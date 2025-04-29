@@ -1,0 +1,174 @@
+import { CollectionConfig } from 'payload';
+import { lexicalEditor } from '@payloadcms/richtext-lexical';
+
+export const Locations: CollectionConfig = {
+  slug: 'locations',
+  labels: {
+    singular: 'Location',
+    plural: 'Locations',
+  },
+  access: {
+    read: () => true,
+    create: () => true,
+    update: () => true,
+    delete: () => true,
+  },
+  admin: {
+    useAsTitle: 'name',
+    defaultColumns: ['name', 'slug', 'status', 'isFeatured'],
+  },
+  fields: [
+    { name: 'name', type: 'text', required: true },
+    { name: 'slug', type: 'text', required: true, unique: true, admin: { description: 'URL-friendly identifier' } },
+    { name: 'description', type: 'richText', required: true, editor: lexicalEditor({}) },
+    { name: 'shortDescription', type: 'text' },
+
+    // Media
+    { name: 'featuredImage', type: 'relationship', relationTo: 'media' },
+    {
+      name: 'gallery',
+      type: 'array',
+      fields: [
+        { name: 'image', type: 'upload', relationTo: 'media', required: true },
+        { name: 'caption', type: 'text' },
+      ],
+    },
+
+    // Taxonomy
+    { name: 'categories', type: 'relationship', relationTo: 'categories', hasMany: true },
+    { name: 'tags', type: 'array', fields: [{ name: 'tag', type: 'text' }] },
+
+    // Location Details
+    {
+      name: 'address',
+      type: 'group',
+      fields: [
+        { name: 'street', type: 'text' },
+        { name: 'city', type: 'text' },
+        { name: 'state', type: 'text' },
+        { name: 'zip', type: 'text' },
+        { name: 'country', type: 'text' },
+      ],
+    },
+    {
+      name: 'coordinates',
+      type: 'group',
+      fields: [
+        { name: 'latitude', type: 'number' },
+        { name: 'longitude', type: 'number' },
+      ],
+    },
+    { name: 'neighborhood', type: 'text' },
+
+    // Contact & Business
+    {
+      name: 'contactInfo',
+      type: 'group',
+      fields: [
+        { name: 'phone', type: 'text' },
+        { name: 'email', type: 'text' },
+        { name: 'website', type: 'text' },
+        {
+          name: 'socialMedia',
+          type: 'group',
+          fields: [
+            { name: 'facebook', type: 'text' },
+            { name: 'twitter', type: 'text' },
+            { name: 'instagram', type: 'text' },
+            { name: 'linkedin', type: 'text' },
+          ],
+        },
+      ],
+    },
+    {
+      name: 'businessHours',
+      type: 'array',
+      fields: [
+        {
+          name: 'day',
+          type: 'select',
+          options: [
+            { label: 'Sunday', value: 'Sunday' },
+            { label: 'Monday', value: 'Monday' },
+            { label: 'Tuesday', value: 'Tuesday' },
+            { label: 'Wednesday', value: 'Wednesday' },
+            { label: 'Thursday', value: 'Thursday' },
+            { label: 'Friday', value: 'Friday' },
+            { label: 'Saturday', value: 'Saturday' },
+          ],
+        },
+        { name: 'open', type: 'text', label: 'Opens at' },
+        { name: 'close', type: 'text', label: 'Closes at' },
+        { name: 'closed', type: 'checkbox', label: 'Closed this day' },
+      ],
+    },
+    {
+      name: 'priceRange',
+      type: 'select',
+      options: [
+        { label: 'Free', value: 'free' },
+        { label: 'Budget', value: 'budget' },
+        { label: 'Moderate', value: 'moderate' },
+        { label: 'Expensive', value: 'expensive' },
+        { label: 'Luxury', value: 'luxury' },
+      ],
+    },
+
+    // Visitor Info
+    { name: 'bestTimeToVisit', type: 'array', fields: [{ name: 'season', type: 'text' }] },
+    { name: 'insiderTips', type: 'richText', editor: lexicalEditor({}) },
+    {
+      name: 'accessibility',
+      type: 'group',
+      fields: [
+        { name: 'wheelchairAccess', type: 'checkbox' },
+        { name: 'parking', type: 'checkbox' },
+        { name: 'other', type: 'text', label: 'Other accommodations' },
+      ],
+    },
+
+    // Creator & Status
+    { name: 'createdBy', type: 'relationship', relationTo: 'users' },
+    {
+      name: 'status',
+      type: 'select',
+      options: [
+        { label: 'Draft', value: 'draft' },
+        { label: 'Review', value: 'review' },
+        { label: 'Published', value: 'published' },
+        { label: 'Archived', value: 'archived' },
+      ],
+      required: true,
+    },
+    { name: 'isFeatured', type: 'checkbox' },
+    { name: 'isVerified', type: 'checkbox' },
+
+    // Monetization & Analytics
+    { name: 'visitVerificationCount', type: 'number' },
+    { name: 'hasBusinessPartnership', type: 'checkbox' },
+    {
+      name: 'partnershipDetails',
+      type: 'group',
+      fields: [
+        { name: 'partnerName', type: 'text' },
+        { name: 'partnerContact', type: 'text' },
+        { name: 'details', type: 'text' },
+      ],
+    },
+
+    // SEO & Metadata
+    {
+      name: 'meta',
+      type: 'group',
+      fields: [
+        { name: 'title', type: 'text' },
+        { name: 'description', type: 'text' },
+        { name: 'keywords', type: 'text' },
+      ],
+    },
+
+    // Virtual fields (read-only)
+    { name: 'averageRating', type: 'number', admin: { readOnly: true } },
+    { name: 'reviewCount', type: 'number', admin: { readOnly: true } },
+  ],
+};

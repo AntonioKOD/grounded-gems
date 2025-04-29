@@ -1,5 +1,7 @@
+
 import React from 'react'
-import './globals.css'
+import "leaflet/dist/leaflet.css";
+import "./globals.css"; 
 import NavBar from '@/components/NavBar'
 export const metadata = {
   description: 'Find the hidden gems around you',
@@ -18,3 +20,4 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
     </html>
   )
 }
+

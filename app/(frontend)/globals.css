@@ -3,55 +3,55 @@
 /* Light mode theme tokens */
 @theme inline {
   /* Base colors */
-  --color-primary: #FF6B6B;         /* Vivid Coral – Primary Brand Accent */
-  --color-secondary: #4ECDC4;       /* Bright Teal – Secondary Accent */
-  --color-accent: #FFE66D;          /* Warm Yellow – Tertiary Accent */
-  --color-background: #FFFFFF;      /* Pure White – Background */
-  --color-foreground: #333333;      /* Dark Charcoal – Foreground */
+  --color-primary: #ff6b6b; /* Vivid Coral – Primary Brand Accent */
+  --color-secondary: #4ecdc4; /* Bright Teal – Secondary Accent */
+  --color-accent: #ffe66d; /* Warm Yellow – Tertiary Accent */
+  --color-background: #ffffff; /* Pure White – Background */
+  --color-foreground: #333333; /* Dark Charcoal – Foreground */
 
   /* Text Colors */
-  --color-text: #333333;            /* Dark Charcoal – Text Base */
-  --color-text-muted: #666666;      /* Medium Gray – Muted Text */
+  --color-text: #333333; /* Dark Charcoal – Text Base */
+  --color-text-muted: #666666; /* Medium Gray – Muted Text */
 
   /* UI Colors */
-  --color-cta: #FF6B6B;             /* Vivid Coral – Call‑to‑Action */
-  --color-card: #F3F4F6;            /* Whisper Gray – Card BG */
-  --color-card-alt: #FFFFFF;        /* White – Alt Card BG */
-  --color-border: #4ECDC4;          /* Bright Teal – Borders */
+  --color-cta: #ff6b6b; /* Vivid Coral – Call‑to-Action */
+  --color-card: #f3f4f6; /* Whisper Gray – Card BG */
+  --color-card-alt: #ffffff; /* White – Alt Card BG */
+  --color-border: #4ecdc4; /* Bright Teal – Borders */
 
   /* State Colors */
-  --color-success: #10B981;         /* Emerald Green – Success */
-  --color-warning: #F59E0B;         /* Amber – Warnings */
-  --color-info: #3B82F6;            /* Blue – Info */
-  --color-surface: #FFFFFF;         /* White – Surface */
-  --color-surface-hover: #F3F4F6;   /* Very Light Gray – Hover */
+  --color-success: #10b981; /* Emerald Green – Success */
+  --color-warning: #f59e0b; /* Amber – Warnings */
+  --color-info: #3b82f6; /* Blue – Info */
+  --color-surface: #ffffff; /* White – Surface */
+  --color-surface-hover: #f3f4f6; /* Very Light Gray – Hover */
 
   /* Tailwind HSL variables */
-  --background:        0   0% 100%; /* #FFFFFF – Pure White */
-  --foreground:      210  15%  20%; /* #333333 – Dark Charcoal */
-  --primary:           4  97%  69%; /* #FF6B6B – Vivid Coral */
-  --secondary:       174  54%  60%; /* #4ECDC4 – Bright Teal */
-  --accent:           50  100% 80%; /* #FFE66D – Warm Yellow */
-  --muted:             0   0%  40%; /* #666666 – Medium Gray */
-  --muted-foreground:  0   0%  40%; /* #666666 – Medium Gray */
-  --card:            210  20%  96%; /* #F3F4F6 – Whisper Gray */
-  --card-foreground:  210  15%  20%;/* #333333 – Dark Charcoal */
-  --popover:         210  20%  96%; /* #F3F4F6 – Whisper Gray */
-  --popover-foreground:210  15%  20%;/* #333333 – Dark Charcoal */
-  --border:          174  54%  60%; /* #4ECDC4 – Bright Teal */
-  --input:           174  54%  60%; /* #4ECDC4 – Bright Teal */
-  --ring:            210  15%  20%; /* #333333 – Dark Charcoal */
+  --background: 0 0% 100%; /* #FFFFFF – Pure White */
+  --foreground: 210 15% 20%; /* #333333 – Dark Charcoal */
+  --primary: 4 97% 69%; /* #FF6B6B – Vivid Coral */
+  --secondary: 174 54% 60%; /* #4ECDC4 – Bright Teal */
+  --accent: 50 100% 80%; /* #FFE66D – Warm Yellow */
+  --muted: 0 0% 40%; /* #666666 – Medium Gray */
+  --muted-foreground: 0 0% 40%; /* #666666 – Medium Gray */
+  --card: 210 20% 96%; /* #F3F4F6 – Whisper Gray */
+  --card-foreground: 210 15% 20%; /* #333333 – Dark Charcoal */
+  --popover: 210 20% 96%; /* #F3F4F6 – Whisper Gray */
+  --popover-foreground: 210 15% 20%; /* #333333 – Dark Charcoal */
+  --border: 174 54% 60%; /* #4ECDC4 – Bright Teal */
+  --input: 174 54% 60%; /* #4ECDC4 – Bright Teal */
+  --ring: 210 15% 20%; /* #333333 – Dark Charcoal */
   --radius: 0.5rem;
 
   /* Other required variables */
-  --primary-foreground:   0   0% 100%; /* #FFFFFF – On Primary */
-  --secondary-foreground: 0   0% 100%; /* #FFFFFF – On Secondary */
-  --destructive:          0  84%  60%; /* #E53935 – Destructive */
-  --destructive-foreground:0   0% 100%; /* #FFFFFF – On Destructive */
-  --cta-foreground:       0   0% 100%; /* #FFFFFF – On CTA */
+  --primary-foreground: 0 0% 100%; /* #FFFFFF – On Primary */
+  --secondary-foreground: 0 0% 100%; /* #FFFFFF – On Secondary */
+  --destructive: 0 84% 60%; /* #E53935 – Destructive */
+  --destructive-foreground: 0 0% 100%; /* #FFFFFF – On Destructive */
+  --cta-foreground: 0 0% 100%; /* #FFFFFF – On CTA */
 
   /* Font settings */
-  --font-sans:  "Inter", Arial, Helvetica, sans-serif;
+  --font-sans: "Inter", Arial, Helvetica, sans-serif;
   --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
 }
 
@@ -73,15 +73,14 @@
 
 /* Custom Pattern Styles */
 .card-pattern-grid {
-  background-image:
-    linear-gradient(to right, rgba(64,64,64,0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(64,64,64,0.05) 1px, transparent 1px);
+  background-image: linear-gradient(to right, rgba(64, 64, 64, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(64, 64, 64, 0.05) 1px, transparent 1px);
   background-size: 0.5em 0.5em;
   pointer-events: none;
 }
 
 .card-overlay-dots {
-  background-image: radial-gradient(rgba(64,64,64,0.1) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(64, 64, 64, 0.1) 1px, transparent 1px);
   background-size: 1em 1em;
   background-position: -0.5em -0.5em;
   pointer-events: none;
@@ -95,9 +94,7 @@
 }
 
 .animate-scroll {
-  animation: scroll var(--animation-duration, 40s)
-             var(--animation-direction, forwards)
-             linear infinite;
+  animation: scroll var(--animation-duration, 40s) var(--animation-direction, forwards) linear infinite;
 }
 
 /* Retro photo frame styles */
@@ -113,11 +110,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    45deg,
-    rgba(255,255,255,0.1) 0%,
-    rgba(255,255,255,0) 100%
-  );
+  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
   z-index: 10;
   pointer-events: none;
 }
@@ -126,12 +119,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0,0,0,0.05) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.05) 50%, transparent 100%);
   background-size: 100% 4px;
   z-index: 10;
   pointer-events: none;
@@ -144,5 +132,59 @@
   }
   100% {
     transform: translateX(calc(-50% - 0.75rem));
+  }
+}
+
+/* Leaflet Map Styles */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  font-family: inherit;
+  z-index: 1;
+}
+
+.leaflet-div-icon {
+  background: transparent;
+  border: none;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.leaflet-control-zoom a {
+  border-radius: 4px !important;
+  color: #555 !important;
+}
+
+.leaflet-control-zoom-in {
+  border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.leaflet-touch .leaflet-control-layers,
+.leaflet-touch .leaflet-bar {
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Fix for map container */
+.map-container {
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Leaflet animation */
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
   }
 }
