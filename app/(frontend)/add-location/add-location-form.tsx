@@ -11,9 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import Image from "next/image"
-import dynamic from "next/dynamic"
 
-const SimpleMap = dynamic(() => import("@/components/simple-map"), { ssr: false })
 
 export default function AddLocationForm() {
   const [locationImage, setLocationImage] = useState<string | null>(null)
@@ -126,12 +124,6 @@ export default function AddLocationForm() {
             <div>
               <Label className="block mb-2">Pin Location on Map</Label>
               <div className="h-[300px] rounded-lg overflow-hidden">
-              <SimpleMap
-  locations={[]}
-  height="300px"
-  center={[coordinates.lat, coordinates.lng]}
-  zoom={15}
-/>
               </div>
               <p className="text-sm text-gray-500 mt-2">
                 Click on the map to set the exact location or adjust the coordinates manually below.

@@ -1,219 +1,244 @@
-"use client"
-import { useEffect, useState } from "react"
-import { MapContainer, TileLayer, Marker, Popup, Circle, useMap, useMapEvents } from "react-leaflet"
-import L from "leaflet"
-import { cn } from "@/lib/utils"
-import type { Location } from "./map-data"
+// app/(frontend)/map/interactive-map.tsx
+'use client';
 
-interface MapControlsProps {
-  center: [number, number]
-  zoom: number
-  onMapMove: (center: [number, number], zoom: number) => void
-  onMapClick: (latlng: { lat: number; lng: number }) => void
-}
+import React, { useEffect, useRef, useState } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Component to handle map events
-function MapControls({ center, zoom, onMapMove, onMapClick }: MapControlsProps) {
-  const map = useMap()
+import { cn } from '@/lib/utils';
+import type { Location } from './map-data';
 
-  // Update map when center or zoom props change
-  useEffect(() => {
-    map.setView(center, zoom)
-  }, [map, center, zoom])
-
-  // Listen for map events
-  useMapEvents({
-    moveend: () => {
-      const center = map.getCenter()
-      onMapMove([center.lat, center.lng], map.getZoom())
-    },
-    click: (e) => {
-      onMapClick(e.latlng)
-    },
-  })
-
-  return null
-}
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN!;
 
 interface InteractiveMapProps {
-  locations: Location[]
-  userLocation: [number, number] | null
-  center: [number, number]
-  zoom: number
-  onMarkerClickAction: (location: Location) => void
-  onMapClickAction: (latlng: { lat: number; lng: number }) => void
-  onMapMoveAction: (center: [number, number], zoom: number) => void
-  searchRadius?: number
-  className?: string
+  locations: Location[];
+  userLocation: [number, number] | null;
+  center: [number, number];
+  zoom: number;
+  onMarkerClickAction: (location: Location) => void;
+  onMapClickAction: (coords: { lat: number; lng: number }) => void;
+  onMapMoveAction: (center: [number, number], zoom: number) => void;
+  searchRadiusKm?: number;
+  className?: string;
 }
 
 export default function InteractiveMap({
   locations,
-  userLocation,
   center,
   zoom,
   onMarkerClickAction,
-  onMapClickAction: onMapClickAction,
-  onMapMoveAction: onMapMoveAction,
-  searchRadius,
+  onMapClickAction,
+  onMapMoveAction,
+  searchRadiusKm,
   className,
 }: InteractiveMapProps) {
-  const [isClient, setIsClient] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
-  // Fix for SSR
+  // Initialize map + controls once
   useEffect(() => {
-    setIsClient(true)
+    if (!containerRef.current || mapRef.current) return;
 
-    // Fix Leaflet's default icon URLs
-    delete (L.Icon.Default.prototype as { _getIconUrl?: () => void })._getIconUrl
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: "/marker-icon-2x.png",
-      iconUrl: "/marker-icon.png",
-      shadowUrl: "/marker-shadow.png",
-    })
-  }, [])
+    const map = new mapboxgl.Map({
+      container: containerRef.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [center[1], center[0]],
+      zoom,
+    }); //  [oai_citation:5‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/api/map/?utm_source=chatgpt.com)
 
-  // Custom marker icon based on category
-  const getMarkerIcon = (category: string) => {
-    const colors: Record<string, string> = {
-      Music: "#FF6B6B",
-      Art: "#4ECDC4",
-      Food: "#FFE66D",
-      Tech: "#6B66FF",
-      Wellness: "#66FFB4",
-      Entertainment: "#FF66E3",
-      Default: "#FF6B6B",
+    // Add navigation (zoom) control
+    map.addControl(new mapboxgl.NavigationControl(), 'bottom-right');
+
+    // Add built-in GeolocateControl
+    const geolocate = new mapboxgl.GeolocateControl({
+      positionOptions: { enableHighAccuracy: true },
+      trackUserLocation: true,
+      showUserLocation: true,
+      showAccuracyCircle: true,
+      fitBoundsOptions: { maxZoom: 15 },
+    }); //  [oai_citation:6‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/api/markers/?utm_source=chatgpt.com)
+
+    map.addControl(geolocate, 'top-right'); //  [oai_citation:7‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/example/locate-user/?utm_source=chatgpt.com)
+
+    map.on('load', () => {
+      setLoaded(true);
+      geolocate.trigger(); // auto-trigger geolocation on load  [oai_citation:8‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/api/map/?utm_source=chatgpt.com)
+
+      // Add clustered GeoJSON source
+      map.addSource('places', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: locations.map(loc => ({
+            type: 'Feature',
+            properties: { id: loc.id, name: loc.name, category: loc.category },
+            geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] },
+          })),
+        },
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50,
+      });
+
+      // Cluster circles
+      map.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'places',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': ['step', ['get', 'point_count'], '#51bbd6', 100, '#f1f075', 750, '#f28cb1'],
+          'circle-radius': ['step', ['get', 'point_count'], 20, 100, 30, 750, 40],
+        },
+      });
+
+      // Cluster count labels
+      map.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'places',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-size': 12,
+        },
+      });
+
+      // Unclustered points
+      map.addLayer({
+        id: 'unclustered-point',
+        type: 'symbol',
+        source: 'places',
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'icon-image': 'marker-15',
+          'icon-size': 1.2,
+        },
+      });
+    });
+
+    // Cluster click → zoom into cluster
+    map.on('click', 'clusters', e => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+      if (!features.length) return;
+      const clusterId = features[0].properties!.cluster_id as number;
+      (map.getSource('places') as mapboxgl.GeoJSONSource).getClusterExpansionZoom(
+        clusterId,
+        (err, zoomLevel) => {
+          if (!err) {
+            const coords = (features[0].geometry as GeoJSON.Point).coordinates as [number, number];
+            map.easeTo({ center: coords, zoom: zoomLevel ?? map.getZoom() });
+          }
+        }
+      );
+    });
+
+    // Unclustered click → show popup / notify parent
+    map.on('click', 'unclustered-point', e => {
+      const feat = e.features?.[0];
+      if (!feat) return;
+      const id = feat.properties!.id as string;
+      const loc = locations.find(l => l.id === id);
+      if (loc) onMarkerClickAction(loc);
+    });
+
+    // Background click
+    map.on('click', () => {
+      const c = map.getCenter();
+      onMapClickAction({ lat: c.lat, lng: c.lng });
+    });
+
+    // Moveend (user pan/zoom)
+    map.on('moveend', e => {
+      if (!('originalEvent' in e)) return;
+      const c = map.getCenter();
+      onMapMoveAction([c.lat, c.lng], map.getZoom());
+    });
+
+    mapRef.current = map;
+    return () => map.remove();
+  }, [locations]);
+
+  // Fly to updated center/zoom props
+  useEffect(() => {
+    if (!mapRef.current || !loaded) return;
+    mapRef.current.flyTo({ center: [center[1], center[0]], zoom, essential: true });
+  }, [center, zoom, loaded]);
+
+  // Render location markers manually (if needed)
+  useEffect(() => {
+    if (!mapRef.current || !loaded) return;
+    // Clear existing
+    markersRef.current.forEach(m => m.remove());
+    markersRef.current = [];
+
+    // Add markers
+    for (const loc of locations) {
+      const el = document.createElement('div');
+      Object.assign(el.style, {
+        width: '30px',
+        height: '30px',
+        borderRadius: '50%',
+        backgroundColor: '#FF6B6B',
+        border: '2px solid white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: '12px',
+      });
+      el.innerText = loc.category.charAt(0);
+
+      const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
+        `<div class="p-2"><h3 class="font-bold text-sm">${loc.name}</h3><p class="text-xs text-gray-600">${loc.category}</p></div>`
+      );
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([loc.longitude, loc.latitude])
+        .setPopup(popup)
+        .addTo(mapRef.current!);
+
+      marker.getElement().addEventListener('click', () => onMarkerClickAction(loc));
+      markersRef.current.push(marker);
     }
+  }, [locations, loaded]);
 
-    const color = colors[category] || colors.Default
+  // Draw / filter by search radius
+  useEffect(() => {
+    if (!mapRef.current || !loaded) return;
+    const map = mapRef.current;
 
-    return L.divIcon({
-      className: "custom-marker",
-      html: `
-        <div style="
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          background-color: ${color};
-          border: 2px solid white;
-          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 12px;
-        ">
-          ${category.charAt(0)}
-        </div>
-      `,
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-    })
-  }
+    // Only apply filter if layer exists
+    const layers = map.getStyle().layers || [];
+    if (!layers.find(l => l.id === 'unclustered-point')) return; //  [oai_citation:9‡MapLibre](https://www.maplibre.org/maplibre-gl-js/docs/API/classes/GeolocateControl/?utm_source=chatgpt.com)
 
-  // Custom user location marker
-  const userLocationIcon = L.divIcon({
-    className: "user-location-marker",
-    html: `
-      <div style="
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background-color: #4285F4;
-        border: 3px solid white;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-      ">
-        <div style="
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          background-color: rgba(66, 133, 244, 0.2);
-          animation: pulse 2s infinite;
-        "></div>
-      </div>
-    `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-  })
-
-  if (!isClient) {
-    return (
-      <div className={cn("bg-gray-100 flex items-center justify-center", className)} style={{ height: "100%" }}>
-        <div className="w-8 h-8 border-4 border-[#FF6B6B] border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    )
-  }
+    if (searchRadiusKm == null) {
+      map.setFilter('unclustered-point', ['!', ['has', 'point_count']]);
+    } else {
+      const coords = [center[1], center[0]] as [number, number];
+      map.setFilter('unclustered-point', [
+        'all',
+        ['!', ['has', 'point_count']],
+        [
+          '<=',
+          ['distance', ['geometry'], ['literal', coords]],
+          searchRadiusKm * 1000
+        ],
+      ]);
+    }
+  }, [searchRadiusKm, center, loaded]);
 
   return (
-    <div className={cn("h-full w-full", className)}>
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        style={{ height: "100%", width: "100%" }}
-        zoomControl={false}
-        className="z-10"
-      >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {/* Map controls */}
-        <MapControls center={center} zoom={zoom} onMapMove={onMapMoveAction} onMapClick={onMapClickAction} />
-
-        {/* User location marker */}
-        {userLocation && (
-          <Marker position={userLocation} icon={userLocationIcon}>
-            <Popup>
-              <div className="p-2">
-                <p className="font-medium">Your Location</p>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-
-        {/* Location markers */}
-        {locations.map((location) => (
-          <Marker
-            key={location.id}
-            position={[location.latitude, location.longitude]}
-            icon={getMarkerIcon(location.category)}
-            eventHandlers={{
-              click: () => onMarkerClickAction(location),
-            }}
-          >
-            <Popup>
-              <div className="p-2">
-                <h3 className="font-bold text-sm">{location.name}</h3>
-                <p className="text-xs text-gray-600">{location.category}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Search radius circle */}
-        {searchRadius && (
-          <Circle
-            center={center}
-            radius={searchRadius * 1000} // Convert km to meters
-            pathOptions={{
-              color: "#4ECDC4",
-              fillColor: "#4ECDC4",
-              fillOpacity: 0.1,
-              weight: 2,
-              dashArray: "5, 5",
-              opacity: 0.7,
-            }}
-          />
-        )}
-      </MapContainer>
-
-      {/* Add CSS for the pulse animation */}
+    <div className={cn('relative bg-white shadow-lg rounded-lg overflow-hidden', className)}>
+      <div ref={containerRef} className="h-full w-full" />
+      {!loaded && (
+        <div className="absolute inset-0 bg-white/75 flex items-center justify-center z-10">
+          <div className="w-8 h-8 border-4 border-[#FF6B6B] border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
       <style jsx global>{`
         @keyframes pulse {
           0% {
@@ -225,48 +250,7 @@ export default function InteractiveMap({
             opacity: 0;
           }
         }
-        
-        .leaflet-container {
-          height: 100%;
-          width: 100%;
-          font-family: inherit;
-          z-index: 10;
-        }
-        
-        .leaflet-popup-content-wrapper {
-          border-radius: 8px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        .leaflet-popup-tip {
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .leaflet-div-icon {
-          background: transparent;
-          border: none;
-        }
-
-        .leaflet-control-zoom {
-          border: none !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
-        }
-
-        .leaflet-control-zoom a {
-          border-radius: 4px !important;
-          color: #555 !important;
-        }
-
-        .leaflet-control-zoom-in {
-          border-bottom: 1px solid #f0f0f0 !important;
-        }
-
-        .leaflet-touch .leaflet-control-layers,
-        .leaflet-touch .leaflet-bar {
-          border: none !important;
-          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
-        }
       `}</style>
     </div>
-  )
+  );
 }

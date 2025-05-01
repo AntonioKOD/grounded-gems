@@ -1,192 +1,215 @@
-"use client"
+'use client';
 
-import { useEffect, useState } from "react"
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from "react-leaflet"
-import L from "leaflet"
-import "leaflet/dist/leaflet.css"
-import { cn } from "@/lib/utils"
+import React, { useState, useCallback } from 'react';
+import Map, {
+  NavigationControl,
+  FullscreenControl,
+  GeolocateControl,
+  Marker,
+  Popup,
+  type MapEvent,
+  type MarkerEvent
+} from 'react-map-gl/mapbox';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
-export interface Location {
-  id: string
-  name: string
-  latitude: number
-  longitude: number
-  category?: string
-  description?: string
-}
+import { MapPin, Layers, Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 interface SimpleMapProps {
-  locations: Location[]
-  center?: [number, number]
-  zoom?: number
-  height?: string
-  className?: string
-  isBackground?: boolean // Flag for when used as background
-  showControls?: boolean
-  interactive?: boolean
+  className?: string;
+  markers?: Array<{
+    id: string;
+    latitude: number;
+    longitude: number;
+    title: string;
+  }>;
 }
 
-export default function SimpleMap({
-  locations,
-  center = [40.7128, -74.006], // Default to NYC
-  zoom = 12,
-  height = "300px",
-  className,
-  isBackground = false,
-  showControls = true,
-  interactive = true,
-}: SimpleMapProps) {
-  const [isClient, setIsClient] = useState(false)
-
-  // Fix for SSR
-  useEffect(() => {
-    setIsClient(true)
-
-    // Fix Leaflet's default icon URLs
-    delete (L.Icon.Default.prototype as { _getIconUrl?: () => string })._getIconUrl
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: "/marker-icon-2x.png",
-      iconUrl: "/marker-icon.png",
-      shadowUrl: "/marker-shadow.png",
-    })
-  }, [])
-
-  // Filter out any entries without valid numeric coords
-  const validLocations = locations.filter(
-    (loc): loc is Location => Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude)
-  )
-
-  // Custom marker icon based on category
-  const getMarkerIcon = (category?: string) => {
-    const colors: Record<string, string> = {
-      Music: "#FF6B6B",
-      Art: "#4ECDC4",
-      Food: "#FFE66D",
-      Tech: "#6B66FF",
-      Wellness: "#66FFB4",
-      Entertainment: "#FF66E3",
-      Default: "#FF6B6B",
-    }
-
-    const color = category && colors[category] ? colors[category] : colors.Default
-
-    return L.divIcon({
-      className: "custom-marker",
-      html: `
-        <div style="
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          background-color: ${color};
-          border: 2px solid white;
-          box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: bold;
-          font-size: 12px;
-          animation: pulse 2s infinite;
-        ">
-          ${category ? category.charAt(0) : "L"}
-        </div>
-      `,
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-      popupAnchor: [0, -15],
-    })
-  }
-
-  if (!isClient) {
+export default function SimpleMap(props: SimpleMapProps) {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+  if (!token) {
     return (
-      <div className={cn("bg-gray-100 flex items-center justify-center", className)} style={{ height }}>
-        <div className="w-8 h-8 border-4 border-[#FF6B6B] border-t-transparent rounded-full animate-spin"></div>
+      <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-lg">
+        <div className="text-center p-6">
+          <div className="w-12 h-12 rounded-full bg-[#FF6B6B] flex items-center justify-center mx-auto mb-4">
+            <Info className="h-6 w-6 text-white" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Map Configuration Required
+          </h3>
+          <p className="text-gray-600 max-w-md">
+            Please set <code>NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN</code> in your environment.
+          </p>
+        </div>
       </div>
-    )
+    );
   }
+  return <MapContent {...props} token={token} />;
+}
+
+interface MapContentProps extends SimpleMapProps {
+  token: string;
+}
+
+function MapContent({ className, markers = [], token }: MapContentProps) {
+  const styleOptions = [
+    { url: 'mapbox://styles/mapbox/standard',            name: 'Standard' },            // Mapbox Standard  [oai_citation:0‡Mapbox](https://docs.mapbox.com/api/maps/styles/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/standard-satellite',   name: 'Satellite' },           // Standard Satellite  [oai_citation:1‡Mapbox](https://docs.mapbox.com/map-styles/standard/guides/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/streets-v12',          name: 'Streets' },             // Streets v12  [oai_citation:2‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/guides/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/outdoors-v12',         name: 'Outdoors' },            // Outdoors v12  [oai_citation:3‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/guides/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/light-v11',            name: 'Light' },               // Light v11  [oai_citation:4‡Mapbox](https://docs.mapbox.com/help/glossary/style-id/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/dark-v11',             name: 'Dark' },                // Dark v11  [oai_citation:5‡Mapbox](https://docs.mapbox.com/help/glossary/style-id/?utm_source=chatgpt.com)
+    { url: 'mapbox://styles/mapbox/satellite-streets-v12',name: 'Satellite Streets' }    // Satellite Streets v12  [oai_citation:6‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/guides/?utm_source=chatgpt.com)
+  ] as const;
+
+  const [styleUrl, setStyleUrl] = useState<string>(styleOptions[0].url);
+  const [showStyles, setShowStyles] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const handleMapLoad = useCallback((e: MapEvent) => {
+    const map = e.target; // raw Mapbox GL JS instance
+    if (map.getStyle().sources?.composite) {
+      try {
+        map.addLayer({
+          id: '3d-buildings',
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', 'extrude', 'true'],
+          type: 'fill-extrusion',
+          minzoom: 10,
+          paint: {
+            'fill-extrusion-color': '#aaa',
+            'fill-extrusion-height': ['interpolate',['linear'],['zoom'],10,0,15,['get','height']],
+            'fill-extrusion-base': ['interpolate',['linear'],['zoom'],10,0,15,['get','min_height']],
+            'fill-extrusion-opacity': 0.6
+          }
+        });
+      } catch (err) {
+        console.warn('Could not add 3D buildings layer:', err);
+      }
+    }
+  }, []);
+
+  const handleMarkerClick = useCallback(
+    (id: string, event: MarkerEvent<MouseEvent>) => {
+      event.originalEvent.stopPropagation();
+      setSelectedId(prev => (prev === id ? null : id));
+    },
+    []
+  );
 
   return (
-    <div className={cn("relative overflow-hidden", className)} style={{ height }}>
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        style={{ width: "100%", height: "100%" }}
-        zoomControl={showControls}
-        attributionControl={!isBackground}
-        dragging={interactive}
-        touchZoom={interactive}
-        doubleClickZoom={interactive}
-        scrollWheelZoom={interactive}
-        boxZoom={interactive}
-        keyboard={interactive}
+    <div className={cn(
+      'w-full h-screen relative rounded-lg overflow-hidden bg-white shadow-lg',
+      className
+    )}>
+      <Map
+        initialViewState={{ longitude: -71.0589, latitude: 42.3601, zoom: 12 }}
+        mapStyle={styleUrl}
+        mapboxAccessToken={token}
+        maxZoom={20}
+        minZoom={3}
+        attributionControl={false}
+        onLoad={handleMapLoad}
+        renderWorldCopies
       >
-        <TileLayer
-          attribution={!isBackground ? "&copy; OpenStreetMap contributors" : ""}
-          url={
-            isBackground
-              ? "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" // Lighter style for background
-              : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          }
-          opacity={isBackground ? 0.7 : 1}
-        />
-        {validLocations.map((loc) => (
-          <Marker key={loc.id} position={[loc.latitude, loc.longitude]} icon={getMarkerIcon(loc.category)}>
-            <Popup className="custom-popup">
-              <div className="p-1">
-                <h3 className="font-bold text-sm text-gray-900">{loc.name}</h3>
-                {loc.description && <p className="text-xs text-gray-600 mt-1">{loc.description}</p>}
-                {loc.category && (
-                  <span className="inline-block mt-2 px-2 py-0.5 bg-gray-100 text-xs rounded-full text-gray-700">
-                    {loc.category}
-                  </span>
+        {/* Controls */}
+        <div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+          <NavigationControl showCompass={false} style={{ backgroundColor: 'white' }} />
+          <FullscreenControl style={{ backgroundColor: 'white' }} />
+          <GeolocateControl
+            style={{ backgroundColor: 'white' }}
+            positionOptions={{ enableHighAccuracy: true }}
+            trackUserLocation
+          />
+          <Button
+            size="icon"
+            variant="outline"
+            className="bg-white shadow-md hover:bg-gray-50"
+            onClick={() => setShowStyles(v => !v)}
+          >
+            <Layers className="text-[#FF6B6B]" />
+          </Button>
+        </div>
+
+        {/* Style Selector */}
+        {showStyles && (
+          <div className="absolute top-4 right-16 bg-white p-2 rounded-lg shadow-lg z-10">
+            {styleOptions.map(opt => (
+              <button
+                key={opt.url}
+                className={cn(
+                  'block w-full text-left px-3 py-1 text-sm rounded',
+                  styleUrl === opt.url
+                    ? 'bg-[#FF6B6B]/20 text-[#FF6B6B] font-medium'
+                    : 'hover:bg-gray-100'
                 )}
+                onClick={() => {
+                  setStyleUrl(opt.url);
+                  setShowStyles(false);
+                }}
+              >
+                {opt.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Markers & Popups */}
+        {markers.map(m => (
+          <Marker
+            key={m.id}
+            longitude={m.longitude}
+            latitude={m.latitude}
+            anchor="bottom"
+            onClick={e => handleMarkerClick(m.id, e)}
+          >
+            <div className="relative cursor-pointer">
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#FF6B6B] rotate-45" />
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white border-2 border-[#FF6B6B] text-[#FF6B6B] shadow-md hover:scale-110 transition-transform">
+                <MapPin className="w-4 h-4" />
               </div>
-            </Popup>
+              <div className="absolute inset-0 rounded-full bg-[#FF6B6B]/20 animate-ping" />
+            </div>
           </Marker>
         ))}
-        {showControls && !isBackground && <ZoomControl position="bottomright" />}
-      </MapContainer>
 
-      {/* Overlay for background use */}
-      {isBackground && (
-        <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-transparent to-white/60 pointer-events-none" />
-      )}
+        {selectedId && (
+          <Popup
+            anchor="bottom"
+            longitude={markers.find(x => x.id === selectedId)!.longitude}
+            latitude={markers.find(x => x.id === selectedId)!.latitude}
+            onClose={() => setSelectedId(null)}
+            closeOnClick={false}
+            className="z-20"
+          >
+            <div className="p-2">
+              <h3 className="font-medium text-[#FF6B6B]">
+                {markers.find(x => x.id === selectedId)!.title}
+              </h3>
+            </div>
+          </Popup>
+        )}
 
-      {/* Add CSS for the pulse animation */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0% {
-            transform: scale(1);
-            opacity: 1;
-          }
-          50% {
-            transform: scale(1.05);
-            opacity: 0.8;
-          }
-          100% {
-            transform: scale(1);
-            opacity: 1;
-          }
-        }
-        
-        .custom-popup .leaflet-popup-content-wrapper {
-          border-radius: 8px;
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        .custom-popup .leaflet-popup-tip {
-          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        .leaflet-container {
-          font-family: inherit;
-        }
-        
-        .leaflet-control-attribution {
-          font-size: 9px;
-          opacity: 0.7;
-        }
-      `}</style>
+        {/* Branding & Attribution */}
+        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 flex items-center z-10">
+          <div className="w-6 h-6 rounded-full bg-[#FF6B6B] flex items-center justify-center mr-2">
+            <span className="text-white font-bold text-xs">GG</span>
+          </div>
+          <span className="text-sm font-medium text-gray-800">Grounded Gems</span>
+        </div>
+        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-1 text-xs text-gray-600 z-10">
+          ©{' '}
+          <a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener noreferrer" className="text-[#4ECDC4] hover:underline">
+            Mapbox
+          </a>{' '}
+          |{' '}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="text-[#4ECDC4] hover:underline">
+            OpenStreetMap
+          </a>
+        </div>
+      </Map>
     </div>
-  )
+  );
 }

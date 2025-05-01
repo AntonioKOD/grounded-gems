@@ -8,26 +8,13 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import dynamic from 'next/dynamic'
 import Link from "next/link"
-import { getLocations } from "@/app/actions"
+
 const SimpleMap = dynamic(() => import("@/components/simple-map"), { ssr: false });
 
 export default function Hero() {
   const [searchFocused, setSearchFocused] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
-  const [locations, setLocations] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([])
-  useEffect(() => {
-    const fetchLocations = async () => {
-      const locations = (await getLocations()).map((location: any) => ({
-        id: String(location.id),
-        name: String(location.name),
-        latitude: parseFloat(location.latitude),
-        longitude: parseFloat(location.longitude),
-      }))
-      setLocations(locations)
-    }
-    fetchLocations()
-  }, [])
   // Close search suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: { target: EventTarget | null }) => {
@@ -48,15 +35,7 @@ export default function Hero() {
 
       {/* Map Container */}
       <div className="absolute inset-0 z-10">
-      <SimpleMap
-          locations={locations}
-          height="100%"
-          zoom={13}
-          center={[40.7128, -74.006]}
-          isBackground={true}
-          showControls={false}
-          interactive={false}
-        />
+      <SimpleMap/>
       </div>
 
       {/* Mobile Menu Button */}

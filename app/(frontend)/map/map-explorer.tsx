@@ -1,353 +1,273 @@
-"use client"
+'use client';
 
-import type React from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Search, MapPin, X, ChevronLeft, ChevronRight, Compass, Circle } from "lucide-react";
+import Link from "next/link";
 
-import { useState, useEffect, useRef } from "react"
-import { Search, MapPin, X, Layers, ChevronLeft, ChevronRight, Compass, Circle } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Slider } from "@/components/ui/slider"
-import { Switch } from "@/components/ui/switch"
-import { Label } from "@/components/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Slider } from "@/components/ui/slider";
 
-import LocationList from "./location-list"
-import LocationDetail from "./location-detail"
-import { mockLocations, searchLocations, type Location } from "./map-data"
-import Link from "next/link"
-import dynamic from "next/dynamic"
-
-const InteractiveMap = dynamic(() => import("./interactive-map"), { ssr: false })
+import { cn } from "@/lib/utils";
+import LocationList from "./location-list";
+import LocationDetail from "./location-detail";
+import InteractiveMap from "./interactive-map";
+import { mockLocations, searchLocations, type Location } from "./map-data";
 
 export default function MapExplorer() {
-  // State for search and locations
-  const [searchQuery, setSearchQuery] = useState("")
-  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([])
-  const [locations] = useState<Location[]>(mockLocations)
-  const [filteredLocations, setFilteredLocations] = useState<Location[]>(mockLocations)
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
-  const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.006]) // Default to NYC
-  const [mapZoom, setMapZoom] = useState(13)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [searchMode, setSearchMode] = useState<"text" | "area">("text")
-  const [radiusKm, setRadiusKm] = useState(5)
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  const searchInputRef = useRef<HTMLInputElement>(null)
-
-  // Get user's location on component mount
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords
-          setUserLocation([latitude, longitude])
-        },
-        (error) => {
-          console.error("Error getting user location:", error)
-          setErrorMessage("Unable to access your location. Using default location instead.")
-         
-        },
-      )
-    } else {
-      setErrorMessage("Geolocation is not supported by your browser. Using default location instead.")
-    }
-  }, [])
-
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const query = e.target.value
-    setSearchQuery(query)
-
-    // Generate search suggestions (in a real app, this would call an API)
-    if (query.length > 2) {
-      // Simulate API call delay
-      setIsLoading(true)
-      setTimeout(() => {
-        const suggestions = mockLocations
-          .filter(
-            (loc) =>
-              loc.name.toLowerCase().includes(query.toLowerCase()) ||
-              loc.address.toLowerCase().includes(query.toLowerCase()),
-          )
-          .map((loc) => loc.name)
-          .slice(0, 5)
-        setSearchSuggestions(suggestions)
-        setIsLoading(false)
-      }, 300)
-    } else {
-      setSearchSuggestions([])
-    }
-  }
-
-  // Handle search submission
-  const handleSearch = (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-
-    if (searchQuery.trim() === "") {
-      setFilteredLocations(locations)
-      return
-    }
-
-    setIsLoading(true)
-
-    // Simulate API call
-    setTimeout(() => {
-      const results = searchLocations(locations, searchQuery)
-      setFilteredLocations(results)
-
-      // Center map on first result if available
-      if (results.length > 0) {
-        setMapCenter([results[0].latitude, results[0].longitude])
-        setMapZoom(14)
-      }
-
-      setIsLoading(false)
-      setSearchSuggestions([])
-    }, 500)
-  }
-
-  // Handle suggestion click
-  const handleSuggestionClick = (suggestion: string) => {
-    setSearchQuery(suggestion)
-    setSearchSuggestions([])
-
-    // Trigger search
-    const results = searchLocations(locations, suggestion)
-    setFilteredLocations(results)
-
-    // Center map on first result if available
-    if (results.length > 0) {
-      setMapCenter([results[0].latitude, results[0].longitude])
-      setMapZoom(14)
-    }
-  }
-
-  // Handle marker click
-  const handleMarkerClick = (location: Location) => {
-    setSelectedLocation(location)
-    setIsDetailOpen(true)
-  }
-
-  // Handle area search
-  const handleAreaSearch = (center: [number, number], radiusInKm: number) => {
-    // Filter locations within the radius
-    const filtered = locations.filter((location) => {
-      const distance = calculateDistance(center[0], center[1], location.latitude, location.longitude)
-      return distance <= radiusInKm
-    })
-
-    setFilteredLocations(filtered)
-  }
-
-  // Calculate distance between two points using Haversine formula
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371 // Radius of the earth in km
-    const dLat = deg2rad(lat2 - lat1)
-    const dLon = deg2rad(lon2 - lon1)
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    const d = R * c // Distance in km
-    return d
-  }
-
-  const deg2rad = (deg: number): number => {
-    return deg * (Math.PI / 180)
-  }
-
-  // Handle category filter change
-  const handleCategoryChange = (categories: string[]) => {
-    setSelectedCategories(categories)
-
-    // Apply category filter
-    if (categories.length === 0) {
-      // If no categories selected, show all locations
-      setFilteredLocations(locations)
-    } else {
-      // Filter locations by selected categories
-      const filtered = locations.filter((location) => categories.includes(location.category))
-      setFilteredLocations(filtered)
-    }
-  }
-
-  // Get unique categories from locations
-  const categories = Array.from(new Set(locations.map((loc) => loc.category)))
+   // 1️⃣ Search & filter state
+   const [searchQuery, setSearchQuery] = useState("");
+   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+   const [locations] = useState<Location[]>(mockLocations);
+   const [filteredLocations, setFilteredLocations] = useState<Location[]>(mockLocations);
+   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+ 
+   // 2️⃣ Geolocation & map viewport
+   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+   const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.006]); // default NYC 
+   const [mapZoom, setMapZoom] = useState(12);
+ 
+   // 3️⃣ UI state
+   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+   const [isDetailOpen, setIsDetailOpen] = useState(false);
+   const [isLoading, setIsLoading] = useState(false);
+   const [searchMode, setSearchMode] = useState<"text" | "area">("text");
+   const [radiusKm, setRadiusKm] = useState(5);
+   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+ 
+   const searchInputRef = useRef<HTMLInputElement>(null);
+ 
+   // 4️⃣ Request geolocation on mount  
+   useEffect(() => {
+     if (!navigator.geolocation) {
+       setErrorMessage("Geolocation not supported. Showing default.");  
+       return;
+     }
+     navigator.geolocation.getCurrentPosition(
+       ({ coords }) => {
+         const loc: [number, number] = [coords.latitude, coords.longitude];
+         setUserLocation(loc);
+         setMapCenter(loc);
+         setMapZoom(14);
+       },
+       () => {
+         setErrorMessage("Location denied. Showing default.");  
+       }
+     );
+   }, []);
+ 
+   // 5️⃣ Map event handlers
+   const handleMapMove = useCallback(
+     (newCenter: [number, number], newZoom: number) => {
+       setMapCenter(newCenter);
+       setMapZoom(newZoom);
+     },
+     []
+   );
+   const handleMapClick = useCallback(
+     ({ lat, lng }: { lat: number; lng: number }) => {
+       setMapCenter([lat, lng]);
+     },
+     []
+   );
+   const handleMarkerClick = useCallback((loc: Location) => {
+     setSelectedLocation(loc);
+     setIsDetailOpen(true);
+   }, []);
+ 
+   // 6️⃣ Text search suggestions
+   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const q = e.target.value;
+     setSearchQuery(q);
+     if (q.length > 2) {
+       setIsLoading(true);
+       setTimeout(() => {
+         setSearchSuggestions(
+           mockLocations
+             .filter(l =>
+               l.name.toLowerCase().includes(q.toLowerCase()) ||
+               l.address.toLowerCase().includes(q.toLowerCase())
+             )
+             .map(l => l.name)
+             .slice(0, 5)
+         );
+         setIsLoading(false);
+       }, 300);
+     } else {
+       setSearchSuggestions([]);
+     }
+   };
+   const handleSearch = (e?: React.FormEvent) => {
+     e?.preventDefault();
+     if (!searchQuery.trim()) {
+       setFilteredLocations(locations);
+       return;
+     }
+     setIsLoading(true);
+     setTimeout(() => {
+       const results = searchLocations(locations, searchQuery);
+       setFilteredLocations(results);
+       if (results.length) {
+         setMapCenter([results[0].latitude, results[0].longitude]);
+         setMapZoom(14);
+       }
+       setSearchSuggestions([]);
+       setIsLoading(false);
+     }, 500);
+   };
+   const handleSuggestionClick = (s: string) => {
+     setSearchQuery(s);
+     setSearchSuggestions([]);
+     const results = searchLocations(locations, s);
+     setFilteredLocations(results);
+     if (results.length) {
+       setMapCenter([results[0].latitude, results[0].longitude]);
+       setMapZoom(14);
+     }
+   };
+ 
+   // 7️⃣ Area search (Haversine)
+   const toRad = (d: number) => d * (Math.PI / 180);
+   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+     const R = 6371;
+     const dLat = toRad(lat2 - lat1);
+     const dLon = toRad(lon2 - lon1);
+     const a =
+       Math.sin(dLat/2)**2 +
+       Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+   };
+   const handleAreaSearch = (centerPt: [number, number], km: number) => {
+     setFilteredLocations(
+       locations.filter(l =>
+         calculateDistance(centerPt[0], centerPt[1], l.latitude, l.longitude) <= km
+       )
+     );
+   };
+ 
+   // 8️⃣ Category filters
+   const categories = Array.from(new Set(locations.map(l => l.category)));
+   const handleCategoryChange = (cats: string[]) => {
+     setSelectedCategories(cats);
+     setFilteredLocations(
+       cats.length
+         ? locations.filter(l => cats.includes(l.category))
+         : locations
+     );
+   };
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header with back button and title */}
-      <header className="bg-white border-b border-gray-200 py-4 px-4 sm:px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center text-gray-600 hover:text-gray-900 mr-4">
-              <ChevronLeft className="h-5 w-5 mr-1" />
-              <span>Back</span>
-            </Link>
-            <h1 className="text-xl font-bold text-gray-900">Explore Map</h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {userLocation && (
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-full"
-                onClick={() => {
-                  setMapCenter(userLocation)
-                  setMapZoom(15)
-                }}
-                title="Center on my location"
-              >
-                <Compass className="h-4 w-4 text-[#4ECDC4]" />
-              </Button>
-            )}
+      <header className="bg-white border-b p-4 flex justify-between items-center">
+        <div className="flex items-center">
+          <Link href="/" className="flex items-center text-gray-600 hover:text-gray-900 mr-3">
+            <ChevronLeft className="w-5 h-5 mr-1" /> Back
+          </Link>
+          <h1 className="text-xl font-bold">Explore Map</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {userLocation && (
             <Button
-              variant="outline"
               size="icon"
-              className="rounded-full md:hidden"
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              variant="outline"
+              onClick={() => {
+                setMapCenter(userLocation);
+                setMapZoom(15);
+              }}
             >
-              {isSidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              <Compass className="w-4 h-4 text-[#4ECDC4]" />
             </Button>
-          </div>
+          )}
+          <Button size="icon" variant="outline" className="md:hidden" onClick={() => setIsSidebarOpen(o => !o)}>
+            {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </Button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
-        <div
+        <aside
           className={cn(
-            "bg-white border-r border-gray-200 flex flex-col w-full max-w-md transition-all duration-300",
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0 md:w-0 md:max-w-0",
-          )}
+            "bg-white border-r transition-transform duration-300",
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+          ) + " w-full md:w-80 flex-shrink-0"}
         >
-          {/* Search and filters */}
-          <div className="p-4 border-b border-gray-200">
-            <Tabs defaultValue="text" onValueChange={(value) => setSearchMode(value as "text" | "area")}>
+          <div className="p-4 border-b">
+            <Tabs defaultValue="text" onValueChange={v => setSearchMode(v as "text" | "area")}>
               <TabsList className="grid grid-cols-2 mb-4">
-                <TabsTrigger value="text">Text Search</TabsTrigger>
-                <TabsTrigger value="area">Area Search</TabsTrigger>
+                <TabsTrigger value="text">Text</TabsTrigger>
+                <TabsTrigger value="area">Area</TabsTrigger>
               </TabsList>
-
-              {searchMode === "text" ? (
-                <div className="space-y-4">
-                  <form onSubmit={handleSearch} className="relative">
-                    <Input
-                      ref={searchInputRef}
-                      type="text"
-                      placeholder="Search locations, events, or addresses..."
-                      value={searchQuery}
-                      onChange={handleSearchChange}
-                      className="pr-10"
-                    />
-                    <Button
-                      type="submit"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full rounded-l-none bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-                    >
-                      <Search className="h-4 w-4 text-white" />
-                    </Button>
-
-                    {/* Search suggestions */}
-                    {searchSuggestions.length > 0 && (
-                      <div className="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200">
-                        {searchSuggestions.map((suggestion, index) => (
-                          <button
-                            key={index}
-                            className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                            onClick={() => handleSuggestionClick(suggestion)}
-                          >
-                            <MapPin className="h-4 w-4 mr-2 text-[#4ECDC4]" />
-                            {suggestion}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </form>
-
-                  <div>
-                    <p className="text-sm font-medium mb-2">Filter by Category</p>
-                    <div className="flex flex-wrap gap-2">
-                      {categories.map((category) => (
-                        <Badge
-                          key={category}
-                          variant={selectedCategories.includes(category) ? "default" : "outline"}
-                          className={cn(
-                            "cursor-pointer",
-                            selectedCategories.includes(category)
-                              ? "bg-[#4ECDC4] hover:bg-[#4ECDC4]/80"
-                              : "hover:bg-gray-100",
-                          )}
-                          onClick={() => {
-                            if (selectedCategories.includes(category)) {
-                              setSelectedCategories(selectedCategories.filter((c) => c !== category))
-                            } else {
-                              setSelectedCategories([...selectedCategories, category])
-                            }
-                            handleCategoryChange(
-                              selectedCategories.includes(category)
-                                ? selectedCategories.filter((c) => c !== category)
-                                : [...selectedCategories, category],
-                            )
-                          }}
-                        >
-                          {category}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm font-medium mb-2">Search Radius</p>
-                    <div className="flex items-center gap-4">
-                      <Slider
-                        value={[radiusKm]}
-                        min={1}
-                        max={50}
-                        step={1}
-                        onValueChange={(value) => setRadiusKm(value[0])}
-                        className="flex-1"
-                      />
-                      <span className="text-sm font-medium w-16 text-right">{radiusKm} km</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium">Search from map center</p>
-                    <Button
-                      onClick={() => handleAreaSearch(mapCenter, radiusKm)}
-                      className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-                    >
-                      <Circle className="h-4 w-4 mr-2" />
-                      Apply Radius
-                    </Button>
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-100">
-                    <p className="text-sm text-gray-500">
-                      Click on the map to set the center point for your area search, then click &quot;Apply Radius&quot; to find
-                      locations within the specified radius.
-                    </p>
-                  </div>
-                </div>
-              )}
             </Tabs>
+
+            {searchMode === "text" ? (
+              <form onSubmit={handleSearch} className="relative">
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder="Search..."
+                  className="pr-10"
+                />
+                <Button type="submit" size="icon" className="absolute right-0 top-0 h-full rounded-l-none bg-[#FF6B6B]">
+                  <Search className="w-4 h-4 text-white" />
+                </Button>
+                {searchSuggestions.length > 0 && (
+                  <ul className="absolute bg-white w-full mt-1 shadow-lg max-h-52 overflow-auto">
+                    {searchSuggestions.map((s, i) => (
+                      <li
+                        key={i}
+                        onClick={() => handleSuggestionClick(s)}
+                        className="p-2 hover:bg-gray-100 flex items-center cursor-pointer"
+                      >
+                        <MapPin className="w-4 h-4 mr-2 text-[#4ECDC4]" /> {s}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-2">Radius</p>
+                  <div className="flex items-center gap-2">
+                    <Slider value={[radiusKm]} min={1} max={50} onValueChange={v => setRadiusKm(v[0])} className="flex-1" />
+                    <span className="text-sm w-12 text-right">{radiusKm} km</span>
+                  </div>
+                </div>
+                <Button onClick={() => handleAreaSearch(mapCenter!, radiusKm)} className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+                  <Circle className="w-4 h-4 mr-2" /> Apply
+                </Button>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <p className="text-sm font-medium mb-2">Categories</p>
+              <div className="flex flex-wrap gap-2">
+                {categories.map(cat => {
+                  const active = selectedCategories.includes(cat);
+                  return (
+                    <Badge
+                      key={cat}
+                      variant={active ? "default" : "outline"}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        handleCategoryChange(
+                          active ? selectedCategories.filter(c => c !== cat) : [...selectedCategories, cat]
+                        )
+                      }
+                    >
+                      {cat}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          {/* Location list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="overflow-y-auto flex-1">
             <LocationList
               locations={filteredLocations}
               onLocationSelect={handleMarkerClick}
@@ -355,99 +275,56 @@ export default function MapExplorer() {
               isLoading={isLoading}
             />
           </div>
-        </div>
+        </aside>
 
-        {/* Map container */}
-        <div className="flex-1 relative h-full">
-          <InteractiveMap
-            locations={filteredLocations}
-            userLocation={userLocation}
-            center={mapCenter}
-            zoom={mapZoom}
-            onMarkerClickAction={handleMarkerClick}
-            onMapClickAction={(latlng) => setMapCenter([latlng.lat, latlng.lng])}
-            onMapMoveAction={(center, zoom) => {
-              setMapCenter(center)
-              setMapZoom(zoom)
-            }}
-            searchRadius={searchMode === "area" ? radiusKm : undefined}
-          />
+        <main className="flex-1 relative">
+          {mapCenter && (
+           <InteractiveMap
+           locations={filteredLocations}
+           userLocation={userLocation}
+           center={mapCenter}         
+           zoom={mapZoom}
+           onMapClickAction={handleMapClick}
+           onMapMoveAction={handleMapMove}
+           onMarkerClickAction={handleMarkerClick}
+           searchRadiusKm={searchMode === "area" ? radiusKm : undefined}
+           className="h-full w-full"
+         />
+          )}
 
-          {/* Toggle sidebar button (desktop) */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="absolute top-4 left-4 rounded-full bg-white shadow-md hidden md:flex z-20"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          >
-            {isSidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-
-          {/* Map controls */}
-          <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-20">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-full bg-white shadow-md">
-                  <Layers className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56" align="end">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Map Settings</h4>
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="show-user-location">Show my location</Label>
-                    <Switch id="show-user-location" defaultChecked />
-                  </div>
-                  <div>
-                    <Label htmlFor="map-style" className="mb-1 block">
-                      Map Style
-                    </Label>
-                    <Select defaultValue="standard">
-                      <SelectTrigger id="map-style">
-                        <SelectValue placeholder="Select style" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="satellite">Satellite</SelectItem>
-                        <SelectItem value="light">Light</SelectItem>
-                        <SelectItem value="dark">Dark</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+          <div className="absolute top-4 left-4 hidden md:flex">
+            <Button size="icon" variant="outline" onClick={() => setIsSidebarOpen(o => !o)}>
+              {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </Button>
           </div>
 
-          {/* Error message */}
           {errorMessage && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-md shadow-md px-4 py-2 border-l-4 border-amber-500 flex items-center z-20">
-              <span className="text-sm text-gray-700">{errorMessage}</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6 ml-2" onClick={() => setErrorMessage(null)}>
-                <X className="h-4 w-4" />
+            <div className="absolute top-4 inset-x-0 mx-auto bg-white rounded-md shadow-md px-4 py-2 border-l-4 border-amber-500 flex items-center z-20">
+              <span className="text-sm text-gray-700 flex-1">{errorMessage}</span>
+              <Button variant="ghost" size="icon" onClick={() => setErrorMessage(null)}>
+                <X className="w-4 h-4" />
               </Button>
             </div>
           )}
-        </div>
+        </main>
 
-        {/* Location detail panel */}
-        {selectedLocation && (
-          <div
+        {selectedLocation && isDetailOpen && (
+          <aside
             className={cn(
-              "bg-white border-l border-gray-200 w-full max-w-md transition-all duration-300",
-              isDetailOpen ? "translate-x-0" : "translate-x-full",
-            )}
+              "bg-white border-l transition-transform duration-300",
+              isDetailOpen ? "translate-x-0" : "translate-x-full"
+            ) + " w-full md:w-80 flex-shrink-0"}
           >
             <LocationDetail
               location={selectedLocation}
               onClose={() => {
-                setIsDetailOpen(false)
-                setSelectedLocation(null)
+                setIsDetailOpen(false);
+                setSelectedLocation(null);
               }}
             />
-          </div>
+          </aside>
         )}
       </div>
     </div>
-  )
+  );
 }

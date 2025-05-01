@@ -4,6 +4,8 @@ import { Button } from "./ui/button"
 import { Menu, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
+import logo from '@/public/logo.svg'
+import Image from "next/image"
 
 export default function NavBar() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -28,12 +30,9 @@ export default function NavBar() {
       >
         <div className="container mx-auto flex justify-between items-center">
           {/* Logo */}
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-full bg-[#FF6B6B] flex items-center justify-center">
-              <span className="text-white font-bold">GG</span>
-            </div>
-            <Link href="/" className="text-gray-900 text-xl font-bold hover:text-[#FF6B6B] transition-colors">
-              Grounded Gems
+          <div className="flex items-center space-x-2 -m-8">
+            <Link href={"/"} className="flex items-center">
+            <Image src={logo} alt="Logo" className="w-30 mx-4"/>
             </Link>
           </div>
 

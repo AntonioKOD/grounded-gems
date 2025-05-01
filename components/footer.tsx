@@ -1,6 +1,8 @@
 import { Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import Image from 'next/image'
+import logo from '@/public/logo.svg'
 
 export default function Footer() {
   return (
@@ -51,10 +53,8 @@ export default function Footer() {
 
         <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center mb-4 md:mb-0">
-            <div className="w-10 h-10 rounded-full bg-[#FF6B6B] flex items-center justify-center mr-3">
-              <span className="text-white font-bold">LE</span>
-            </div>
-            <span className="font-bold text-xl">Local Explorer</span>
+            <Image src={logo} alt="Logo" width={80} height={80} className="w-20" />
+            <span className="text-xl font-bold text-[#FF6B6B] ml-2">Grounded Gems</span>
           </div>
 
           <div className="flex flex-wrap gap-x-8 gap-y-2 justify-center">
@@ -80,3 +80,4 @@ export default function Footer() {
     </footer>
   )
 }
+
