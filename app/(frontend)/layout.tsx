@@ -1,6 +1,5 @@
 
 import React from 'react'
-import "leaflet/dist/leaflet.css";
 import "./globals.css"; 
 import NavBar from '@/components/NavBar'
 export const metadata = {

@@ -1,8 +1,10 @@
-import { MapPin, Calendar, Star } from 'lucide-react'
+"use client"
+
+import { MapPin, Calendar, Star } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Location } from "./map-data"
+import type { Location } from "./map-data"
 import { Skeleton } from "@/components/ui/skeleton"
-import Image from 'next/image'
+import { Button } from "@/components/ui/button"
 
 interface LocationListProps {
   locations: Location[]
@@ -11,12 +13,7 @@ interface LocationListProps {
   isLoading: boolean
 }
 
-export default function LocationList({ 
-  locations, 
-  onLocationSelect, 
-  selectedLocation,
-  isLoading 
-}: LocationListProps) {
+export default function LocationList({ locations, onLocationSelect, selectedLocation, isLoading }: LocationListProps) {
   if (isLoading) {
     return (
       <div className="p-4 space-y-4">
@@ -33,7 +30,7 @@ export default function LocationList({
       </div>
     )
   }
-  
+
   if (locations.length === 0) {
     return (
       <div className="p-8 text-center">
@@ -42,10 +39,20 @@ export default function LocationList({
         </div>
         <h3 className="text-lg font-medium text-gray-900 mb-1">No locations found</h3>
         <p className="text-gray-500">Try adjusting your search or filters</p>
+        <Button
+          variant="outline"
+          className="mt-4 mx-auto"
+          onClick={() => {
+            // This will clear any filters
+            window.dispatchEvent(new CustomEvent("clearFilters"))
+          }}
+        >
+          Clear Filters
+        </Button>
       </div>
     )
   }
-  
+
   return (
     <div className="divide-y divide-gray-100">
       {locations.map((location) => (
@@ -53,23 +60,22 @@ export default function LocationList({
           key={location.id}
           className={cn(
             "w-full text-left p-4 hover:bg-gray-50 transition-colors flex gap-3",
-            selectedLocation?.id === location.id && "bg-[#4ECDC4]/5 border-l-4 border-[#4ECDC4]"
+            selectedLocation?.id === location.id && "bg-[#4ECDC4]/5 border-l-4 border-[#4ECDC4]",
+            "active:bg-gray-100 min-h-[80px]", // Increase minimum height for better touch targets
           )}
           onClick={() => onLocationSelect(location)}
         >
-          <div 
+          <div
             className="h-16 w-16 rounded-md bg-gray-100 flex-shrink-0 flex items-center justify-center overflow-hidden"
-            style={{ 
-              backgroundColor: location.imageUrl ? 'transparent' : `${getCategoryColor(location.category)}20` 
+            style={{
+              backgroundColor: location.imageUrl ? "transparent" : `${getCategoryColor(location.category)}20`,
             }}
           >
             {location.imageUrl ? (
-              <Image
-                src={location.imageUrl || "/placeholder.svg"} 
-                alt={location.name} 
-                className="h-full w-full object-cover" 
-                width={64}
-                height={64}
+              <img
+                src={location.imageUrl || "/placeholder.svg"}
+                alt={location.name}
+                className="h-full w-full object-cover"
               />
             ) : (
               <span className="text-lg font-bold" style={{ color: getCategoryColor(location.category) }}>
@@ -77,26 +83,28 @@ export default function LocationList({
               </span>
             )}
           </div>
-          
+
           <div className="flex-1">
-            <h3 className="font-medium text-gray-900 line-clamp-1">{location.name}</h3>
-            
+            <h3 className="font-medium text-gray-900 line-clamp-1 text-base">{location.name}</h3>
+
             <div className="flex items-center text-gray-500 text-sm mt-1">
-              <MapPin className="h-3 w-3 mr-1" />
+              <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
               <span className="line-clamp-1">{location.address}</span>
             </div>
-            
+
             {location.eventDate && (
               <div className="flex items-center text-gray-500 text-sm mt-1">
-                <Calendar className="h-3 w-3 mr-1" />
+                <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
                 <span>{location.eventDate}</span>
               </div>
             )}
-            
+
             {location.rating && (
               <div className="flex items-center text-gray-500 text-sm mt-1">
-                <Star className="h-3 w-3 mr-1 text-[#FFE66D] fill-[#FFE66D]" />
-                <span>{location.rating} ({location.reviewCount} reviews)</span>
+                <Star className="h-3 w-3 mr-1 text-[#FFE66D] fill-[#FFE66D] flex-shrink-0" />
+                <span>
+                  {location.rating} ({location.reviewCount} reviews)
+                </span>
               </div>
             )}
           </div>
@@ -117,6 +125,6 @@ function getCategoryColor(category: string): string {
     Entertainment: "#FF66E3",
     Default: "#FF6B6B",
   }
-  
+
   return colors[category] || colors.Default
 }

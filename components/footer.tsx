@@ -73,7 +73,7 @@ export default function Footer() {
           </div>
 
           <div className="mt-4 md:mt-0 text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} Local Explorer. All rights reserved.
+            &copy; {new Date().getFullYear()} Grounded Gems. All rights reserved.
           </div>
         </div>
       </div>
