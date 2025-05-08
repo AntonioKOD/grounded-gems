@@ -8,8 +8,6 @@ export const metadata = {
 export default function MapPage() {
   return (
     <div className="min-h-screen h-screen bg-white overflow-hidden">
-      {/* Add viewport meta tag for proper mobile scaling */}
-      <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <style>{`
           html, body {
@@ -31,7 +29,6 @@ export default function MapPage() {
             }
           }
         `}</style>
-      </head>
       <MapExplorer />
     </div>
   )

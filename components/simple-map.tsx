@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Layers, Info } from "lucide-react";
+
+import {  Info } from "lucide-react";
 
 // Set your Mapbox access token
 mapboxgl.accessToken = "pk.eyJ1IjoiYW50b25pby1rb2RoZWxpIiwiYSI6ImNtYTQ3bTlibTAyYTUyanBzem5qZGV1ZzgifQ.cSUliejFuQnIHZ-DDinPRQ";
@@ -29,7 +29,7 @@ export default function SimpleMap({
   center = [-71.0589, 42.3601],
   zoom = 12,
   markers = [],
-  showControls = true,
+  showControls = false,
   interactive = true,
   isBackground = false,
   locations = [],
@@ -173,7 +173,7 @@ export default function SimpleMap({
   }, [markers, locations, mapLoaded, getCategoryColor]);
 
   // Style selector handlers
-  const toggleStyleSelector = useCallback(() => setShowStyles(v => !v), []);
+
   const selectStyle = useCallback((id: string) => { setStyleId(id); setShowStyles(false); }, []);
 
   // Fallback for no WebGL
@@ -191,13 +191,6 @@ export default function SimpleMap({
       <div ref={mapContainer} className="h-full w-full" />
 
       {/* Style toggle */}
-      {interactive && showControls && (
-        <div className="absolute top-4 right-4 z-10">
-          <Button size="icon" variant="outline" onClick={toggleStyleSelector}>
-            <Layers className="h-4 w-4 text-[#FF6B6B]" />
-          </Button>
-        </div>
-      )}
       {showStyles && (
         <div className="absolute top-12 right-4 bg-white rounded-lg shadow-lg p-2 z-10">
           {styles.map(s => (

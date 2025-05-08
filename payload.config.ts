@@ -1,7 +1,6 @@
 // storage-adapter-import-placeholder
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
-import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'path'
 import { buildConfig } from 'payload'
 import { fileURLToPath } from 'url'
@@ -14,6 +13,7 @@ import { Events }       from './collections/Events';
 import { Reviews }      from './collections/Reviews';
 import { Specials }     from './collections/Specials';
 import { Subscribers }  from './collections/Subscribers';
+import {resendAdapter} from '@payloadcms/email-resend'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -26,6 +26,11 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
+  email: resendAdapter({
+    defaultFromAddress: 'info@groundedgems.com',
+    defaultFromName: 'Grounded Gems',
+    apiKey: process.env.RESEND_API_KEY || '',
+  }),
   collections: [
     Users,
     Media,
@@ -36,7 +41,6 @@ export default buildConfig({
     Specials,
     Subscribers,
   ],
-  editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),

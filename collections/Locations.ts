@@ -1,5 +1,5 @@
 import { CollectionConfig } from 'payload';
-import { lexicalEditor } from '@payloadcms/richtext-lexical';
+
 
 export const Locations: CollectionConfig = {
   slug: 'locations',
@@ -13,14 +13,10 @@ export const Locations: CollectionConfig = {
     update: () => true,
     delete: () => true,
   },
-  admin: {
-    useAsTitle: 'name',
-    defaultColumns: ['name', 'slug', 'status', 'isFeatured'],
-  },
   fields: [
     { name: 'name', type: 'text', required: true },
-    { name: 'slug', type: 'text', required: true, unique: true, admin: { description: 'URL-friendly identifier' } },
-    { name: 'description', type: 'richText', required: true, editor: lexicalEditor({}) },
+    { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },
+    { name: 'description', type: 'text', required: true },
     { name: 'shortDescription', type: 'text' },
 
     // Media
@@ -116,7 +112,7 @@ export const Locations: CollectionConfig = {
 
     // Visitor Info
     { name: 'bestTimeToVisit', type: 'array', fields: [{ name: 'season', type: 'text' }] },
-    { name: 'insiderTips', type: 'richText', editor: lexicalEditor({}) },
+    { name: 'insiderTips', type: 'text'},
     {
       name: 'accessibility',
       type: 'group',

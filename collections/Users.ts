@@ -1,8 +1,26 @@
+
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { CollectionConfig } from 'payload';
 
 export const Users: CollectionConfig = {
   slug: 'users',
-  auth: true,
+  auth: {
+    verify: {
+      generateEmailSubject: ({ user }) => 
+        `Welcome to Grounded Gems, please verify ${user.email}`,   // Custom subject  [oai_citation:14‡Payload](https://payloadcms.com/docs/authentication/email?utm_source=chatgpt.com)
+      generateEmailHTML: ({ req, token, user }) => {
+        const url = `${process.env.FRONTEND_URL}/verify?token=${token}`;
+        return `
+          <html>
+            <body>
+              <h1>Hello, ${user.email}!</h1>
+              <p>Click below to verify your account:</p>
+              <a href="${url}">${url}</a>
+            </body>
+          </html>`;
+      },   // Custom HTML  [oai_citation:15‡Payload](https://payloadcms.com/docs/authentication/email?utm_source=chatgpt.com)
+    },
+  },
   admin: {
     useAsTitle: 'email',
   },

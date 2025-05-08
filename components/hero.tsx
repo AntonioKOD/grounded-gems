@@ -2,18 +2,18 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, X, Menu } from "lucide-react"
+import { Search} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import dynamic from 'next/dynamic'
-import Link from "next/link"
+
 
 const SimpleMap = dynamic(() => import("@/components/simple-map"), { ssr: false });
 
 export default function Hero() {
   const [searchFocused, setSearchFocused] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   const searchRef = useRef<HTMLDivElement>(null)
   // Close search suggestions when clicking outside
   useEffect(() => {
@@ -38,51 +38,7 @@ export default function Hero() {
       <SimpleMap/>
       </div>
 
-      {/* Mobile Menu Button */}
-      <div className="absolute top-4 right-4 z-30 md:hidden">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-10 w-10 rounded-full bg-white shadow-md border-gray-200"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
-      </div>
-
-      {/* Mobile Menu */}
-      <div
-        className={cn(
-          "absolute inset-x-0 top-0 z-20 bg-white shadow-lg transition-transform duration-300 transform md:hidden",
-          mobileMenuOpen ? "translate-y-0" : "-translate-y-full",
-        )}
-      >
-        <div className="p-4 space-y-4">
-          <nav className="flex flex-col space-y-2">
-            <Link href="/" className="px-4 py-2 hover:bg-gray-100 rounded-md font-medium">
-              Home
-            </Link>
-            <Link href="/explore" className="px-4 py-2 hover:bg-gray-100 rounded-md font-medium">
-              Explore
-            </Link>
-            <Link href="/locations" className="px-4 py-2 hover:bg-gray-100 rounded-md font-medium">
-              Locations
-            </Link>
-            <Link href="/add-event" className="px-4 py-2 hover:bg-gray-100 rounded-md font-medium">
-              Add Event
-            </Link>
-            <Link href="/add-location" className="px-4 py-2 hover:bg-gray-100 rounded-md font-medium">
-              Add Location
-            </Link>
-          </nav>
-          <div className="pt-2 border-t border-gray-200">
-            <Button className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Sign In</Button>
-          </div>
-        </div>
-      </div>
-
   
-       
 
       {/* Search Overlay */}
       <div className="absolute inset-0 flex flex-col items-center justify-center px-4 z-20">
