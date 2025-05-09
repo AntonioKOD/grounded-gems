@@ -6,7 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
 import useSWR from "swr"
-import { Menu, X, LogOut, UserCircle, Bell, Settings, Search, ChevronDown, Home, Info, Mail, Plus } from "lucide-react"
+import { Menu, X, LogOut, UserCircle, Bell, Settings, Search, ChevronDown, Home, Info, Plus } from "lucide-react"
 
 import { Button } from "./ui/button"
 import {
@@ -54,7 +54,7 @@ export default function NavBar() {
   const navLinks = [
     { path: "/", label: "Home", icon: Home },
     { path: "/about", label: "About", icon: Info },
-    { path: "/contact", label: "Contact", icon: Mail },
+    
   ]
 
   // Scroll effect
@@ -173,7 +173,7 @@ export default function NavBar() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      onClick={() => router.push("/locations/add")}
+                      onClick={() => router.push("/add-location")}
                       size="sm"
                       className="ml-2 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white"
                     >

@@ -3,7 +3,7 @@
 
 import { cn } from "@/lib/utils"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { addedLocations, searchLocations, type Location } from "./map-data"
 import { locationMatchesCategories } from "./category-utils"
 import MapComponent from "./map-component"
@@ -23,7 +23,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useMediaQuery } from "@/hooks/use-media-query"
 
 export default function MapExplorer() {
   const [allLocations, setAllLocations] = useState<Location[]>([])
@@ -39,10 +38,23 @@ export default function MapExplorer() {
   const [error, setError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<"map" | "list">("map")
   const [showDetail, setShowDetail] = useState(false)
-  
+
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+
+    return () => {
+      window.removeEventListener("resize", checkMobile)
+    }
+  }, [])
 
   // Load locations
   useEffect(() => {
@@ -232,13 +244,6 @@ export default function MapExplorer() {
   // Toggle search expansion on mobile
   const toggleSearch = () => {
     setIsSearchExpanded(!isSearchExpanded)
-
-    // Focus the input when expanding
-    if (!isSearchExpanded && searchInputRef.current) {
-      setTimeout(() => {
-        searchInputRef.current?.focus()
-      }, 100)
-    }
   }
 
   if (error) {
@@ -278,7 +283,6 @@ export default function MapExplorer() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9 pr-8 border-gray-200 focus:border-[#FF6B6B] focus:ring-[#FF6B6B]/10"
-                      ref={searchInputRef}
                     />
                     <Button
                       variant="ghost"
@@ -456,6 +460,20 @@ export default function MapExplorer() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
+        {/* List view - now on the left */}
+        <div
+          className={`${
+            activeView === "list" ? "block" : "hidden"
+          } md:block w-full md:w-96 border-r overflow-hidden flex-shrink-0 bg-white z-10`}
+        >
+          <LocationList
+            locations={filteredLocations}
+            onLocationSelect={handleLocationSelect}
+            selectedLocation={selectedLocation}
+            isLoading={isLoading}
+          />
+        </div>
+
         {/* Map view */}
         <div className={`${activeView === "map" ? "block" : "hidden"} md:block flex-1 relative h-full`}>
           <MapComponent
@@ -463,25 +481,11 @@ export default function MapExplorer() {
             userLocation={userLocation}
             center={mapCenter}
             zoom={mapZoom}
-            onMarkerClick={handleLocationSelect}
-            onMapClick={handleMapClick}
-            onMapMove={handleMapMove}
+            onMarkerClickAction={handleLocationSelect}
+            onMapClickAction={handleMapClick}
+            onMapMoveAction={handleMapMove}
             className="h-full w-full"
             selectedLocation={selectedLocation}
-          />
-        </div>
-
-        {/* List view */}
-        <div
-          className={`${
-            activeView === "list" ? "block" : "hidden"
-          } md:block w-full md:w-96 border-l overflow-hidden flex-shrink-0 bg-white`}
-        >
-          <LocationList
-            locations={filteredLocations}
-            onLocationSelect={handleLocationSelect}
-            selectedLocation={selectedLocation}
-            isLoading={isLoading}
           />
         </div>
 

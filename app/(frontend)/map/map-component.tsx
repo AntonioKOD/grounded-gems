@@ -1,18 +1,15 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Layers, Info, MapPin, Locate, X, ChevronUp, Filter, Search } from 'lucide-react'
+import { Layers, Info, MapPin, Locate, X } from "lucide-react"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
-import { useMediaQuery } from "@/hooks/use-media-query"
-import  Image  from "next/image"
 
 // Set the Mapbox access token from env
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ""
@@ -56,9 +53,9 @@ interface MapComponentProps {
   center: [number, number]
   zoom: number
   mapStyle?: string
-  onMarkerClick: (location: Location) => void
-  onMapClick: (coords: { lat: number; lng: number }) => void
-  onMapMove: (center: [number, number], zoom: number) => void
+  onMarkerClickAction: (location: Location) => void
+  onMapClickAction: (coords: { lat: number; lng: number }) => void
+  onMapMoveAction: (center: [number, number], zoom: number) => void
   searchRadius?: number
   className?: string
   selectedLocation?: Location | null
@@ -70,9 +67,9 @@ export default function MapComponent({
   center,
   zoom,
   mapStyle = "streets-v12",
-  onMarkerClick,
-  onMapClick,
-  onMapMove,
+  onMarkerClickAction,
+  onMapClickAction,
+  onMapMoveAction,
   searchRadius,
   className,
   selectedLocation,
@@ -88,12 +85,9 @@ export default function MapComponent({
   const [currentStyle, setCurrentStyle] = useState(mapStyle)
   const [webglSupported, setWebglSupported] = useState(true)
   const [showLegend, setShowLegend] = useState(false)
-  const [currentZoom, setCurrentZoom] = useState(zoom)
   const [showMiniPreview, setShowMiniPreview] = useState(false)
   const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
-  const isMobile = useMediaQuery("(max-width: 768px)")
-  const [mapHeight, setMapHeight] = useState("100%")
-  const [isMapInteractive, setIsMapInteractive] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
 
   const styles = [
     { id: "streets-v12", name: "Streets", icon: "🏙️" },
@@ -104,72 +98,27 @@ export default function MapComponent({
     { id: "outdoors-v12", name: "Outdoors", icon: "🏞️" },
   ]
 
-  // Get unique categories from locations for the legend
-  const uniqueCategories = useMemo(() => {
-    return locations.reduce(
-      (acc, location) => {
-        if (location.categories && Array.isArray(location.categories)) {
-          location.categories.forEach((category) => {
-            const id = typeof category === "string" ? category : category.id
-            const name = typeof category === "string" ? category : category.name || "Category"
-            const color = getCategoryColor(category)
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
 
-            if (id && !acc.some((c) => c.id === id)) {
-              acc.push({ id, name, color })
-            }
-          })
-        }
-        return acc
-      },
-      [] as { id: string; name: string; color: string }[],
-    )
-  }, [locations])
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+
+    return () => {
+      window.removeEventListener("resize", checkMobile)
+    }
+  }, [])
 
   // Detect WebGL support
   useEffect(() => {
     setWebglSupported(mapboxgl.supported())
   }, [])
 
-  // Update marker sizes based on zoom level
-  const updateMarkerSizes = useCallback(() => {
-    if (!mapRef.current) return
-
-    const zoom = mapRef.current.getZoom()
-    setCurrentZoom(zoom)
-
-    // Update marker sizes based on zoom level
-    markersRef.current.forEach(({ marker, location, element }) => {
-      // Scale factor based on zoom (smaller at lower zoom levels)
-      let scaleFactor = 1
-      if (zoom < 8) scaleFactor = 0.3
-      else if (zoom < 10) scaleFactor = 0.5
-      else if (zoom < 12) scaleFactor = 0.7
-      else if (zoom < 14) scaleFactor = 0.85
-      else if (zoom > 16) scaleFactor = 1.1
-
-      // Base size that will be scaled
-      const baseSize = isMobile ? 40 : 32
-      const size = Math.max(baseSize * scaleFactor, 12) // Minimum size
-
-      // Update marker size
-      element.style.width = `${size}px`
-      element.style.height = `${size}px`
-      element.style.fontSize = `${Math.max(size * 0.4, 8)}px`
-
-      // If this is the selected location, make it larger
-      if (selectedLocation && location.id === selectedLocation.id) {
-        element.style.width = `${size * 1.3}px`
-        element.style.height = `${size * 1.3}px`
-        element.style.zIndex = "10"
-        element.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
-      } else {
-        element.style.zIndex = "1"
-        element.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
-      }
-    })
-  }, [isMobile, selectedLocation])
-
-  // Initialize map once
+  // Optimize the useEffect for map initialization to prevent re-renders
+  // Replace the existing useEffect for map initialization with this optimized version
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !webglSupported) return
 
@@ -232,12 +181,12 @@ export default function MapComponent({
         }),
         position,
       )
-      
+
       // Only add fullscreen on non-mobile
       if (!isMobile) {
         map.addControl(new mapboxgl.FullscreenControl(), position)
       }
-      
+
       // Add geolocate control
       map.addControl(
         new mapboxgl.GeolocateControl({
@@ -253,17 +202,13 @@ export default function MapComponent({
         // Close any open popups when clicking on the map
         setShowMiniPreview(false)
         setPreviewLocation(null)
-        onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-      })
-      
-      map.on("moveend", () => {
-        const c = map.getCenter()
-        onMapMove([c.lat, c.lng], map.getZoom())
+        onMapClickAction({ lat: e.lngLat.lat, lng: e.lngLat.lng })
       })
 
-      // Add zoom handler for marker scaling
-      map.on("zoom", updateMarkerSizes)
-      map.on("zoomend", updateMarkerSizes)
+      map.on("moveend", () => {
+        const c = map.getCenter()
+        onMapMoveAction([c.lat, c.lng], map.getZoom())
+      })
 
       // Store map reference
       mapRef.current = map
@@ -283,9 +228,20 @@ export default function MapComponent({
         brandingRef.current = null
       }
     }
-  }, []) // Empty dependency array to initialize map only once
+  }, []) // Empty dependency array to ensure map is only initialized once
 
-  // Update map center and zoom when props change
+  // Add a separate effect to handle style changes
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return
+
+    try {
+      mapRef.current.setStyle(`mapbox://styles/mapbox/${currentStyle}`)
+    } catch (error) {
+      console.warn("Error changing map style:", error)
+    }
+  }, [currentStyle, mapLoaded])
+
+  // Add a separate effect to handle center and zoom changes
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
@@ -314,28 +270,167 @@ export default function MapComponent({
     }
   }, [center, zoom, mapLoaded])
 
-  // Update map style when prop changes
-  useEffect(() => {
-    if (!mapRef.current || !mapLoaded || currentStyle === mapStyle) return
-
-    try {
-      setCurrentStyle(mapStyle)
-      mapRef.current.setStyle(`mapbox://styles/mapbox/${mapStyle}`)
-    } catch (error) {
-      console.warn("Error changing map style:", error)
-    }
-  }, [mapStyle, mapLoaded])
-
-  // Update markers when locations change or selected location changes
+  // Optimize the markers update effect
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
 
-    console.log(`Updating ${locations.length} location markers`)
+    // Use a ref to track if markers have been initialized
+    const markersInitialized = markersRef.current.length > 0
+
+    // Only update markers if they haven't been initialized or if locations have changed
+    if (!markersInitialized) {
+      console.log(`Initializing ${locations.length} location markers`)
+
+      // Add new markers for each location
+      locations.forEach((location) => {
+        try {
+          // Get coordinates
+          const coords = getCoordinates(location)
+          if (!coords) return // Skip if no valid coordinates
+
+          const [lat, lng] = coords
+
+          // Create marker element
+          const el = document.createElement("div")
+
+          // Get primary category and its color
+          const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
+          const color = getCategoryColor(primaryCategory) || "#888"
+
+          // Fixed marker size regardless of zoom level
+          const isSelected = selectedLocation && location.id === selectedLocation.id
+          const baseMarkerSize = isSelected ? 40 : 32 // Slightly larger for selected marker
+
+          // Style the marker
+          Object.assign(el.style, {
+            width: `${baseMarkerSize}px`,
+            height: `${baseMarkerSize}px`,
+            backgroundColor: color,
+            borderRadius: "50%",
+            border: isSelected ? "3px solid #FF6B6B" : "3px solid white",
+            boxShadow: isSelected
+              ? "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+              : "0 3px 6px rgba(0,0,0,0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "white",
+            fontSize: `${baseMarkerSize * 0.4}px`,
+            fontWeight: "bold",
+            cursor: "pointer",
+            position: "relative",
+            transition: "transform 0.2s ease, box-shadow 0.2s ease",
+            zIndex: isSelected ? "10" : "1",
+          })
+
+          // Add hover effect only for non-mobile devices
+          if (!isMobile) {
+            el.onmouseenter = () => {
+              if (!isSelected) {
+                // Use CSS transform-origin to ensure the marker scales from the center point
+                el.style.transformOrigin = "center center"
+                // Apply a transform that doesn't affect position
+                el.style.transform = "scale(1.1)"
+                el.style.boxShadow = "0 4px 8px rgba(0,0,0,0.4)"
+                // Increase z-index on hover to ensure it appears above other markers
+                el.style.zIndex = "5"
+              }
+            }
+
+            el.onmouseleave = () => {
+              if (!isSelected) {
+                el.style.transform = "scale(1)"
+                el.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
+                // Reset z-index when not hovered
+                el.style.zIndex = "1"
+              }
+            }
+          }
+
+          // Get first letter of category name for marker label
+          let categoryLabel = "C"
+          if (primaryCategory) {
+            if (typeof primaryCategory === "string") {
+              categoryLabel = primaryCategory.charAt(0)
+            } else if (primaryCategory.name) {
+              categoryLabel = primaryCategory.name.charAt(0)
+            }
+          }
+
+          el.textContent = categoryLabel
+
+          // Add pulse effect
+          const pulse = document.createElement("div")
+          Object.assign(pulse.style, {
+            position: "absolute",
+            inset: "0",
+            borderRadius: "50%",
+            backgroundColor: `${color}20`,
+            animation: "pulse 2s infinite",
+            zIndex: "-1",
+          })
+          el.appendChild(pulse)
+
+          // Add click handler
+          el.addEventListener("click", (e) => {
+            e.stopPropagation()
+
+            // On mobile, show mini preview first
+            if (isMobile) {
+              setPreviewLocation(location)
+              setShowMiniPreview(true)
+            } else {
+              // On desktop, go directly to full detail view
+              onMarkerClickAction(location)
+            }
+          })
+
+          // Create marker without popup (we'll handle our own preview)
+          const marker = new mapboxgl.Marker({
+            element: el,
+            // Allow markers to overlap when zoomed out
+            anchor: "center",
+          })
+            .setLngLat([lng, lat])
+            .addTo(map)
+
+          // Store marker reference with its element
+          markersRef.current.push({ marker, location, element: el })
+        } catch (error) {
+          console.warn(`Error adding marker for location "${location.name}":`, error)
+        }
+      })
+
+      console.log(`Added ${markersRef.current.length} markers to map`)
+    } else {
+      // Just update the selected state of existing markers
+      markersRef.current.forEach(({ element, location }) => {
+        const isSelected = selectedLocation && location.id === selectedLocation.id
+
+        if (isSelected) {
+          element.style.border = "3px solid #FF6B6B"
+          element.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+          element.style.zIndex = "10"
+        } else {
+          element.style.border = "3px solid white"
+          element.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
+          element.style.zIndex = "1"
+        }
+      })
+    }
+  }, [mapLoaded, selectedLocation, isMobile])
+
+  // Add a separate effect to handle location changes
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapLoaded) return
 
     // Remove existing markers
     markersRef.current.forEach(({ marker }) => marker.remove())
     markersRef.current = []
+
+    console.log(`Updating ${locations.length} location markers`)
 
     // Add new markers for each location
     locations.forEach((location) => {
@@ -353,27 +448,14 @@ export default function MapComponent({
         const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
         const color = getCategoryColor(primaryCategory) || "#888"
 
-        // Base size that will be scaled based on zoom level
-        const baseSize = isMobile ? 40 : 32
-        let scaleFactor = 1
-        if (mapRef.current) {
-          const zoom = mapRef.current.getZoom()
-          if (zoom < 8) scaleFactor = 0.3
-          else if (zoom < 10) scaleFactor = 0.5
-          else if (zoom < 12) scaleFactor = 0.7
-          else if (zoom < 14) scaleFactor = 0.85
-          else if (zoom > 16) scaleFactor = 1.1
-        }
-        const size = Math.max(baseSize * scaleFactor, 12) // Minimum size
-
-        // Check if this is the selected location
+        // Fixed marker size regardless of zoom level
         const isSelected = selectedLocation && location.id === selectedLocation.id
-        const finalSize = isSelected ? size * 1.3 : size
+        const baseMarkerSize = isSelected ? 40 : 32 // Slightly larger for selected marker
 
         // Style the marker
         Object.assign(el.style, {
-          width: `${finalSize}px`,
-          height: `${finalSize}px`,
+          width: `${baseMarkerSize}px`,
+          height: `${baseMarkerSize}px`,
           backgroundColor: color,
           borderRadius: "50%",
           border: isSelected ? "3px solid #FF6B6B" : "3px solid white",
@@ -384,11 +466,11 @@ export default function MapComponent({
           alignItems: "center",
           justifyContent: "center",
           color: "white",
-          fontSize: `${Math.max(finalSize * 0.4, 8)}px`,
+          fontSize: `${baseMarkerSize * 0.4}px`,
           fontWeight: "bold",
           cursor: "pointer",
-          position: "relative",
-          transition: "transform 0.2s ease, box-shadow 0.2s ease, width 0.2s ease, height 0.2s ease",
+          position: "absolute",
+          transition: "transform 0.2s ease, box-shadow 0.2s ease",
           zIndex: isSelected ? "10" : "1",
         })
 
@@ -396,8 +478,13 @@ export default function MapComponent({
         if (!isMobile) {
           el.onmouseenter = () => {
             if (!isSelected) {
+              // Use CSS transform-origin to ensure the marker scales from the center point
+              el.style.transformOrigin = "center center"
+              // Apply a transform that doesn't affect position
               el.style.transform = "scale(1.1)"
               el.style.boxShadow = "0 4px 8px rgba(0,0,0,0.4)"
+              // Increase z-index on hover to ensure it appears above other markers
+              el.style.zIndex = "5"
             }
           }
 
@@ -405,6 +492,8 @@ export default function MapComponent({
             if (!isSelected) {
               el.style.transform = "scale(1)"
               el.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
+              // Reset z-index when not hovered
+              el.style.zIndex = "1"
             }
           }
         }
@@ -436,19 +525,25 @@ export default function MapComponent({
         // Add click handler
         el.addEventListener("click", (e) => {
           e.stopPropagation()
-          
+
           // On mobile, show mini preview first
           if (isMobile) {
             setPreviewLocation(location)
             setShowMiniPreview(true)
           } else {
             // On desktop, go directly to full detail view
-            onMarkerClick(location)
+            onMarkerClickAction(location)
           }
         })
 
         // Create marker without popup (we'll handle our own preview)
-        const marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(map)
+        const marker = new mapboxgl.Marker({
+          element: el,
+          // Allow markers to overlap when zoomed out
+          anchor: "center",
+        })
+          .setLngLat([lng, lat])
+          .addTo(map)
 
         // Store marker reference with its element
         markersRef.current.push({ marker, location, element: el })
@@ -458,10 +553,7 @@ export default function MapComponent({
     })
 
     console.log(`Added ${markersRef.current.length} markers to map`)
-    
-    // Update marker sizes after adding them
-    updateMarkerSizes()
-  }, [locations, mapLoaded, onMarkerClick, selectedLocation, isMobile, updateMarkerSizes])
+  }, [locations, mapLoaded, onMarkerClickAction, selectedLocation, isMobile])
 
   // Add user location marker
   useEffect(() => {
@@ -484,7 +576,7 @@ export default function MapComponent({
         backgroundColor: "#4285F4",
         border: "3px solid white",
         boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-        position: "relative",
+        position: "absoulute",
       })
 
       // Add pulse effect
@@ -505,7 +597,13 @@ export default function MapComponent({
       )
 
       // Add marker to map
-      userMarkerRef.current = new mapboxgl.Marker(el).setLngLat([lng, lat]).setPopup(popup).addTo(map)
+      userMarkerRef.current = new mapboxgl.Marker({
+        element: el,
+        scale: 1, // Fixed size
+      })
+        .setLngLat([lng, lat])
+        .setPopup(popup)
+        .addTo(map)
     } catch (error) {
       console.warn("Error adding user location marker:", error)
     }
@@ -600,7 +698,7 @@ export default function MapComponent({
     }
   }, [mapLoaded])
 
-  // Style selector handlers
+  // Memoize callback functions
   const toggleStyles = useCallback(() => setShowStyles((s) => !s), [])
   const selectMapStyle = useCallback(
     (styleId: string) => {
@@ -624,11 +722,11 @@ export default function MapComponent({
   // Handle mini preview actions
   const handleViewDetails = useCallback(() => {
     if (previewLocation) {
-      onMarkerClick(previewLocation)
+      onMarkerClickAction(previewLocation)
       setShowMiniPreview(false)
       setPreviewLocation(null)
     }
-  }, [previewLocation, onMarkerClick])
+  }, [previewLocation, onMarkerClickAction])
 
   const closeMiniPreview = useCallback(() => {
     setShowMiniPreview(false)
@@ -663,24 +761,17 @@ export default function MapComponent({
 
   return (
     <div className={cn("relative h-full w-full", className)}>
-      <div 
-        ref={containerRef} 
-        className="h-full w-full map-container"
-        style={{ 
-          height: mapHeight,
-          pointerEvents: isMapInteractive ? 'auto' : 'none'
-        }}
-      />
+      <div ref={containerRef} className="h-full w-full map-container" />
 
       {/* Map controls */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 md:top-4 md:right-4 top-2 right-2">
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 md:top-4 md:right-4">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 size="icon"
                 variant="outline"
-                className="bg-white shadow-md rounded-full h-10 w-10 md:h-10 md:w-10 h-12 w-12"
+                className="bg-white shadow-md rounded-full h-10 w-10"
                 onClick={toggleStyles}
               >
                 <Layers className="h-5 w-5 text-[#FF6B6B]" />
@@ -712,25 +803,23 @@ export default function MapComponent({
           </TooltipProvider>
         )}
 
-        {uniqueCategories.length > 0 && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className={cn("bg-white shadow-md rounded-full h-10 w-10", showLegend && "bg-gray-100")}
-                  onClick={toggleLegend}
-                >
-                  <Info className="h-5 w-5 text-gray-600" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>Category Legend</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="outline"
+                className={cn("bg-white shadow-md rounded-full h-10 w-10", showLegend && "bg-gray-100")}
+                onClick={toggleLegend}
+              >
+                <Info className="h-5 w-5 text-gray-600" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Category Legend</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
 
       {/* Style selector dropdown */}
@@ -763,7 +852,7 @@ export default function MapComponent({
       )}
 
       {/* Category legend */}
-      {showLegend && uniqueCategories.length > 0 && (
+      {showLegend && (
         <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
           <div className="flex justify-between items-center mb-3">
             <h4 className="text-sm font-medium text-gray-800 px-2">Categories</h4>
@@ -774,12 +863,30 @@ export default function MapComponent({
             )}
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {uniqueCategories.map((category) => (
-              <div key={category.id} className="flex items-center px-2">
-                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                <span className="text-sm text-gray-700">{category.name}</span>
-              </div>
-            ))}
+            {locations
+              .reduce(
+                (acc, location) => {
+                  if (location.categories && Array.isArray(location.categories)) {
+                    location.categories.forEach((category) => {
+                      const id = typeof category === "string" ? category : category.id
+                      const name = typeof category === "string" ? category : category.name || "Category"
+                      const color = getCategoryColor(category)
+
+                      if (id && !acc.some((c) => c.id === id)) {
+                        acc.push({ id, name, color })
+                      }
+                    })
+                  }
+                  return acc
+                },
+                [] as { id: string; name: string; color: string }[],
+              )
+              .map((category) => (
+                <div key={category.id} className="flex items-center px-2">
+                  <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                  <span className="text-sm text-gray-700">{category.name}</span>
+                </div>
+              ))}
           </div>
         </div>
       )}
@@ -792,30 +899,31 @@ export default function MapComponent({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <div className="flex items-start mb-3">
             <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
               {previewLocation.imageUrl || previewLocation.featuredImage ? (
-                <Image
-                  src={
-                    typeof previewLocation.featuredImage === "string"
-                      ? previewLocation.featuredImage
-                      : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
-                  }
-                  alt={previewLocation.name}
-                  fill
-                  className="object-cover"
-                />
+                <div className="w-full h-full relative">
+                  <img
+                    src={
+                      typeof previewLocation.featuredImage === "string"
+                        ? previewLocation.featuredImage
+                        : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
+                    }
+                    alt={previewLocation.name}
+                    className="object-cover w-full h-full"
+                  />
+                </div>
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <MapPin className="h-6 w-6 text-gray-400" />
                 </div>
               )}
             </div>
-            
+
             <div className="ml-3 flex-1">
               <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
-              
+
               {/* Address */}
               {previewLocation.address && (
                 <div className="flex items-center mt-1">
@@ -827,14 +935,14 @@ export default function MapComponent({
                   </p>
                 </div>
               )}
-              
+
               {/* Categories */}
               {previewLocation.categories && previewLocation.categories.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {previewLocation.categories.slice(0, 2).map((category, idx) => {
                     const color = getCategoryColor(category)
                     const name = typeof category === "string" ? category : category?.name || "Category"
-                    
+
                     return (
                       <Badge
                         key={idx}
@@ -854,7 +962,7 @@ export default function MapComponent({
               )}
             </div>
           </div>
-          
+
           <Button className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={handleViewDetails}>
             View Details
           </Button>
@@ -983,6 +1091,33 @@ export default function MapComponent({
             height: 100% !important;
             width: 100% !important;
           }
+        }
+
+        /* Marker clustering and overlapping styles */
+        .mapboxgl-marker {
+          will-change: transform;
+        }
+
+        .mapboxgl-marker:hover {
+          z-index: 10 !important;
+        }
+
+        /* Ensure markers don't get too small when zoomed out */
+        @media (max-width: 768px) {
+          .mapboxgl-marker {
+            touch-action: pan-x pan-y;
+          }
+        }
+
+        /* Fix for marker hover effect */
+        .mapboxgl-marker {
+          transform-origin: center bottom !important;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+        }
+
+        .mapboxgl-marker > div {
+          transform-origin: center center !important;
         }
       `}</style>
     </div>

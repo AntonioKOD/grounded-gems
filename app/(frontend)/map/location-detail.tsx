@@ -30,7 +30,6 @@ import type { Location } from "./map-data"
 import { getCategoryColor, formatBusinessHours, formatPriceRange } from "./category-utils"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface LocationDetailProps {
   location: Location
@@ -44,7 +43,21 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
   const [showFullGallery, setShowFullGallery] = useState(false)
   const [scrollPosition, setScrollPosition] = useState(0)
   const contentRef = useRef<HTMLDivElement>(null)
-  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [isMobile, setIsMobile] = useState(false)
+
+  // Check if device is mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+
+    return () => {
+      window.removeEventListener("resize", checkMobile)
+    }
+  }, [])
 
   // Format address
   const formatAddress = () => {
@@ -61,7 +74,7 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
   const phone = contactInfo.phone 
   const email = contactInfo.email 
   const website = contactInfo.website 
-  
+
 
   // Get images
   const images: string[] = []
@@ -231,7 +244,7 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
       {/* Content */}
       <div className="flex-1 overflow-y-auto" ref={contentRef}>
         {/* Image gallery */}
-        <div className="relative h-64 md:h-72 bg-gray-100">
+        <div className="relative h-56 md:h-72 bg-gray-100">
           {images.length > 0 && (
             <Image
               src={images[activeImageIndex] || "/placeholder.svg"}
@@ -665,8 +678,9 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
                   )}
                 </div>
               </div>
-            )} */}
+            )}*/}
           </TabsContent>
+          
 
           {/* Tips tab */}
           {location.insiderTips && (
@@ -684,10 +698,10 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t bg-white sticky bottom-0 z-10 safe-area-bottom">
+      <div className="p-3 md:p-4 border-t bg-white sticky bottom-0 z-10 safe-area-bottom">
         <div className="flex gap-2">
           <Button
-            className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 py-6 md:py-2"
+            className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 py-5 md:py-2"
             onClick={() => {
               const lat = location.coordinates?.latitude || location.latitude
               const lng = location.coordinates?.longitude || location.longitude
@@ -702,13 +716,13 @@ export default function LocationDetail({ location, onCloseAction }: LocationDeta
           </Button>
           <Button
             variant={isFavorite ? "default" : "outline"}
-            className={cn("flex-1 py-6 md:py-2", isFavorite && "bg-pink-500 hover:bg-pink-600 border-pink-500")}
+            className={cn("flex-1 py-5 md:py-2", isFavorite && "bg-pink-500 hover:bg-pink-600 border-pink-500")}
             onClick={() => setIsFavorite(!isFavorite)}
           >
             <Heart className={cn("h-5 w-5 mr-2", isFavorite && "fill-white")} />
             {isFavorite ? "Saved" : "Save"}
           </Button>
-          <Button variant="outline" size="icon" className="h-14 w-14 md:h-10 md:w-10" onClick={shareLocation}>
+          <Button variant="outline" size="icon" className="h-12 w-12 md:h-10 md:w-10" onClick={shareLocation}>
             <Share2 className="h-5 w-5" />
           </Button>
         </div>

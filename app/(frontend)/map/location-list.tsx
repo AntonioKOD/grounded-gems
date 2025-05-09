@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import { useState, useRef, useEffect } from "react"
@@ -107,8 +106,8 @@ export default function LocationList({ locations, onLocationSelect, selectedLoca
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 border-b border-gray-200 bg-white sticky top-0 z-10">
+    <div className="flex flex-col h-full border-r border-gray-200">
+      <div className="p-3 md:p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-lg font-medium">
             <span className="text-[#FF6B6B]">{filteredLocations.length}</span> Locations
@@ -138,7 +137,7 @@ export default function LocationList({ locations, onLocationSelect, selectedLoca
             placeholder="Filter locations..."
             value={quickFilter}
             onChange={(e) => setQuickFilter(e.target.value)}
-            className="pl-9 pr-8 border-gray-200 focus:border-[#FF6B6B] focus:ring-[#FF6B6B]/10"
+            className="pl-9 pr-8 border-gray-200 focus:border-[#FF6B6B] focus:ring-[#FF6B6B]/10 h-10"
           />
           {quickFilter && (
             <Button
@@ -207,8 +206,7 @@ export default function LocationList({ locations, onLocationSelect, selectedLoca
               const today = new Date().toLocaleDateString("en-US", { weekday: "long" })
               const todayHours = location.businessHours?.find((h) => h.day === today)
 
-              // Check if open now
-              const isOpenNow = todayHours && !todayHours.closed
+      
 
               const isSelected = selectedLocation?.id === location.id
 
@@ -222,7 +220,7 @@ export default function LocationList({ locations, onLocationSelect, selectedLoca
                   )}
                   onClick={() => onLocationSelect(location)}
                 >
-                  <div className="p-4 md:p-4 p-5">
+                  <div className="p-3 md:p-4">
                     <div className="flex">
                       <div
                         className={cn(
