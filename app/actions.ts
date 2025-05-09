@@ -6,26 +6,100 @@ import {logout} from '@payloadcms/next/auth'
 
 
 
+
+
 export async function getLocations() {
- // Next.js Server Action
-  
-    // Initialize (or reuse) your running Payload instance
-    const payload = await getPayload({ config: config });
-  
-    // Query the 'locations' collection without HTTP
+  try {
+    const payload = await getPayload({ config: config })
+
+    // Fetch locations with categories and other related fields
     const result = await payload.find({
-      collection: 'locations',
-      depth: 0,             // no nested relations by default  [oai_citation:5‡Payload](https://payloadcms.com/docs/local-api/overview)
-      overrideAccess: true, // bypass access control on server  [oai_citation:6‡Payload](https://payloadcms.com/docs/local-api/overview)
-    });
-  
-    return result.docs.map(doc => ({
-      id: String(doc.id),
-      name: String(doc.name),
-      latitude: Number(doc.coordinates.latitude),
-      longitude: Number(doc.coordinates.longitude),
-    }));
+      collection: "locations",
+      depth: 2, // Increase depth to get related fields like categories
+      limit: 100,
+      overrideAccess: true,
+    })
+
+    console.log(`Fetched ${result.docs?.length || 0} locations from Payload CMS`)
+
+    // Process the locations to ensure they have the required fields
+    const processedLocations = result.docs.map((location) => {
+      // Extract coordinates
+      const latitude = location.coordinates?.latitude || null
+      const longitude = location.coordinates?.longitude || null
+
+      // Log coordinates for debugging
+      if (latitude && longitude) {
+        console.log(`Location "${location.name}" coordinates: [${latitude}, ${longitude}]`)
+      } else {
+        console.warn(`Location "${location.name}" is missing coordinates`)
+      }
+
+      // Format the address
+      let formattedAddress = ""
+      if (location.address) {
+        const addressParts = [
+          location.address.street,
+          location.address.city,
+          location.address.state,
+          location.address.zip,
+          location.address.country,
+        ].filter(Boolean)
+        formattedAddress = addressParts.join(", ")
+      }
+
+      // Get image URL
+      let imageUrl = null
+      if (location.featuredImage) {
+        if (typeof location.featuredImage === "string") {
+          imageUrl = location.featuredImage
+        } else if (location.featuredImage.url) {
+          imageUrl = location.featuredImage.url
+        }
+      }
+
+      return {
+        ...location,
+        latitude,
+        longitude,
+        address: formattedAddress || location.address,
+        imageUrl,
+      }
+    })
+
+    // Filter out locations without valid coordinates
+    const validLocations = processedLocations.filter(
+      (loc) => loc.latitude !== null && loc.longitude !== null && !isNaN(loc.latitude) && !isNaN(loc.longitude),
+    )
+
+    console.log(`Returning ${validLocations.length} valid locations`)
+
+    return validLocations
+  } catch (error) {
+    console.error("Error fetching locations:", error)
+    return []
   }
+}
+
+// Your other server actions...
+
+// Add the getCategories export to your actions file if it's not already there
+export async function getCategories() {
+  const payload = await getPayload({ config: config })
+  const result = await payload.find({
+    collection: "categories",
+    depth: 1,
+    where: {
+      isActive: {
+        equals: true,
+      },
+    },
+    sort: "order",
+    limit: 100,
+    overrideAccess: true,
+  })
+  return result
+}
 
 
   export type DayOfWeek =
@@ -41,7 +115,6 @@ export interface LocationFormData {
   // Basic
   name: string;
   slug: string;
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
   description: string; // richText value from your editor
   shortDescription?: string;
 
@@ -155,15 +228,7 @@ export async function createLocation(data: LocationFormData) {
   return created;
 }
 
-export async function getCategories(){
-  const payload = await getPayload({ config: config });
-  const result = await payload.find({
-    collection: 'categories',
-    depth: 0,
-    overrideAccess: true,
-  });
-  return result
-}
+
 
 interface SignupInput {
   email: string;

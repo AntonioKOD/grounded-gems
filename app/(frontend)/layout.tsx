@@ -2,6 +2,8 @@
 import React from 'react'
 import "./globals.css"; 
 import NavBar from '@/components/NavBar'
+import Footer from '@/components/footer';
+import MobileNavigation from '@/components/mobile-navigation';
 
 
 export const metadata = {
@@ -17,6 +19,10 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <body>
         <NavBar />
         <main>{children}</main>
+        <Footer/>
+        <div className="md:hidden">
+        <MobileNavigation />
+      </div>
       </body>
     </html>
   )

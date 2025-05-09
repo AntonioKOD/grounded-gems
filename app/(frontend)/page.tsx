@@ -3,8 +3,8 @@ import FilterBar from "@/components/filter-bar"
 import FeaturedEvents from "@/components/featured-events"
 import CategoryGrid from "@/components/category-grid"
 import RecommendedEvents from "@/components/recommended-events"
-import Footer from "@/components/footer"
-import MobileNavigation from "@/components/mobile-navigation"
+
+
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { CalendarPlus, MapPin } from "lucide-react"
@@ -49,10 +49,6 @@ export default function HomePage() {
           <RecommendedEvents />
         </div>
       </main>
-      <Footer />
-      <div className="md:hidden">
-        <MobileNavigation />
-      </div>
     </div>
   )
 }
