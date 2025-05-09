@@ -22,7 +22,7 @@ export default function MobileNavigation() {
           <span className="text-xs mt-1">Add Event</span>
         </Link>
 
-        <Link href="/locations" className="flex flex-col items-center">
+        <Link href="/map" className="flex flex-col items-center">
           <MapPin className="h-6 w-6 text-gray-500" />
           <span className="text-xs mt-1">Locations</span>
         </Link>

@@ -1754,7 +1754,7 @@ export default function AddLocationForm() {
             >
               Add Another Location
             </Button>
-            <Button variant="outline" onClick={() => router.push("/locations")}>
+            <Button variant="outline" onClick={() => router.push("/map")}>
               View All Locations
             </Button>
           </DialogFooter>

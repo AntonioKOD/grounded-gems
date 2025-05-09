@@ -1,50 +1,51 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Layers, Info, MapPin } from 'lucide-react'
+import { Layers, Info, MapPin, Locate, X, ChevronUp, Filter, Search } from 'lucide-react'
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Badge } from "@/components/ui/badge"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import  Image  from "next/image"
 
 // Set the Mapbox access token from env
 mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ""
 
 // Validate latitude/longitude
 const isValidCoordinate = (lat?: number | string | null, lng?: number | string | null): boolean => {
-  const numLat = typeof lat === 'string' ? parseFloat(lat) : lat
-  const numLng = typeof lng === 'string' ? parseFloat(lng) : lng
-  
-  return numLat != null && 
-         numLng != null && 
-         !isNaN(numLat) && 
-         !isNaN(numLng) && 
-         Math.abs(numLat) <= 90 && 
-         Math.abs(numLng) <= 180
+  const numLat = typeof lat === "string" ? Number.parseFloat(lat) : lat
+  const numLng = typeof lng === "string" ? Number.parseFloat(lng) : lng
+
+  return (
+    numLat != null &&
+    numLng != null &&
+    !isNaN(numLat) &&
+    !isNaN(numLng) &&
+    Math.abs(numLat) <= 90 &&
+    Math.abs(numLng) <= 180
+  )
 }
 
 // Extract coordinates from location
 const getCoordinates = (location: Location): [number, number] | null => {
   // Try direct latitude/longitude properties
   if (isValidCoordinate(location.latitude, location.longitude)) {
-    return [
-      Number(location.latitude),
-      Number(location.longitude)
-    ]
+    return [Number(location.latitude), Number(location.longitude)]
   }
-  
+
   // Try coordinates object
   if (location.coordinates) {
     if (isValidCoordinate(location.coordinates.latitude, location.coordinates.longitude)) {
-      return [
-        Number(location.coordinates.latitude),
-        Number(location.coordinates.longitude)
-      ]
+      return [Number(location.coordinates.latitude), Number(location.coordinates.longitude)]
     }
   }
-  
+
   console.warn(`Invalid coordinates for location "${location.name}"`)
   return null
 }
@@ -60,6 +61,7 @@ interface MapComponentProps {
   onMapMove: (center: [number, number], zoom: number) => void
   searchRadius?: number
   className?: string
+  selectedLocation?: Location | null
 }
 
 export default function MapComponent({
@@ -73,10 +75,11 @@ export default function MapComponent({
   onMapMove,
   searchRadius,
   className,
+  selectedLocation,
 }: MapComponentProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<{ marker: mapboxgl.Marker, location: Location }[]>([])
+  const markersRef = useRef<{ marker: mapboxgl.Marker; location: Location; element: HTMLElement }[]>([])
   const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
   const circleLayerId = useRef<string | null>(null)
   const brandingRef = useRef<HTMLDivElement | null>(null)
@@ -84,31 +87,97 @@ export default function MapComponent({
   const [showStyles, setShowStyles] = useState(false)
   const [currentStyle, setCurrentStyle] = useState(mapStyle)
   const [webglSupported, setWebglSupported] = useState(true)
+  const [showLegend, setShowLegend] = useState(false)
+  const [currentZoom, setCurrentZoom] = useState(zoom)
+  const [showMiniPreview, setShowMiniPreview] = useState(false)
+  const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
+  const isMobile = useMediaQuery("(max-width: 768px)")
+  const [mapHeight, setMapHeight] = useState("100%")
+  const [isMapInteractive, setIsMapInteractive] = useState(true)
 
   const styles = [
-    { id: "streets-v12", name: "Streets" },
-    { id: "light-v11", name: "Light" },
-    { id: "dark-v11", name: "Dark" },
-    { id: "satellite-v9", name: "Satellite" },
-    { id: "satellite-streets-v12", name: "Satellite Streets" },
-    { id: "outdoors-v12", name: "Outdoors" },
+    { id: "streets-v12", name: "Streets", icon: "🏙️" },
+    { id: "light-v11", name: "Light", icon: "☀️" },
+    { id: "dark-v11", name: "Dark", icon: "🌙" },
+    { id: "satellite-v9", name: "Satellite", icon: "🛰️" },
+    { id: "satellite-streets-v12", name: "Satellite Streets", icon: "🛣️" },
+    { id: "outdoors-v12", name: "Outdoors", icon: "🏞️" },
   ]
+
+  // Get unique categories from locations for the legend
+  const uniqueCategories = useMemo(() => {
+    return locations.reduce(
+      (acc, location) => {
+        if (location.categories && Array.isArray(location.categories)) {
+          location.categories.forEach((category) => {
+            const id = typeof category === "string" ? category : category.id
+            const name = typeof category === "string" ? category : category.name || "Category"
+            const color = getCategoryColor(category)
+
+            if (id && !acc.some((c) => c.id === id)) {
+              acc.push({ id, name, color })
+            }
+          })
+        }
+        return acc
+      },
+      [] as { id: string; name: string; color: string }[],
+    )
+  }, [locations])
 
   // Detect WebGL support
   useEffect(() => {
     setWebglSupported(mapboxgl.supported())
   }, [])
 
+  // Update marker sizes based on zoom level
+  const updateMarkerSizes = useCallback(() => {
+    if (!mapRef.current) return
+
+    const zoom = mapRef.current.getZoom()
+    setCurrentZoom(zoom)
+
+    // Update marker sizes based on zoom level
+    markersRef.current.forEach(({ marker, location, element }) => {
+      // Scale factor based on zoom (smaller at lower zoom levels)
+      let scaleFactor = 1
+      if (zoom < 8) scaleFactor = 0.3
+      else if (zoom < 10) scaleFactor = 0.5
+      else if (zoom < 12) scaleFactor = 0.7
+      else if (zoom < 14) scaleFactor = 0.85
+      else if (zoom > 16) scaleFactor = 1.1
+
+      // Base size that will be scaled
+      const baseSize = isMobile ? 40 : 32
+      const size = Math.max(baseSize * scaleFactor, 12) // Minimum size
+
+      // Update marker size
+      element.style.width = `${size}px`
+      element.style.height = `${size}px`
+      element.style.fontSize = `${Math.max(size * 0.4, 8)}px`
+
+      // If this is the selected location, make it larger
+      if (selectedLocation && location.id === selectedLocation.id) {
+        element.style.width = `${size * 1.3}px`
+        element.style.height = `${size * 1.3}px`
+        element.style.zIndex = "10"
+        element.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+      } else {
+        element.style.zIndex = "1"
+        element.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
+      }
+    })
+  }, [isMobile, selectedLocation])
+
   // Initialize map once
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !webglSupported) return
 
-    const isMobile = window.innerWidth < 768
     const defaultCenter: [number, number] = [40.7128, -74.006] // NYC
-    
+
     // Validate center coordinates
-    const mapCenter = isValidCoordinate(center[0], center[1]) 
-      ? [center[1], center[0]] as [number, number]
+    const mapCenter = isValidCoordinate(center[0], center[1])
+      ? ([center[1], center[0]] as [number, number])
       : [defaultCenter[1], defaultCenter[0]]
 
     console.log("Initializing map with center:", mapCenter)
@@ -121,12 +190,16 @@ export default function MapComponent({
         zoom: isMobile ? zoom - 0.5 : zoom,
         attributionControl: false, // We'll add custom attribution
         preserveDrawingBuffer: true,
+        dragRotate: false, // Disable rotation for simpler mobile interaction
+        pitchWithRotate: false,
+        touchZoomRotate: true,
+        maxTileCacheSize: 50, // Optimize for mobile
       })
 
       map.on("load", () => {
         console.log("Map loaded")
         setMapLoaded(true)
-        
+
         // Add 3D buildings on high zoom levels
         try {
           if (map.getStyle().sources?.composite) {
@@ -150,25 +223,47 @@ export default function MapComponent({
         }
       })
 
-      // Add map controls
+      // Add map controls - position them differently for mobile
       const position = isMobile ? "bottom-right" : "top-right"
-      map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), position)
-      map.addControl(new mapboxgl.FullscreenControl(), position)
+      map.addControl(
+        new mapboxgl.NavigationControl({
+          showCompass: false,
+          visualizePitch: false,
+        }),
+        position,
+      )
+      
+      // Only add fullscreen on non-mobile
+      if (!isMobile) {
+        map.addControl(new mapboxgl.FullscreenControl(), position)
+      }
+      
+      // Add geolocate control
       map.addControl(
         new mapboxgl.GeolocateControl({
           positionOptions: { enableHighAccuracy: true },
           trackUserLocation: true,
           showUserHeading: true,
         }),
-        position
+        position,
       )
 
       // Map event handlers
-      map.on("click", (e) => onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng }))
+      map.on("click", (e) => {
+        // Close any open popups when clicking on the map
+        setShowMiniPreview(false)
+        setPreviewLocation(null)
+        onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+      })
+      
       map.on("moveend", () => {
         const c = map.getCenter()
         onMapMove([c.lat, c.lng], map.getZoom())
       })
+
+      // Add zoom handler for marker scaling
+      map.on("zoom", updateMarkerSizes)
+      map.on("zoomend", updateMarkerSizes)
 
       // Store map reference
       mapRef.current = map
@@ -199,20 +294,19 @@ export default function MapComponent({
     try {
       const currentCenter = map.getCenter()
       const currentZoom = map.getZoom()
-      
+
       // Only fly to new location if it's significantly different
-      const centerChanged = 
-        Math.abs(currentCenter.lat - center[0]) > 0.0001 || 
-        Math.abs(currentCenter.lng - center[1]) > 0.0001
-      
+      const centerChanged =
+        Math.abs(currentCenter.lat - center[0]) > 0.0001 || Math.abs(currentCenter.lng - center[1]) > 0.0001
+
       const zoomChanged = Math.abs(currentZoom - zoom) > 0.1
-      
+
       if (centerChanged || zoomChanged) {
-        map.flyTo({ 
-          center: [center[1], center[0]], 
-          zoom, 
+        map.flyTo({
+          center: [center[1], center[0]],
+          zoom,
           essential: true,
-          duration: 1000
+          duration: 1000,
         })
       }
     } catch (error) {
@@ -232,7 +326,7 @@ export default function MapComponent({
     }
   }, [mapStyle, mapLoaded])
 
-  // Update markers when locations change
+  // Update markers when locations change or selected location changes
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded) return
@@ -249,37 +343,71 @@ export default function MapComponent({
         // Get coordinates
         const coords = getCoordinates(location)
         if (!coords) return // Skip if no valid coordinates
-        
+
         const [lat, lng] = coords
-        
+
         // Create marker element
         const el = document.createElement("div")
-        const isMobile = window.innerWidth < 768
 
         // Get primary category and its color
-        const primaryCategory = location.categories && location.categories.length > 0 
-          ? location.categories[0] 
-          : null
-          
+        const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
         const color = getCategoryColor(primaryCategory) || "#888"
+
+        // Base size that will be scaled based on zoom level
+        const baseSize = isMobile ? 40 : 32
+        let scaleFactor = 1
+        if (mapRef.current) {
+          const zoom = mapRef.current.getZoom()
+          if (zoom < 8) scaleFactor = 0.3
+          else if (zoom < 10) scaleFactor = 0.5
+          else if (zoom < 12) scaleFactor = 0.7
+          else if (zoom < 14) scaleFactor = 0.85
+          else if (zoom > 16) scaleFactor = 1.1
+        }
+        const size = Math.max(baseSize * scaleFactor, 12) // Minimum size
+
+        // Check if this is the selected location
+        const isSelected = selectedLocation && location.id === selectedLocation.id
+        const finalSize = isSelected ? size * 1.3 : size
 
         // Style the marker
         Object.assign(el.style, {
-          width: isMobile ? "40px" : "30px",
-          height: isMobile ? "40px" : "30px",
+          width: `${finalSize}px`,
+          height: `${finalSize}px`,
           backgroundColor: color,
           borderRadius: "50%",
-          border: "3px solid white",
-          boxShadow: "0 3px 6px rgba(0,0,0,0.3)",
+          border: isSelected ? "3px solid #FF6B6B" : "3px solid white",
+          boxShadow: isSelected
+            ? "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+            : "0 3px 6px rgba(0,0,0,0.3)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "white",
-          fontSize: isMobile ? "16px" : "12px",
+          fontSize: `${Math.max(finalSize * 0.4, 8)}px`,
           fontWeight: "bold",
           cursor: "pointer",
           position: "relative",
+          transition: "transform 0.2s ease, box-shadow 0.2s ease, width 0.2s ease, height 0.2s ease",
+          zIndex: isSelected ? "10" : "1",
         })
+
+        // Add hover effect only for non-mobile devices
+        if (!isMobile) {
+          el.onmouseenter = () => {
+            if (!isSelected) {
+              el.style.transform = "scale(1.1)"
+              el.style.boxShadow = "0 4px 8px rgba(0,0,0,0.4)"
+            }
+          }
+
+          el.onmouseleave = () => {
+            if (!isSelected) {
+              el.style.transform = "scale(1)"
+              el.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
+            }
+          }
+        }
 
         // Get first letter of category name for marker label
         let categoryLabel = "C"
@@ -308,85 +436,45 @@ export default function MapComponent({
         // Add click handler
         el.addEventListener("click", (e) => {
           e.stopPropagation()
-          onMarkerClick(location)
+          
+          // On mobile, show mini preview first
+          if (isMobile) {
+            setPreviewLocation(location)
+            setShowMiniPreview(true)
+          } else {
+            // On desktop, go directly to full detail view
+            onMarkerClick(location)
+          }
         })
 
-        // Format address for popup
-        let address = ""
-        if (typeof location.address === "string") {
-          address = location.address
-        } else if (location.address) {
-          address = [
-            location.address.street, 
-            location.address.city, 
-            location.address.state, 
-            location.address.zip, 
-            location.address.country
-          ]
-            .filter(Boolean)
-            .join(", ")
-        }
+        // Create marker without popup (we'll handle our own preview)
+        const marker = new mapboxgl.Marker(el).setLngLat([lng, lat]).addTo(map)
 
-        // Create popup with location info
-        const popup = new mapboxgl.Popup({ 
-          offset: isMobile ? 30 : 25, 
-          closeButton: false,
-          maxWidth: "300px"
-        }).setHTML(`
-          <div class="p-2">
-            <h3 class="font-bold text-sm">${location.name}</h3>
-            ${address ? `<p class="text-xs text-gray-600 mt-1">${address}</p>` : ""}
-            ${
-              location.categories && location.categories.length > 0
-                ? `
-              <div class="flex flex-wrap gap-1 mt-1">
-                ${location.categories
-                  .slice(0, 3)
-                  .map((cat) => {
-                    const catName = typeof cat === "string" ? cat : cat.name || "Category"
-                    const catColor = getCategoryColor(cat)
-                    return `<span class="text-xs px-1.5 py-0.5 rounded" style="background-color: ${catColor}20; color: ${catColor}">
-                    ${catName}
-                  </span>`
-                  })
-                  .join("")}
-              </div>
-            `
-                : ""
-            }
-          </div>
-        `)
-
-        // Add marker to map
-        const marker = new mapboxgl.Marker(el)
-          .setLngLat([lng, lat])
-          .setPopup(popup)
-          .addTo(map)
-          
-        // Store marker reference
-        markersRef.current.push({ marker, location })
-        
+        // Store marker reference with its element
+        markersRef.current.push({ marker, location, element: el })
       } catch (error) {
         console.warn(`Error adding marker for location "${location.name}":`, error)
       }
     })
-    
+
     console.log(`Added ${markersRef.current.length} markers to map`)
     
-  }, [locations, mapLoaded, onMarkerClick])
+    // Update marker sizes after adding them
+    updateMarkerSizes()
+  }, [locations, mapLoaded, onMarkerClick, selectedLocation, isMobile, updateMarkerSizes])
 
   // Add user location marker
   useEffect(() => {
     const map = mapRef.current
     if (!map || !mapLoaded || !userLocation) return
-    
+
     const [lat, lng] = userLocation
     if (!isValidCoordinate(lat, lng)) return
 
     try {
       // Remove existing user marker
       userMarkerRef.current?.remove()
-      
+
       // Create user marker element
       const el = document.createElement("div")
       Object.assign(el.style, {
@@ -398,7 +486,7 @@ export default function MapComponent({
         boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
         position: "relative",
       })
-      
+
       // Add pulse effect
       const pulse = document.createElement("div")
       Object.assign(pulse.style, {
@@ -415,13 +503,9 @@ export default function MapComponent({
       const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
         `<div class="p-2"><p class="font-medium">Your Location</p></div>`,
       )
-      
+
       // Add marker to map
-      userMarkerRef.current = new mapboxgl.Marker(el)
-        .setLngLat([lng, lat])
-        .setPopup(popup)
-        .addTo(map)
-        
+      userMarkerRef.current = new mapboxgl.Marker(el).setLngLat([lng, lat]).setPopup(popup).addTo(map)
     } catch (error) {
       console.warn("Error adding user location marker:", error)
     }
@@ -448,7 +532,7 @@ export default function MapComponent({
       if (searchRadius && isValidCoordinate(center[0], center[1])) {
         const id = `radius-${Date.now()}`
         circleLayerId.current = id
-        
+
         map.addSource(id, {
           type: "geojson",
           data: {
@@ -496,21 +580,21 @@ export default function MapComponent({
       if (brandingRef.current && brandingRef.current.parentNode) {
         brandingRef.current.parentNode.removeChild(brandingRef.current)
       }
-      
+
       // Create branding element
       const box = document.createElement("div")
-      box.className = "absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 flex items-center z-10"
+      box.className =
+        "absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 flex items-center z-10"
       box.innerHTML = `
         <div class="w-6 h-6 rounded-full bg-[#FF6B6B] flex items-center justify-center mr-2">
           <span class="text-white font-bold text-xs">GG</span>
         </div>
         <span class="text-sm font-medium text-gray-800">Grounded Gems</span>
       `
-      
+
       // Add to map container
       map.getContainer().appendChild(box)
       brandingRef.current = box
-      
     } catch (error) {
       console.warn("Error adding branding overlay:", error)
     }
@@ -534,6 +618,34 @@ export default function MapComponent({
     [mapLoaded],
   )
 
+  // Toggle legend
+  const toggleLegend = useCallback(() => setShowLegend((prev) => !prev), [])
+
+  // Handle mini preview actions
+  const handleViewDetails = useCallback(() => {
+    if (previewLocation) {
+      onMarkerClick(previewLocation)
+      setShowMiniPreview(false)
+      setPreviewLocation(null)
+    }
+  }, [previewLocation, onMarkerClick])
+
+  const closeMiniPreview = useCallback(() => {
+    setShowMiniPreview(false)
+    setPreviewLocation(null)
+  }, [])
+
+  // Fly to user location
+  const flyToUserLocation = useCallback(() => {
+    if (userLocation && mapRef.current) {
+      mapRef.current.flyTo({
+        center: [userLocation[1], userLocation[0]],
+        zoom: 15,
+        essential: true,
+      })
+    }
+  }, [userLocation])
+
   // No WebGL support fallback
   if (!webglSupported) {
     return (
@@ -551,29 +663,98 @@ export default function MapComponent({
 
   return (
     <div className={cn("relative h-full w-full", className)}>
-      <div ref={containerRef} className="h-full w-full" />
+      <div 
+        ref={containerRef} 
+        className="h-full w-full map-container"
+        style={{ 
+          height: mapHeight,
+          pointerEvents: isMapInteractive ? 'auto' : 'none'
+        }}
+      />
 
-      {/* Style selector button */}
-      <div className="absolute top-4 right-4 z-10">
-        <Button size="icon" variant="outline" className="bg-white shadow-md" onClick={toggleStyles}>
-          <Layers className="h-4 w-4 text-[#FF6B6B]" />
-        </Button>
+      {/* Map controls */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 md:top-4 md:right-4 top-2 right-2">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="outline"
+                className="bg-white shadow-md rounded-full h-10 w-10 md:h-10 md:w-10 h-12 w-12"
+                onClick={toggleStyles}
+              >
+                <Layers className="h-5 w-5 text-[#FF6B6B]" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p>Map Styles</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {userLocation && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="bg-white shadow-md rounded-full h-10 w-10"
+                  onClick={flyToUserLocation}
+                >
+                  <Locate className="h-5 w-5 text-blue-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>My Location</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
+        {uniqueCategories.length > 0 && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className={cn("bg-white shadow-md rounded-full h-10 w-10", showLegend && "bg-gray-100")}
+                  onClick={toggleLegend}
+                >
+                  <Info className="h-5 w-5 text-gray-600" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>Category Legend</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
 
       {/* Style selector dropdown */}
       {showStyles && (
-        <div className="absolute top-14 right-4 bg-white rounded-lg shadow-lg p-3 z-10 w-48">
-          <h4 className="text-sm font-medium text-gray-800 mb-2">Map Style</h4>
-          <div className="space-y-1">
+        <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-sm font-medium text-gray-800 px-2">Map Style</h4>
+            {isMobile && (
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleStyles}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-1">
             {styles.map((style) => (
               <button
                 key={style.id}
                 onClick={() => selectMapStyle(style.id)}
                 className={cn(
-                  "w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
+                  "flex items-center w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
                   currentStyle === style.id ? "bg-[#FF6B6B]/10 text-[#FF6B6B] font-medium" : "hover:bg-gray-100",
                 )}
               >
+                <span className="mr-2">{style.icon}</span>
                 {style.name}
               </button>
             ))}
@@ -581,17 +762,118 @@ export default function MapComponent({
         </div>
       )}
 
+      {/* Category legend */}
+      {showLegend && uniqueCategories.length > 0 && (
+        <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="text-sm font-medium text-gray-800 px-2">Categories</h4>
+            {isMobile && (
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleLegend}>
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {uniqueCategories.map((category) => (
+              <div key={category.id} className="flex items-center px-2">
+                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: category.color }} />
+                <span className="text-sm text-gray-700">{category.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Mini location preview for mobile */}
+      {showMiniPreview && previewLocation && (
+        <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl shadow-lg z-30 p-4 animate-slide-up">
+          <div className="absolute top-2 right-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={closeMiniPreview}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <div className="flex items-start mb-3">
+            <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
+              {previewLocation.imageUrl || previewLocation.featuredImage ? (
+                <Image
+                  src={
+                    typeof previewLocation.featuredImage === "string"
+                      ? previewLocation.featuredImage
+                      : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
+                  }
+                  alt={previewLocation.name}
+                  fill
+                  className="object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <MapPin className="h-6 w-6 text-gray-400" />
+                </div>
+              )}
+            </div>
+            
+            <div className="ml-3 flex-1">
+              <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
+              
+              {/* Address */}
+              {previewLocation.address && (
+                <div className="flex items-center mt-1">
+                  <MapPin className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
+                  <p className="text-sm text-gray-500 truncate">
+                    {typeof previewLocation.address === "string"
+                      ? previewLocation.address
+                      : Object.values(previewLocation.address).filter(Boolean).join(", ")}
+                  </p>
+                </div>
+              )}
+              
+              {/* Categories */}
+              {previewLocation.categories && previewLocation.categories.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {previewLocation.categories.slice(0, 2).map((category, idx) => {
+                    const color = getCategoryColor(category)
+                    const name = typeof category === "string" ? category : category?.name || "Category"
+                    
+                    return (
+                      <Badge
+                        key={idx}
+                        variant="outline"
+                        className="px-2 py-0.5 h-5 text-[10px] font-medium rounded-full"
+                        style={{
+                          backgroundColor: `${color}10`,
+                          color: color,
+                          borderColor: `${color}30`,
+                        }}
+                      >
+                        {name}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <Button className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={handleViewDetails}>
+            View Details
+          </Button>
+        </div>
+      )}
+
       {/* No locations message */}
       {locations.length === 0 && mapLoaded && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-4 z-10 text-center">
-          <MapPin className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+            <MapPin className="h-6 w-6 text-gray-400" />
+          </div>
           <p className="text-gray-700 font-medium">No locations found</p>
-          <p className="text-gray-500 text-sm">Adjust your filters or search</p>
+          <p className="text-gray-500 text-sm mt-1">Adjust your filters or search</p>
         </div>
       )}
 
       {/* Attribution */}
-      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-1 text-xs text-gray-600 z-10">
+      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 text-xs text-gray-600 z-10 md:bottom-4 md:right-4 bottom-24 right-2">
         ©{" "}
         <a
           href="https://www.mapbox.com/about/maps/"
@@ -614,31 +896,92 @@ export default function MapComponent({
 
       {/* Global styles for animations */}
       <style jsx global>{`
-        @keyframes pulse { 0% {transform:scale(0.5);opacity:1} 100% {transform:scale(1.5);opacity:0} }
+        @keyframes pulse { 0% {transform:scale(0.95);opacity:1} 70% {transform:scale(1.3);opacity:0} 100% {transform:scale(0.95);opacity:0} }
+        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out forwards;
+        }
+        
         .mapboxgl-popup-content {
-          border-radius: 8px;
-          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          border-radius: 12px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.1);
           padding: 0;
           font-family: inherit;
+          overflow: hidden;
         }
+        
         .mapboxgl-popup-close-button {
-          font-size: 16px;
+          font-size: 18px;
           color: #666;
           padding: 4px 8px;
+          background: transparent;
+          border: none;
+          z-index: 2;
         }
+        
+        .mapboxgl-popup-close-button:hover {
+          background: rgba(0,0,0,0.05);
+          color: #333;
+        }
+        
         .mapboxgl-ctrl-bottom-right {
           bottom: 70px !important;
           right: 12px;
         }
+        
         .mapboxgl-ctrl-group {
           border-radius: 8px;
           overflow: hidden;
           box-shadow: 0 2px 6px rgba(0,0,0,0.1);
           border: none;
         }
+        
+        .mapboxgl-ctrl-group button {
+          width: 32px;
+          height: 32px;
+        }
+        
+        .mapboxgl-ctrl-group button:focus {
+          box-shadow: none;
+        }
+        
         @media (max-width: 768px) {
           .mapboxgl-popup-content {
             max-width: 90vw;
+          }
+        }
+
+        .mapboxgl-popup {
+          z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+          .mapboxgl-popup-content {
+            max-width: 90vw;
+            width: 90vw;
+          }
+          
+          .mapboxgl-ctrl-group {
+            margin-bottom: 60px;
+          }
+          
+          .mapboxgl-ctrl-group button {
+            width: 36px;
+            height: 36px;
+          }
+        }
+
+        /* Fix for full height on mobile */
+        @media (max-width: 768px) {
+          .map-container {
+            position: absolute !important;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 100% !important;
+            width: 100% !important;
           }
         }
       `}</style>
