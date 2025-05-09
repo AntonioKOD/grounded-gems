@@ -70,7 +70,6 @@ export default function NavBar() {
     try {
       const res = await fetch("/api/users/logout", {
         method: "POST",
-        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
