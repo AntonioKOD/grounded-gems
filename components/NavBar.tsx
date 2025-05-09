@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { logoutUser } from "@/app/actions"
 
 interface UserData {
   email: string
@@ -66,23 +67,7 @@ export default function NavBar() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  const handleLogout = async () => {
-    try {
-      const res = await fetch("/api/users/logout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (res.ok) {
-        setUser(null)
-        router.push("/login")
-      }
-    } catch (error) {
-      console.error("Logout failed:", error)
-    }
-  }
+ 
 
   // Get user initials for avatar
   const getInitials = () => {
@@ -160,7 +145,7 @@ export default function NavBar() {
                       <span>View profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
+                    <DropdownMenuItem onClick={logoutUser}>
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>Log out</span>
                     </DropdownMenuItem>
@@ -208,7 +193,7 @@ export default function NavBar() {
                     <span>View profile</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onClick={logoutUser}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                   </DropdownMenuItem>

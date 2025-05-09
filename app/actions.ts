@@ -2,6 +2,7 @@
 import { getPayload } from "payload";
 import config from '@payload-config';
 
+import {logout} from '@payloadcms/next/auth'
 
 
 
@@ -191,3 +192,13 @@ export async function signupUser(data: SignupInput){
   }
 }
 
+
+export async function logoutUser(){
+  try{
+    return await logout({config: config})
+
+  }catch(err){
+    console.error('Error logging out:', err);
+    throw new Error('Logout failed');
+  }
+}
