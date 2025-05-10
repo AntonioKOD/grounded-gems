@@ -2,6 +2,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { addedLocations, searchLocations, type Location } from "./map-data"
@@ -13,7 +14,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, X, List, MapIcon, Loader2, Filter, ArrowLeft, Maximize2, Minimize2 } from "lucide-react"
+import {
+  Search,
+  X,
+  List,
+  MapIcon,
+  Loader2,
+  Filter,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+  Share2,
+  Navigation,
+  ChevronUp,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -25,6 +39,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export default function MapExplorer() {
+  // Browser detection states
+  const [isSafari, setIsSafari] = useState(false)
+  const [isIOS, setIsIOS] = useState(false)
+  const [browserInfo, setBrowserInfo] = useState<string>("")
+
+  // Core states
   const [allLocations, setAllLocations] = useState<Location[]>([])
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
@@ -36,6 +56,8 @@ export default function MapExplorer() {
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // UI states
   const [activeView, setActiveView] = useState<"map" | "list">("map")
   const [showDetail, setShowDetail] = useState(false)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
@@ -44,12 +66,96 @@ export default function MapExplorer() {
   const [listHeight, setListHeight] = useState<"partial" | "full">("partial")
   const [showMobilePreview, setShowMobilePreview] = useState(false)
   const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
+  const [showBackToTop, setShowBackToTop] = useState(false)
+  const [isSelecting, setIsSelecting] = useState(false)
+  const [touchStarted, setTouchStarted] = useState(false)
+  const [safariFixesApplied, setSafariFixesApplied] = useState(false)
+  const [viewportHeight, setViewportHeight] = useState(0)
 
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const listContainerRef = useRef<HTMLDivElement>(null)
   const detailContainerRef = useRef<HTMLDivElement>(null)
   const mobileListRef = useRef<HTMLDivElement>(null)
+  const listScrollRef = useRef<HTMLDivElement>(null)
+  const showListButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Helper function to extract coordinates from a location
+  const getLocationCoordinates = useCallback((location: Location): [number, number] | null => {
+    let lat, lng
+
+    if (location.latitude != null && location.longitude != null) {
+      lat = Number(location.latitude)
+      lng = Number(location.longitude)
+    } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
+      lat = Number(location.coordinates.latitude)
+      lng = Number(location.coordinates.longitude)
+    }
+
+    if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+      return [lat, lng]
+    }
+
+    return null
+  }, [])
+
+  // Browser detection
+  useEffect(() => {
+    // Detect Safari and iOS
+    const ua = navigator.userAgent.toLowerCase()
+    const isSafariBrowser = /safari/.test(ua) && !/chrome/.test(ua) && !/android/.test(ua)
+
+    const isIOSDevice =
+      /iphone|ipad|ipod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+
+    setIsSafari(isSafariBrowser)
+    setIsIOS(isIOSDevice)
+
+    // Set browser info for debugging
+    setBrowserInfo(`${ua} | Safari: ${isSafariBrowser} | iOS: ${isIOSDevice}`)
+
+    // Apply Safari-specific body styles
+    if (isSafariBrowser || isIOSDevice) {
+      document.documentElement.classList.add("safari-mobile")
+
+      // Fix for Safari viewport height issues
+      const setVH = () => {
+        const vh = window.innerHeight * 0.01
+        document.documentElement.style.setProperty("--vh", `${vh}px`)
+        setViewportHeight(window.innerHeight)
+      }
+
+      setVH()
+      window.addEventListener("resize", setVH)
+      window.addEventListener("orientationchange", setVH)
+
+      return () => {
+        window.removeEventListener("resize", setVH)
+        window.removeEventListener("orientationchange", setVH)
+        document.documentElement.classList.remove("safari-mobile")
+      }
+    }
+  }, [])
+
+  // Apply Safari-specific fixes after component mounts
+  useEffect(() => {
+    if ((isSafari || isIOS) && !safariFixesApplied) {
+      // Force a repaint to fix Safari rendering issues
+      setTimeout(() => {
+        if (showListButtonRef.current) {
+          showListButtonRef.current.style.display = "none"
+          // Force a reflow
+          void showListButtonRef.current.offsetHeight
+          showListButtonRef.current.style.display = ""
+        }
+
+        // Force a window resize to recalculate layouts
+        window.dispatchEvent(new Event("resize"))
+
+        setSafariFixesApplied(true)
+      }, 500)
+    }
+  }, [isSafari, isIOS, safariFixesApplied])
 
   // Check if device is mobile
   useEffect(() => {
@@ -63,6 +169,7 @@ export default function MapExplorer() {
         setListHeight("partial")
         setShowMobilePreview(false)
         setPreviewLocation(null)
+        setIsSearchExpanded(false)
       }
     }
 
@@ -109,19 +216,12 @@ export default function MapExplorer() {
 
         // Set initial map center based on first location with valid coordinates
         for (const loc of locations) {
-          let lat, lng
-
-          if (loc.latitude != null && loc.longitude != null) {
-            lat = Number(loc.latitude)
-            lng = Number(loc.longitude)
-          } else if (loc.coordinates?.latitude != null && loc.coordinates?.longitude != null) {
-            lat = Number(loc.coordinates.latitude)
-            lng = Number(loc.coordinates.longitude)
-          }
-
-          if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-            console.log(`Setting initial map center to [${lat}, ${lng}] from location "${loc.name}"`)
-            setMapCenter([lat, lng])
+          const coordinates = getLocationCoordinates(loc)
+          if (coordinates) {
+            console.log(
+              `Setting initial map center to [${coordinates[0]}, ${coordinates[1]}] from location "${loc.name}"`,
+            )
+            setMapCenter(coordinates)
             break
           }
         }
@@ -149,7 +249,7 @@ export default function MapExplorer() {
         },
       )
     }
-  }, [])
+  }, [getLocationCoordinates])
 
   // Filter locations when search or categories change
   useEffect(() => {
@@ -180,10 +280,37 @@ export default function MapExplorer() {
     }
   }, [searchQuery, selectedCategories, allLocations, selectedLocation])
 
-  // Handle location selection
+  // Handle location selection with Safari-specific fixes
   const handleLocationSelect = useCallback(
     (location: Location) => {
       console.log("Selected location:", location)
+
+      // Prevent multiple rapid selections
+      if (isSelecting) return
+      setIsSelecting(true)
+
+      // Add a visual feedback for selection
+      if (isSafari || isIOS) {
+        // Flash the screen briefly to indicate selection on Safari
+        const flashElement = document.createElement("div")
+        flashElement.style.position = "fixed"
+        flashElement.style.top = "0"
+        flashElement.style.left = "0"
+        flashElement.style.right = "0"
+        flashElement.style.bottom = "0"
+        flashElement.style.backgroundColor = "rgba(255,107,107,0.1)"
+        flashElement.style.zIndex = "9999"
+        flashElement.style.pointerEvents = "none"
+        document.body.appendChild(flashElement)
+
+        setTimeout(() => {
+          document.body.removeChild(flashElement)
+        }, 300)
+      }
+
+      setTimeout(() => {
+        setIsSelecting(false)
+      }, 500) // Longer timeout for Safari
 
       // On mobile, show preview first
       if (isMobile) {
@@ -191,19 +318,10 @@ export default function MapExplorer() {
         setShowMobilePreview(true)
 
         // Center map on selected location
-        let lat, lng
-
-        if (location.latitude != null && location.longitude != null) {
-          lat = Number(location.latitude)
-          lng = Number(location.longitude)
-        } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
-          lat = Number(location.coordinates.latitude)
-          lng = Number(location.coordinates.longitude)
-        }
-
-        if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-          console.log(`Centering map on [${lat}, ${lng}]`)
-          setMapCenter([lat, lng])
+        const coordinates = getLocationCoordinates(location)
+        if (coordinates) {
+          console.log(`Centering map on [${coordinates[0]}, ${coordinates[1]}]`)
+          setMapCenter(coordinates)
           setMapZoom(15) // Zoom in a bit more on mobile for better visibility
 
           // Switch to map view when a location is selected on mobile list view
@@ -232,23 +350,14 @@ export default function MapExplorer() {
         setShowDetail(true)
 
         // Center map on selected location
-        let lat, lng
-
-        if (location.latitude != null && location.longitude != null) {
-          lat = Number(location.latitude)
-          lng = Number(location.longitude)
-        } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
-          lat = Number(location.coordinates.latitude)
-          lng = Number(location.coordinates.longitude)
-        }
-
-        if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-          console.log(`Centering map on [${lat}, ${lng}]`)
-          setMapCenter([lat, lng])
+        const coordinates = getLocationCoordinates(location)
+        if (coordinates) {
+          console.log(`Centering map on [${coordinates[0]}, ${coordinates[1]}]`)
+          setMapCenter(coordinates)
         }
       }
     },
-    [isMobile, showMobileList, activeView],
+    [isMobile, showMobileList, activeView, getLocationCoordinates, isSelecting, isSafari, isIOS],
   )
 
   // Handle view details from preview
@@ -257,11 +366,19 @@ export default function MapExplorer() {
       setSelectedLocation(previewLocation)
       setShowDetail(true)
       setShowMobilePreview(false)
+
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
     }
   }, [previewLocation])
 
   // Handle map click
   const handleMapClick = useCallback(() => {
+    // Ignore if touch just started (to prevent double-firing on Safari)
+    if (touchStarted) return
+
     // Close detail view when clicking on map
     if (showDetail) {
       setShowDetail(false)
@@ -283,7 +400,7 @@ export default function MapExplorer() {
       setShowMobilePreview(false)
       setPreviewLocation(null)
     }
-  }, [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview])
+  }, [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted])
 
   // Handle map move
   const handleMapMove = useCallback((center: [number, number], zoom: number) => {
@@ -301,6 +418,7 @@ export default function MapExplorer() {
   // Clear search
   const clearSearch = useCallback(() => {
     setSearchQuery("")
+    setIsSearchExpanded(false)
   }, [])
 
   // Clear all filters
@@ -321,7 +439,7 @@ export default function MapExplorer() {
     setPreviewLocation(null)
   }, [])
 
-  // Handle tab change
+  // Handle tab change with Safari-specific fixes
   const handleViewChange = useCallback(
     (value: string) => {
       setActiveView(value as "map" | "list")
@@ -342,20 +460,35 @@ export default function MapExplorer() {
         setShowMobileList(false)
       }
 
+      // Safari-specific: force a repaint after view change
+      if (isSafari || isIOS) {
+        setTimeout(() => {
+          window.dispatchEvent(new Event("resize"))
+        }, 100)
+      }
+
       // Add haptic feedback if available
-      if (isMobile && navigator.vibrate) {
+      if (navigator.vibrate) {
         navigator.vibrate(50)
       }
     },
-    [isMobile, showDetail, showMobilePreview, showMobileList],
+    [isMobile, showDetail, showMobilePreview, showMobileList, isSafari, isIOS],
   )
 
   // Toggle search expansion on mobile
   const toggleSearch = useCallback(() => {
     setIsSearchExpanded(!isSearchExpanded)
+
+    // Focus the input when expanding
+    if (!isSearchExpanded) {
+      setTimeout(() => {
+        const input = document.querySelector('input[type="text"]') as HTMLInputElement
+        if (input) input.focus()
+      }, 100)
+    }
   }, [isSearchExpanded])
 
-  // Toggle mobile list drawer
+  // Toggle mobile list drawer with Safari-specific fixes
   const toggleMobileList = useCallback(() => {
     setShowMobileList((prev) => !prev)
 
@@ -364,35 +497,59 @@ export default function MapExplorer() {
       setShowMobilePreview(false)
       setPreviewLocation(null)
     }
-  }, [showMobilePreview])
+
+    // Safari-specific: force a repaint after toggling list
+    if ((isSafari || isIOS) && !showMobileList) {
+      setTimeout(() => {
+        if (mobileListRef.current) {
+          mobileListRef.current.style.display = "none"
+          // Force a reflow
+          void mobileListRef.current.offsetHeight
+          mobileListRef.current.style.display = ""
+        }
+      }, 50)
+    }
+
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+  }, [showMobilePreview, isSafari, isIOS, showMobileList])
 
   // Toggle list height between partial and full
   const toggleListHeight = useCallback(() => {
     setListHeight((prev) => (prev === "partial" ? "full" : "partial"))
+
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
   }, [])
 
-  // Handle touch events for mobile list drawer
+  // Handle touch events for mobile list drawer with Safari-specific fixes
   useEffect(() => {
     if (!isMobile || !mobileListRef.current) return
 
     let startY = 0
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let currentHeight = 0
 
     const handleTouchStart = (e: TouchEvent) => {
       startY = e.touches[0].clientY
-      currentHeight = mobileListRef.current?.offsetHeight || 0
+      setTouchStarted(true)
+
+      // Reset touch started state after a delay
+      setTimeout(() => {
+        setTouchStarted(false)
+      }, 300)
     }
 
     const handleTouchMove = (e: TouchEvent) => {
       if (!mobileListRef.current) return
 
       const deltaY = e.touches[0].clientY - startY
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const windowHeight = window.innerHeight
 
-      // If dragging down and list is in full mode, or dragging up and list is in partial mode
+      // If swiping down and list is in full mode, or swiping up and list is in partial mode
       if ((deltaY > 50 && listHeight === "full") || (deltaY < -50 && listHeight === "partial")) {
+        // Only prevent default when actually toggling to avoid breaking scrolling
         e.preventDefault()
         toggleListHeight()
         startY = e.touches[0].clientY
@@ -400,16 +557,19 @@ export default function MapExplorer() {
     }
 
     const element = mobileListRef.current
-    element.addEventListener("touchstart", handleTouchStart)
-    element.addEventListener("touchmove", handleTouchMove)
+
+    // Use different event options for Safari
+    const options = isSafari || isIOS ? { passive: false } : { passive: true }
+    element.addEventListener("touchstart", handleTouchStart, options)
+    element.addEventListener("touchmove", handleTouchMove, { passive: false })
 
     return () => {
       element.removeEventListener("touchstart", handleTouchStart)
       element.removeEventListener("touchmove", handleTouchMove)
     }
-  }, [isMobile, listHeight, toggleListHeight])
+  }, [isMobile, listHeight, toggleListHeight, isSafari, isIOS])
 
-  // Add orientation change handling
+  // Add orientation change handling with Safari-specific fixes
   useEffect(() => {
     const handleOrientationChange = () => {
       // Recalculate layout on orientation change
@@ -427,15 +587,116 @@ export default function MapExplorer() {
           const event = new Event("resize")
           window.dispatchEvent(event)
         }
+
+        // Safari-specific: force a repaint after orientation change
+        if (isSafari || isIOS) {
+          setTimeout(() => {
+            // Force a reflow of the entire page
+            document.body.style.display = "none"
+            void document.body.offsetHeight
+            document.body.style.display = ""
+
+            // Update viewport height
+            const vh = window.innerHeight * 0.01
+            document.documentElement.style.setProperty("--vh", `${vh}px`)
+            setViewportHeight(window.innerHeight)
+          }, 300)
+        }
       }
     }
 
     window.addEventListener("orientationchange", handleOrientationChange)
+    window.addEventListener("resize", handleOrientationChange)
 
     return () => {
       window.removeEventListener("orientationchange", handleOrientationChange)
+      window.removeEventListener("resize", handleOrientationChange)
     }
-  }, [isMobile, showMobileList])
+  }, [isMobile, showMobileList, isSafari, isIOS])
+
+  // Handle scroll in list view to show/hide back to top button
+  useEffect(() => {
+    if (!listScrollRef.current) return
+
+    const handleScroll = () => {
+      if (!listScrollRef.current) return
+      setShowBackToTop(listScrollRef.current.scrollTop > 300)
+    }
+
+    const element = listScrollRef.current
+    element.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      element.removeEventListener("scroll", handleScroll)
+    }
+  }, [activeView])
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Close detail or preview on escape key
+      if (e.key === "Escape") {
+        if (showDetail) {
+          closeDetail()
+        } else if (showMobilePreview) {
+          closeMobilePreview()
+        } else if (isSearchExpanded) {
+          setIsSearchExpanded(false)
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [showDetail, showMobilePreview, isSearchExpanded, closeDetail, closeMobilePreview])
+
+  // Share location function
+  const shareLocation = useCallback((location: Location) => {
+    const title = location.name
+    const text = `Check out ${location.name}`
+    const url = window.location.href
+
+    if (navigator.share) {
+      navigator
+        .share({
+          title,
+          text,
+          url,
+        })
+        .catch((err) => console.error("Error sharing:", err))
+    } else {
+      // Fallback for browsers that don't support the Web Share API
+      navigator.clipboard
+        .writeText(`${text} - ${url}`)
+        .then(() => alert("Location link copied to clipboard!"))
+        .catch((err) => console.error("Error copying to clipboard:", err))
+    }
+  }, [])
+
+  // Scroll to top function for list view
+  const scrollToTop = useCallback(() => {
+    if (listScrollRef.current) {
+      listScrollRef.current.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      })
+    }
+  }, [])
+
+  // Get image URL helper function
+  const getImageUrl = useCallback((location: Location): string => {
+    if (typeof location.featuredImage === "string") {
+      return location.featuredImage
+    } else if (location.featuredImage?.url) {
+      return location.featuredImage.url
+    } else if (location.imageUrl) {
+      return location.imageUrl
+    }
+    return "/placeholder.svg"
+  }, [])
 
   if (error) {
     return (
@@ -453,7 +714,13 @@ export default function MapExplorer() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gray-50">
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden bg-gray-50",
+        isSafari || isIOS ? "safari-container" : "h-[calc(100vh-4rem)]",
+      )}
+      style={isSafari || isIOS ? { height: `calc(${viewportHeight}px - 4rem)` } : {}}
+    >
       {/* Header with search */}
       <div
         className={cn(
@@ -474,12 +741,13 @@ export default function MapExplorer() {
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9 pr-8 border-gray-200 focus:border-[#FF6B6B] focus:ring-[#FF6B6B]/10"
+                      autoFocus
                     />
                     <Button
                       variant="ghost"
                       size="sm"
                       className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
-                      onClick={toggleSearch}
+                      onClick={clearSearch}
                     >
                       <X className="h-4 w-4 text-gray-400" />
                     </Button>
@@ -490,20 +758,25 @@ export default function MapExplorer() {
                   <Button variant="outline" size="icon" className="border-gray-200" onClick={toggleSearch}>
                     <Search className="h-4 w-4 text-gray-500" />
                   </Button>
-                  <h1 className="text-lg font-semibold flex-1 text-center">Grounded Gems</h1>
+                  <h1 className="text-lg font-semibold flex-1 text-center">{filteredLocations.length} Locations</h1>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
                         size="icon"
                         className={cn(
-                          "border-gray-200",
+                          "border-gray-200 relative",
                           selectedCategories.length > 0 && "bg-[#FF6B6B]/10 border-[#FF6B6B]",
                         )}
                       >
                         <Filter
                           className={cn("h-4 w-4", selectedCategories.length > 0 ? "text-[#FF6B6B]" : "text-gray-500")}
                         />
+                        {selectedCategories.length > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-[#FF6B6B] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                            {selectedCategories.length}
+                          </span>
+                        )}
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-56">
@@ -571,13 +844,18 @@ export default function MapExplorer() {
                     variant="outline"
                     size="icon"
                     className={cn(
-                      "border-gray-200",
+                      "border-gray-200 relative",
                       selectedCategories.length > 0 && "bg-[#FF6B6B]/10 border-[#FF6B6B]",
                     )}
                   >
                     <Filter
                       className={cn("h-4 w-4", selectedCategories.length > 0 ? "text-[#FF6B6B]" : "text-gray-500")}
                     />
+                    {selectedCategories.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#FF6B6B] text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                        {selectedCategories.length}
+                      </span>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56">
@@ -658,12 +936,14 @@ export default function MapExplorer() {
             className="hidden md:block w-96 border-r overflow-hidden flex-shrink-0 bg-white z-10"
             style={{ height: "calc(100% - 0px)" }}
           >
-            <LocationList
-              locations={filteredLocations}
-              onLocationSelect={handleLocationSelect}
-              selectedLocation={selectedLocation}
-              isLoading={isLoading}
-            />
+            <div ref={listScrollRef} className="h-full overflow-y-auto">
+              <LocationList
+                locations={filteredLocations}
+                onLocationSelect={handleLocationSelect}
+                selectedLocation={selectedLocation}
+                isLoading={isLoading}
+              />
+            </div>
           </div>
         )}
 
@@ -685,11 +965,42 @@ export default function MapExplorer() {
             selectedLocation={selectedLocation}
           />
 
+          {/* User location button */}
+          {userLocation && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                setMapCenter(userLocation)
+                setMapZoom(15)
+              }}
+              className="absolute top-4 right-4 z-10 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200"
+              aria-label="Go to my location"
+            >
+              <Navigation className="h-4 w-4" />
+            </Button>
+          )}
+
           {/* Mobile location preview */}
           {isMobile && showMobilePreview && previewLocation && (
-            <div className="absolute bottom-20 left-0 right-0 mx-4 bg-white rounded-lg shadow-lg z-20 p-4 animate-slide-up">
+            <div
+              className={cn(
+                "absolute left-0 right-0 mx-4 bg-white rounded-lg shadow-lg z-20 p-4 animate-slide-up",
+                isSafari || isIOS ? "safari-preview" : "bottom-20",
+              )}
+              style={isSafari || isIOS ? { bottom: "5rem" } : {}}
+            >
               <div className="absolute top-2 right-2">
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={closeMobilePreview}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 rounded-full"
+                  onClick={closeMobilePreview}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    closeMobilePreview()
+                  }}
+                >
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -698,15 +1009,13 @@ export default function MapExplorer() {
                 <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
                   {previewLocation.imageUrl || previewLocation.featuredImage ? (
                     <div className="w-full h-full relative">
-                      <img
-                        src={
-                          typeof previewLocation.featuredImage === "string"
-                            ? previewLocation.featuredImage
-                            : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
-                        }
+                      <Image
+                        src={getImageUrl(previewLocation) || "/placeholder.svg"}
                         alt={previewLocation.name}
-                        className="object-cover w-full h-full"
-                        loading="eager"
+                        className="object-cover"
+                        fill
+                        sizes="64px"
+                        priority
                       />
                     </div>
                   ) : (
@@ -757,7 +1066,14 @@ export default function MapExplorer() {
               </div>
 
               <div className="flex gap-2">
-                <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={handleViewDetails}>
+                <Button
+                  className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+                  onClick={handleViewDetails}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    handleViewDetails()
+                  }}
+                >
                   View Details
                 </Button>
                 <Button
@@ -772,65 +1088,119 @@ export default function MapExplorer() {
                             .filter(Boolean)
                             .join(", ")
 
-                    let lat, lng
-                    if (previewLocation.latitude != null && previewLocation.longitude != null) {
-                      lat = Number(previewLocation.latitude)
-                      lng = Number(previewLocation.longitude)
-                    } else if (
-                      previewLocation.coordinates?.latitude != null &&
-                      previewLocation.coordinates?.longitude != null
-                    ) {
-                      lat = Number(previewLocation.coordinates.latitude)
-                      lng = Number(previewLocation.coordinates.longitude)
-                    }
-
-                    if (lat && lng) {
-                      window.open(`https://maps.google.com/maps?q=${lat},${lng}`, "_blank")
+                    const coordinates = getLocationCoordinates(previewLocation)
+                    if (coordinates) {
+                      window.open(`https://maps.google.com/maps?q=${coordinates[0]},${coordinates[1]}`, "_blank")
                     } else if (address) {
                       window.open(`https://maps.google.com/maps?q=${encodeURIComponent(address)}`, "_blank")
                     }
                   }}
+                  aria-label="Open in Maps"
                 >
-                  <MapIcon className="h-4 w-4" />
+                  <Navigation className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                  onClick={() => shareLocation(previewLocation)}
+                  aria-label="Share Location"
+                >
+                  <Share2 className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Mobile list toggle button */}
+          {/* Mobile list toggle button - Safari-specific fixes */}
           {isMobile && activeView === "map" && (
             <Button
+              ref={showListButtonRef}
               variant="default"
               size="sm"
               onClick={toggleMobileList}
-              className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-20 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200"
+              onTouchEnd={(e) => {
+                e.preventDefault()
+                toggleMobileList()
+              }}
+              className={cn(
+                "absolute left-1/2 z-30 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200",
+                isSafari || isIOS ? "safari-button" : "bottom-20 transform -translate-x-1/2",
+              )}
+              style={
+                isSafari || isIOS
+                  ? {
+                      bottom: "5rem",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      WebkitTransform: "translateX(-50%)",
+                      position: "absolute",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      zIndex: 30,
+                    }
+                  : {}
+              }
             >
               <List className="h-4 w-4 mr-2" />
               {showMobileList ? "Hide List" : "Show List"}
             </Button>
           )}
 
-          {/* Mobile list drawer */}
+          {/* Mobile list drawer with Safari-specific fixes */}
           {isMobile && showMobileList && (
             <div
               ref={mobileListRef}
               className={cn(
-                "absolute bottom-0 left-0 right-0 bg-white z-20 rounded-t-xl shadow-lg transition-all duration-300 ease-in-out",
+                "absolute left-0 right-0 bg-white z-20 rounded-t-xl shadow-lg transition-all duration-300 ease-in-out",
                 listHeight === "partial" ? "h-[40%]" : "h-[80%]",
+                isSafari || isIOS ? "safari-drawer" : "bottom-0",
               )}
+              style={
+                isSafari || isIOS
+                  ? {
+                      bottom: 0,
+                      position: "absolute",
+                      zIndex: 20,
+                      width: "100%",
+                    }
+                  : {}
+              }
             >
               <div className="flex items-center justify-between p-3 border-b sticky top-0 bg-white z-10">
                 <h3 className="font-medium">Locations ({filteredLocations.length})</h3>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleListHeight}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={toggleListHeight}
+                    onTouchEnd={(e) => {
+                      e.preventDefault()
+                      toggleListHeight()
+                    }}
+                  >
                     {listHeight === "partial" ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleMobileList}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={toggleMobileList}
+                    onTouchEnd={(e) => {
+                      e.preventDefault()
+                      toggleMobileList()
+                    }}
+                  >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-              <div className="overflow-y-auto" style={{ height: `calc(100% - 49px)` }}>
+              <div
+                ref={listScrollRef}
+                className="overflow-y-auto overscroll-contain"
+                style={{ height: `calc(100% - 49px)` }}
+              >
                 <LocationList
                   locations={filteredLocations}
                   onLocationSelect={handleLocationSelect}
@@ -854,12 +1224,35 @@ export default function MapExplorer() {
             className="w-full overflow-hidden flex-shrink-0 bg-white z-10 animate-fade-in"
             style={{ height: "calc(100% - 0px)" }}
           >
-            <LocationList
-              locations={filteredLocations}
-              onLocationSelect={handleLocationSelect}
-              selectedLocation={selectedLocation}
-              isLoading={isLoading}
-            />
+            <div ref={listScrollRef} className="h-full overflow-y-auto overscroll-contain">
+              <LocationList
+                locations={filteredLocations}
+                onLocationSelect={handleLocationSelect}
+                selectedLocation={selectedLocation}
+                isLoading={isLoading}
+              />
+
+              {/* Back to top button */}
+              {showBackToTop && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={scrollToTop}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    scrollToTop()
+                  }}
+                  className={cn(
+                    "fixed right-4 z-10 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10 p-0",
+                    isSafari || isIOS ? "safari-back-to-top" : "bottom-20",
+                  )}
+                  style={isSafari || isIOS ? { bottom: "5rem" } : {}}
+                  aria-label="Back to top"
+                >
+                  <ChevronUp className="h-5 w-5" />
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
@@ -867,16 +1260,40 @@ export default function MapExplorer() {
         {showDetail && selectedLocation && (
           <div
             ref={detailContainerRef}
-            className="absolute inset-0 md:relative md:inset-auto md:w-96 bg-white z-30 md:border-l overflow-hidden"
+            className="absolute inset-0 md:relative md:inset-auto md:w-96 bg-white z-30 md:border-l overflow-hidden animate-slide-in"
             style={{ height: isMobile ? "100%" : "calc(100% - 0px)" }}
           >
             {/* Mobile back button */}
             {isMobile && (
               <div className="sticky top-0 z-10 bg-white border-b p-3 flex items-center">
-                <Button variant="ghost" size="sm" onClick={closeDetail} className="h-8 w-8 p-0 mr-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={closeDetail}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    closeDetail()
+                  }}
+                  className="h-8 w-8 p-0 mr-2"
+                >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <h3 className="font-medium truncate">{selectedLocation.name}</h3>
+                <div className="ml-auto flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={() => shareLocation(selectedLocation)}
+                    onTouchEnd={(e) => {
+                      e.preventDefault()
+                      shareLocation(selectedLocation)
+                    }}
+                    aria-label="Share Location"
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
             <div className="h-full overflow-auto" style={{ height: isMobile ? "calc(100% - 49px)" : "100%" }}>
@@ -886,14 +1303,34 @@ export default function MapExplorer() {
         )}
       </div>
 
-      {/* Mobile view selector */}
+      {/* Mobile view selector with Safari-specific fixes */}
       {isMobile && (
-        <div className="border-t bg-white sticky bottom-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+        <div
+          className={cn(
+            "border-t bg-white sticky z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]",
+            isSafari || isIOS ? "safari-tabs" : "bottom-0",
+          )}
+          style={
+            isSafari || isIOS
+              ? {
+                  bottom: 0,
+                  position: "sticky",
+                  zIndex: 20,
+                }
+              : {}
+          }
+        >
           <Tabs defaultValue={activeView} value={activeView} onValueChange={handleViewChange} className="w-full">
             <TabsList className="w-full grid grid-cols-2 p-1">
               <TabsTrigger
                 value="map"
                 className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3 transition-all duration-200"
+                onTouchEnd={(e) => {
+                  if (activeView !== "map") {
+                    e.preventDefault()
+                    handleViewChange("map")
+                  }
+                }}
               >
                 <MapIcon className="h-5 w-5 mr-2" />
                 Map
@@ -901,12 +1338,64 @@ export default function MapExplorer() {
               <TabsTrigger
                 value="list"
                 className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3 transition-all duration-200"
+                onTouchEnd={(e) => {
+                  if (activeView !== "list") {
+                    e.preventDefault()
+                    handleViewChange("list")
+                  }
+                }}
               >
                 <List className="h-5 w-5 mr-2" />
                 List
               </TabsTrigger>
             </TabsList>
           </Tabs>
+        </div>
+      )}
+
+      {/* View on map button when in list view with selected location */}
+      {isMobile && activeView === "list" && selectedLocation && (
+        <div
+          className={cn("fixed left-0 right-0 mx-4 z-20", isSafari || isIOS ? "safari-view-on-map" : "bottom-20")}
+          style={isSafari || isIOS ? { bottom: "5rem" } : {}}
+        >
+          <Button
+            className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-lg"
+            onClick={() => {
+              setActiveView("map")
+              // Center map on selected location
+              const coordinates = getLocationCoordinates(selectedLocation)
+              if (coordinates) {
+                setMapCenter(coordinates)
+                setMapZoom(15) // Zoom in for better visibility
+              }
+
+              // Show preview after a short delay to allow view transition
+              setTimeout(() => {
+                setPreviewLocation(selectedLocation)
+                setShowMobilePreview(true)
+              }, 300)
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              setActiveView("map")
+              // Center map on selected location
+              const coordinates = getLocationCoordinates(selectedLocation)
+              if (coordinates) {
+                setMapCenter(coordinates)
+                setMapZoom(15)
+              }
+
+              // Show preview after a short delay
+              setTimeout(() => {
+                setPreviewLocation(selectedLocation)
+                setShowMobilePreview(true)
+              }, 300)
+            }}
+          >
+            <MapIcon className="h-4 w-4 mr-2" />
+            View on Map
+          </Button>
         </div>
       )}
 
@@ -920,65 +1409,151 @@ export default function MapExplorer() {
         </div>
       )}
 
-      {/* Global styles for animations */}
+      {/* Debug info for Safari issues - only visible in development */}
+      {process.env.NODE_ENV === "development" && (isSafari || isIOS) && (
+        <div className="fixed bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-1 z-50">
+          <details>
+            <summary>Debug Info</summary>
+            <p>Browser: {browserInfo}</p>
+            <p>Safari: {isSafari ? "Yes" : "No"}</p>
+            <p>iOS: {isIOS ? "Yes" : "No"}</p>
+            <p>Viewport: {viewportHeight}px</p>
+            <p>Fixes Applied: {safariFixesApplied ? "Yes" : "No"}</p>
+          </details>
+        </div>
+      )}
+
+      {/* Global styles for animations and Safari fixes */}
       <style jsx global>{`
+        /* Animation keyframes */
         @keyframes slide-up {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
-        
+
         .animate-slide-up {
           animation: slide-up 0.3s ease-out forwards;
         }
-        
+
         @keyframes fade-in {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-        
+
         .animate-fade-in {
           animation: fade-in 0.2s ease-out forwards;
         }
-        
+
+        @keyframes slide-in {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+
+        .animate-slide-in {
+          animation: slide-in 0.3s ease-out forwards;
+        }
+
         .tab-transition {
           transition: all 0.3s ease;
         }
-      `}</style>
-      {isMobile && activeView === "list" && selectedLocation && (
-        <div className="fixed bottom-20 left-0 right-0 mx-4 z-20">
-          <Button
-            className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-lg"
-            onClick={() => {
-              setActiveView("map")
-              // Center map on selected location
-              let lat, lng
-              if (selectedLocation.latitude != null && selectedLocation.longitude != null) {
-                lat = Number(selectedLocation.latitude)
-                lng = Number(selectedLocation.longitude)
-              } else if (
-                selectedLocation.coordinates?.latitude != null &&
-                selectedLocation.coordinates?.longitude != null
-              ) {
-                lat = Number(selectedLocation.coordinates.latitude)
-                lng = Number(selectedLocation.coordinates.longitude)
-              }
-              if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-                setMapCenter([lat, lng])
-                setMapZoom(15) // Zoom in for better visibility
-              }
 
-              // Show preview after a short delay to allow view transition
-              setTimeout(() => {
-                setPreviewLocation(selectedLocation)
-                setShowMobilePreview(true)
-              }, 300)
-            }}
-          >
-            <MapIcon className="h-4 w-4 mr-2" />
-            View on Map
-          </Button>
-        </div>
-      )}
+        /* Safari-specific fixes */
+        .safari-mobile {
+          /* Use viewport height variable for more accurate height calculations */
+          height: 100%;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .safari-mobile body {
+          height: 100%;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .safari-mobile .absolute {
+          position: absolute !important;
+        }
+
+        .safari-mobile button {
+          -webkit-appearance: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Fix z-index stacking in Safari */
+        .safari-mobile .z-20 {
+          z-index: 20 !important;
+        }
+
+        .safari-mobile .z-30 {
+          z-index: 30 !important;
+        }
+
+        /* Improve touch targets for Safari */
+        @media (max-width: 767px) {
+          .safari-mobile button {
+            min-height: 44px;
+            min-width: 44px;
+          }
+          
+          /* Fix for Safari touch handling */
+          .safari-mobile * {
+            touch-action: manipulation;
+          }
+        }
+
+        /* Use CSS variable for viewport height */
+        .safari-container {
+          height: calc(var(--vh, 1vh) * 100 - 4rem);
+        }
+
+        /* Ensure buttons are visible and clickable in Safari */
+        .safari-button {
+          transform: translateX(-50%) !important;
+          -webkit-transform: translateX(-50%) !important;
+          position: absolute !important;
+          z-index: 30 !important;
+          display: flex !important;
+          visibility: visible !important;
+        }
+
+        /* Fix for Safari drawer positioning */
+        .safari-drawer {
+          position: absolute !important;
+          bottom: 0 !important;
+          left: 0 !important;
+          right: 0 !important;
+          z-index: 20 !important;
+        }
+
+        /* Fix for Safari tabs positioning */
+        .safari-tabs {
+          position: sticky !important;
+          bottom: 0 !important;
+          z-index: 20 !important;
+        }
+
+        /* Fix for Safari preview positioning */
+        .safari-preview {
+          position: absolute !important;
+          bottom: 5rem !important;
+          z-index: 20 !important;
+        }
+
+        /* Fix for Safari back to top button */
+        .safari-back-to-top {
+          position: fixed !important;
+          bottom: 5rem !important;
+          z-index: 10 !important;
+        }
+
+        /* Fix for Safari view on map button */
+        .safari-view-on-map {
+          position: fixed !important;
+          bottom: 5rem !important;
+          z-index: 20 !important;
+        }
+      `}</style>
     </div>
   )
 }
