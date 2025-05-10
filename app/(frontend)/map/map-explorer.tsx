@@ -3,7 +3,7 @@
 
 import { cn } from "@/lib/utils"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { addedLocations, searchLocations, type Location } from "./map-data"
 import { locationMatchesCategories } from "./category-utils"
 import MapComponent from "./map-component"
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, X, List, MapIcon, Loader2, Filter } from "lucide-react"
+import { Search, X, List, MapIcon, Loader2, Filter, ArrowLeft, Maximize2, Minimize2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
@@ -38,14 +38,32 @@ export default function MapExplorer() {
   const [error, setError] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<"map" | "list">("map")
   const [showDetail, setShowDetail] = useState(false)
-
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [showMobileList, setShowMobileList] = useState(false)
+  const [listHeight, setListHeight] = useState<"partial" | "full">("partial")
+  const [showMobilePreview, setShowMobilePreview] = useState(false)
+  const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
+
+  // Refs for container elements
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const listContainerRef = useRef<HTMLDivElement>(null)
+  const detailContainerRef = useRef<HTMLDivElement>(null)
+  const mobileListRef = useRef<HTMLDivElement>(null)
 
   // Check if device is mobile
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
+      const isMobileDevice = window.innerWidth < 768
+      setIsMobile(isMobileDevice)
+
+      // Reset mobile-specific states when switching between mobile and desktop
+      if (!isMobileDevice) {
+        setShowMobileList(false)
+        setListHeight("partial")
+        setShowMobilePreview(false)
+        setPreviewLocation(null)
+      }
     }
 
     checkMobile()
@@ -157,94 +175,267 @@ export default function MapExplorer() {
     if (selectedLocation && !results.find((loc) => loc.id === selectedLocation.id)) {
       setSelectedLocation(null)
       setShowDetail(false)
+      setPreviewLocation(null)
+      setShowMobilePreview(false)
     }
   }, [searchQuery, selectedCategories, allLocations, selectedLocation])
 
   // Handle location selection
-  const handleLocationSelect = (location: Location) => {
-    console.log("Selected location:", location)
-    setSelectedLocation(location)
-    setShowDetail(true)
+  const handleLocationSelect = useCallback(
+    (location: Location) => {
+      console.log("Selected location:", location)
 
-    // On mobile, switch to map view when selecting a location
-    if (isMobile && activeView === "list") {
-      setActiveView("map")
+      // On mobile, show preview first
+      if (isMobile) {
+        setPreviewLocation(location)
+        setShowMobilePreview(true)
+
+        // Center map on selected location
+        let lat, lng
+
+        if (location.latitude != null && location.longitude != null) {
+          lat = Number(location.latitude)
+          lng = Number(location.longitude)
+        } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
+          lat = Number(location.coordinates.latitude)
+          lng = Number(location.coordinates.longitude)
+        }
+
+        if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+          console.log(`Centering map on [${lat}, ${lng}]`)
+          setMapCenter([lat, lng])
+          setMapZoom(15) // Zoom in a bit more on mobile for better visibility
+
+          // Switch to map view when a location is selected on mobile list view
+          if (activeView === "list") {
+            setActiveView("map")
+
+            // Add a small delay to allow the view to switch before showing the preview
+            setTimeout(() => {
+              setShowMobilePreview(true)
+            }, 300)
+          }
+        }
+
+        // Hide the list drawer if it's showing
+        if (showMobileList) {
+          setShowMobileList(false)
+        }
+
+        // Add haptic feedback if available
+        if (navigator.vibrate) {
+          navigator.vibrate(50)
+        }
+      } else {
+        // On desktop, go directly to detail view
+        setSelectedLocation(location)
+        setShowDetail(true)
+
+        // Center map on selected location
+        let lat, lng
+
+        if (location.latitude != null && location.longitude != null) {
+          lat = Number(location.latitude)
+          lng = Number(location.longitude)
+        } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
+          lat = Number(location.coordinates.latitude)
+          lng = Number(location.coordinates.longitude)
+        }
+
+        if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+          console.log(`Centering map on [${lat}, ${lng}]`)
+          setMapCenter([lat, lng])
+        }
+      }
+    },
+    [isMobile, showMobileList, activeView],
+  )
+
+  // Handle view details from preview
+  const handleViewDetails = useCallback(() => {
+    if (previewLocation) {
+      setSelectedLocation(previewLocation)
+      setShowDetail(true)
+      setShowMobilePreview(false)
     }
-
-    // Center map on selected location
-    let lat, lng
-
-    if (location.latitude != null && location.longitude != null) {
-      lat = Number(location.latitude)
-      lng = Number(location.longitude)
-    } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
-      lat = Number(location.coordinates.latitude)
-      lng = Number(location.coordinates.longitude)
-    }
-
-    if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-      console.log(`Centering map on [${lat}, ${lng}]`)
-      setMapCenter([lat, lng])
-    }
-  }
+  }, [previewLocation])
 
   // Handle map click
-  const handleMapClick = () => {
+  const handleMapClick = useCallback(() => {
     // Close detail view when clicking on map
     if (showDetail) {
       setShowDetail(false)
+      setSelectedLocation(null)
     }
 
     // Close search on mobile when clicking map
     if (isMobile && isSearchExpanded) {
       setIsSearchExpanded(false)
     }
-  }
+
+    // Close mobile list drawer when clicking on map
+    if (isMobile && showMobileList) {
+      setShowMobileList(false)
+    }
+
+    // Close mobile preview when clicking on map
+    if (isMobile && showMobilePreview) {
+      setShowMobilePreview(false)
+      setPreviewLocation(null)
+    }
+  }, [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview])
 
   // Handle map move
-  const handleMapMove = (center: [number, number], zoom: number) => {
+  const handleMapMove = useCallback((center: [number, number], zoom: number) => {
     setMapCenter(center)
     setMapZoom(zoom)
-  }
+  }, [])
 
   // Toggle category selection
-  const toggleCategory = (categoryId: string) => {
+  const toggleCategory = useCallback((categoryId: string) => {
     setSelectedCategories((prev) =>
       prev.includes(categoryId) ? prev.filter((id) => id !== categoryId) : [...prev, categoryId],
     )
-  }
+  }, [])
 
   // Clear search
-  const clearSearch = () => {
+  const clearSearch = useCallback(() => {
     setSearchQuery("")
-  }
+  }, [])
 
   // Clear all filters
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setSearchQuery("")
     setSelectedCategories([])
-  }
+  }, [])
 
   // Close detail view
-  const closeDetail = () => {
+  const closeDetail = useCallback(() => {
     setShowDetail(false)
     setSelectedLocation(null)
-  }
+  }, [])
+
+  // Close mobile preview
+  const closeMobilePreview = useCallback(() => {
+    setShowMobilePreview(false)
+    setPreviewLocation(null)
+  }, [])
 
   // Handle tab change
-  const handleViewChange = (value: string) => {
-    setActiveView(value as "map" | "list")
+  const handleViewChange = useCallback(
+    (value: string) => {
+      setActiveView(value as "map" | "list")
 
-    // Close detail view when switching to list on mobile
-    if (isMobile && value === "list" && showDetail) {
-      setShowDetail(false)
-    }
-  }
+      // Close detail view when switching to list on mobile
+      if (isMobile && value === "list" && showDetail) {
+        setShowDetail(false)
+      }
+
+      // Close mobile preview when switching views
+      if (isMobile && showMobilePreview) {
+        setShowMobilePreview(false)
+        setPreviewLocation(null)
+      }
+
+      // Close mobile list drawer when switching to list view
+      if (isMobile && value === "list" && showMobileList) {
+        setShowMobileList(false)
+      }
+
+      // Add haptic feedback if available
+      if (isMobile && navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    },
+    [isMobile, showDetail, showMobilePreview, showMobileList],
+  )
 
   // Toggle search expansion on mobile
-  const toggleSearch = () => {
+  const toggleSearch = useCallback(() => {
     setIsSearchExpanded(!isSearchExpanded)
-  }
+  }, [isSearchExpanded])
+
+  // Toggle mobile list drawer
+  const toggleMobileList = useCallback(() => {
+    setShowMobileList((prev) => !prev)
+
+    // Close mobile preview when toggling list
+    if (showMobilePreview) {
+      setShowMobilePreview(false)
+      setPreviewLocation(null)
+    }
+  }, [showMobilePreview])
+
+  // Toggle list height between partial and full
+  const toggleListHeight = useCallback(() => {
+    setListHeight((prev) => (prev === "partial" ? "full" : "partial"))
+  }, [])
+
+  // Handle touch events for mobile list drawer
+  useEffect(() => {
+    if (!isMobile || !mobileListRef.current) return
+
+    let startY = 0
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    let currentHeight = 0
+
+    const handleTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].clientY
+      currentHeight = mobileListRef.current?.offsetHeight || 0
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!mobileListRef.current) return
+
+      const deltaY = e.touches[0].clientY - startY
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const windowHeight = window.innerHeight
+
+      // If dragging down and list is in full mode, or dragging up and list is in partial mode
+      if ((deltaY > 50 && listHeight === "full") || (deltaY < -50 && listHeight === "partial")) {
+        e.preventDefault()
+        toggleListHeight()
+        startY = e.touches[0].clientY
+      }
+    }
+
+    const element = mobileListRef.current
+    element.addEventListener("touchstart", handleTouchStart)
+    element.addEventListener("touchmove", handleTouchMove)
+
+    return () => {
+      element.removeEventListener("touchstart", handleTouchStart)
+      element.removeEventListener("touchmove", handleTouchMove)
+    }
+  }, [isMobile, listHeight, toggleListHeight])
+
+  // Add orientation change handling
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      // Recalculate layout on orientation change
+      if (isMobile) {
+        // Close any open panels that might cause layout issues
+        if (showMobileList) {
+          setShowMobileList(false)
+        }
+
+        // Reset list height to partial on orientation change
+        setListHeight("partial")
+
+        // Force map to recalculate size
+        if (mapContainerRef.current) {
+          const event = new Event("resize")
+          window.dispatchEvent(event)
+        }
+      }
+    }
+
+    window.addEventListener("orientationchange", handleOrientationChange)
+
+    return () => {
+      window.removeEventListener("orientationchange", handleOrientationChange)
+    }
+  }, [isMobile, showMobileList])
 
   if (error) {
     return (
@@ -262,11 +453,11 @@ export default function MapExplorer() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="flex flex-col h-[calc(100vh-4rem)] overflow-hidden bg-gray-50">
       {/* Header with search */}
       <div
         className={cn(
-          "border-b bg-white shadow-sm transition-all duration-200",
+          "border-b bg-white shadow-sm transition-all duration-200 z-20 sticky top-0",
           isMobile && isSearchExpanded ? "p-4 pb-6" : "p-4",
         )}
       >
@@ -460,58 +651,264 @@ export default function MapExplorer() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
-        {/* List view - now on the left */}
-        <div
-          className={`${
-            activeView === "list" ? "block" : "hidden"
-          } md:block w-full md:w-96 border-r overflow-hidden flex-shrink-0 bg-white z-10`}
-        >
-          <LocationList
-            locations={filteredLocations}
-            onLocationSelect={handleLocationSelect}
-            selectedLocation={selectedLocation}
-            isLoading={isLoading}
-          />
-        </div>
+        {/* Desktop list view - always on the left on desktop */}
+        {!isMobile && (
+          <div
+            ref={listContainerRef}
+            className="hidden md:block w-96 border-r overflow-hidden flex-shrink-0 bg-white z-10"
+            style={{ height: "calc(100% - 0px)" }}
+          >
+            <LocationList
+              locations={filteredLocations}
+              onLocationSelect={handleLocationSelect}
+              selectedLocation={selectedLocation}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
 
-        {/* Map view */}
-        <div className={`${activeView === "map" ? "block" : "hidden"} md:block flex-1 relative h-full`}>
+        {/* Map view - always visible on desktop, conditionally on mobile */}
+        <div
+          ref={mapContainerRef}
+          className={cn("flex-1 relative", isMobile && activeView === "list" ? "hidden" : "block")}
+          style={{ height: "calc(100% - 0px)" }}
+        >
           <MapComponent
             locations={filteredLocations}
             userLocation={userLocation}
             center={mapCenter}
             zoom={mapZoom}
-            onMarkerClickAction={handleLocationSelect}
-            onMapClickAction={handleMapClick}
-            onMapMoveAction={handleMapMove}
+            onMarkerClick={handleLocationSelect}
+            onMapClick={handleMapClick}
+            onMapMove={handleMapMove}
             className="h-full w-full"
             selectedLocation={selectedLocation}
           />
+
+          {/* Mobile location preview */}
+          {isMobile && showMobilePreview && previewLocation && (
+            <div className="absolute bottom-20 left-0 right-0 mx-4 bg-white rounded-lg shadow-lg z-20 p-4 animate-slide-up">
+              <div className="absolute top-2 right-2">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={closeMobilePreview}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex items-start mb-3">
+                <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
+                  {previewLocation.imageUrl || previewLocation.featuredImage ? (
+                    <div className="w-full h-full relative">
+                      <img
+                        src={
+                          typeof previewLocation.featuredImage === "string"
+                            ? previewLocation.featuredImage
+                            : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
+                        }
+                        alt={previewLocation.name}
+                        className="object-cover w-full h-full"
+                        loading="eager"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <MapIcon className="h-6 w-6 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="ml-3 flex-1">
+                  <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
+
+                  {/* Address */}
+                  {previewLocation.address && (
+                    <div className="flex items-center mt-1">
+                      <MapIcon className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-500 truncate">
+                        {typeof previewLocation.address === "string"
+                          ? previewLocation.address
+                          : Object.values(previewLocation.address).filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Categories */}
+                  {previewLocation.categories && previewLocation.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {previewLocation.categories.slice(0, 2).map((category, idx) => {
+                        const name = typeof category === "string" ? category : category?.name || "Category"
+                        return (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="bg-[#FF6B6B]/10 text-[#FF6B6B] hover:bg-[#FF6B6B]/20 border-none text-xs"
+                          >
+                            {name}
+                          </Badge>
+                        )
+                      })}
+                      {previewLocation.categories.length > 2 && (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-none text-xs">
+                          +{previewLocation.categories.length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={handleViewDetails}>
+                  View Details
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                  onClick={() => {
+                    // Open in maps app if available
+                    const address =
+                      typeof previewLocation.address === "string"
+                        ? previewLocation.address
+                        : Object.values(previewLocation.address || {})
+                            .filter(Boolean)
+                            .join(", ")
+
+                    let lat, lng
+                    if (previewLocation.latitude != null && previewLocation.longitude != null) {
+                      lat = Number(previewLocation.latitude)
+                      lng = Number(previewLocation.longitude)
+                    } else if (
+                      previewLocation.coordinates?.latitude != null &&
+                      previewLocation.coordinates?.longitude != null
+                    ) {
+                      lat = Number(previewLocation.coordinates.latitude)
+                      lng = Number(previewLocation.coordinates.longitude)
+                    }
+
+                    if (lat && lng) {
+                      window.open(`https://maps.google.com/maps?q=${lat},${lng}`, "_blank")
+                    } else if (address) {
+                      window.open(`https://maps.google.com/maps?q=${encodeURIComponent(address)}`, "_blank")
+                    }
+                  }}
+                >
+                  <MapIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Mobile list toggle button */}
+          {isMobile && activeView === "map" && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={toggleMobileList}
+              className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-20 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200"
+            >
+              <List className="h-4 w-4 mr-2" />
+              {showMobileList ? "Hide List" : "Show List"}
+            </Button>
+          )}
+
+          {/* Mobile list drawer */}
+          {isMobile && showMobileList && (
+            <div
+              ref={mobileListRef}
+              className={cn(
+                "absolute bottom-0 left-0 right-0 bg-white z-20 rounded-t-xl shadow-lg transition-all duration-300 ease-in-out",
+                listHeight === "partial" ? "h-[40%]" : "h-[80%]",
+              )}
+            >
+              <div className="flex items-center justify-between p-3 border-b sticky top-0 bg-white z-10">
+                <h3 className="font-medium">Locations ({filteredLocations.length})</h3>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleListHeight}>
+                    {listHeight === "partial" ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleMobileList}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="overflow-y-auto" style={{ height: `calc(100% - 49px)` }}>
+                <LocationList
+                  locations={filteredLocations}
+                  onLocationSelect={handleLocationSelect}
+                  selectedLocation={selectedLocation}
+                  isLoading={isLoading}
+                />
+              </div>
+
+              {/* Drag handle indicator */}
+              <div className="absolute top-0 left-0 right-0 flex justify-center">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mt-2 mb-1"></div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Mobile list view */}
+        {isMobile && activeView === "list" && (
+          <div
+            ref={listContainerRef}
+            className="w-full overflow-hidden flex-shrink-0 bg-white z-10 animate-fade-in"
+            style={{ height: "calc(100% - 0px)" }}
+          >
+            <LocationList
+              locations={filteredLocations}
+              onLocationSelect={handleLocationSelect}
+              selectedLocation={selectedLocation}
+              isLoading={isLoading}
+            />
+          </div>
+        )}
 
         {/* Detail panel */}
         {showDetail && selectedLocation && (
-          <div className="absolute inset-0 md:relative md:inset-auto md:w-96 bg-white z-30 md:border-l overflow-auto">
-            <LocationDetail location={selectedLocation} onCloseAction={closeDetail} />
+          <div
+            ref={detailContainerRef}
+            className="absolute inset-0 md:relative md:inset-auto md:w-96 bg-white z-30 md:border-l overflow-hidden"
+            style={{ height: isMobile ? "100%" : "calc(100% - 0px)" }}
+          >
+            {/* Mobile back button */}
+            {isMobile && (
+              <div className="sticky top-0 z-10 bg-white border-b p-3 flex items-center">
+                <Button variant="ghost" size="sm" onClick={closeDetail} className="h-8 w-8 p-0 mr-2">
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <h3 className="font-medium truncate">{selectedLocation.name}</h3>
+              </div>
+            )}
+            <div className="h-full overflow-auto" style={{ height: isMobile ? "calc(100% - 49px)" : "100%" }}>
+              <LocationDetail location={selectedLocation} onCloseAction={closeDetail} />
+            </div>
           </div>
         )}
       </div>
 
       {/* Mobile view selector */}
-      <div className="md:hidden border-t bg-white sticky bottom-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-        <Tabs value={activeView} onValueChange={handleViewChange} className="w-full">
-          <TabsList className="w-full grid grid-cols-2 p-1">
-            <TabsTrigger value="map" className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3">
-              <MapIcon className="h-5 w-5 mr-2" />
-              Map
-            </TabsTrigger>
-            <TabsTrigger value="list" className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3">
-              <List className="h-5 w-5 mr-2" />
-              List
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {isMobile && (
+        <div className="border-t bg-white sticky bottom-0 z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+          <Tabs defaultValue={activeView} value={activeView} onValueChange={handleViewChange} className="w-full">
+            <TabsList className="w-full grid grid-cols-2 p-1">
+              <TabsTrigger
+                value="map"
+                className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3 transition-all duration-200"
+              >
+                <MapIcon className="h-5 w-5 mr-2" />
+                Map
+              </TabsTrigger>
+              <TabsTrigger
+                value="list"
+                className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3 transition-all duration-200"
+              >
+                <List className="h-5 w-5 mr-2" />
+                List
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* Loading overlay */}
       {isLoading && (
@@ -520,6 +917,66 @@ export default function MapExplorer() {
             <Loader2 className="h-10 w-10 text-[#FF6B6B] animate-spin mb-4" />
             <p className="text-gray-700 font-medium">Loading locations...</p>
           </div>
+        </div>
+      )}
+
+      {/* Global styles for animations */}
+      <style jsx global>{`
+        @keyframes slide-up {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .animate-slide-up {
+          animation: slide-up 0.3s ease-out forwards;
+        }
+        
+        @keyframes fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.2s ease-out forwards;
+        }
+        
+        .tab-transition {
+          transition: all 0.3s ease;
+        }
+      `}</style>
+      {isMobile && activeView === "list" && selectedLocation && (
+        <div className="fixed bottom-20 left-0 right-0 mx-4 z-20">
+          <Button
+            className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-lg"
+            onClick={() => {
+              setActiveView("map")
+              // Center map on selected location
+              let lat, lng
+              if (selectedLocation.latitude != null && selectedLocation.longitude != null) {
+                lat = Number(selectedLocation.latitude)
+                lng = Number(selectedLocation.longitude)
+              } else if (
+                selectedLocation.coordinates?.latitude != null &&
+                selectedLocation.coordinates?.longitude != null
+              ) {
+                lat = Number(selectedLocation.coordinates.latitude)
+                lng = Number(selectedLocation.coordinates.longitude)
+              }
+              if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
+                setMapCenter([lat, lng])
+                setMapZoom(15) // Zoom in for better visibility
+              }
+
+              // Show preview after a short delay to allow view transition
+              setTimeout(() => {
+                setPreviewLocation(selectedLocation)
+                setShowMobilePreview(true)
+              }, 300)
+            }}
+          >
+            <MapIcon className="h-4 w-4 mr-2" />
+            View on Map
+          </Button>
         </div>
       )}
     </div>

@@ -1,394 +1,311 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
-import { cn } from "@/lib/utils"
-import { MapPin, Star, Clock, Phone, Globe, ChevronRight, Loader2, Tag, Check, Calendar, Search, X } from "lucide-react"
-import type { Location } from "./map-data"
-import { getCategoryColor, formatBusinessHours, formatPriceRange } from "./category-utils"
-import Image from "next/image"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type React from "react"
+
+import { useState, useCallback } from "react"
+import { Search, MapPin, Star, Filter } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { cn } from "@/lib/utils"
+import Image from "next/image"
+import type { Location } from "./map-data"
+import { getCategoryColor } from "./category-utils"
 
 interface LocationListProps {
   locations: Location[]
-  onLocationSelect: (location: Location) => void
   selectedLocation: Location | null
-  isLoading: boolean
+  onLocationSelect: (location: Location) => void
+  isLoading?: boolean
 }
 
-export default function LocationList({ locations, onLocationSelect, selectedLocation, isLoading }: LocationListProps) {
-  const [sortBy, setSortBy] = useState<"name" | "rating">("name")
-  const [quickFilter, setQuickFilter] = useState("")
-  const [filteredLocations, setFilteredLocations] = useState<Location[]>(locations)
-  const listRef = useRef<HTMLDivElement>(null)
-  const selectedRef = useRef<HTMLLIElement>(null)
+export default function LocationList({ locations, selectedLocation, onLocationSelect }: LocationListProps) {
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortBy, setSortBy] = useState<"relevance" | "distance" | "rating">("relevance")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
 
-  // Apply quick filter
-  useEffect(() => {
-    if (!quickFilter.trim()) {
-      setFilteredLocations(locations)
-      return
+  // Extract all unique categories from locations
+  const allCategories = locations.reduce((acc, location) => {
+    if (location.categories && Array.isArray(location.categories)) {
+      location.categories.forEach((category) => {
+        const categoryName = typeof category === "string" ? category : category.name
+        if (categoryName && !acc.includes(categoryName)) {
+          acc.push(categoryName)
+        }
+      })
     }
+    return acc
+  }, [] as string[])
 
-    const filtered = locations.filter((location) => {
-      const searchTerm = quickFilter.toLowerCase()
+  // Filter locations based on search query and selected categories
+  const filteredLocations = locations.filter((location) => {
+    // Search query filter
+    const matchesSearch =
+      searchQuery === "" ||
+      location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase()))
 
-      // Search in name
-      if (location.name.toLowerCase().includes(searchTerm)) return true
+    // Category filter
+    const matchesCategory =
+      selectedCategories.length === 0 ||
+      (location.categories &&
+        location.categories.some((category) => {
+          const categoryName = typeof category === "string" ? category : category.name
+          return categoryName && selectedCategories.includes(categoryName)
+        }))
 
-      // Search in categories
-      if (
-        location.categories?.some((cat) => {
-          const catName = typeof cat === "string" ? cat : cat.name
-          return catName?.toLowerCase().includes(searchTerm)
-        })
-      )
-        return true
-
-      // Search in address
-      if (typeof location.address === "string") {
-        if (location.address.toLowerCase().includes(searchTerm)) return true
-      } else if (location.address) {
-        const addressStr = Object.values(location.address).filter(Boolean).join(" ").toLowerCase()
-        if (addressStr.includes(searchTerm)) return true
-      }
-
-      return false
-    })
-
-    setFilteredLocations(filtered)
-  }, [quickFilter, locations])
+    return matchesSearch && matchesCategory
+  })
 
   // Sort locations
   const sortedLocations = [...filteredLocations].sort((a, b) => {
     if (sortBy === "rating") {
-      return (b.averageRating || 0) - (a.averageRating || 0)
+      const ratingA = a.averageRating || 0
+      const ratingB = b.averageRating || 0
+      return ratingB - ratingA
     }
-    return (a.name || "").localeCompare(b.name || "")
+    // For now, other sort options just maintain original order
+    // In a real app, you'd implement distance sorting using coordinates
+    return 0
   })
 
-  // Scroll to selected location
-  useEffect(() => {
-    if (selectedLocation && selectedRef.current && listRef.current) {
-      selectedRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      })
-    }
-  }, [selectedLocation])
+  // Handle search input change
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value)
+  }, [])
 
-  // Clear filter
-  const clearFilter = () => {
-    setQuickFilter("")
-  }
+  // Handle category selection
+  const handleCategoryChange = useCallback((category: string, checked: boolean) => {
+    setSelectedCategories((prev) => (checked ? [...prev, category] : prev.filter((c) => c !== category)))
+  }, [])
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 p-4">
-        <Loader2 className="h-8 w-8 text-[#FF6B6B] animate-spin mb-4" />
-        <p className="text-gray-500">Loading locations...</p>
-      </div>
-    )
-  }
+  // Handle sort selection
+  const handleSortChange = useCallback((value: string) => {
+    setSortBy(value as "relevance" | "distance" | "rating")
+  }, [])
 
-  if (locations.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 p-4 text-center">
-        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-          <MapPin className="h-8 w-8 text-gray-400" />
-        </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Locations Found</h3>
-        <p className="text-gray-500 max-w-xs">Try adjusting your search criteria or explore a different area.</p>
-      </div>
-    )
-  }
+  // Clear all filters
+  const clearFilters = useCallback(() => {
+    setSelectedCategories([])
+    setSortBy("relevance")
+  }, [])
 
   return (
-    <div className="flex flex-col h-full border-r border-gray-200">
-      <div className="p-3 md:p-4 border-b border-gray-200 bg-white sticky top-0 z-10 shadow-sm">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-medium">
-            <span className="text-[#FF6B6B]">{filteredLocations.length}</span> Locations
-          </h3>
-          <div className="flex items-center">
-            <Select value={sortBy} onValueChange={(value) => setSortBy(value as "name" | "rating")}>
-              <SelectTrigger className="w-[130px] h-10 text-sm border-none bg-gray-50 focus:ring-0">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name" className="py-3">
-                  Name
-                </SelectItem>
-                <SelectItem value="rating" className="py-3">
-                  Rating
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Search and filter header */}
+      <div className="p-4 border-b sticky top-0 bg-white z-10">
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            placeholder="Search locations..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            className="pl-9 bg-gray-50 border-gray-200"
+          />
         </div>
 
-        {/* Quick filter */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input
-            type="text"
-            placeholder="Filter locations..."
-            value={quickFilter}
-            onChange={(e) => setQuickFilter(e.target.value)}
-            className="pl-9 pr-8 border-gray-200 focus:border-[#FF6B6B] focus:ring-[#FF6B6B]/10 h-10"
-          />
-          {quickFilter && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
-              onClick={clearFilter}
-            >
-              <X className="h-4 w-4 text-gray-400" />
-            </Button>
-          )}
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            {filteredLocations.length} {filteredLocations.length === 1 ? "location" : "locations"}
+          </p>
+
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8">
+                <Filter className="h-3.5 w-3.5 mr-2" />
+                Filter & Sort
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80 sm:w-96">
+              <SheetHeader>
+                <SheetTitle>Filter & Sort</SheetTitle>
+              </SheetHeader>
+
+              <div className="py-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium mb-3">Sort By</h3>
+                  <RadioGroup value={sortBy} onValueChange={handleSortChange}>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <RadioGroupItem value="relevance" id="relevance" />
+                      <Label htmlFor="relevance">Relevance</Label>
+                    </div>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <RadioGroupItem value="distance" id="distance" />
+                      <Label htmlFor="distance">Distance</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="rating" id="rating" />
+                      <Label htmlFor="rating">Rating</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div>
+                  <h3 className="text-sm font-medium mb-3">Categories</h3>
+                  <div className="space-y-2">
+                    {allCategories.map((category) => (
+                      <div key={category} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`category-${category}`}
+                          checked={selectedCategories.includes(category)}
+                          onCheckedChange={(checked) => handleCategoryChange(category, checked as boolean)}
+                        />
+                        <Label htmlFor={`category-${category}`} className="flex items-center">
+                          <div
+                            className="w-3 h-3 rounded-full mr-2"
+                            style={{ backgroundColor: getCategoryColor(category) }}
+                          />
+                          {category}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <SheetFooter className="flex-row justify-between sm:justify-between border-t pt-4">
+                <Button variant="outline" onClick={clearFilters}>
+                  Clear All
+                </Button>
+                <SheetClose asChild>
+                  <Button>Apply Filters</Button>
+                </SheetClose>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-gray-50" ref={listRef}>
-        {sortedLocations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 p-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <Search className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Matching Locations</h3>
-            <p className="text-gray-500 max-w-xs">Try adjusting your filter criteria</p>
-            <Button variant="outline" className="mt-4" onClick={clearFilter}>
-              Clear Filter
-            </Button>
+      {/* Location list */}
+      <div className="flex-1 overflow-y-auto">
+        {sortedLocations.length > 0 ? (
+          <div className="divide-y">
+            {sortedLocations.map((location) => (
+              <button
+                key={location.id}
+                onClick={() => onLocationSelect(location)}
+                className={cn(
+                  "w-full text-left p-4 hover:bg-gray-50 transition-colors flex items-start",
+                  selectedLocation?.id === location.id && "bg-[#FF6B6B]/5 hover:bg-[#FF6B6B]/10",
+                )}
+              >
+                {/* Location image */}
+                <div className="w-20 h-20 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
+                  {location.imageUrl || location.featuredImage ? (
+                    <Image
+                      src={
+                        typeof location.featuredImage === "string"
+                          ? location.featuredImage
+                          : location.featuredImage?.url || location.imageUrl || "/placeholder.svg"
+                      }
+                      alt={location.name}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <MapPin className="h-6 w-6 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="ml-3 flex-1 min-w-0">
+                  <h3 className="font-medium text-gray-900 truncate">{location.name}</h3>
+
+                  {/* Rating */}
+                  {location.averageRating && (
+                    <div className="flex items-center mt-1">
+                      <div className="flex items-center">
+                        <Star className="h-3.5 w-3.5 text-yellow-400 fill-yellow-400" />
+                        <span className="ml-1 text-sm font-medium text-gray-700">{location.averageRating.toFixed(1)}</span>
+                      </div>
+                      {location.reviewCount && (
+                        <span className="text-xs text-gray-500 ml-1">({location.reviewCount})</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Address */}
+                  {location.address && (
+                    <div className="flex items-center mt-1">
+                      <MapPin className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-500 truncate">
+                        {typeof location.address === "string"
+                          ? location.address
+                          : Object.values(location.address).filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Categories */}
+                  {location.categories && location.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {location.categories.slice(0, 2).map((category, idx) => {
+                        const color = getCategoryColor(category)
+                        const name = typeof category === "string" ? category : category?.name || "Category"
+
+                        return (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="px-2 py-0.5 h-5 text-[10px] font-medium rounded-full"
+                            style={{
+                              backgroundColor: `${color}10`,
+                              color: color,
+                              borderColor: `${color}30`,
+                            }}
+                          >
+                            {name}
+                          </Badge>
+                        )
+                      })}
+
+                      {location.categories.length > 2 && (
+                        <span className="text-xs text-gray-500 ml-1 flex items-center">
+                          +{location.categories.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
           </div>
         ) : (
-          <ul className="divide-y divide-gray-200">
-            {sortedLocations.map((location) => {
-              // Format address
-              let addressText = ""
-              if (typeof location.address === "string") {
-                addressText = location.address
-              } else if (location.address) {
-                addressText = [
-                  location.address.street,
-                  location.address.city,
-                  location.address.state,
-                  location.address.zip,
-                  location.address.country,
-                ]
-                  .filter(Boolean)
-                  .join(", ")
-              }
-
-              // Get image URL
-              const imageUrl =
-                location.imageUrl ||
-                (typeof location.featuredImage === "string" ? location.featuredImage : location.featuredImage?.url)
-
-              // Get contact info
-              const contactInfo = location.contactInfo || {}
-              const phone = contactInfo.phone 
-              const website = contactInfo.website 
-
-              // Get business hours summary
-              const hoursText =
-                location.businessHours && location.businessHours.length > 0
-                  ? formatBusinessHours(location.businessHours)
-                  : null
-
-              // Get price range
-              const priceRangeText = location.priceRange ? formatPriceRange(location.priceRange) : null
-
-              // Get today's day
-              const today = new Date().toLocaleDateString("en-US", { weekday: "long" })
-              const todayHours = location.businessHours?.find((h) => h.day === today)
-
-      
-
-              const isSelected = selectedLocation?.id === location.id
-
-              return (
-                <li
-                  key={location.id}
-                  ref={isSelected ? selectedRef : null}
-                  className={cn(
-                    "bg-white hover:bg-gray-50 cursor-pointer transition-colors",
-                    isSelected ? "bg-[#FF6B6B]/5 border-l-4 border-[#FF6B6B]" : "border-l-4 border-transparent",
-                  )}
-                  onClick={() => onLocationSelect(location)}
-                >
-                  <div className="p-3 md:p-4">
-                    <div className="flex">
-                      <div
-                        className={cn(
-                          "w-24 h-24 rounded-lg overflow-hidden relative flex-shrink-0 bg-gray-100",
-                          !imageUrl && "flex items-center justify-center",
-                        )}
-                      >
-                        {imageUrl ? (
-                          <Image
-                            src={imageUrl || "/placeholder.svg"}
-                            alt={location.name || "Location"}
-                            fill
-                            className="object-cover"
-                            sizes="(max-width: 768px) 96px, 96px"
-                          />
-                        ) : (
-                          <MapPin className="h-8 w-8 text-gray-400" />
-                        )}
-
-                        {/* Badges */}
-                        <div className="absolute top-0 left-0 right-0 flex justify-between p-1">
-                          {location.isFeatured && (
-                            <Badge className="bg-amber-500 text-white border-0 h-5 px-1.5 text-[10px]">
-                              <Star className="h-2.5 w-2.5 mr-0.5 fill-white" />
-                              Featured
-                            </Badge>
-                          )}
-
-                          {location.isVerified && (
-                            <Badge className="bg-blue-500 text-white border-0 h-5 px-1.5 text-[10px]">
-                              <Check className="h-2.5 w-2.5 mr-0.5" />
-                              Verified
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="ml-4 flex-1">
-                        <div className="flex justify-between">
-                          <h3 className="font-medium text-gray-900">{location.name}</h3>
-                          <ChevronRight className="h-5 w-5 text-gray-400" />
-                        </div>
-
-                        {/* Rating and price */}
-                        <div className="flex items-center gap-3 mt-1">
-                          {location.averageRating !== undefined && (
-                            <div className="flex items-center">
-                              <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400 mr-1" />
-                              <span className="text-xs font-medium">{location.averageRating.toFixed(1)}</span>
-                              {location.reviewCount !== undefined && (
-                                <span className="text-xs text-gray-500 ml-1">({location.reviewCount})</span>
-                              )}
-                            </div>
-                          )}
-
-                          {priceRangeText && (
-                            <div className="flex items-center text-xs text-gray-600">
-                              <span>{priceRangeText}</span>
-                            </div>
-                          )}
-
-                          {/* Open/closed status */}
-                          {todayHours && (
-                            <div
-                              className={cn(
-                                "text-xs font-medium",
-                                todayHours.closed ? "text-red-500" : "text-green-600",
-                              )}
-                            >
-                              {todayHours.closed ? "Closed" : "Open"}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Address */}
-                        {addressText && (
-                          <div className="flex items-center mt-1">
-                            <MapPin className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
-                            <p className="text-sm text-gray-500 truncate">{addressText}</p>
-                          </div>
-                        )}
-
-                        {/* Categories */}
-                        {location.categories && location.categories.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {location.categories.slice(0, 2).map((category, idx) => {
-                              const color = getCategoryColor(category)
-                              const name = typeof category === "string" ? category : category?.name || "Category"
-
-                              return (
-                                <Badge
-                                  key={idx}
-                                  variant="outline"
-                                  className="px-2 py-0.5 h-5 text-[10px] font-medium rounded-full"
-                                  style={{
-                                    backgroundColor: `${color}10`,
-                                    color: color,
-                                    borderColor: `${color}30`,
-                                  }}
-                                >
-                                  {name}
-                                </Badge>
-                              )
-                            })}
-                            {location.categories.length > 2 && (
-                              <Badge
-                                variant="outline"
-                                className="px-2 py-0.5 h-5 text-[10px] font-medium rounded-full bg-gray-100 text-gray-600 border-gray-200"
-                              >
-                                +{location.categories.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Additional info */}
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
-                          {/* Hours */}
-                          {hoursText && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Clock className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span className="truncate max-w-[120px]">{hoursText}</span>
-                            </div>
-                          )}
-
-                          {/* Phone */}
-                          {phone && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span>{phone}</span>
-                            </div>
-                          )}
-
-                          {/* Website */}
-                          {website && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Globe className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span>Website</span>
-                            </div>
-                          )}
-
-                          {/* Best time to visit */}
-                          {location.bestTimeToVisit && location.bestTimeToVisit.length > 0 && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span className="truncate max-w-[100px]">
-                                {location.bestTimeToVisit.map((t) => t.season).join(", ")}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Tags */}
-                          {location.tags && location.tags.length > 0 && (
-                            <div className="flex items-center text-xs text-gray-500">
-                              <Tag className="h-3 w-3 mr-1 flex-shrink-0" />
-                              <span className="truncate max-w-[100px]">
-                                {location.tags.map((t) => t.tag).join(", ")}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+              <MapPin className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-1">No locations found</h3>
+            <p className="text-gray-500 max-w-xs">
+              Try adjusting your search or filters to find what you&apos;re looking for.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => {
+                setSearchQuery("")
+                setSelectedCategories([])
+              }}
+            >
+              Clear Search
+            </Button>
+          </div>
         )}
       </div>
     </div>

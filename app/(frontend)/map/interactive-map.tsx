@@ -22,9 +22,9 @@ interface InteractiveMapProps {
   center: [number, number]
   zoom: number
   mapStyle: string
-  onMarkerClickAction: (location: Location) => void
-  onMapClickAction: (latlng: { lat: number; lng: number }) => void
-  onMapMoveAction: (center: [number, number], zoom: number) => void
+  onMarkerClick: (location: Location) => void
+  onMapClick: (latlng: { lat: number; lng: number }) => void
+  onMapMove: (center: [number, number], zoom: number) => void
   searchRadius?: number
   className?: string
 }
