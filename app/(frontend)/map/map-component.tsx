@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Layers, Info, MapPin, Locate, X } from "lucide-react"
@@ -45,6 +46,23 @@ const getCoordinates = (location: Location): [number, number] | null => {
 
   console.warn(`Invalid coordinates for location "${location.name}"`)
   return null
+}
+
+// Helper to get image URL from location
+const getLocationImageUrl = (location: Location): string => {
+  if (typeof location.featuredImage === "string") {
+    return location.featuredImage
+  }
+
+  if (location.featuredImage?.url) {
+    return location.featuredImage.url
+  }
+
+  if (location.imageUrl) {
+    return location.imageUrl
+  }
+
+  return "/abstract-location.png"
 }
 
 interface MapComponentProps {
@@ -108,14 +126,21 @@ const MapComponent = memo(function MapComponent({
   const [showMiniPreview, setShowMiniPreview] = useState(false)
   const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
   const [isMobile, setIsMobile] = useState(false)
+  const [isSafari, setIsSafari] = useState(false)
 
-  // Check if device is mobile - only run once on mount and on resize
+  // Check if device is mobile and browser is Safari - only run once on mount and on resize
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768)
     }
 
+    const checkSafari = () => {
+      const ua = navigator.userAgent.toLowerCase()
+      setIsSafari(/safari/.test(ua) && !/chrome/.test(ua) && !/firefox/.test(ua) && !/edge/.test(ua))
+    }
+
     checkMobile()
+    checkSafari()
     window.addEventListener("resize", checkMobile)
 
     return () => {
@@ -339,6 +364,8 @@ const MapComponent = memo(function MapComponent({
           height: `${baseMarkerSize}px`,
           cursor: "pointer",
           zIndex: isSelected ? "10" : "1",
+          touchAction: "none", // Prevent default touch actions for better mobile handling
+          WebkitTapHighlightColor: "transparent", // Remove tap highlight on iOS
         })
 
         // Create the actual marker element
@@ -411,19 +438,55 @@ const MapComponent = memo(function MapComponent({
         markerDot.appendChild(pulse)
         el.appendChild(markerDot)
 
-        // Add click handler
-        el.addEventListener("click", (e) => {
+        // Add click handler with improved touch handling for Safari
+        const handleMarkerClick = (e: Event) => {
           e.stopPropagation()
+          e.preventDefault()
 
-          // On mobile, show mini preview first
-          if (isMobile) {
-            setPreviewLocation(location)
-            setShowMiniPreview(true)
-          } else {
-            // On desktop, go directly to full detail view
-            onMarkerClick(location)
+          // Call the onMarkerClick callback with the location
+          onMarkerClick(location)
+
+          // Highlight the marker
+          markerDot.style.transform = "scale(1.1)"
+          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+          el.style.zIndex = "10"
+
+          // Add a pulse animation to the marker
+          const pulseEffect = document.createElement("div")
+          pulseEffect.className = "marker-pulse-effect"
+          Object.assign(pulseEffect.style, {
+            position: "absolute",
+            inset: "0",
+            borderRadius: "50%",
+            backgroundColor: `${color}20`,
+            animation: "marker-pulse 1.5s infinite",
+            zIndex: "-1",
+          })
+
+          // Remove any existing pulse effects
+          const existingPulse = markerDot.querySelector(".marker-pulse-effect")
+          if (existingPulse) {
+            markerDot.removeChild(existingPulse)
           }
-        })
+
+          markerDot.appendChild(pulseEffect)
+        }
+
+        // Add multiple event listeners for better cross-browser compatibility
+        el.addEventListener("click", handleMarkerClick, { passive: false })
+
+        // Add specific touch handlers for mobile Safari
+        if (isMobile || isSafari) {
+          el.addEventListener(
+            "touchstart",
+            (e) => {
+              e.stopPropagation()
+            },
+            { passive: false },
+          )
+
+          el.addEventListener("touchend", handleMarkerClick, { passive: false })
+        }
 
         // Create marker
         const marker = new mapboxgl.Marker({
@@ -445,7 +508,7 @@ const MapComponent = memo(function MapComponent({
     // Update refs to track changes
     prevLocationsRef.current = locations
     markersInitializedRef.current = true
-  }, [locationIds, mapLoaded, isMobile, selectedLocationId]) // Only depend on the memoized values
+  }, [locationIds, mapLoaded, isMobile, selectedLocationId, isSafari, onMarkerClick]) // Only depend on the memoized values
 
   // Update selected marker state - only run when selected location changes
   useEffect(() => {
@@ -820,14 +883,13 @@ const MapComponent = memo(function MapComponent({
             <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
               {previewLocation.imageUrl || previewLocation.featuredImage ? (
                 <div className="w-full h-full relative">
-                  <img
-                    src={
-                      typeof previewLocation.featuredImage === "string"
-                        ? previewLocation.featuredImage
-                        : previewLocation.featuredImage?.url || previewLocation.imageUrl || "/placeholder.svg"
-                    }
+                  <Image
+                    src={getLocationImageUrl(previewLocation) || "/placeholder.svg"}
                     alt={previewLocation.name}
-                    className="object-cover w-full h-full"
+                    fill
+                    sizes="64px"
+                    className="object-cover"
+                    priority
                   />
                 </div>
               ) : (
@@ -1023,6 +1085,49 @@ const MapComponent = memo(function MapComponent({
 
         .mapboxgl-marker-dot {
           transform-origin: center center !important;
+        }
+        
+        /* Safari-specific fixes */
+        @supports (-webkit-touch-callout: none) {
+          .mapboxgl-marker-container {
+            /* Increase touch target for Safari */
+            min-width: 44px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        /* Marker pulse animation */
+        @keyframes marker-pulse {
+          0% { transform: scale(1); opacity: 0.7; }
+          50% { transform: scale(1.5); opacity: 0.3; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+
+        .marker-pulse-effect {
+          animation: marker-pulse 1.5s infinite;
+          position: absolute;
+          border-radius: 50%;
+          background-color: rgba(255, 107, 107, 0.2);
+          width: 100%;
+          height: 100%;
+          top: 0;
+          left: 0;
+          pointer-events: none;
+        }
+
+        /* Improve marker visibility */
+        .mapboxgl-marker-container {
+          z-index: 1;
+          transition: z-index 0.1s;
+        }
+
+        .mapboxgl-marker-container:hover,
+        .mapboxgl-marker-container:active,
+        .mapboxgl-marker-container.active {
+          z-index: 10 !important;
         }
       `}</style>
     </div>

@@ -1,8 +1,8 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { cn } from "@/lib/utils"
-import Image from "next/image"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { addedLocations, searchLocations, type Location } from "./map-data"
@@ -37,6 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import Image from "next/image"
 
 export default function MapExplorer() {
   // Browser detection states
@@ -71,6 +72,7 @@ export default function MapExplorer() {
   const [touchStarted, setTouchStarted] = useState(false)
   const [safariFixesApplied, setSafariFixesApplied] = useState(false)
   const [viewportHeight, setViewportHeight] = useState(0)
+  const [previewPosition, setPreviewPosition] = useState<[number, number] | null>(null)
 
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -103,7 +105,7 @@ export default function MapExplorer() {
   useEffect(() => {
     // Detect Safari and iOS
     const ua = navigator.userAgent.toLowerCase()
-    const isSafariBrowser = /safari/.test(ua) && !/chrome/.test(ua) && !/android/.test(ua)
+    const isSafariBrowser = /safari/.test(ua) && !/chrome/.test(ua) && !/firefox/.test(ua) && !/edge/.test(ua)
 
     const isIOSDevice =
       /iphone|ipad|ipod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
@@ -308,54 +310,37 @@ export default function MapExplorer() {
         }, 300)
       }
 
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+
+      // Center map on selected location
+      const coordinates = getLocationCoordinates(location)
+      if (coordinates) {
+        console.log(`Centering map on [${coordinates[0]}, ${coordinates[1]}]`)
+        setMapCenter(coordinates)
+        setMapZoom(isMobile ? 15 : 14) // Zoom in a bit more on mobile for better visibility
+
+        // Switch to map view when a location is selected on mobile list view
+        if (activeView === "list" && isMobile) {
+          setActiveView("map")
+        }
+      }
+
+      // Set the preview location
+      setPreviewLocation(location)
+      setShowMobilePreview(true)
+
+      // Hide the list drawer if it's showing
+      if (showMobileList) {
+        setShowMobileList(false)
+      }
+
+      // Reset selection state after a delay
       setTimeout(() => {
         setIsSelecting(false)
       }, 500) // Longer timeout for Safari
-
-      // On mobile, show preview first
-      if (isMobile) {
-        setPreviewLocation(location)
-        setShowMobilePreview(true)
-
-        // Center map on selected location
-        const coordinates = getLocationCoordinates(location)
-        if (coordinates) {
-          console.log(`Centering map on [${coordinates[0]}, ${coordinates[1]}]`)
-          setMapCenter(coordinates)
-          setMapZoom(15) // Zoom in a bit more on mobile for better visibility
-
-          // Switch to map view when a location is selected on mobile list view
-          if (activeView === "list") {
-            setActiveView("map")
-
-            // Add a small delay to allow the view to switch before showing the preview
-            setTimeout(() => {
-              setShowMobilePreview(true)
-            }, 300)
-          }
-        }
-
-        // Hide the list drawer if it's showing
-        if (showMobileList) {
-          setShowMobileList(false)
-        }
-
-        // Add haptic feedback if available
-        if (navigator.vibrate) {
-          navigator.vibrate(50)
-        }
-      } else {
-        // On desktop, go directly to detail view
-        setSelectedLocation(location)
-        setShowDetail(true)
-
-        // Center map on selected location
-        const coordinates = getLocationCoordinates(location)
-        if (coordinates) {
-          console.log(`Centering map on [${coordinates[0]}, ${coordinates[1]}]`)
-          setMapCenter(coordinates)
-        }
-      }
     },
     [isMobile, showMobileList, activeView, getLocationCoordinates, isSelecting, isSafari, isIOS],
   )
@@ -375,32 +360,38 @@ export default function MapExplorer() {
   }, [previewLocation])
 
   // Handle map click
-  const handleMapClick = useCallback(() => {
-    // Ignore if touch just started (to prevent double-firing on Safari)
-    if (touchStarted) return
+  const handleMapClick = useCallback(
+    (coords: { lat: number; lng: number }) => {
+      // Ignore if touch just started (to prevent double-firing on Safari)
+      if (touchStarted) return
 
-    // Close detail view when clicking on map
-    if (showDetail) {
-      setShowDetail(false)
-      setSelectedLocation(null)
-    }
+      // Close detail view when clicking on map
+      if (showDetail) {
+        setShowDetail(false)
+        setSelectedLocation(null)
+      }
 
-    // Close search on mobile when clicking map
-    if (isMobile && isSearchExpanded) {
-      setIsSearchExpanded(false)
-    }
+      // Close search on mobile when clicking map
+      if (isMobile && isSearchExpanded) {
+        setIsSearchExpanded(false)
+      }
 
-    // Close mobile list drawer when clicking on map
-    if (isMobile && showMobileList) {
-      setShowMobileList(false)
-    }
+      // Close mobile list drawer when clicking on map
+      if (isMobile && showMobileList) {
+        setShowMobileList(false)
+      }
 
-    // Close mobile preview when clicking on map
-    if (isMobile && showMobilePreview) {
-      setShowMobilePreview(false)
-      setPreviewLocation(null)
-    }
-  }, [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted])
+      // Close mobile preview when clicking on map (but not on a marker)
+      if (showMobilePreview) {
+        setShowMobilePreview(false)
+        setPreviewLocation(null)
+        setPreviewPosition(null)
+      }
+
+      console.log("Map clicked at:", coords)
+    },
+    [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted],
+  )
 
   // Handle map move
   const handleMapMove = useCallback((center: [number, number], zoom: number) => {
@@ -437,6 +428,7 @@ export default function MapExplorer() {
   const closeMobilePreview = useCallback(() => {
     setShowMobilePreview(false)
     setPreviewLocation(null)
+    setPreviewPosition(null)
   }, [])
 
   // Handle tab change with Safari-specific fixes
@@ -453,6 +445,7 @@ export default function MapExplorer() {
       if (isMobile && showMobilePreview) {
         setShowMobilePreview(false)
         setPreviewLocation(null)
+        setPreviewPosition(null)
       }
 
       // Close mobile list drawer when switching to list view
@@ -695,7 +688,7 @@ export default function MapExplorer() {
     } else if (location.imageUrl) {
       return location.imageUrl
     }
-    return "/placeholder.svg"
+    return "/abstract-location.png"
   }, [])
 
   if (error) {
@@ -981,137 +974,7 @@ export default function MapExplorer() {
             </Button>
           )}
 
-          {/* Mobile location preview */}
-          {isMobile && showMobilePreview && previewLocation && (
-            <div
-              className={cn(
-                "absolute left-0 right-0 mx-4 bg-white rounded-lg shadow-lg z-20 p-4 animate-slide-up",
-                isSafari || isIOS ? "safari-preview" : "bottom-20",
-              )}
-              style={isSafari || isIOS ? { bottom: "5rem" } : {}}
-            >
-              <div className="absolute top-2 right-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 rounded-full"
-                  onClick={closeMobilePreview}
-                  onTouchEnd={(e) => {
-                    e.preventDefault()
-                    closeMobilePreview()
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="flex items-start mb-3">
-                <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
-                  {previewLocation.imageUrl || previewLocation.featuredImage ? (
-                    <div className="w-full h-full relative">
-                      <Image
-                        src={getImageUrl(previewLocation) || "/placeholder.svg"}
-                        alt={previewLocation.name}
-                        className="object-cover"
-                        fill
-                        sizes="64px"
-                        priority
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <MapIcon className="h-6 w-6 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="ml-3 flex-1">
-                  <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
-
-                  {/* Address */}
-                  {previewLocation.address && (
-                    <div className="flex items-center mt-1">
-                      <MapIcon className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
-                      <p className="text-sm text-gray-500 truncate">
-                        {typeof previewLocation.address === "string"
-                          ? previewLocation.address
-                          : Object.values(previewLocation.address).filter(Boolean).join(", ")}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Categories */}
-                  {previewLocation.categories && previewLocation.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {previewLocation.categories.slice(0, 2).map((category, idx) => {
-                        const name = typeof category === "string" ? category : category?.name || "Category"
-                        return (
-                          <Badge
-                            key={idx}
-                            variant="secondary"
-                            className="bg-[#FF6B6B]/10 text-[#FF6B6B] hover:bg-[#FF6B6B]/20 border-none text-xs"
-                          >
-                            {name}
-                          </Badge>
-                        )
-                      })}
-                      {previewLocation.categories.length > 2 && (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-none text-xs">
-                          +{previewLocation.categories.length - 2}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-                  onClick={handleViewDetails}
-                  onTouchEnd={(e) => {
-                    e.preventDefault()
-                    handleViewDetails()
-                  }}
-                >
-                  View Details
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-                  onClick={() => {
-                    // Open in maps app if available
-                    const address =
-                      typeof previewLocation.address === "string"
-                        ? previewLocation.address
-                        : Object.values(previewLocation.address || {})
-                            .filter(Boolean)
-                            .join(", ")
-
-                    const coordinates = getLocationCoordinates(previewLocation)
-                    if (coordinates) {
-                      window.open(`https://maps.google.com/maps?q=${coordinates[0]},${coordinates[1]}`, "_blank")
-                    } else if (address) {
-                      window.open(`https://maps.google.com/maps?q=${encodeURIComponent(address)}`, "_blank")
-                    }
-                  }}
-                  aria-label="Open in Maps"
-                >
-                  <Navigation className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-                  onClick={() => shareLocation(previewLocation)}
-                  aria-label="Share Location"
-                >
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Mobile list toggle button - Safari-specific fixes */}
+          {/* Mobile list toggle button with repositioned layout */}
           {isMobile && activeView === "map" && (
             <Button
               ref={showListButtonRef}
@@ -1123,16 +986,14 @@ export default function MapExplorer() {
                 toggleMobileList()
               }}
               className={cn(
-                "absolute left-1/2 z-30 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200",
-                isSafari || isIOS ? "safari-button" : "bottom-20 transform -translate-x-1/2",
+                "absolute z-30 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200",
+                isSafari || isIOS ? "safari-button" : "top-4 left-4",
               )}
               style={
                 isSafari || isIOS
                   ? {
-                      bottom: "5rem",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      WebkitTransform: "translateX(-50%)",
+                      top: "1rem",
+                      left: "1rem",
                       position: "absolute",
                       display: "flex",
                       alignItems: "center",
@@ -1212,6 +1073,146 @@ export default function MapExplorer() {
               {/* Drag handle indicator */}
               <div className="absolute top-0 left-0 right-0 flex justify-center">
                 <div className="w-12 h-1 bg-gray-300 rounded-full mt-2 mb-1"></div>
+              </div>
+            </div>
+          )}
+
+          {/* Marker-anchored location preview */}
+          {showMobilePreview && previewLocation && (
+            <div
+              className={cn(
+                "fixed bg-white rounded-lg shadow-lg z-30 p-4 marker-preview",
+                isMobile ? "w-[calc(100%-2rem)]" : "w-80",
+              )}
+              style={{
+                left: "50%",
+                transform: "translateX(-50%) translateY(-100%)",
+                marginTop: "-15px", // Space for the pointer
+                maxWidth: isMobile ? "calc(100% - 2rem)" : "320px",
+              }}
+            >
+              {/* Preview arrow pointer */}
+              <div className="absolute h-4 w-4 bg-white transform rotate-45 left-1/2 -ml-2 -bottom-2"></div>
+
+              <div className="absolute top-2 right-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 rounded-full"
+                  onClick={closeMobilePreview}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    closeMobilePreview()
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex items-start mb-3">
+                <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
+                  {previewLocation.imageUrl || previewLocation.featuredImage ? (
+                    <div className="w-full h-full relative">
+                      <Image
+                        src={getImageUrl(previewLocation) || "/abstract-location.png"}
+                        alt={previewLocation.name}
+                        className="object-cover"
+                        fill
+                        sizes="64px"
+                        priority
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <MapIcon className="h-6 w-6 text-gray-400" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="ml-3 flex-1">
+                  <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
+
+                  {/* Address */}
+                  {previewLocation.address && (
+                    <div className="flex items-center mt-1">
+                      <MapIcon className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
+                      <p className="text-sm text-gray-500 truncate">
+                        {typeof previewLocation.address === "string"
+                          ? previewLocation.address
+                          : Object.values(previewLocation.address).filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Categories */}
+                  {previewLocation.categories && previewLocation.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {previewLocation.categories.slice(0, 2).map((category, idx) => {
+                        const name = typeof category === "string" ? category : category?.name || "Category"
+                        return (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="bg-[#FF6B6B]/10 text-[#FF6B6B] hover:bg-[#FF6B6B]/20 border-none text-xs"
+                          >
+                            {name}
+                          </Badge>
+                        )
+                      })}
+                      {previewLocation.categories.length > 2 && (
+                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-none text-xs">
+                          +{previewLocation.categories.length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+                  onClick={handleViewDetails}
+                  onTouchEnd={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleViewDetails()
+                  }}
+                >
+                  View Details
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                  onClick={() => {
+                    // Open in maps app if available
+                    const address =
+                      typeof previewLocation.address === "string"
+                        ? previewLocation.address
+                        : Object.values(previewLocation.address || {})
+                            .filter(Boolean)
+                            .join(", ")
+
+                    const coordinates = getLocationCoordinates(previewLocation)
+                    if (coordinates) {
+                      window.open(`https://maps.google.com/maps?q=${coordinates[0]},${coordinates[1]}`, "_blank")
+                    } else if (address) {
+                      window.open(`https://maps.google.com/maps?q=${encodeURIComponent(address)}`, "_blank")
+                    }
+                  }}
+                  aria-label="Open in Maps"
+                >
+                  <Navigation className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                  onClick={() => shareLocation(previewLocation)}
+                  aria-label="Share Location"
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           )}
@@ -1552,6 +1553,73 @@ export default function MapExplorer() {
           position: fixed !important;
           bottom: 5rem !important;
           z-index: 20 !important;
+        }
+
+        /* Enhanced mobile touch interaction styles */
+        @media (max-width: 768px) {
+          /* Prevent text selection during touch interactions */
+          .map-container * {
+            user-select: none;
+            -webkit-user-select: none;
+          }
+          
+          /* Increase touch targets */
+          button, 
+          .marker-container,
+          .marker-pin {
+            min-height: 44px;
+            min-width: 44px;
+          }
+          
+          /* Improve touch feedback */
+          .marker-container:active {
+            transform: scale(1.2);
+          }
+        }
+
+        /* Marker preview styles */
+        .marker-preview {
+          position: fixed;
+          top: 50%;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+          animation: fade-in-up 0.3s ease-out forwards;
+          max-height: 40vh;
+          overflow-y: auto;
+        }
+
+        @keyframes fade-in-up {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(-90%);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-100%);
+          }
+        }
+
+        /* Safari-specific marker preview fixes */
+        @supports (-webkit-touch-callout: none) {
+          .marker-preview {
+            transform: translateX(-50%) translateY(-100%) !important;
+            -webkit-transform: translateX(-50%) translateY(-100%) !important;
+            z-index: 999 !important;
+          }
+        }
+
+        /* Ensure preview is visible on smaller screens */
+        @media (max-width: 640px) {
+          .marker-preview {
+            max-height: 50vh;
+          }
+        }
+
+        /* Adjust for landscape orientation */
+        @media (max-width: 768px) and (orientation: landscape) {
+          .marker-preview {
+            max-height: 70vh;
+            top: 40%;
+          }
         }
       `}</style>
     </div>
