@@ -18,6 +18,8 @@ import {
   Calendar,
   Info,
   Navigation,
+  Link,
+  Copy,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +30,7 @@ import { AspectRatio } from "@/components/ui/aspect-ratio"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/use-toast"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 
@@ -75,6 +78,39 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
     return { primaryCategory: category, primaryColor: color }
   }, [location])
 
+  // Generate shareable URL
+  const getShareableUrl = useCallback(() => {
+    if (!location) return window.location.href
+
+    const url = new URL(window.location.href)
+
+    // Clear any existing locationId parameter
+    url.searchParams.delete("locationId")
+
+    // Add the current location's ID
+    url.searchParams.set("locationId", location.id)
+
+    return url.toString()
+  }, [location])
+
+  // Update browser URL when showing location details
+  useEffect(() => {
+    if (isOpen && location) {
+      const url = new URL(window.location.href)
+      url.searchParams.set("locationId", location.id)
+
+      // Update URL without reloading the page
+      window.history.pushState({}, "", url.toString())
+
+      // Restore original URL when dialog closes
+      return () => {
+        const originalUrl = new URL(window.location.href)
+        originalUrl.searchParams.delete("locationId")
+        window.history.pushState({}, "", originalUrl.toString())
+      }
+    }
+  }, [isOpen, location])
+
   // Scroll to top when location changes
   useEffect(() => {
     if (location && detailRef.current) {
@@ -111,24 +147,46 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
 
     const title = location.name
     const text = `Check out ${location.name}`
-    const url = window.location.href
+    const shareUrl = getShareableUrl()
 
     if (navigator.share) {
       navigator
         .share({
           title,
           text,
-          url,
+          url: shareUrl,
         })
         .catch((err) => console.error("Error sharing:", err))
     } else {
       // Fallback for browsers that don't support the Web Share API
       navigator.clipboard
-        .writeText(`${text} - ${url}`)
-        .then(() => alert("Location link copied to clipboard!"))
+        .writeText(`${text} - ${shareUrl}`)
+        .then(() => {
+          toast({
+            title: "Link copied!",
+            description: "Location link copied to clipboard",
+          })
+        })
         .catch((err) => console.error("Error copying to clipboard:", err))
     }
-  }, [location])
+  }, [location, getShareableUrl])
+
+  // Copy link to clipboard
+  const copyLink = useCallback(() => {
+    if (!location) return
+
+    const shareUrl = getShareableUrl()
+
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => {
+        toast({
+          title: "Link copied!",
+          description: "Location link copied to clipboard",
+        })
+      })
+      .catch((err) => console.error("Error copying to clipboard:", err))
+  }, [location, getShareableUrl])
 
   // If no location is provided, render nothing in the dialog
   if (!location) {
@@ -322,6 +380,16 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                             size="sm"
                             variant="outline"
                             className="h-8 text-xs border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                            onClick={() => {
+                              // Open Google Maps directions
+                              const address =
+                                typeof location.address === "string"
+                                  ? location.address
+                                  : Object.values(location.address).filter(Boolean).join(", ")
+
+                              const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+                              window.open(mapsUrl, "_blank")
+                            }}
                           >
                             <Navigation className="h-3 w-3 mr-1" />
                             Get Directions
@@ -381,6 +449,24 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                       </div>
                     </div>
                   )}
+
+                  {/* Share information */}
+                  <div className="flex pt-2">
+                    <Link className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Share this location</p>
+                      <div className="flex gap-2 mt-1">
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={shareLocation}>
+                          <Share2 className="h-3 w-3 mr-1" />
+                          Share
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={copyLink}>
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copy Link
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
 
@@ -590,7 +676,21 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
             <MapPin className="h-4 w-4 mr-2" />
             Back to Map
           </Button>
-          <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+          <Button
+            className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+            onClick={() => {
+              // Open Google Maps directions
+              if (location.address) {
+                const address =
+                  typeof location.address === "string"
+                    ? location.address
+                    : Object.values(location.address).filter(Boolean).join(", ")
+
+                const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+                window.open(mapsUrl, "_blank")
+              }
+            }}
+          >
             <Navigation className="h-4 w-4 mr-2" />
             Get Directions
           </Button>
@@ -625,6 +725,19 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={copyLink}>
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Copy Link</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <Button
                         variant="outline"
                         size="icon"
@@ -644,6 +757,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
 
             <DialogClose asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                <X className="h-4 w-4" />
               </Button>
             </DialogClose>
           </div>
