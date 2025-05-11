@@ -14,6 +14,7 @@ import { Reviews }      from './collections/Reviews';
 import { Specials }     from './collections/Specials';
 import { Subscribers }  from './collections/Subscribers';
 import {resendAdapter} from '@payloadcms/email-resend'
+import {vercelBlobStorage} from '@payloadcms/storage-vercel-blob'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -41,6 +42,7 @@ export default buildConfig({
     Specials,
     Subscribers,
   ],
+  
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
@@ -52,5 +54,12 @@ export default buildConfig({
   plugins: [
     payloadCloudPlugin(),
     // storage-adapter-placeholder
+    vercelBlobStorage({
+      enabled: true,
+      collections: {
+        [Media.slug]: true,
+      },
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+    })
   ],
 })

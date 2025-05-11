@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import {
   X,
   MapPin,
@@ -14,12 +15,18 @@ import {
   Share2,
   Heart,
   ExternalLink,
+  Calendar,
+  Info,
+  Navigation,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import Image from "next/image"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { AspectRatio } from "@/components/ui/aspect-ratio"
+import { Card, CardContent } from "@/components/ui/card"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 
@@ -33,6 +40,7 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showFullGallery, setShowFullGallery] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
+  const [activeTab, setActiveTab] = useState<"info" | "photos" | "reviews">("info")
   const detailRef = useRef<HTMLDivElement>(null)
 
   // Get all images for the location
@@ -46,7 +54,7 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
 
   // If no images, add a placeholder
   if (images.length === 0) {
-    images.push("/abstract-location.png")
+    images.push("/placeholder.svg?key=5nd76")
   }
 
   // Scroll to top when location changes
@@ -54,28 +62,30 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
     if (detailRef.current) {
       detailRef.current.scrollTop = 0
     }
+    setCurrentImageIndex(0)
+    setActiveTab("info")
   }, [location.id])
 
   // Navigate to previous image
-  const prevImage = () => {
+  const prevImage = useCallback(() => {
     setCurrentImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1))
-  }
+  }, [images.length])
 
   // Navigate to next image
-  const nextImage = () => {
+  const nextImage = useCallback(() => {
     setCurrentImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1))
-  }
+  }, [images.length])
 
   // Toggle favorite status
-  const toggleFavorite = () => {
+  const toggleFavorite = useCallback(() => {
     setIsFavorite((prev) => !prev)
-  }
+  }, [])
 
   // Format phone number
-  const formatPhone = (phone: string) => {
+  const formatPhone = useCallback((phone: string) => {
     // Simple formatting, in a real app you'd use a library for international numbers
     return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
-  }
+  }, [])
 
   // Get primary category
   const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
@@ -83,232 +93,443 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
   // Get primary category color
   const primaryColor = getCategoryColor(primaryCategory)
 
+  // Share the location
+  const shareLocation = useCallback(() => {
+    const title = location.name
+    const text = `Check out ${location.name}`
+    const url = window.location.href
+
+    if (navigator.share) {
+      navigator
+        .share({
+          title,
+          text,
+          url,
+        })
+        .catch((err) => console.error("Error sharing:", err))
+    } else {
+      // Fallback for browsers that don't support the Web Share API
+      navigator.clipboard
+        .writeText(`${text} - ${url}`)
+        .then(() => alert("Location link copied to clipboard!"))
+        .catch((err) => console.error("Error copying to clipboard:", err))
+    }
+  }, [location.name])
+
   return (
     <div
       ref={detailRef}
-      className="flex flex-col h-full overflow-y-auto"
+      className="flex flex-col h-full overflow-y-auto bg-white"
       style={{ scrollbarWidth: "thin", scrollbarColor: "#E5E7EB transparent" }}
     >
       {/* Sticky header for desktop */}
       {!isMobile && (
         <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white border-b">
           <h2 className="text-lg font-medium truncate">{location.name}</h2>
-          <Button variant="ghost" size="icon" onClick={onCloseAction} className="h-8 w-8">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+          <div className="flex gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={shareLocation}>
+                    <Share2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Share</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
-      {/* Image gallery */}
-      <div className="relative">
-        <div className="relative aspect-[4/3] bg-gray-100">
-          <Image
-            src={images[currentImageIndex] || "/placeholder.svg"}
-            alt={location.name}
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, 600px"
-          />
-
-          {/* Image navigation */}
-          {images.length > 1 && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={prevImage}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={nextImage}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-
-              {/* Image counter */}
-              <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
-                {currentImageIndex + 1} / {images.length}
-              </div>
-
-              {/* Thumbnail strip */}
-              <div className="absolute bottom-3 left-3 flex space-x-1">
-                {images.slice(0, 5).map((img, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setCurrentImageIndex(idx)}
-                    className={cn(
-                      "w-8 h-8 rounded-md overflow-hidden border-2",
-                      currentImageIndex === idx ? "border-white" : "border-transparent opacity-70",
-                    )}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className={cn("h-8 w-8 rounded-full", isFavorite && "bg-[#FF6B6B]/10 border-[#FF6B6B]")}
+                    onClick={toggleFavorite}
                   >
-                    <Image
-                      src={img || "/placeholder.svg"}
-                      alt={`Thumbnail ${idx + 1}`}
-                      width={32}
-                      height={32}
-                      className="object-cover w-full h-full"
-                    />
-                  </button>
-                ))}
-                {images.length > 5 && (
-                  <button
-                    onClick={() => setShowFullGallery(true)}
-                    className="w-8 h-8 rounded-md bg-black/50 flex items-center justify-center text-white text-xs"
-                  >
-                    +{images.length - 5}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+                    <Heart className={cn("h-4 w-4", isFavorite && "fill-[#FF6B6B] text-[#FF6B6B]")} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isFavorite ? "Remove from favorites" : "Add to favorites"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
-          {/* Action buttons */}
-          <div className="absolute top-3 right-3 flex space-x-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleFavorite}
-              className="bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
-            >
-              <Heart className={cn("h-4 w-4", isFavorite && "fill-red-500 text-red-500")} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
-            >
-              <Share2 className="h-4 w-4" />
+            <Button variant="ghost" size="icon" onClick={onCloseAction} className="h-8 w-8 rounded-full">
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Location details */}
-      <div className="p-4">
-        {/* Title and rating */}
-        <div className="mb-3">
-          <h1 className="text-xl font-semibold text-gray-900">{location.name}</h1>
+      {/* Tabs for desktop */}
+      {!isMobile && (
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full border-b">
+          <TabsList className="w-full justify-start h-11 bg-transparent p-0 px-4">
+            <TabsTrigger
+              value="info"
+              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+            >
+              <Info className="h-4 w-4 mr-2" />
+              Information
+            </TabsTrigger>
+            <TabsTrigger
+              value="photos"
+              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+            >
+              {/*<Image className="h-4 w-4 mr-2 text-current" /> */}
+              Photos ({images.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="reviews"
+              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+            >
+              <Star className="h-4 w-4 mr-2" />
+              Reviews {location.reviewCount && `(${location.reviewCount})`}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
-          {/* Rating */}
-          {location.averageRating && (
-            <div className="flex items-center mt-1">
-              <div className="flex items-center">
-                <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
-                <span className="ml-1 text-sm font-medium text-gray-700">{location.averageRating.toFixed(1)}</span>
-              </div>
-              {location.reviewCount && (
-                <span className="text-sm text-gray-500 ml-1">({location.reviewCount} reviews)</span>
+      {/* Main content based on active tab */}
+      <div className="flex-1 overflow-auto">
+        {activeTab === "info" && (
+          <div className="flex flex-col">
+            {/* Image gallery (shown only in info tab) */}
+            <div className="relative">
+              <AspectRatio ratio={4 / 3} className="bg-gray-100">
+                <Image
+                  src={images[currentImageIndex] || "/placeholder.svg?height=400&width=600&query=location"}
+                  alt={`${location.name} - Photo ${currentImageIndex + 1}`}
+                  sizes="(max-width: 768px) 100vw, 600px"
+                  className="object-cover"
+                  width={600}
+                  height={400}
+                  priority
+                />
+              </AspectRatio>
+
+              {/* Image navigation */}
+              {images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={prevImage}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={nextImage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white rounded-full h-8 w-8"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </Button>
+
+                  {/* Image counter */}
+                  <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
+                    {currentImageIndex + 1} / {images.length}
+                  </div>
+
+                  {/* Thumbnail strip */}
+                  <div className="absolute bottom-3 left-3 flex space-x-1">
+                    {images.slice(0, 5).map((img, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentImageIndex(idx)}
+                        className={cn(
+                          "w-10 h-10 rounded-md overflow-hidden border-2",
+                          currentImageIndex === idx ? "border-white" : "border-transparent opacity-70",
+                        )}
+                      >
+                        <Image
+                          src={img || "/placeholder.svg?height=40&width=40&query=thumbnail"}
+                          alt={`${location.name} thumbnail ${idx + 1}`}
+                          width={40}
+                          height={40}
+                          className="object-cover w-full h-full"
+                        />
+                      </button>
+                    ))}
+                    {images.length > 5 && (
+                      <button
+                        onClick={() => setActiveTab("photos")}
+                        className="w-10 h-10 rounded-md bg-black/50 flex items-center justify-center text-white text-xs"
+                      >
+                        +{images.length - 5}
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          )}
 
-          {/* Categories */}
-          {location.categories && location.categories.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {location.categories.map((category, idx) => {
-                const color = getCategoryColor(category)
-                const name = typeof category === "string" ? category : category?.name || "Category"
+            {/* Location details */}
+            <div className="p-4">
+              {/* Title and rating */}
+              <div className="mb-3">
+                <h1 className="text-xl font-semibold text-gray-900">{location.name}</h1>
 
-                return (
-                  <Badge
-                    key={idx}
-                    variant="outline"
-                    className="px-2 py-1 text-xs font-medium rounded-full"
-                    style={{
-                      backgroundColor: `${color}10`,
-                      color: color,
-                      borderColor: `${color}30`,
-                    }}
-                  >
-                    {name}
-                  </Badge>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                {/* Rating */}
+                {location.averageRating && (
+                  <div className="flex items-center mt-1">
+                    <div className="flex items-center">
+                      <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                      <span className="ml-1 text-sm font-medium text-gray-700">
+                        {location.averageRating.toFixed(1)}
+                      </span>
+                    </div>
+                    {location.reviewCount && (
+                      <span className="text-sm text-gray-500 ml-1">({location.reviewCount} reviews)</span>
+                    )}
+                  </div>
+                )}
 
-        <Separator className="my-4" />
+                {/* Categories */}
+                {location.categories && location.categories.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {location.categories.map((category, idx) => {
+                      const color = getCategoryColor(category)
+                      const name = typeof category === "string" ? category : category?.name || "Category"
 
-        {/* Contact information */}
-        <div className="space-y-3">
-          {/* Address */}
-          {location.address && (
-            <div className="flex">
-              <MapPin className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-gray-700">
-                  {typeof location.address === "string"
-                    ? location.address
-                    : Object.values(location.address).filter(Boolean).join(", ")}
-                </p>
-                <Button variant="link" className="h-auto p-0 text-sm text-[#FF6B6B]">
-                  Get Directions
-                </Button>
+                      return (
+                        <Badge
+                          key={idx}
+                          variant="outline"
+                          className="px-2 py-1 text-xs font-medium rounded-full"
+                          style={{
+                            backgroundColor: `${color}10`,
+                            color: color,
+                            borderColor: `${color}30`,
+                          }}
+                        >
+                          {name}
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
 
-          {/* Phone */}
-          {location.contactInfo?.phone && (
-            <div className="flex">
-              <Phone className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
-              <a href={`tel:${location.contactInfo?.phone}`} className="text-sm text-gray-700 hover:text-[#FF6B6B]">
-                {formatPhone(location.contactInfo?.phone)}
-              </a>
-            </div>
-          )}
+              <Card className="mb-4 bg-gray-50 border-gray-200">
+                <CardContent className="p-4 space-y-3">
+                  {/* Address */}
+                  {location.address && (
+                    <div className="flex">
+                      <MapPin className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm text-gray-700">
+                          {typeof location.address === "string"
+                            ? location.address
+                            : Object.values(location.address).filter(Boolean).join(", ")}
+                        </p>
+                        <div className="flex gap-2 mt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 text-xs border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                          >
+                            <Navigation className="h-3 w-3 mr-1" />
+                            Get Directions
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 text-xs">
+                            <MapPin className="h-3 w-3 mr-1" />
+                            View on Map
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-          {/* Website */}
-          {location.contactInfo?.website && (
-            <div className="flex">
-              <Globe className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
-              <a
-                href={location.contactInfo?.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-gray-700 hover:text-[#FF6B6B] flex items-center"
-              >
-                {location.contactInfo?.website.replace(/^https?:\/\/(www\.)?/, "")}
-                <ExternalLink className="h-3 w-3 ml-1" />
-              </a>
-            </div>
-          )}
+                  {/* Phone */}
+                  {location.contactInfo?.phone && (
+                    <div className="flex">
+                      <Phone className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
+                      <a
+                        href={`tel:${location.contactInfo?.phone}`}
+                        className="text-sm text-gray-700 hover:text-[#FF6B6B]"
+                      >
+                        {formatPhone(location.contactInfo?.phone)}
+                      </a>
+                    </div>
+                  )}
 
-          {/* Hours */}
-          {location.businessHours && location.businessHours.length > 0 && (
-            <div className="flex">
-              <Clock className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-gray-700">Hours</p>
-                <div className="mt-1 space-y-1">
-                  {location.businessHours.map((businessHour, idx) => (
-                    <div key={idx} className="flex text-sm">
-                      <span className="w-20 text-gray-500">{businessHour.day}</span>
-                      <span className="text-gray-700">{businessHour.open || "N/A"}</span>
+                  {/* Website */}
+                  {location.contactInfo?.website && (
+                    <div className="flex">
+                      <Globe className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
+                      <a
+                        href={location.contactInfo?.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-gray-700 hover:text-[#FF6B6B] flex items-center"
+                      >
+                        {location.contactInfo?.website.replace(/^https?:\/\/(www\.)?/, "")}
+                        <ExternalLink className="h-3 w-3 ml-1" />
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Hours */}
+                  {location.businessHours && location.businessHours.length > 0 && (
+                    <div className="flex">
+                      <Clock className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">Hours</p>
+                        <div className="mt-1 space-y-1">
+                          {location.businessHours.map((businessHour, idx) => (
+                            <div key={idx} className="flex text-sm">
+                              <span className="w-24 text-gray-500">{businessHour.day}</span>
+                              <span className="text-gray-700">{businessHour.open || "Closed"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Description */}
+              {location.description && (
+                <div className="mb-4">
+                  <h2 className="text-lg font-medium mb-2">About</h2>
+                  <p className="text-sm text-gray-700 whitespace-pre-line">{location.description}</p>
+                </div>
+              )}
+
+              {/* Additional info (placeholder) */}
+              <div className="mb-4">
+                <h2 className="text-lg font-medium mb-2">Amenities</h2>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    "Wi-Fi",
+                    "Parking",
+                    "Wheelchair Accessible",
+                    "Air Conditioning",
+                    "Outdoor Seating",
+                    "Pet Friendly",
+                  ].map((amenity, idx) => (
+                    <div key={idx} className="flex items-center">
+                      <div className="h-2 w-2 rounded-full bg-green-500 mr-2"></div>
+                      <span className="text-sm text-gray-600">{amenity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Upcoming events (placeholder) */}
+              <div className="mb-4">
+                <h2 className="text-lg font-medium mb-2">Upcoming Events</h2>
+                <div className="space-y-3">
+                  {[
+                    { name: "Weekly Workshop", date: "Every Tuesday" },
+                    { name: "Community Meetup", date: "June 15, 2025" },
+                  ].map((event, idx) => (
+                    <div key={idx} className="flex items-start">
+                      <Calendar className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-700">{event.name}</p>
+                        <p className="text-xs text-gray-500">{event.date}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-          )}
-        </div>
-
-        <Separator className="my-4" />
-
-        {/* Description */}
-        {location.description && (
-          <div className="mb-4">
-            <h2 className="text-lg font-medium mb-2">About</h2>
-            <p className="text-sm text-gray-700 whitespace-pre-line">{location.description}</p>
           </div>
         )}
 
+        {activeTab === "photos" && (
+          <div className="p-4">
+            <h2 className="text-lg font-medium mb-4">Photos</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {images.map((image, idx) => (
+                <div key={idx} className="relative aspect-square overflow-hidden rounded-md group cursor-pointer">
+                  <Image
+                    src={image || "/placeholder.svg?height=200&width=200&query=location-photo"}
+                    alt={`${location.name} - Photo ${idx + 1}`}
+                    fill
+                    width={200}
+                    height={200}
+                    className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    onClick={() => {
+                      setCurrentImageIndex(idx)
+                      setShowFullGallery(true)
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "reviews" && (
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium">Reviews</h2>
+              <Button>Write a Review</Button>
+            </div>
+
+            {location.reviewCount && location.reviewCount > 0 ? (
+              <div className="space-y-4">
+                {Array.from({ length: Math.min(5, location.reviewCount) }).map((_, idx) => (
+                  <div key={idx} className="border rounded-lg p-4">
+                    <div className="flex justify-between mb-2">
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-gray-200 mr-2 overflow-hidden">
+                          <Image
+                            src={`/diverse-person-portrait.png?key=cl4ap&height=32&width=32&query=portrait${idx}`}
+                            alt="Reviewer"
+                            width={32}
+                            height={32}
+                            className="object-cover"
+                          />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">Reviewer {idx + 1}</p>
+                          <p className="text-xs text-gray-500">May {idx + 1}, 2025</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        {Array.from({ length: 5 }).map((_, starIdx) => (
+                          <Star
+                            key={starIdx}
+                            className={cn(
+                              "h-4 w-4",
+                              starIdx < 5 - idx * 0.5 ? "text-yellow-400 fill-yellow-400" : "text-gray-300",
+                            )}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700">
+                      This is a sample review for {location.name}. The reviewer shared their experience about the
+                      location.
+                      {idx % 2 === 0 && " They particularly enjoyed the atmosphere and service quality."}
+                      {idx % 3 === 0 && " The staff was very friendly and helpful throughout their visit."}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                  <Star className="h-6 w-6 text-gray-400" />
+                </div>
+                <h3 className="text-gray-600 mb-1">No reviews yet</h3>
+                <p className="text-sm text-gray-500 mb-4">Be the first to review this location</p>
+                <Button variant="outline">Write a Review</Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Full gallery modal */}
@@ -324,10 +545,13 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="relative w-full max-w-3xl aspect-[4/3]">
               <Image
-                src={images[currentImageIndex] || "/placeholder.svg"}
-                alt={location.name}
+                src={images[currentImageIndex] || "/placeholder.svg?height=800&width=1200&query=gallery-image"}
+                alt={`${location.name} - Full Photo ${currentImageIndex + 1}`}
                 fill
+                width={1200}
+                height={800}
                 className="object-contain"
+                priority
               />
             </div>
           </div>
@@ -358,8 +582,8 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
                   )}
                 >
                   <Image
-                    src={img || "/placeholder.svg"}
-                    alt={`Thumbnail ${idx + 1}`}
+                    src={img || "/placeholder.svg?height=64&width=64&query=gallery-thumbnail"}
+                    alt={`${location.name} thumbnail ${idx + 1}`}
                     width={64}
                     height={64}
                     className="object-cover w-full h-full"
@@ -374,10 +598,18 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
       {/* Action buttons for mobile */}
       {isMobile && (
         <div className="sticky bottom-0 left-0 right-0 bg-white border-t p-3 flex space-x-3 z-10">
-          <Button variant="outline" className="flex-1" onClick={onCloseAction}>
+          <Button
+            variant="outline"
+            className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+            onClick={onCloseAction}
+          >
+            <MapPin className="h-4 w-4 mr-2" />
             Back to Map
           </Button>
-          <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Get Directions</Button>
+          <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+            <Navigation className="h-4 w-4 mr-2" />
+            Get Directions
+          </Button>
         </div>
       )}
     </div>

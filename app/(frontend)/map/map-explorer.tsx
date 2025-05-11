@@ -2,11 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
+import { useEffect, useState, useRef, useCallback } from "react"
 import { cn } from "@/lib/utils"
-
-import { useState, useEffect, useRef, useCallback } from "react"
 import { addedLocations, searchLocations, type Location } from "./map-data"
-import { locationMatchesCategories } from "./category-utils"
+import { locationMatchesCategories, getCategoryColor } from "./category-utils"
 import MapComponent from "./map-component"
 import LocationList from "./location-list"
 import LocationDetail from "./location-detail"
@@ -27,6 +26,7 @@ import {
   Share2,
   Navigation,
   ChevronUp,
+  Info,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -37,7 +37,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import Image from "next/image"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export default function MapExplorer() {
   // Browser detection states
@@ -73,6 +73,7 @@ export default function MapExplorer() {
   const [safariFixesApplied, setSafariFixesApplied] = useState(false)
   const [viewportHeight, setViewportHeight] = useState(0)
   const [previewPosition, setPreviewPosition] = useState<[number, number] | null>(null)
+  const [showLegend, setShowLegend] = useState(false)
 
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -99,6 +100,18 @@ export default function MapExplorer() {
     }
 
     return null
+  }, [])
+
+  // Helper function to get image URL
+  const getImageUrl = useCallback((location: Location): string => {
+    if (typeof location.featuredImage === "string") {
+      return location.featuredImage
+    } else if (location.featuredImage?.url) {
+      return location.featuredImage.url
+    } else if (location.imageUrl) {
+      return location.imageUrl
+    }
+    return "/placeholder.svg?key=19lq3"
   }, [])
 
   // Browser detection
@@ -328,9 +341,14 @@ export default function MapExplorer() {
         }
       }
 
-      // Set the preview location
-      setPreviewLocation(location)
-      setShowMobilePreview(true)
+      // Set the selected location
+      setSelectedLocation(location)
+
+      // Set the preview location for mobile
+      if (isMobile) {
+        setPreviewLocation(location)
+        setShowMobilePreview(true)
+      }
 
       // Hide the list drawer if it's showing
       if (showMobileList) {
@@ -346,6 +364,7 @@ export default function MapExplorer() {
   )
 
   // Handle view details from preview
+  // Update the handleViewDetails function to make sure it properly shows the location detail panel
   const handleViewDetails = useCallback(() => {
     if (previewLocation) {
       setSelectedLocation(previewLocation)
@@ -519,6 +538,11 @@ export default function MapExplorer() {
     }
   }, [])
 
+  // Toggle category legend
+  const toggleLegend = useCallback(() => {
+    setShowLegend((prev) => !prev)
+  }, [])
+
   // Handle touch events for mobile list drawer with Safari-specific fixes
   useEffect(() => {
     if (!isMobile || !mobileListRef.current) return
@@ -679,17 +703,27 @@ export default function MapExplorer() {
     }
   }, [])
 
-  // Get image URL helper function
-  const getImageUrl = useCallback((location: Location): string => {
-    if (typeof location.featuredImage === "string") {
-      return location.featuredImage
-    } else if (location.featuredImage?.url) {
-      return location.featuredImage.url
-    } else if (location.imageUrl) {
-      return location.imageUrl
+  // Add this useEffect after the other useEffects in the component
+  useEffect(() => {
+    const handleViewLocationDetails = (e: CustomEvent) => {
+      const locationId = e.detail
+      const location = allLocations.find((loc) => loc.id === locationId)
+      if (location) {
+        setSelectedLocation(location)
+        setShowDetail(true)
+
+        // Close any open popups or previews
+        setShowMobilePreview(false)
+        setPreviewLocation(null)
+      }
     }
-    return "/abstract-location.png"
-  }, [])
+
+    document.addEventListener("viewLocationDetails", handleViewLocationDetails as EventListener)
+
+    return () => {
+      document.removeEventListener("viewLocationDetails", handleViewLocationDetails as EventListener)
+    }
+  }, [allLocations])
 
   if (error) {
     return (
@@ -790,7 +824,13 @@ export default function MapExplorer() {
                               checked={selectedCategories.includes(category.id)}
                               onCheckedChange={() => toggleCategory(category.id)}
                             />
-                            <span>{category.name}</span>
+                            <div className="flex items-center">
+                              <div
+                                className="w-3 h-3 rounded-full mr-2"
+                                style={{ backgroundColor: getCategoryColor(category) }}
+                              ></div>
+                              <span>{category.name}</span>
+                            </div>
                           </DropdownMenuItem>
                         ))}
                       </div>
@@ -869,7 +909,13 @@ export default function MapExplorer() {
                           checked={selectedCategories.includes(category.id)}
                           onCheckedChange={() => toggleCategory(category.id)}
                         />
-                        <span>{category.name}</span>
+                        <div className="flex items-center">
+                          <div
+                            className="w-3 h-3 rounded-full mr-2"
+                            style={{ backgroundColor: getCategoryColor(category) }}
+                          ></div>
+                          <span>{category.name}</span>
+                        </div>
                       </DropdownMenuItem>
                     ))}
                   </div>
@@ -898,11 +944,17 @@ export default function MapExplorer() {
           <div className="flex flex-wrap gap-2 mt-3">
             {selectedCategories.map((categoryId) => {
               const category = categories.find((c) => c.id === categoryId)
+              const color = getCategoryColor(category)
               return (
                 <Badge
                   key={categoryId}
-                  variant="secondary"
-                  className="bg-[#FF6B6B]/10 text-[#FF6B6B] hover:bg-[#FF6B6B]/20 border-none"
+                  variant="outline"
+                  className="px-2 py-0.5 h-6 text-xs font-medium"
+                  style={{
+                    backgroundColor: `${color}10`,
+                    color: color,
+                    borderColor: `${color}30`,
+                  }}
                 >
                   {category?.name || categoryId}
                   <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => toggleCategory(categoryId)} />
@@ -935,6 +987,10 @@ export default function MapExplorer() {
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
                 isLoading={isLoading}
+                onViewDetail={(location) => {
+                  setSelectedLocation(location)
+                  setShowDetail(true)
+                }}
               />
             </div>
           </div>
@@ -958,20 +1014,78 @@ export default function MapExplorer() {
             selectedLocation={selectedLocation}
           />
 
-          {/* User location button */}
-          {userLocation && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => {
-                setMapCenter(userLocation)
-                setMapZoom(15)
-              }}
-              className="absolute top-4 right-4 z-10 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200"
-              aria-label="Go to my location"
-            >
-              <Navigation className="h-4 w-4" />
-            </Button>
+          {/* Map controls */}
+          <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+            {userLocation && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      onClick={() => {
+                        setMapCenter(userLocation)
+                        setMapZoom(15)
+                      }}
+                      className="bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10"
+                      aria-label="Go to my location"
+                    >
+                      <Navigation className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p>My Location</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="default"
+                    size="icon"
+                    onClick={toggleLegend}
+                    className={cn(
+                      "bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10",
+                      showLegend && "bg-gray-100",
+                    )}
+                    aria-label="Show category legend"
+                  >
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>Category Legend</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* Category legend */}
+          {showLegend && (
+            <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-sm font-medium text-gray-800 px-2">Categories</h4>
+                {isMobile && (
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleLegend}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {categories.map((category) => (
+                  <div key={category.id} className="flex items-center px-2">
+                    <div
+                      className="w-4 h-4 rounded-full mr-2"
+                      style={{ backgroundColor: getCategoryColor(category) }}
+                    />
+                    <span className="text-sm text-gray-700">{category.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {/* Mobile list toggle button with repositioned layout */}
@@ -1014,7 +1128,7 @@ export default function MapExplorer() {
               ref={mobileListRef}
               className={cn(
                 "absolute left-0 right-0 bg-white z-20 rounded-t-xl shadow-lg transition-all duration-300 ease-in-out",
-                listHeight === "partial" ? "h-[40%]" : "h-[80%]",
+                listHeight === "partial" ? "h-[50%]" : "h-[80%]",
                 isSafari || isIOS ? "safari-drawer" : "bottom-0",
               )}
               style={
@@ -1067,152 +1181,16 @@ export default function MapExplorer() {
                   onLocationSelect={handleLocationSelect}
                   selectedLocation={selectedLocation}
                   isLoading={isLoading}
+                  onViewDetail={(location) => {
+                    setSelectedLocation(location)
+                    setShowDetail(true)
+                  }}
                 />
               </div>
 
               {/* Drag handle indicator */}
               <div className="absolute top-0 left-0 right-0 flex justify-center">
                 <div className="w-12 h-1 bg-gray-300 rounded-full mt-2 mb-1"></div>
-              </div>
-            </div>
-          )}
-
-          {/* Marker-anchored location preview */}
-          {showMobilePreview && previewLocation && (
-            <div
-              className={cn(
-                "fixed bg-white rounded-lg shadow-lg z-30 p-4 marker-preview",
-                isMobile ? "w-[calc(100%-2rem)]" : "w-80",
-              )}
-              style={{
-                left: "50%",
-                transform: "translateX(-50%) translateY(-100%)",
-                marginTop: "-15px", // Space for the pointer
-                maxWidth: isMobile ? "calc(100% - 2rem)" : "320px",
-              }}
-            >
-              {/* Preview arrow pointer */}
-              <div className="absolute h-4 w-4 bg-white transform rotate-45 left-1/2 -ml-2 -bottom-2"></div>
-
-              <div className="absolute top-2 right-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0 rounded-full"
-                  onClick={closeMobilePreview}
-                  onTouchEnd={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    closeMobilePreview()
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="flex items-start mb-3">
-                <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
-                  {previewLocation.imageUrl || previewLocation.featuredImage ? (
-                    <div className="w-full h-full relative">
-                      <Image
-                        src={getImageUrl(previewLocation) || "/abstract-location.png"}
-                        alt={previewLocation.name}
-                        className="object-cover"
-                        fill
-                        sizes="64px"
-                        priority
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <MapIcon className="h-6 w-6 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-
-                <div className="ml-3 flex-1">
-                  <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
-
-                  {/* Address */}
-                  {previewLocation.address && (
-                    <div className="flex items-center mt-1">
-                      <MapIcon className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
-                      <p className="text-sm text-gray-500 truncate">
-                        {typeof previewLocation.address === "string"
-                          ? previewLocation.address
-                          : Object.values(previewLocation.address).filter(Boolean).join(", ")}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Categories */}
-                  {previewLocation.categories && previewLocation.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {previewLocation.categories.slice(0, 2).map((category, idx) => {
-                        const name = typeof category === "string" ? category : category?.name || "Category"
-                        return (
-                          <Badge
-                            key={idx}
-                            variant="secondary"
-                            className="bg-[#FF6B6B]/10 text-[#FF6B6B] hover:bg-[#FF6B6B]/20 border-none text-xs"
-                          >
-                            {name}
-                          </Badge>
-                        )
-                      })}
-                      {previewLocation.categories.length > 2 && (
-                        <Badge variant="secondary" className="bg-gray-100 text-gray-600 border-none text-xs">
-                          +{previewLocation.categories.length - 2}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-                  onClick={handleViewDetails}
-                  onTouchEnd={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleViewDetails()
-                  }}
-                >
-                  View Details
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-                  onClick={() => {
-                    // Open in maps app if available
-                    const address =
-                      typeof previewLocation.address === "string"
-                        ? previewLocation.address
-                        : Object.values(previewLocation.address || {})
-                            .filter(Boolean)
-                            .join(", ")
-
-                    const coordinates = getLocationCoordinates(previewLocation)
-                    if (coordinates) {
-                      window.open(`https://maps.google.com/maps?q=${coordinates[0]},${coordinates[1]}`, "_blank")
-                    } else if (address) {
-                      window.open(`https://maps.google.com/maps?q=${encodeURIComponent(address)}`, "_blank")
-                    }
-                  }}
-                  aria-label="Open in Maps"
-                >
-                  <Navigation className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-none border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-                  onClick={() => shareLocation(previewLocation)}
-                  aria-label="Share Location"
-                >
-                  <Share2 className="h-4 w-4" />
-                </Button>
               </div>
             </div>
           )}
@@ -1231,6 +1209,10 @@ export default function MapExplorer() {
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
                 isLoading={isLoading}
+                onViewDetail={(location) => {
+                  setSelectedLocation(location)
+                  setShowDetail(true)
+                }}
               />
 
               {/* Back to top button */}

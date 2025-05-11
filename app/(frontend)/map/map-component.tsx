@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react"
@@ -116,6 +117,8 @@ const MapComponent = memo(function MapComponent({
   const prevZoomRef = useRef<number | null>(null)
   const mapInitializedRef = useRef(false)
   const markersInitializedRef = useRef(false)
+  const popupRef = useRef<mapboxgl.Popup | null>(null)
+  const activePopupRef = useRef<mapboxgl.Popup | null>(null)
 
   // State that should trigger re-renders
   const [mapLoaded, setMapLoaded] = useState(false)
@@ -127,6 +130,7 @@ const MapComponent = memo(function MapComponent({
   const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
+  const [clickedLocation, setClickedLocation] = useState<Location | null>(null)
 
   // Check if device is mobile and browser is Safari - only run once on mount and on resize
   useEffect(() => {
@@ -240,9 +244,24 @@ const MapComponent = memo(function MapComponent({
         position,
       )
 
+      // Create a popup but don't add it to the map yet
+      popupRef.current = new mapboxgl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        maxWidth: "300px",
+        offset: [0, -15],
+        className: "marker-hover-popup",
+      })
+
       // Map event handlers with useCallback to prevent recreation
       map.on("click", (e) => {
         // Close any open popups when clicking on the map
+        if (activePopupRef.current) {
+          activePopupRef.current.remove()
+          activePopupRef.current = null
+          setClickedLocation(null)
+        }
+
         setShowMiniPreview(false)
         setPreviewLocation(null)
         onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
@@ -321,6 +340,109 @@ const MapComponent = memo(function MapComponent({
     }
   }, [center[0], center[1], zoom, mapLoaded]) // Only depend on the actual values that matter
 
+  // Function to show location preview popup
+  const showLocationPreview = useCallback((location: Location, lngLat: [number, number]) => {
+    if (!mapRef.current) return
+
+    // Close any existing popup
+    if (activePopupRef.current) {
+      activePopupRef.current.remove()
+    }
+
+    // Create popup content
+    const popupContent = document.createElement("div")
+    popupContent.className = "marker-preview-container"
+
+    // Create React-like structure for the popup
+    const previewHTML = `
+      <div class="marker-preview-card">
+        <div class="p-3">
+          <div class="flex items-start gap-3">
+            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
+              <img 
+                src="${getLocationImageUrl(location)}" 
+                alt="${location.name}"
+                class="h-full w-full object-cover"
+              />
+            </div>
+            <div class="flex-1 min-w-0">
+              <h4 class="font-medium text-sm line-clamp-1">${location.name}</h4>
+              ${
+                location.address
+                  ? `
+                <p class="text-xs text-gray-500 line-clamp-1 mt-1">
+                  ${
+                    typeof location.address === "string"
+                      ? location.address
+                      : Object.values(location.address).filter(Boolean).join(", ")
+                  }
+                </p>
+              `
+                  : ""
+              }
+              ${
+                location.categories && location.categories.length > 0
+                  ? `
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                  ${location.categories
+                    .slice(0, 2)
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    .map((category, idx) => {
+                      const catColor = getCategoryColor(category)
+                      const name = typeof category === "string" ? category : category?.name || "Category"
+                      return `
+                      <span 
+                        class="px-1.5 py-0 text-[10px] font-medium rounded-full inline-block"
+                        style="background-color: ${catColor}10; color: ${catColor}; border: 1px solid ${catColor}30;"
+                      >
+                        ${name}
+                      </span>
+                    `
+                    })
+                    .join("")}
+                </div>
+              `
+                  : ""
+              }
+              <button 
+                class="mt-2 h-7 text-xs w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white rounded-md px-2 py-1"
+                onclick="document.dispatchEvent(new CustomEvent('viewLocationDetails', {detail: '${location.id}'}))"
+              >
+                View Details
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `
+
+    popupContent.innerHTML = previewHTML
+
+    // Create and show popup
+    const popup = new mapboxgl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      maxWidth: "300px",
+      offset: [0, -15],
+      className: "marker-click-popup",
+    })
+      .setLngLat(lngLat)
+      .setDOMContent(popupContent)
+      .addTo(mapRef.current)
+
+    // Store reference to active popup
+    activePopupRef.current = popup
+
+    // Set clicked location
+    setClickedLocation(location)
+
+    // Add event listener for popup close
+    popup.on("close", () => {
+      activePopupRef.current = null
+      setClickedLocation(null)
+    })
+  }, [])
+
   // Update markers when locations change - use memoized locationIds to detect actual changes
   useEffect(() => {
     const map = mapRef.current
@@ -368,7 +490,7 @@ const MapComponent = memo(function MapComponent({
           WebkitTapHighlightColor: "transparent", // Remove tap highlight on iOS
         })
 
-        // Create the actual marker element
+        // Create the actual marker element with improved design
         const markerDot = document.createElement("div")
         markerDot.className = "mapboxgl-marker-dot"
         Object.assign(markerDot.style, {
@@ -388,29 +510,55 @@ const MapComponent = memo(function MapComponent({
           fontWeight: "bold",
           transition: "transform 0.2s ease, box-shadow 0.2s ease",
           transformOrigin: "center center",
+          position: "relative",
+        })
+
+        // Add location image to marker for visual enhancement
+        const markerImage = document.createElement("div")
+        markerImage.className = "mapboxgl-marker-image"
+        Object.assign(markerImage.style, {
+          width: "100%",
+          height: "100%",
+          borderRadius: "50%",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundImage: `url(${getLocationImageUrl(location)})`,
+          opacity: "0.8",
           position: "absolute",
           top: "0",
           left: "0",
         })
 
-        // Add hover effect only for non-mobile devices
-        if (!isMobile) {
-          el.onmouseenter = () => {
-            if (!isSelected) {
-              markerDot.style.transform = "scale(1.1)"
-              markerDot.style.boxShadow = "0 4px 8px rgba(0,0,0,0.4)"
-              el.style.zIndex = "5"
-            }
-          }
+        // Add category overlay
+        const categoryOverlay = document.createElement("div")
+        categoryOverlay.className = "mapboxgl-marker-category"
+        Object.assign(categoryOverlay.style, {
+          width: "100%",
+          height: "100%",
+          borderRadius: "50%",
+          backgroundColor: color,
+          opacity: "0.6",
+          position: "absolute",
+          top: "0",
+          left: "0",
+        })
 
-          el.onmouseleave = () => {
-            if (!isSelected) {
-              markerDot.style.transform = "scale(1)"
-              markerDot.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
-              el.style.zIndex = "1"
-            }
-          }
-        }
+        // Add icon or initial
+        const markerIcon = document.createElement("div")
+        markerIcon.className = "mapboxgl-marker-icon"
+        Object.assign(markerIcon.style, {
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          fontSize: `${baseMarkerSize * 0.4}px`,
+          fontWeight: "bold",
+          position: "relative",
+          zIndex: "1",
+          textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+        })
 
         // Get first letter of category name for marker label
         let categoryLabel = "C"
@@ -422,7 +570,13 @@ const MapComponent = memo(function MapComponent({
           }
         }
 
-        markerDot.textContent = categoryLabel
+        markerIcon.textContent = categoryLabel
+
+        // Add elements to marker in correct order
+        markerDot.appendChild(markerImage)
+        markerDot.appendChild(categoryOverlay)
+        markerDot.appendChild(markerIcon)
+        el.appendChild(markerDot)
 
         // Add pulse effect
         const pulse = document.createElement("div")
@@ -436,19 +590,18 @@ const MapComponent = memo(function MapComponent({
           zIndex: "-1",
         })
         markerDot.appendChild(pulse)
-        el.appendChild(markerDot)
 
         // Add click handler with improved touch handling for Safari
         const handleMarkerClick = (e: Event) => {
           e.stopPropagation()
           e.preventDefault()
 
-          // Call the onMarkerClick callback with the location
-          onMarkerClick(location)
+          // Show location preview popup
+          showLocationPreview(location, [lng, lat])
 
           // Highlight the marker
-          markerDot.style.transform = "scale(1.1)"
-          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+          markerDot.style.transform = "scale(1.15)"
+          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 12px rgba(0,0,0,0.5)"
           el.style.zIndex = "10"
 
           // Add a pulse animation to the marker
@@ -508,7 +661,7 @@ const MapComponent = memo(function MapComponent({
     // Update refs to track changes
     prevLocationsRef.current = locations
     markersInitializedRef.current = true
-  }, [locationIds, mapLoaded, isMobile, selectedLocationId, isSafari, onMarkerClick]) // Only depend on the memoized values
+  }, [locationIds, mapLoaded, isMobile, selectedLocationId, isSafari, showLocationPreview]) // Only depend on the memoized values
 
   // Update selected marker state - only run when selected location changes
   useEffect(() => {
@@ -521,12 +674,35 @@ const MapComponent = memo(function MapComponent({
       if (markerDot) {
         if (isSelected) {
           markerDot.style.border = "3px solid #FF6B6B"
-          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
+          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 12px rgba(0,0,0,0.5)"
           element.style.zIndex = "10"
+
+          // Make category overlay more transparent for selected marker
+          const categoryOverlay = markerDot.querySelector(".mapboxgl-marker-category") as HTMLElement
+          if (categoryOverlay) {
+            categoryOverlay.style.opacity = "0.4"
+          }
+
+          // Make image more visible for selected marker
+          const markerImage = markerDot.querySelector(".mapboxgl-marker-image") as HTMLElement
+          if (markerImage) {
+            markerImage.style.opacity = "0.9"
+          }
         } else {
           markerDot.style.border = "3px solid white"
           markerDot.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
           element.style.zIndex = "1"
+
+          // Reset opacity for non-selected markers
+          const categoryOverlay = markerDot.querySelector(".mapboxgl-marker-category") as HTMLElement
+          if (categoryOverlay) {
+            categoryOverlay.style.opacity = "0.6"
+          }
+
+          const markerImage = markerDot.querySelector(".mapboxgl-marker-image") as HTMLElement
+          if (markerImage) {
+            markerImage.style.opacity = "0.8"
+          }
         }
       }
     })
@@ -673,6 +849,30 @@ const MapComponent = memo(function MapComponent({
     }
   }, [mapLoaded])
 
+  // Listen for custom event to handle "View Details" button click in popup
+  useEffect(() => {
+    const handleViewDetails = (e: CustomEvent) => {
+      const locationId = e.detail
+      const location = locations.find((loc) => loc.id === locationId)
+      if (location) {
+        // Close popup
+        if (activePopupRef.current) {
+          activePopupRef.current.remove()
+          activePopupRef.current = null
+        }
+
+        // Call onMarkerClick to show details
+        onMarkerClick(location)
+      }
+    }
+
+    document.addEventListener("viewLocationDetails", handleViewDetails as EventListener)
+
+    return () => {
+      document.removeEventListener("viewLocationDetails", handleViewDetails as EventListener)
+    }
+  }, [locations, onMarkerClick])
+
   // Memoize callback functions to prevent recreation on each render
   const toggleStyles = useCallback(() => setShowStyles((s) => !s), [])
 
@@ -760,115 +960,7 @@ const MapComponent = memo(function MapComponent({
     <div className={cn("relative h-full w-full", className)}>
       <div ref={containerRef} className="h-full w-full map-container" />
 
-      {/* Map controls */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 md:top-4 md:right-4">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon"
-                variant="outline"
-                className="bg-white shadow-md rounded-full h-10 w-10"
-                onClick={toggleStyles}
-              >
-                <Layers className="h-5 w-5 text-[#FF6B6B]" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>Map Styles</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
 
-        {userLocation && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="outline"
-                  className="bg-white shadow-md rounded-full h-10 w-10"
-                  onClick={flyToUserLocation}
-                >
-                  <Locate className="h-5 w-5 text-blue-500" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>My Location</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                size="icon"
-                variant="outline"
-                className={cn("bg-white shadow-md rounded-full h-10 w-10", showLegend && "bg-gray-100")}
-                onClick={toggleLegend}
-              >
-                <Info className="h-5 w-5 text-gray-600" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              <p>Category Legend</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
-      {/* Style selector dropdown */}
-      {showStyles && (
-        <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-sm font-medium text-gray-800 px-2">Map Style</h4>
-            {isMobile && (
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleStyles}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-1">
-            {MAP_STYLES.map((style) => (
-              <button
-                key={style.id}
-                onClick={() => selectMapStyle(style.id)}
-                className={cn(
-                  "flex items-center w-full text-left px-3 py-2 text-sm rounded-md transition-colors",
-                  currentStyle === style.id ? "bg-[#FF6B6B]/10 text-[#FF6B6B] font-medium" : "hover:bg-gray-100",
-                )}
-              >
-                <span className="mr-2">{style.icon}</span>
-                {style.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Category legend */}
-      {showLegend && (
-        <div className="absolute top-4 right-16 bg-white rounded-lg shadow-lg p-3 z-20 w-56">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-sm font-medium text-gray-800 px-2">Categories</h4>
-            {isMobile && (
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={toggleLegend}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            {categories.map((category) => (
-              <div key={category.id} className="flex items-center px-2">
-                <div className="w-4 h-4 rounded-full mr-2" style={{ backgroundColor: category.color }} />
-                <span className="text-sm text-gray-700">{category.name}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Mini location preview for mobile */}
       {showMiniPreview && previewLocation && (
@@ -886,8 +978,8 @@ const MapComponent = memo(function MapComponent({
                   <Image
                     src={getLocationImageUrl(previewLocation) || "/placeholder.svg"}
                     alt={previewLocation.name}
-                    fill
-                    sizes="64px"
+                    width={64}
+                    height={64}
                     className="object-cover"
                     priority
                   />
@@ -1042,6 +1134,22 @@ const MapComponent = memo(function MapComponent({
           z-index: 10;
         }
 
+        .marker-click-popup .mapboxgl-popup-content {
+          padding: 0;
+          overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+          border: 1px solid rgba(0,0,0,0.1);
+          min-width: 220px;
+          pointer-events: auto;
+        }
+
+        .marker-click-popup .mapboxgl-popup-close-button {
+          color: #666;
+          font-size: 16px;
+          padding: 5px 10px;
+          z-index: 5;
+        }
+
         @media (max-width: 768px) {
           .mapboxgl-popup-content {
             max-width: 90vw;
@@ -1128,6 +1236,14 @@ const MapComponent = memo(function MapComponent({
         .mapboxgl-marker-container:active,
         .mapboxgl-marker-container.active {
           z-index: 10 !important;
+        }
+        
+        /* Enhanced marker preview styling */
+        .marker-preview-card {
+          background: white;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
       `}</style>
     </div>
