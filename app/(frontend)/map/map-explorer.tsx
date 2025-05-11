@@ -20,10 +20,8 @@ import {
   MapIcon,
   Loader2,
   Filter,
-  ArrowLeft,
   Maximize2,
   Minimize2,
-  Share2,
   Navigation,
   ChevronUp,
   Info,
@@ -60,7 +58,7 @@ export default function MapExplorer() {
 
   // UI states
   const [activeView, setActiveView] = useState<"map" | "list">("map")
-  const [showDetail, setShowDetail] = useState(false)
+  const [isDetailOpen, setIsDetailOpen] = useState(false) // Changed from showDetail to isDetailOpen
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileList, setShowMobileList] = useState(false)
@@ -78,7 +76,6 @@ export default function MapExplorer() {
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const listContainerRef = useRef<HTMLDivElement>(null)
-  const detailContainerRef = useRef<HTMLDivElement>(null)
   const mobileListRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
   const showListButtonRef = useRef<HTMLButtonElement>(null)
@@ -289,7 +286,7 @@ export default function MapExplorer() {
     // Reset selected location if it's no longer in filtered results
     if (selectedLocation && !results.find((loc) => loc.id === selectedLocation.id)) {
       setSelectedLocation(null)
-      setShowDetail(false)
+      setIsDetailOpen(false)
       setPreviewLocation(null)
       setShowMobilePreview(false)
     }
@@ -364,11 +361,11 @@ export default function MapExplorer() {
   )
 
   // Handle view details from preview
-  // Update the handleViewDetails function to make sure it properly shows the location detail panel
+  // Update the handleViewDetails function to use dialog-based detail view
   const handleViewDetails = useCallback(() => {
     if (previewLocation) {
       setSelectedLocation(previewLocation)
-      setShowDetail(true)
+      setIsDetailOpen(true) // Open the dialog
       setShowMobilePreview(false)
 
       // Add haptic feedback if available
@@ -384,11 +381,7 @@ export default function MapExplorer() {
       // Ignore if touch just started (to prevent double-firing on Safari)
       if (touchStarted) return
 
-      // Close detail view when clicking on map
-      if (showDetail) {
-        setShowDetail(false)
-        setSelectedLocation(null)
-      }
+      // No need to close detail view when clicking on map - dialog handles this
 
       // Close search on mobile when clicking map
       if (isMobile && isSearchExpanded) {
@@ -409,7 +402,7 @@ export default function MapExplorer() {
 
       console.log("Map clicked at:", coords)
     },
-    [showDetail, isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted],
+    [isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted],
   )
 
   // Handle map move
@@ -439,8 +432,7 @@ export default function MapExplorer() {
 
   // Close detail view
   const closeDetail = useCallback(() => {
-    setShowDetail(false)
-    setSelectedLocation(null)
+    setIsDetailOpen(false)
   }, [])
 
   // Close mobile preview
@@ -455,10 +447,7 @@ export default function MapExplorer() {
     (value: string) => {
       setActiveView(value as "map" | "list")
 
-      // Close detail view when switching to list on mobile
-      if (isMobile && value === "list" && showDetail) {
-        setShowDetail(false)
-      }
+      // No need to close detail view when switching to list, dialog handles itself
 
       // Close mobile preview when switching views
       if (isMobile && showMobilePreview) {
@@ -484,7 +473,7 @@ export default function MapExplorer() {
         navigator.vibrate(50)
       }
     },
-    [isMobile, showDetail, showMobilePreview, showMobileList, isSafari, isIOS],
+    [isMobile, showMobilePreview, showMobileList, isSafari, isIOS],
   )
 
   // Toggle search expansion on mobile
@@ -651,11 +640,11 @@ export default function MapExplorer() {
   // Handle keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Close detail or preview on escape key
+      // No need to handle Escape for detail dialog - it handles itself
+
+      // Handle escape for preview and search
       if (e.key === "Escape") {
-        if (showDetail) {
-          closeDetail()
-        } else if (showMobilePreview) {
+        if (showMobilePreview) {
           closeMobilePreview()
         } else if (isSearchExpanded) {
           setIsSearchExpanded(false)
@@ -668,7 +657,7 @@ export default function MapExplorer() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [showDetail, showMobilePreview, isSearchExpanded, closeDetail, closeMobilePreview])
+  }, [showMobilePreview, isSearchExpanded, closeMobilePreview])
 
   // Share location function
   const shareLocation = useCallback((location: Location) => {
@@ -710,7 +699,7 @@ export default function MapExplorer() {
       const location = allLocations.find((loc) => loc.id === locationId)
       if (location) {
         setSelectedLocation(location)
-        setShowDetail(true)
+        setIsDetailOpen(true) // Open the dialog
 
         // Close any open popups or previews
         setShowMobilePreview(false)
@@ -989,7 +978,7 @@ export default function MapExplorer() {
                 isLoading={isLoading}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
-                  setShowDetail(true)
+                  setIsDetailOpen(true) // Open the dialog
                 }}
               />
             </div>
@@ -1183,7 +1172,7 @@ export default function MapExplorer() {
                   isLoading={isLoading}
                   onViewDetail={(location) => {
                     setSelectedLocation(location)
-                    setShowDetail(true)
+                    setIsDetailOpen(true) // Open the dialog
                   }}
                 />
               </div>
@@ -1211,7 +1200,7 @@ export default function MapExplorer() {
                 isLoading={isLoading}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
-                  setShowDetail(true)
+                  setIsDetailOpen(true) // Open the dialog
                 }}
               />
 
@@ -1239,51 +1228,8 @@ export default function MapExplorer() {
           </div>
         )}
 
-        {/* Detail panel */}
-        {showDetail && selectedLocation && (
-          <div
-            ref={detailContainerRef}
-            className="absolute inset-0 md:relative md:inset-auto md:w-96 bg-white z-30 md:border-l overflow-hidden animate-slide-in"
-            style={{ height: isMobile ? "100%" : "calc(100% - 0px)" }}
-          >
-            {/* Mobile back button */}
-            {isMobile && (
-              <div className="sticky top-0 z-10 bg-white border-b p-3 flex items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={closeDetail}
-                  onTouchEnd={(e) => {
-                    e.preventDefault()
-                    closeDetail()
-                  }}
-                  className="h-8 w-8 p-0 mr-2"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <h3 className="font-medium truncate">{selectedLocation.name}</h3>
-                <div className="ml-auto flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => shareLocation(selectedLocation)}
-                    onTouchEnd={(e) => {
-                      e.preventDefault()
-                      shareLocation(selectedLocation)
-                    }}
-                    aria-label="Share Location"
-                  >
-                    <Share2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-            <div className="h-full overflow-auto" style={{ height: isMobile ? "calc(100% - 49px)" : "100%" }}>
-              <LocationDetail location={selectedLocation} onCloseAction={closeDetail} />
-            </div>
-          </div>
-        )}
+        {/* Location Detail Dialog - Use the new dialog-based component instead of a side panel */}
+        <LocationDetail location={selectedLocation} isOpen={isDetailOpen} onClose={closeDetail} isMobile={isMobile} />
       </div>
 
       {/* Mobile view selector with Safari-specific fixes */}
@@ -1425,15 +1371,6 @@ export default function MapExplorer() {
 
         .animate-fade-in {
           animation: fade-in 0.2s ease-out forwards;
-        }
-
-        @keyframes slide-in {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out forwards;
         }
 
         .tab-transition {

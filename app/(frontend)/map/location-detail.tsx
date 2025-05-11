@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   X,
   MapPin,
@@ -27,44 +27,62 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { AspectRatio } from "@/components/ui/aspect-ratio"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 
 interface LocationDetailProps {
-  location: Location
-  onCloseAction: () => void
+  location: Location | null
+  isOpen: boolean
+  onClose: () => void
   isMobile?: boolean
 }
 
-export default function LocationDetail({ location, onCloseAction, isMobile = false }: LocationDetailProps) {
+export default function LocationDetail({ location, isOpen, onClose, isMobile = false }: LocationDetailProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showFullGallery, setShowFullGallery] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
   const [activeTab, setActiveTab] = useState<"info" | "photos" | "reviews">("info")
   const detailRef = useRef<HTMLDivElement>(null)
 
-  // Get all images for the location
-  const images = [
-    ...(location.featuredImage
-      ? [typeof location.featuredImage === "string" ? location.featuredImage : location.featuredImage.url]
-      : []),
-    ...(location.imageUrl ? [location.imageUrl] : []),
-    ...(location.gallery || []).map((img) => (typeof img === "string" ? img : img.image.url)),
-  ].filter(Boolean) as string[]
+  // Process images using useMemo to avoid conditional hook calls
+  const images = useMemo(() => {
+    if (!location) return ["/placeholder.svg?key=5nd76"]
 
-  // If no images, add a placeholder
-  if (images.length === 0) {
-    images.push("/placeholder.svg?key=5nd76")
-  }
+    const imageList = [
+      ...(location.featuredImage
+        ? [typeof location.featuredImage === "string" ? location.featuredImage : location.featuredImage.url]
+        : []),
+      ...(location.imageUrl ? [location.imageUrl] : []),
+      ...(location.gallery || []).map((img) => (typeof img === "string" ? img : img.image.url)),
+    ].filter(Boolean) as string[]
+
+    // If no images, add a placeholder
+    if (imageList.length === 0) {
+      imageList.push("/placeholder.svg?key=5nd76")
+    }
+
+    return imageList
+  }, [location])
+
+  // Get primary category and color using useMemo
+  const { primaryCategory, primaryColor } = useMemo(() => {
+    if (!location) {
+      return { primaryCategory: null, primaryColor: null }
+    }
+    const category = location.categories && location.categories.length > 0 ? location.categories[0] : null
+    const color = getCategoryColor(category)
+    return { primaryCategory: category, primaryColor: color }
+  }, [location])
 
   // Scroll to top when location changes
   useEffect(() => {
-    if (detailRef.current) {
+    if (location && detailRef.current) {
       detailRef.current.scrollTop = 0
+      setCurrentImageIndex(0)
+      setActiveTab("info")
     }
-    setCurrentImageIndex(0)
-    setActiveTab("info")
-  }, [location.id])
+  }, [location?.id, location])
 
   // Navigate to previous image
   const prevImage = useCallback(() => {
@@ -87,14 +105,10 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
     return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
   }, [])
 
-  // Get primary category
-  const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
-
-  // Get primary category color
-  const primaryColor = getCategoryColor(primaryCategory)
-
   // Share the location
   const shareLocation = useCallback(() => {
+    if (!location) return
+
     const title = location.name
     const text = `Check out ${location.name}`
     const url = window.location.href
@@ -114,85 +128,60 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
         .then(() => alert("Location link copied to clipboard!"))
         .catch((err) => console.error("Error copying to clipboard:", err))
     }
-  }, [location.name])
+  }, [location])
 
-  return (
+  // If no location is provided, render nothing in the dialog
+  if (!location) {
+    return (
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-[800px] p-0 max-h-[90vh] overflow-hidden">
+          <DialogHeader className="px-4 py-2 flex flex-row items-center justify-between border-b">
+            <DialogTitle className="text-lg font-medium truncate">Location Details</DialogTitle>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogClose>
+          </DialogHeader>
+          <div className="p-8 text-center text-gray-500">
+            <p>No location selected</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  const dialogContent = (
     <div
       ref={detailRef}
-      className="flex flex-col h-full overflow-y-auto bg-white"
+      className="flex flex-col max-h-[80vh] overflow-y-auto"
       style={{ scrollbarWidth: "thin", scrollbarColor: "#E5E7EB transparent" }}
     >
-      {/* Sticky header for desktop */}
-      {!isMobile && (
-        <div className="sticky top-0 z-10 flex items-center justify-between p-4 bg-white border-b">
-          <h2 className="text-lg font-medium truncate">{location.name}</h2>
-          <div className="flex gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={shareLocation}>
-                    <Share2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Share</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className={cn("h-8 w-8 rounded-full", isFavorite && "bg-[#FF6B6B]/10 border-[#FF6B6B]")}
-                    onClick={toggleFavorite}
-                  >
-                    <Heart className={cn("h-4 w-4", isFavorite && "fill-[#FF6B6B] text-[#FF6B6B]")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isFavorite ? "Remove from favorites" : "Add to favorites"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <Button variant="ghost" size="icon" onClick={onCloseAction} className="h-8 w-8 rounded-full">
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Tabs for desktop */}
-      {!isMobile && (
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full border-b">
-          <TabsList className="w-full justify-start h-11 bg-transparent p-0 px-4">
-            <TabsTrigger
-              value="info"
-              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
-            >
-              <Info className="h-4 w-4 mr-2" />
-              Information
-            </TabsTrigger>
-            <TabsTrigger
-              value="photos"
-              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
-            >
-              {/*<Image className="h-4 w-4 mr-2 text-current" /> */}
-              Photos ({images.length})
-            </TabsTrigger>
-            <TabsTrigger
-              value="reviews"
-              className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
-            >
-              <Star className="h-4 w-4 mr-2" />
-              Reviews {location.reviewCount && `(${location.reviewCount})`}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      )}
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full border-b">
+        <TabsList className="w-full justify-start h-11 bg-transparent p-0 px-4">
+          <TabsTrigger
+            value="info"
+            className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+          >
+            <Info className="h-4 w-4 mr-2" />
+            Information
+          </TabsTrigger>
+          <TabsTrigger
+            value="photos"
+            className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+          >
+            Photos ({images.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="reviews"
+            className="data-[state=active]:text-[#FF6B6B] data-[state=active]:border-b-2 data-[state=active]:border-[#FF6B6B] data-[state=active]:shadow-none data-[state=active]:bg-transparent rounded-none h-11"
+          >
+            <Star className="h-4 w-4 mr-2" />
+            Reviews {location.reviewCount && `(${location.reviewCount})`}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Main content based on active tab */}
       <div className="flex-1 overflow-auto">
@@ -206,8 +195,7 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
                   alt={`${location.name} - Photo ${currentImageIndex + 1}`}
                   sizes="(max-width: 768px) 100vw, 600px"
                   className="object-cover"
-                  width={600}
-                  height={400}
+                  fill
                   priority
                 />
               </AspectRatio>
@@ -456,8 +444,6 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
                     src={image || "/placeholder.svg?height=200&width=200&query=location-photo"}
                     alt={`${location.name} - Photo ${idx + 1}`}
                     fill
-                    width={200}
-                    height={200}
                     className="object-cover group-hover:scale-105 transition-transform duration-300"
                     onClick={() => {
                       setCurrentImageIndex(idx)
@@ -548,8 +534,6 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
                 src={images[currentImageIndex] || "/placeholder.svg?height=800&width=1200&query=gallery-image"}
                 alt={`${location.name} - Full Photo ${currentImageIndex + 1}`}
                 fill
-                width={1200}
-                height={800}
                 className="object-contain"
                 priority
               />
@@ -601,7 +585,7 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
           <Button
             variant="outline"
             className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-            onClick={onCloseAction}
+            onClick={onClose}
           >
             <MapPin className="h-4 w-4 mr-2" />
             Back to Map
@@ -613,5 +597,59 @@ export default function LocationDetail({ location, onCloseAction, isMobile = fal
         </div>
       )}
     </div>
+  )
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[800px] p-0 max-h-[90vh] overflow-hidden">
+        <DialogHeader className="px-4 py-2 flex flex-row items-center justify-between border-b">
+          <DialogTitle className="text-lg font-medium truncate">
+            {location ? location.name : "Location Details"}
+          </DialogTitle>
+          <div className="flex gap-2">
+            {location && (
+              <>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-full" onClick={shareLocation}>
+                        <Share2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Share</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className={cn("h-8 w-8 rounded-full", isFavorite && "bg-[#FF6B6B]/10 border-[#FF6B6B]")}
+                        onClick={toggleFavorite}
+                      >
+                        <Heart className={cn("h-4 w-4", isFavorite && "fill-[#FF6B6B] text-[#FF6B6B]")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{isFavorite ? "Remove from favorites" : "Add to favorites"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </>
+            )}
+
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogHeader>
+        {location ? dialogContent : <div className="p-8 text-center text-gray-500">No location selected</div>}
+      </DialogContent>
+    </Dialog>
   )
 }

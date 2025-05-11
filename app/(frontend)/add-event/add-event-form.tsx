@@ -2,11 +2,11 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { CalendarIcon, Clock, ImageIcon, X } from "lucide-react"
+import { CalendarIcon, Clock, ImageIcon, X, Upload } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -16,6 +16,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import Image from "next/image"
+
+
 
 // Sample locations data
 const LOCATIONS = [
@@ -33,20 +35,80 @@ export default function AddEventForm() {
   const [eventType, setEventType] = useState("in-person")
   const [selectedLocation, setSelectedLocation] = useState<string | null>(null)
   const [createNewLocation, setCreateNewLocation] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      console.log("No file selected")
+      return
+    }
+
     if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+
+      // Show preview immediately
       const reader = new FileReader()
       reader.onload = (event) => {
         setEventImage(event.target?.result as string)
       }
-      reader.readAsDataURL(e.target.files[0])
+      reader.readAsDataURL(file)
+
+      try {
+        setUploadProgress(10) // Start progress indication
+
+        // Create FormData for Payload CMS upload
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("alt", `Event image: ${file.name}`)
+
+        console.log("Uploading to /api/media")
+
+        // Upload to Payload CMS Media collection via our proxy endpoint
+        const response = await fetch("/api/media", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.status} ${response.statusText}`)
+        }
+
+        // Get the media object from Payload
+        const { doc } = await response.json()
+        console.log("Upload successful, doc:", doc)
+
+        // Update the image state with the media ID or URL
+        // Note: You might need to adjust this depending on how you want to store/display the image
+        setEventImage(doc.url || `/api/media/${doc.id}`) // Use URL if available, otherwise construct one
+
+        setUploadProgress(100)
+        setTimeout(() => setUploadProgress(0), 500) // Reset progress after a short delay
+
+        console.log("Upload complete:", doc)
+      } catch (error) {
+        console.error("Upload failed:", error)
+        setUploadProgress(0)
+      } finally {
+        // Reset the file input so it can be used again
+        if (e.target) e.target.value = ""
+      }
     }
   }
 
   const removeImage = () => {
     setEventImage(null)
   }
+
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
+    }
+  }
+
 
   return (
     <section className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
@@ -282,7 +344,10 @@ export default function AddEventForm() {
             <h3 className="text-lg font-medium text-gray-900">Event Image</h3>
 
             {!eventImage ? (
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center">
+              <div
+                className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center"
+                onClick={triggerFileInput}
+              >
                 <ImageIcon className="h-10 w-10 text-gray-400 mb-2" />
                 <p className="text-sm text-gray-500 text-center mb-2">Drag and drop an image, or click to browse</p>
                 <Input
@@ -290,12 +355,16 @@ export default function AddEventForm() {
                   accept="image/*"
                   className="hidden"
                   id="event-image-upload"
+                  ref={fileInputRef}
                   onChange={handleImageUpload}
                 />
                 <label htmlFor="event-image-upload">
-                  <Button variant="outline" size="sm" className="cursor-pointer" type="button">
-                    Upload Image
-                  </Button>
+                  <div className="cursor-pointer">
+                    <Button variant="outline" size="sm" type="button" onClick={triggerFileInput}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Image
+                    </Button>
+                  </div>
                 </label>
               </div>
             ) : (
@@ -304,8 +373,16 @@ export default function AddEventForm() {
                   src={eventImage || "/placeholder.svg"}
                   alt="Event preview"
                   className="w-full h-full object-cover"
-                    fill
+                  fill
                 />
+                {uploadProgress > 0 && uploadProgress < 100 && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1">
+                    Uploading: {uploadProgress.toFixed(0)}%
+                    <div className="h-1 bg-gray-700 mt-1">
+                      <div className="h-1 bg-white" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   size="icon"

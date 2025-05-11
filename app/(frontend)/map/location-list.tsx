@@ -26,9 +26,7 @@ import Image from "next/image"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
-// Remove these lines:
-// import { Dialog, DialogContent, DialogOverlay } from "@/components/ui/dialog"
-// import LocationDetail from "./location-detail"
+
 
 interface LocationListProps {
   locations: Location[]
@@ -65,8 +63,7 @@ export default function LocationList({
   const [searchQuery, setSearchQuery] = useState("")
   const [sortBy, setSortBy] = useState<"relevance" | "distance" | "rating">("relevance")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  // Remove this line:
-  // const [detailLocation, setDetailLocation] = useState<Location | null>(null)
+  
   const [favoriteLocations, setFavoriteLocations] = useState<Set<string>>(new Set())
 
   // Extract all unique categories from locations
@@ -162,6 +159,7 @@ export default function LocationList({
   const viewLocationDetails = useCallback(
     (e: React.MouseEvent, location: Location) => {
       e.stopPropagation()
+    
       if (onViewDetail) {
         onViewDetail(location)
       }
@@ -169,11 +167,8 @@ export default function LocationList({
     [onViewDetail],
   )
 
-  // Remove this function:
   // Close location details
-  // const closeLocationDetails = useCallback(() => {
-  //   setDetailLocation(null)
-  // }, [])
+  
 
   // LocationCard component for consistent rendering
   const LocationCard = useCallback(
@@ -303,7 +298,7 @@ export default function LocationList({
         </Card>
       )
     },
-    [selectedLocation, onLocationSelect, favoriteLocations, toggleFavorite, onViewDetail, viewLocationDetails],
+    [selectedLocation, onLocationSelect, favoriteLocations, toggleFavorite, viewLocationDetails],
   )
 
   return (
@@ -491,16 +486,7 @@ export default function LocationList({
         )}
       </div>
 
-      {/* Remove this entire block: */}
-      {/* Location detail dialog */}
-      {/* <Dialog open={detailLocation !== null} onOpenChange={(open) => !open && closeLocationDetails()}>
-        <DialogOverlay className="bg-black/50" />
-        <DialogContent className="sm:max-w-[600px] p-0 h-[80vh] max-h-[800px] overflow-hidden">
-          {detailLocation && (
-            <LocationDetail location={detailLocation} onCloseAction={closeLocationDetails} isMobile={false} />
-          )}
-        </DialogContent>
-      </Dialog> */}
+
 
       {/* Loading state */}
       {isLoading && (

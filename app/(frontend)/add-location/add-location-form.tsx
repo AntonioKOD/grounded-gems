@@ -1,37 +1,44 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
+
+import type React from "react"
 
 import { useEffect, useState, useRef } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Building, Camera, CheckCircle2,Clock, Compass, ExternalLink, Globe, ImageIcon, Info, Link2, Loader2, MapPin, Plus, Save, Settings, Tag, Trash2, Upload, Users, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Building,
+  Camera,
+  CheckCircle2,
+  Clock,
+  Compass,
+  ExternalLink,
+  Globe,
+  ImageIcon,
+  Info,
+  Link2,
+  Loader2,
+  MapPin,
+  Plus,
+  Save,
+  Settings,
+  Tag,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardFooter, 
-  CardHeader, 
-  CardTitle 
-} from "@/components/ui/card"
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
-} from "@/components/ui/tabs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import {
   Dialog,
@@ -51,18 +58,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -80,12 +77,14 @@ export default function AddLocationForm() {
   const router = useRouter()
   const { toast } = useToast()
   const slugInputRef = useRef<HTMLInputElement>(null)
-  
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const galleryFileInputRef = useRef<HTMLInputElement>(null)
+
   // State for categories and user data
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
   const [user, setUser] = useState<UserData | null>(null)
   const [formProgress, setFormProgress] = useState(0)
-  
+
   // Dialog states
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
@@ -108,7 +107,7 @@ export default function AddLocationForm() {
 
   // Media
   const [locationImage, setLocationImage] = useState<string | null>(null)
-  const [gallery, setGallery] = useState<{ image: string; caption?: string }[]>([])
+  const [gallery, setGallery] = useState<{ image: string; caption?: string; tempId?: string }[]>([])
 
   // Tags
   const [tags, setTags] = useState<{ tag: string }[]>([])
@@ -190,6 +189,15 @@ export default function AddLocationForm() {
     keywords: "",
   })
 
+  // Add these state variables near the other state declarations
+  const [isUploading, setIsUploading] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [uploadProgress, setUploadProgress] = useState<number>(0)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [file, setFile] = useState<File | null>(null)
+  // Add these state variables for better image handling
+  const [locationImagePreview, setLocationImagePreview] = useState<string | null>(null)
+
   // Fetch categories and user data on component mount
   useEffect(() => {
     const fetchCategories = async () => {
@@ -215,11 +223,11 @@ export default function AddLocationForm() {
             "Content-Type": "application/json",
           },
         })
-        
+
         if (!res.ok) {
           throw new Error("Failed to fetch user data")
         }
-        
+
         const { user } = await res.json()
         setUser(user)
       } catch (error) {
@@ -268,14 +276,21 @@ export default function AddLocationForm() {
     totalFields += 3
     if (contactInfo.phone || contactInfo.email) completedFields++
     if (contactInfo.website) completedFields++
-    if (Object.values(contactInfo.socialMedia).some(val => val)) completedFields++
+    if (Object.values(contactInfo.socialMedia).some((val) => val)) completedFields++
 
     // Calculate percentage
     const progress = Math.round((completedFields / totalFields) * 100)
     setFormProgress(progress)
   }, [
-    locationName, locationSlug, locationCategory, shortDescription, locationDescription,
-    locationImage, gallery, address, contactInfo
+    locationName,
+    locationSlug,
+    locationCategory,
+    shortDescription,
+    locationDescription,
+    locationImage,
+    gallery,
+    address,
+    contactInfo,
   ])
 
   // Handle slug generation and validation
@@ -291,7 +306,7 @@ export default function AddLocationForm() {
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value
     setLocationName(name)
-    
+
     // Auto-generate slug if user hasn't manually edited it
     if (!slugEdited) {
       setLocationSlug(generateSlug(name))
@@ -303,7 +318,7 @@ export default function AddLocationForm() {
     const formattedSlug = generateSlug(rawSlug)
     setLocationSlug(formattedSlug)
     setSlugEdited(true)
-    
+
     // Clear slug error if it's valid now
     if (formErrors.slug && formattedSlug) {
       const newErrors = { ...formErrors }
@@ -417,48 +432,177 @@ export default function AddLocationForm() {
     })
   }
 
-  // Image handling
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Image must be less than 5MB",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        setLocationImage(event.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  // Trigger file input click programmatically
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
     }
   }
 
-  const handleGalleryImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
+  // Trigger gallery file input click programmatically
+  const triggerGalleryFileInput = () => {
+    if (galleryFileInputRef.current) {
+      galleryFileInputRef.current.click()
+    }
+  }
 
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Image must be less than 5MB",
-          variant: "destructive",
+  // Image handling
+  // Replace the handleImageUpload function with this:
+  const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    console.log("File input change event triggered")
+    const file = e.target.files?.[0]
+    if (!file) {
+      console.log("No file selected")
+      return
+    }
+
+    // 1. Size guard
+    if (file.size > MAX_IMAGE_SIZE) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 5 MB.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // 2. Instant preview
+    const reader = new FileReader()
+    reader.onload = () => {
+      console.log("File reader loaded")
+      setLocationImagePreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+
+    try {
+      setIsUploading(true)
+      setUploadError(null)
+
+      // 3. Build FormData for Payload's /api/media
+      const formData = new FormData()
+      formData.append("file", file)
+      // Optional: set alt text or other metadata fields
+      formData.append("alt", locationName || "Location image")
+
+      console.log("Uploading to /api/media")
+      // 4. Send to Payload's media endpoint
+      const res = await fetch("/api/media", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!res.ok) {
+        throw new Error(`Upload failed: ${res.status} ${res.statusText}`)
+      }
+
+      // 5. Extract the created document
+      const { doc } = await res.json()
+      console.log("Upload successful, doc:", doc)
+      // doc.id is the new Media document's ID
+      setLocationImage(doc.id)
+
+      toast({
+        title: "Upload successful",
+        description: "Image has been saved to the media library.",
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      console.error("Upload error:", message)
+      setUploadError(message)
+
+      toast({
+        title: "Upload failed",
+        description: `Could not upload image: ${message}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // Replace the handleGalleryImageUpload function with this:
+  const handleGalleryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("Gallery file input change event triggered")
+    const file = e.target.files?.[0]
+    if (!file) {
+      console.log("No gallery file selected")
+      return
+    }
+
+    // Client-side size check (max 5 MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 5MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Add a temporary placeholder to the gallery with a local object URL
+    const tempId = Date.now().toString()
+    const localPreviewUrl = URL.createObjectURL(file)
+    setGallery([...gallery, { image: localPreviewUrl, caption: "", tempId }])
+
+    try {
+      setIsUploading(true)
+      setUploadError(null)
+
+      // Create FormData for Payload CMS upload
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("alt", `Gallery image for ${locationName || "location"}`)
+
+      console.log("Uploading gallery image to /api/media")
+      // Upload to Payload CMS Media collection
+      const response = await fetch("/api/media", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`)
+      }
+
+      // Get the media object from Payload
+      const { doc } = await response.json()
+      console.log("Gallery upload successful, doc:", doc)
+
+      // Update the gallery with the actual media ID
+      setGallery((prev) => {
+        return prev.map((item) => {
+          if (item.tempId === tempId) {
+            // For Payload, we need to store the media ID
+            return {
+              image: doc.id, // Store the media ID for the relationship
+              caption: item.caption || "",
+              tempId: undefined,
+            }
+          }
+          return item
         })
-        return
-      }
+      })
 
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        setGallery([...gallery, { image: event.target?.result as string }])
-      }
-      reader.readAsDataURL(file)
+      toast({
+        title: "Upload successful",
+        description: "Gallery image has been uploaded to media library",
+      })
+    } catch (error) {
+      console.error("Gallery upload failed:", error)
+      setUploadError((error as Error).message || "Failed to upload gallery image")
+
+      // Remove the temporary image from gallery
+      setGallery((prev) => prev.filter((item) => item.tempId !== tempId))
+
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload gallery image: ${(error as Error).message}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -552,6 +696,9 @@ export default function AddLocationForm() {
     setShowConfirmDialog(true)
   }
 
+  // Update the handleSubmit function to properly format the data for Payload CMS
+  // Find the handleSubmit function and update the formData preparation:
+
   const handleSubmit = async (saveAsDraft = false) => {
     setIsSubmitting(true)
     setShowConfirmDialog(false)
@@ -560,15 +707,23 @@ export default function AddLocationForm() {
       const formData: LocationFormData = {
         // Basic
         name: locationName,
-        slug: locationSlug,
+        slug: locationSlug || generateSlug(locationName),
         description: locationDescription || "",
         shortDescription: shortDescription || undefined,
 
-        // Media
-        featuredImage: locationImage || undefined,
-        gallery: gallery.length > 0 ? gallery : undefined,
+        // Media - For Payload CMS, we need to pass the media IDs
+        featuredImage: locationImage || undefined, // This should now be the media ID
 
-        // Taxonomy
+        // For gallery, we need to ensure we're passing the correct format for Payload
+        gallery:
+          gallery.length > 0
+            ? gallery.map((item) => ({
+                image: item.image, // This should be the media ID
+                caption: item.caption || undefined,
+              }))
+            : undefined,
+
+        // Rest of your form data remains the same
         categories: locationCategory ? [locationCategory] : undefined,
         tags: tags.length > 0 ? tags : undefined,
 
@@ -634,6 +789,7 @@ export default function AddLocationForm() {
         createdBy: user?.id,
       }
 
+      // Call your createLocation function with the prepared data
       const newLoc = await createLocation(formData)
       console.log("Location created successfully:", newLoc)
 
@@ -646,13 +802,12 @@ export default function AddLocationForm() {
         description: `${locationName} has been successfully ${saveAsDraft ? "saved as draft" : "published"}.`,
       })
     } catch (error) {
+      // Error handling remains the same
       console.error("Error creating location:", error)
 
-      // Handle validation errors
       if (error instanceof Error) {
         const errorMessage = error.message
 
-        // Check for specific field errors
         if (errorMessage.includes("Description")) {
           setFormErrors({
             ...formErrors,
@@ -666,7 +821,6 @@ export default function AddLocationForm() {
             variant: "destructive",
           })
         } else {
-          // Generic error handling
           toast({
             title: "Error",
             description: `Failed to create location: ${errorMessage}`,
@@ -702,9 +856,9 @@ export default function AddLocationForm() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="text-gray-500 hover:text-[#FF6B6B]"
                     onClick={() => setResetDialogOpen(true)}
                   >
@@ -817,23 +971,26 @@ export default function AddLocationForm() {
                       </div>
                     </div>
                     {formErrors.slug && <p className="text-red-500 text-sm">{formErrors.slug}</p>}
-                    
+
                     {showSlugInfo && (
                       <Alert className="bg-blue-50 text-blue-800 border-blue-200 mt-2">
                         <AlertDescription className="flex items-start">
                           <Info className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
                           <span>
-                            URL slugs must be lowercase, contain only letters, numbers, and hyphens. 
-                            Spaces will be converted to hyphens automatically.
+                            URL slugs must be lowercase, contain only letters, numbers, and hyphens. Spaces will be
+                            converted to hyphens automatically.
                           </span>
                         </AlertDescription>
                       </Alert>
                     )}
-                    
+
                     {locationSlug && (
                       <div className="text-sm text-gray-500 flex items-center mt-1">
                         <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                        <span>Will be accessible at: <span className="font-medium">yourdomain.com/locations/{locationSlug}</span></span>
+                        <span>
+                          Will be accessible at:{" "}
+                          <span className="font-medium">yourdomain.com/locations/{locationSlug}</span>
+                        </span>
                       </div>
                     )}
                   </div>
@@ -893,7 +1050,10 @@ export default function AddLocationForm() {
                     <Label className="text-base font-medium">Tags</Label>
                     <div className="flex flex-wrap gap-2 mb-2">
                       {tags.map((tag, index) => (
-                        <div key={index} className="flex items-center bg-[#FF6B6B]/10 text-[#FF6B6B] rounded-full px-3 py-1.5">
+                        <div
+                          key={index}
+                          className="flex items-center bg-[#FF6B6B]/10 text-[#FF6B6B] rounded-full px-3 py-1.5"
+                        >
                           <span className="text-sm">{tag.tag}</span>
                           <button
                             type="button"
@@ -935,7 +1095,10 @@ export default function AddLocationForm() {
                     <Label className="text-base font-medium">Featured Image</Label>
 
                     {!locationImage ? (
-                      <div className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer">
+                      <div
+                        className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer"
+                        onClick={triggerFileInput}
+                      >
                         <div className="bg-[#FF6B6B]/10 rounded-full p-3 mb-3">
                           <ImageIcon className="h-8 w-8 text-[#FF6B6B]" />
                         </div>
@@ -945,60 +1108,101 @@ export default function AddLocationForm() {
                         <p className="text-sm text-muted-foreground text-center mb-4">
                           Recommended size: 1200 x 800 pixels (Max: 5MB)
                         </p>
-                        <Input
+                        <input
                           type="file"
                           accept="image/*"
                           className="hidden"
                           id="location-image-upload"
+                          ref={fileInputRef}
                           onChange={handleImageUpload}
+                          disabled={isUploading}
                         />
-                        <label htmlFor="location-image-upload">
-                          <Button variant="outline" size="lg" className="cursor-pointer" type="button">
-                            <Upload className="h-4 w-4 mr-2" />
-                            Upload Image
-                          </Button>
-                        </label>
+                        <Button
+                          variant="outline"
+                          size="lg"
+                          className="cursor-pointer"
+                          type="button"
+                          disabled={isUploading}
+                          
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Uploading... {uploadProgress.toFixed(0)}%
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload Image
+                            </>
+                          )}
+                        </Button>
+                        {uploadError && <p className="text-red-500 text-sm mt-2">{uploadError}</p>}
                       </div>
                     ) : (
                       <div className="relative rounded-lg overflow-hidden h-[300px] border">
-                        <Image
-                          src={locationImage || "/placeholder.svg"}
-                          alt="Location preview"
-                          className="w-full h-full object-cover"
-                          fill
-                        />
+                        {locationImagePreview ? (
+                          <Image
+                            src={locationImagePreview || "/placeholder.svg"}
+                            alt="Location preview"
+                            className="w-full h-full object-cover"
+                            fill
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-full bg-gray-100">
+                            <CheckCircle2 className="h-12 w-12 text-green-500" />
+                            <p className="ml-2 text-gray-600">Image uploaded successfully</p>
+                          </div>
+                        )}
                         <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
                           <div className="flex gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               className="bg-white/90 hover:bg-white"
-                              onClick={() => setLocationImage(null)}
+                              onClick={() => {
+                                setLocationImage(null)
+                                setLocationImagePreview(null)
+                              }}
                               type="button"
+                              disabled={isUploading}
                             >
                               <Trash2 className="h-4 w-4 mr-1" />
                               Remove
                             </Button>
-                            <label htmlFor="location-image-upload">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-white/90 hover:bg-white cursor-pointer"
-                                type="button"
-                              >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="bg-white/90 hover:bg-white cursor-pointer"
+                              type="button"
+                              disabled={isUploading}
+                              onClick={triggerFileInput}
+                            >
+                              {isUploading ? (
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              ) : (
                                 <Camera className="h-4 w-4 mr-1" />
-                                Change
-                              </Button>
-                            </label>
-                            <Input
+                              )}
+                              Change
+                            </Button>
+                            <input
                               type="file"
                               accept="image/*"
                               className="hidden"
                               id="location-image-upload"
+                              ref={fileInputRef}
                               onChange={handleImageUpload}
+                              disabled={isUploading}
                             />
                           </div>
                         </div>
+                        {isUploading && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-2">
+                            <div className="h-1 bg-gray-700 mt-1">
+                              <div className="h-1 bg-white animate-pulse" />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1012,17 +1216,27 @@ export default function AddLocationForm() {
                         {gallery.length} images
                       </Badge>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {gallery.map((item, index) => (
                         <Card key={index} className="overflow-hidden border">
                           <div className="relative h-[150px]">
-                            <Image
-                              src={item.image || "/placeholder.svg"}
-                              alt={`Gallery image ${index + 1}`}
-                              className="object-cover"
-                              fill
-                            />
+                            {item.tempId ? (
+                              // Local preview for newly uploaded images
+                              <Image
+                                src={item.image || "/placeholder.svg"}
+                                alt={`Gallery image ${index + 1}`}
+                                className="object-cover"
+                                fill
+                              />
+                            ) : (
+                              // For already uploaded images, we'd need to fetch the URL from Payload
+                              // This is a placeholder - you might need to adjust based on your Payload setup
+                              <div className="flex items-center justify-center h-full bg-gray-100">
+                                <CheckCircle2 className="h-8 w-8 text-green-500" />
+                                <p className="ml-2 text-sm text-gray-600">Image uploaded</p>
+                              </div>
+                            )}
                             <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
                               <Button
                                 variant="outline"
@@ -1047,25 +1261,46 @@ export default function AddLocationForm() {
                         </Card>
                       ))}
 
-                      <div className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-6 flex flex-col items-center justify-center h-[220px] bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer">
+                      {/* Update the gallery upload button to show progress */}
+                      <div
+                        className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-6 flex flex-col items-center justify-center h-[220px] bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer"
+                        onClick={triggerGalleryFileInput}
+                      >
                         <div className="bg-[#FF6B6B]/10 rounded-full p-2 mb-3">
                           <Plus className="h-6 w-6 text-[#FF6B6B]" />
                         </div>
                         <p className="text-base text-muted-foreground text-center mb-2">Add to gallery</p>
                         <p className="text-sm text-muted-foreground text-center mb-4">Max file size: 5MB</p>
-                        <Input
+                        <input
                           type="file"
                           accept="image/*"
                           className="hidden"
                           id="gallery-image-upload"
+                          ref={galleryFileInputRef}
                           onChange={handleGalleryImageUpload}
+                          disabled={isUploading}
                         />
-                        <label htmlFor="gallery-image-upload">
-                          <Button variant="outline" size="sm" className="cursor-pointer" type="button">
-                            <Upload className="h-4 w-4 mr-1" />
-                            Upload Image
-                          </Button>
-                        </label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer"
+                          type="button"
+                          disabled={isUploading}
+                          
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                              Uploading... {uploadProgress.toFixed(0)}%
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4 mr-1" />
+                              Upload Image
+                            </>
+                          )}
+                        </Button>
+                        {uploadError && <p className="text-red-500 text-sm mt-2">{uploadError}</p>}
                       </div>
                     </div>
                   </div>
@@ -1397,7 +1632,10 @@ export default function AddLocationForm() {
                     <Label className="text-base font-medium block mb-2">Best Time to Visit</Label>
                     <div className="flex flex-wrap gap-2 mb-2">
                       {bestTimeToVisit.map((item, index) => (
-                        <div key={index} className="flex items-center bg-[#FF6B6B]/10 text-[#FF6B6B] rounded-full px-3 py-1.5">
+                        <div
+                          key={index}
+                          className="flex items-center bg-[#FF6B6B]/10 text-[#FF6B6B] rounded-full px-3 py-1.5"
+                        >
                           <span className="text-sm">{item.season}</span>
                           <button
                             type="button"
@@ -1456,7 +1694,9 @@ export default function AddLocationForm() {
                           setAccessibility({ ...accessibility, wheelchairAccess: !!checked })
                         }
                       />
-                      <Label htmlFor="wheelchair-access" className="text-base">Wheelchair Accessible</Label>
+                      <Label htmlFor="wheelchair-access" className="text-base">
+                        Wheelchair Accessible
+                      </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Checkbox
@@ -1464,7 +1704,9 @@ export default function AddLocationForm() {
                         checked={accessibility.parking}
                         onCheckedChange={(checked) => setAccessibility({ ...accessibility, parking: !!checked })}
                       />
-                      <Label htmlFor="parking-available" className="text-base">Parking Available</Label>
+                      <Label htmlFor="parking-available" className="text-base">
+                        Parking Available
+                      </Label>
                     </div>
                     <div className="mt-3">
                       <Label htmlFor="accessibility-other" className="text-base font-medium">
@@ -1518,7 +1760,9 @@ export default function AddLocationForm() {
                       checked={isFeatured}
                       onCheckedChange={(checked) => setIsFeatured(!!checked)}
                     />
-                    <Label htmlFor="location-featured" className="text-base">Feature this location</Label>
+                    <Label htmlFor="location-featured" className="text-base">
+                      Feature this location
+                    </Label>
                   </div>
 
                   <div className="flex items-center space-x-2">
@@ -1527,7 +1771,9 @@ export default function AddLocationForm() {
                       checked={isVerified}
                       onCheckedChange={(checked) => setIsVerified(!!checked)}
                     />
-                    <Label htmlFor="location-verified" className="text-base">Mark as verified location</Label>
+                    <Label htmlFor="location-verified" className="text-base">
+                      Mark as verified location
+                    </Label>
                   </div>
 
                   <Separator />
@@ -1543,7 +1789,9 @@ export default function AddLocationForm() {
                         checked={hasPartnership}
                         onCheckedChange={(checked) => setHasPartnership(!!checked)}
                       />
-                      <Label htmlFor="has-partnership" className="text-base">This location has a business partnership</Label>
+                      <Label htmlFor="has-partnership" className="text-base">
+                        This location has a business partnership
+                      </Label>
                     </div>
 
                     {hasPartnership && (
