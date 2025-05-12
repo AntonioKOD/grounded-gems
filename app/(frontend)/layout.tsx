@@ -4,6 +4,8 @@ import "./globals.css";
 import NavBar from '@/components/NavBar'
 import Footer from '@/components/footer';
 import MobileNavigation from '@/components/mobile-navigation';
+import {Toaster} from 'sonner'
+
 
 
 export const metadata = {
@@ -22,6 +24,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         <Footer/>
         <div className="md:hidden">
         <MobileNavigation />
+        <Toaster/>
       </div>
       </body>
     </html>

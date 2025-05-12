@@ -30,9 +30,10 @@ import { AspectRatio } from "@/components/ui/aspect-ratio"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
+import { createLocationShareUrl } from "@/lib/location-sharing"
 
 interface LocationDetailProps {
   location: Location | null
@@ -81,16 +82,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
   // Generate shareable URL
   const getShareableUrl = useCallback(() => {
     if (!location) return window.location.href
-
-    const url = new URL(window.location.href)
-
-    // Clear any existing locationId parameter
-    url.searchParams.delete("locationId")
-
-    // Add the current location's ID
-    url.searchParams.set("locationId", location.id)
-
-    return url.toString()
+    return createLocationShareUrl(location.id)
   }, [location])
 
   // Update browser URL when showing location details
@@ -141,51 +133,113 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
     return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
   }, [])
 
-  // Share the location
+  // Share the location with enhanced functionality and Sonner toast
   const shareLocation = useCallback(() => {
     if (!location) return
 
-    const title = location.name
-    const text = `Check out ${location.name}`
+    // Create a rich description that includes key details about the location
+    const title = `Check out ${location.name} on Local Explorer`
+    const description = location.description
+      ? `${location.description.substring(0, 100)}${location.description.length > 100 ? "..." : ""}`
+      : `I found this interesting place called ${location.name}!`
+
     const shareUrl = getShareableUrl()
 
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+
+    // Use Web Share API for mobile devices
     if (navigator.share) {
       navigator
         .share({
           title,
-          text,
+          text: description,
           url: shareUrl,
         })
-        .catch((err) => console.error("Error sharing:", err))
-    } else {
-      // Fallback for browsers that don't support the Web Share API
-      navigator.clipboard
-        .writeText(`${text} - ${shareUrl}`)
         .then(() => {
-          toast({
-            title: "Link copied!",
-            description: "Location link copied to clipboard",
+          // Show success toast
+          toast.success("Shared successfully", {
+            description: "The location has been shared",
+            duration: 3000,
           })
         })
-        .catch((err) => console.error("Error copying to clipboard:", err))
+        .catch((err) => {
+          // Only show error for actual errors, not user cancellations
+          if (err.name !== "AbortError") {
+            console.error("Error sharing:", err)
+            toast.error("Sharing failed", {
+              description: "Could not share this location",
+              duration: 3000,
+            })
+          }
+        })
+    } else {
+      // For desktop browsers, copy to clipboard with better feedback
+      try {
+        // Create a temporary element to hold the rich text
+        const shareText = `${title}\n\n${description}\n\nView it here: ${shareUrl}`
+
+        navigator.clipboard
+          .writeText(shareText)
+          .then(() => {
+            toast.success("Link copied!", {
+              description: "Location link copied to clipboard",
+              duration: 3000,
+              action: {
+                label: "View",
+                onClick: () => window.open(shareUrl, "_blank"),
+              },
+            })
+          })
+          .catch((err) => {
+            console.error("Clipboard error:", err)
+            toast.error("Copy failed", {
+              description: "Could not copy to clipboard. Try again or use another sharing method.",
+              duration: 5000,
+            })
+          })
+      } catch (err) {
+        console.error("Share error:", err)
+        toast.error("Sharing failed", {
+          description: "Could not share this location",
+          duration: 3000,
+        })
+      }
     }
   }, [location, getShareableUrl])
 
-  // Copy link to clipboard
+  // Copy link to clipboard with enhanced feedback
   const copyLink = useCallback(() => {
     if (!location) return
 
     const shareUrl = getShareableUrl()
 
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+
     navigator.clipboard
       .writeText(shareUrl)
       .then(() => {
-        toast({
-          title: "Link copied!",
+        toast.success("Link copied!", {
           description: "Location link copied to clipboard",
+          duration: 3000,
+          action: {
+            label: "View",
+            onClick: () => window.open(shareUrl, "_blank"),
+          },
         })
       })
-      .catch((err) => console.error("Error copying to clipboard:", err))
+      .catch((err) => {
+        console.error("Error copying to clipboard:", err)
+        toast.error("Copy failed", {
+          description: "Could not copy link to clipboard",
+          duration: 3000,
+        })
+      })
   }, [location, getShareableUrl])
 
   // If no location is provided, render nothing in the dialog
@@ -385,7 +439,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                               const address =
                                 typeof location.address === "string"
                                   ? location.address
-                                  : Object.values(location.address).filter(Boolean).join(", ")
+                                  : location.address ? Object.values(location.address).filter(Boolean).join(", ") : ""
 
                               const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
                               window.open(mapsUrl, "_blank")
@@ -756,8 +810,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
             )}
 
             <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                <X className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full -mx-2">
               </Button>
             </DialogClose>
           </div>

@@ -13,6 +13,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { Copy } from "lucide-react"
+import Image from "next/image"
 import {
   Search,
   X,
@@ -72,6 +84,18 @@ export default function MapExplorer() {
   const [viewportHeight, setViewportHeight] = useState(0)
   const [previewPosition, setPreviewPosition] = useState<[number, number] | null>(null)
   const [showLegend, setShowLegend] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
+  const [shareData, setShareData] = useState<{
+    url: string
+    title: string
+    text: string
+    location: Location | null
+  }>({
+    url: "",
+    title: "",
+    text: "",
+    location: null,
+  })
 
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -110,6 +134,51 @@ export default function MapExplorer() {
     }
     return "/placeholder.svg?key=19lq3"
   }, [])
+
+  // Add this useEffect near the top of your component, after your state declarations
+  // but before other useEffects
+
+  useEffect(() => {
+    // Check for locationId in URL when the component mounts
+    const handleInitialLocationId = async () => {
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href)
+        const locationId = url.searchParams.get("locationId")
+
+        if (locationId && allLocations.length > 0) {
+          // Find the location with the matching ID
+          const location = allLocations.find((loc) => loc.id === locationId)
+
+          if (location) {
+            console.log("Opening location from URL parameter:", location.name)
+
+            // Select the location
+            setSelectedLocation(location)
+
+            // Open the detail dialog
+            setIsDetailOpen(true)
+
+            // Center map on the location
+            const coordinates = getLocationCoordinates(location)
+            if (coordinates) {
+              setMapCenter(coordinates)
+              setMapZoom(14)
+            }
+
+            // Switch to map view if on mobile
+            if (isMobile && activeView !== "map") {
+              setActiveView("map")
+            }
+          }
+        }
+      }
+    }
+
+    // Only run this effect when allLocations are loaded
+    if (allLocations.length > 0) {
+      handleInitialLocationId()
+    }
+  }, [allLocations, getLocationCoordinates, isMobile, activeView])
 
   // Browser detection
   useEffect(() => {
@@ -660,27 +729,64 @@ export default function MapExplorer() {
   }, [showMobilePreview, isSearchExpanded, closeMobilePreview])
 
   // Share location function
-  const shareLocation = useCallback((location: Location) => {
-    const title = location.name
-    const text = `Check out ${location.name}`
-    const url = window.location.href
+  // Share location function with improved design and user experience
+  const shareLocation = useCallback(
+    (location: Location) => {
+      if (!location) return
 
-    if (navigator.share) {
-      navigator
-        .share({
+      // Create a properly formatted share URL with the location ID
+      const createShareUrl = () => {
+        const url = new URL(window.location.origin + window.location.pathname)
+        // Add the location ID as a parameter
+        url.searchParams.set("locationId", location.id)
+        return url.toString()
+      }
+
+      const shareUrl = createShareUrl()
+      const title = `Check out ${location.name} on Local Explorer`
+      const text = location.description
+        ? `${location.name} - ${location.description.substring(0, 100)}${location.description.length > 100 ? "..." : ""}`
+        : `I found this interesting place called ${location.name}!`
+
+      // Use the Web Share API if available (mobile devices)
+      if (navigator.share) {
+        navigator
+          .share({
+            title,
+            text,
+            url: shareUrl,
+          })
+          .then(() => {
+            // Show success toast
+            toast( "Location shared!", {
+             
+              description: "The location has been shared",
+            })
+          })
+          .catch((err) => {
+            // Only show error for actual errors, not user cancellations
+            if (err.name !== "AbortError") {
+              console.error("Error sharing:", err)
+              toast("Share failed", {
+               
+                description: "Could not share this location",
+               
+              })
+            }
+          })
+      } else {
+        // For desktop browsers, show a share dialog with options
+        setShareDialogOpen(true)
+        setShareData({
+          url: shareUrl,
           title,
           text,
-          url,
+          location,
         })
-        .catch((err) => console.error("Error sharing:", err))
-    } else {
-      // Fallback for browsers that don't support the Web Share API
-      navigator.clipboard
-        .writeText(`${text} - ${url}`)
-        .then(() => alert("Location link copied to clipboard!"))
-        .catch((err) => console.error("Error copying to clipboard:", err))
-    }
-  }, [])
+      }
+    },
+    [toast],
+  )
 
   // Scroll to top function for list view
   const scrollToTop = useCallback(() => {
@@ -691,6 +797,53 @@ export default function MapExplorer() {
       })
     }
   }, [])
+
+  // Add this function to your component, near your other handler functions:
+  const openLocationById = useCallback(
+    (locationId: string) => {
+      const location = allLocations.find((loc) => loc.id === locationId)
+
+      if (location) {
+        // Select the location
+        setSelectedLocation(location)
+
+        // Open the detail dialog
+        setIsDetailOpen(true)
+
+        // Center map on the location
+        const coordinates = getLocationCoordinates(location)
+        if (coordinates) {
+          setMapCenter(coordinates)
+          setMapZoom(14)
+        }
+
+        // Switch to map view if on mobile
+        if (isMobile && activeView !== "map") {
+          setActiveView("map")
+        }
+
+        return true
+      }
+
+      return false
+    },
+    [allLocations, getLocationCoordinates, isMobile, activeView],
+  )
+
+  // Expose this function globally for deep linking
+  useEffect(() => {
+    if (typeof window !== "undefined" && allLocations.length > 0) {
+      
+      window.openLocationById = openLocationById
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        
+        delete window.openLocationById
+      }
+    }
+  }, [openLocationById, allLocations])
 
   // Add this useEffect after the other useEffects in the component
   useEffect(() => {
@@ -713,6 +866,168 @@ export default function MapExplorer() {
       document.removeEventListener("viewLocationDetails", handleViewLocationDetails as EventListener)
     }
   }, [allLocations])
+
+  // Add this ShareDialog component just before the return statement of your component
+  const ShareDialog = () => {
+    if (!shareData.location) return null
+
+    const copyToClipboard = async () => {
+      try {
+        await navigator.clipboard.writeText(shareData.url)
+        toast( "Link copied!", {
+         
+          description: "Location link copied to clipboard",
+        })
+        setShareDialogOpen(false)
+      } catch (err) {
+        console.error("Error copying to clipboard:", err)
+        toast( "Copy failed", {
+         
+          description: "Could not copy link to clipboard",
+          
+        })
+      }
+    }
+
+    const shareViaEmail = () => {
+      const subject = encodeURIComponent(shareData.title)
+      const body = encodeURIComponent(`${shareData.text}\n\nCheck it out here: ${shareData.url}`)
+      window.open(`mailto:?subject=${subject}&body=${body}`, "_blank")
+      setShareDialogOpen(false)
+    }
+
+    const shareViaFacebook = () => {
+      window.open(
+        `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareData.url)}`,
+        "_blank",
+        "width=600,height=400",
+      )
+      setShareDialogOpen(false)
+    }
+
+    const shareViaTwitter = () => {
+      window.open(
+        `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareData.text)}&url=${encodeURIComponent(shareData.url)}`,
+        "_blank",
+        "width=600,height=400",
+      )
+      setShareDialogOpen(false)
+    }
+
+    const shareViaWhatsApp = () => {
+      window.open(`https://wa.me/?text=${encodeURIComponent(`${shareData.text} ${shareData.url}`)}`, "_blank")
+      setShareDialogOpen(false)
+    }
+
+    return (
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share this location</DialogTitle>
+            <DialogDescription>Share {shareData.location.name} with friends and family</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="flex items-center gap-4">
+              <Image
+                src={getImageUrl(shareData.location) || "/placeholder.svg?height=60&width=60&query=location"}
+                alt={shareData.location.name}
+                width={60}
+                height={60}
+                className="rounded-md object-cover"
+              />
+              <div>
+                <h3 className="font-medium">{shareData.location.name}</h3>
+                <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                  {shareData.location.address
+                    ? typeof shareData.location.address === "string"
+                      ? shareData.location.address
+                      : Object.values(shareData.location.address).filter(Boolean).join(", ")
+                    : "No address available"}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col space-y-2">
+              <div className="relative">
+                <Input value={shareData.url} readOnly className="pr-20" />
+                <Button variant="ghost" size="sm" className="absolute right-1 top-1 h-7" onClick={copyToClipboard}>
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copy
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-4 pt-2">
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-blue-500 hover:bg-blue-600 text-white"
+                onClick={shareViaFacebook}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M9.198 21.5h4v-8.01h3.604l.396-3.98h-4V7.5a1 1 0 0 1 1-1h3v-4h-3a5 5 0 0 0-5 5v2.01h-2l-.396 3.98h2.396v8.01Z" />
+                </svg>
+                <span className="sr-only">Facebook</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-sky-400 hover:bg-sky-500 text-white"
+                onClick={shareViaTwitter}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M22 5.8a8.49 8.49 0 0 1-2.36.64 4.13 4.13 0 0 0 1.81-2.27 8.21 8.21 0 0 1-2.61 1 4.1 4.1 0 0 0-7 3.74 11.64 11.64 0 0 1-8.45-4.29 4.16 4.16 0 0 0-.55 2.07 4.09 4.09 0 0 0 1.82 3.41 4.05 4.05 0 0 1-1.86-.51v.05a4.1 4.1 0 0 0 3.3 4 3.93 3.93 0 0 1-1.1.17 4.9 4.9 0 0 1-.77-.07 4.11 4.11 0 0 0 3.83 2.84A8.22 8.22 0 0 1 3 18.34a7.93 7.93 0 0 1-1-.06 11.57 11.57 0 0 0 6.29 1.85A11.59 11.59 0 0 0 20 8.45v-.53a8.43 8.43 0 0 0 2-2.12Z" />
+                </svg>
+                <span className="sr-only">Twitter</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-green-500 hover:bg-green-600 text-white"
+                onClick={shareViaWhatsApp}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                </svg>
+                <span className="sr-only">WhatsApp</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-gray-500 hover:bg-gray-600 text-white"
+                onClick={shareViaEmail}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect width="20" height="16" x="2" y="4" rx="2" />
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                </svg>
+                <span className="sr-only">Email</span>
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="sm:justify-start">
+            <DialogClose asChild>
+              <Button type="button" variant="secondary">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
 
   if (error) {
     return (
@@ -1541,6 +1856,7 @@ export default function MapExplorer() {
           }
         }
       `}</style>
+      <ShareDialog />
     </div>
   )
 }
