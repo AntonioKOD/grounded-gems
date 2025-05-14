@@ -13,6 +13,44 @@ export const Locations: CollectionConfig = {
     update: () => true,
     delete: () => true,
   },
+  hooks: {
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        if (!req.payload) return doc
+
+        // Handle location verification
+        if (operation === "update" && !previousDoc.isVerified && doc.isVerified) {
+          try {
+            // Notify the creator that their location was verified
+            if (doc.createdBy) {
+              await req.payload.create({
+                collection: "notifications",
+                data: {
+                  recipient: doc.createdBy,
+                  type: "event_update", // Reusing this type for location updates
+                  title: `Your location "${doc.name}" has been verified!`,
+                  message: "Your location listing is now verified and will be featured more prominently.",
+                  relatedTo: {
+                    relationTo: "locations",
+                    value: doc.id,
+                  },
+                  read: false,
+                  createdAt: new Date().toISOString(),
+                },
+              })
+            }
+
+            // Optionally, notify users who have interacted with this location
+            // This would require tracking user interactions with locations
+          } catch (error) {
+            console.error("Error creating location verification notification:", error)
+          }
+        }
+
+        return doc
+      },
+    ],
+  },
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },

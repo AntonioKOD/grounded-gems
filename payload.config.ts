@@ -15,6 +15,8 @@ import { Specials }     from './collections/Specials';
 import { Subscribers }  from './collections/Subscribers';
 import {resendAdapter} from '@payloadcms/email-resend'
 import {vercelBlobStorage} from '@payloadcms/storage-vercel-blob'
+import { Posts } from './collections/Posts'
+import { Notifications } from './collections/Notifications'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -41,6 +43,8 @@ export default buildConfig({
     Reviews,
     Specials,
     Subscribers,
+    Posts,
+    Notifications,
   ],
   
   secret: process.env.PAYLOAD_SECRET || '',

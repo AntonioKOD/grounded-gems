@@ -1,5 +1,5 @@
 import { CollectionConfig } from 'payload';
-import { lexicalEditor } from '@payloadcms/richtext-lexical';
+
 
 export const Reviews: CollectionConfig = {
   slug: 'reviews',
@@ -20,7 +20,7 @@ export const Reviews: CollectionConfig = {
   fields: [
     // Basic Information
     { name: 'title', type: 'text', required: true },
-    { name: 'content', type: 'richText', required: true, editor: lexicalEditor({}) },
+    { name: 'content', type: 'text', required: true,  },
     { name: 'rating', type: 'number', required: true, min: 1, max: 5 },
 
     // Review Target
@@ -38,15 +38,7 @@ export const Reviews: CollectionConfig = {
     { name: 'event',    type: 'relationship', relationTo: 'events' },
     { name: 'special',  type: 'relationship', relationTo: 'specials' },
 
-    // Media
-    {
-      name: 'photos',
-      type: 'array',
-      fields: [
-        { name: 'photo', type: 'upload', relationTo: 'media', required: true },
-        { name: 'caption', type: 'text' },
-      ],
-    },
+    
 
     // Review Details
     { name: 'visitDate', type: 'date' },

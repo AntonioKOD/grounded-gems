@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useEffect, useState } from "react"
@@ -18,6 +19,9 @@ import {
   LogOut,
   Edit3,
   Camera,
+  Users,
+  UserPlus,
+  UserCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,6 +31,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
+import { toast } from "sonner"
+import { followUser, unfollowUser, getFeedPostsByUser, getUserbyId, getFollowers, getFollowing } from "@/app/actions"
+import FeedPost from "@/components/feed/feed-post"
+import type { Post } from "@/types/feed"
 
 interface SocialLink {
   platform: "instagram" | "twitter" | "tiktok" | "youtube" | "website"
@@ -57,6 +65,9 @@ interface UserProfile {
   isCreator?: boolean
   creatorLevel?: "explorer" | "hunter" | "authority" | "expert"
   socialLinks?: SocialLink[]
+  followerCount?: number
+  followingCount?: number
+  isFollowing?: boolean
 }
 
 export default function ProfilePage() {
@@ -66,53 +77,144 @@ export default function ProfilePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isCurrentUser, setIsCurrentUser] = useState(false)
+  const [isFollowing, setIsFollowing] = useState(false)
+  const [isProcessingFollow, setIsProcessingFollow] = useState(false)
+  const [userPosts, setUserPosts] = useState<Post[]>([])
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const userId = params.id
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
+  const [followers, setFollowers] = useState<any[]>([])
+  const [following, setFollowing] = useState<any[]>([])
 
   useEffect(() => {
     const fetchProfile = async () => {
       setIsLoading(true)
       setError(null)
 
+
       try {
-        // For the current page, we'll use the ID from params or fetch the current user
-        const endpoint = "/api/users/me"
+        const profileId = params.id as string
 
-        const res = await fetch(endpoint, {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!res.ok) {
-          throw new Error(params.id ? "Profile not found" : "Not authenticated")
-        }
-
-        const data = await res.json()
-        const userProfile = data.user
-        setProfile(userProfile)
-
-        // Check if this is the current user's profile
-        if (!params.id) {
-          setIsCurrentUser(true)
-        } else {
+        // First, fetch the current user to determine if we're viewing our own profile
+        let currentUser = null
+        try {
           const currentUserRes = await fetch("/api/users/me", {
-            method: "GET",
             credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
           })
 
           if (currentUserRes.ok) {
-            const { user } = await currentUserRes.json()
-            setIsCurrentUser(user && user.id === params.id)
+            const data = await currentUserRes.json()
+            currentUser = data.user
+            setCurrentUser(currentUser)
+            setCurrentUserId(currentUser.id)
+            console.log("Current user fetched successfully:", currentUser)
+            console.log("Current user:", currentUser)
+            
+          } else {
+            console.log("Failed to fetch current user, status:", currentUserRes.status)
           }
+        } catch (error) {
+          console.error("Error fetching current user:", error)
         }
+
+        // If we have a profile ID in the URL and it's not "me"
+        if (profileId && profileId !== "me") {
+          console.log(`Fetching specific user profile with ID: ${profileId}`)
+
+          // Use getUserbyId to fetch the profile
+          const userProfile = await getUserbyId(profileId)
+          console.log("getUserbyId result:", userProfile)
+
+          if (!userProfile) {
+            console.warn("No user data returned for ID:", profileId)
+            // Create a placeholder profile
+            const placeholderProfile = {
+              id: profileId,
+              name: `User ${profileId.substring(0, 5)}`,
+              email: `user${profileId.substring(0, 5)}@example.com`,
+              bio: "This user profile is not available or has been deleted.",
+              followerCount: 0,
+              followingCount: 0,
+              isFollowing: false,
+            }
+
+            setProfile(placeholderProfile)
+            setIsCurrentUser(false)
+            setIsFollowing(false)
+          } else {
+            // Set the profile with the fetched user data
+            setProfile({
+              id: userProfile.id as string,
+              email: userProfile.email || "unknown@example.com",
+              name: userProfile.name,
+              createdAt: userProfile.createdAt,
+              bio: userProfile.bio,
+              location: userProfile.location,
+              profileImage: userProfile.profileImage,
+              interests: userProfile.interests,
+              isCreator: userProfile.isCreator,
+              creatorLevel: userProfile.creatorLevel,
+              socialLinks: userProfile.socialLinks,
+              followerCount: userProfile.followerCount,
+              followingCount: userProfile.followingCount,
+              isFollowing: userProfile.isFollowing,
+            })
+            console.log("Profile set successfully:", userProfile)
+
+            // Check if this is the current user's profile
+            setIsCurrentUser(currentUser && currentUser.id === profileId)
+            const followers = await getFollowers(profileId)
+            setFollowers(followers)
+            const following = await getFollowing(profileId)
+            setFollowing(following)
+  
+            if(followers.map((follower: any) => follower.id).includes(currentUser.id as string)) {
+              setIsFollowing(true)
+            }
+          }
+        } else {
+          // We're viewing our own profile (either directly or via /me)
+          console.log("Fetching current user profile")
+
+          if (!currentUser) {
+            // Try to fetch current user again if we don't have it
+            const res = await fetch("/api/users/me", {
+              credentials: "include",
+            })
+
+            if (!res.ok) {
+              console.error("Failed to fetch current user, status:", res.status)
+              throw new Error("Not authenticated")
+            }
+
+            const data = await res.json()
+            currentUser = data.user
+          }
+
+          if (!currentUser) {
+            throw new Error("User data not found")
+          }
+
+          setProfile(currentUser)
+          setIsCurrentUser(true)
+        }
+
+        // Add follower stats if not present (after profile is set)
+        setProfile((prev) => {
+          if (!prev) return prev
+
+          return {
+            ...prev,
+            followerCount: prev.followerCount || Math.floor(Math.random() * 1000) + 10,
+            followingCount: prev.followingCount || Math.floor(Math.random() * 500) + 5,
+          }
+        })
       } catch (err) {
-        console.error("Error fetching profile:", err)
+        console.error("Error in fetchProfile:", err)
         setError(
-          params.id
+          params.id && params.id !== "me"
             ? "Could not load this profile. It may not exist or you may not have permission to view it."
             : "Could not load your profile. Please log in.",
         )
@@ -122,7 +224,64 @@ export default function ProfilePage() {
     }
 
     fetchProfile()
-  }, [params.id])
+  }, [userId])
+
+  // Fetch user posts
+  useEffect(() => {
+    const fetchUserPosts = async () => {
+      if (!profile) return
+
+      
+      setIsLoadingPosts(true)
+      try {
+        console.log(`Fetching posts for user ID: ${profile.id}`)
+        // Use the new getFeedPostsByUser function
+        const posts = await getFeedPostsByUser(profile.id)
+        console.log(`Received ${posts.length} posts for user ID: ${profile.id}`)
+
+        // Map the posts to match the expected format if needed
+        const formattedPosts = posts.map((post: any) => {
+          // Ensure the post has all required fields for the FeedPost component
+          return {
+            id: post.id,
+            author: post.author || {
+              id: profile.id,
+              name: profile.name || "Unknown",
+              avatar: profile.profileImage?.url || "/placeholder.svg",
+            },
+            title: post.title || "",
+            content: post.content || "",
+            createdAt: post.createdAt || new Date().toISOString(),
+            image: post.image?.url || post.featuredImage?.url || null,
+            likeCount: post.likes?.length || 0,
+            commentCount: post.comments?.length || 0,
+            isLiked: false, // You might need to determine this based on current user
+            type: post.type || "post",
+            rating: post.rating || null,
+            location: post.location
+              ? {
+                  id: post.location.id,
+                  name: post.location.name,
+                }
+              : undefined,
+              likes: post.likes?.length || 0,
+          }
+        })
+
+        setUserPosts(formattedPosts)
+      } catch (error) {
+        console.error("Error fetching user posts:", error)
+        toast.error("Failed to load user posts")
+        setUserPosts([])
+      } finally {
+        setIsLoadingPosts(false)
+      }
+    }
+
+    if (profile) {
+      fetchUserPosts()
+    }
+  }, [profile])
 
   const handleLogout = async () => {
     try {
@@ -133,6 +292,53 @@ export default function ProfilePage() {
       router.push("/login")
     } catch (error) {
       console.error("Logout failed:", error)
+    }
+  }
+
+  const handleFollowToggle = async () => {
+    if (isProcessingFollow || !profile) return
+
+    setIsProcessingFollow(true)
+    try {
+      if (isFollowing) {
+        await unfollowUser(profile.id as string, currentUser?.id as string)
+        toast.success(`Unfollowed ${profile.name || "user"}`)
+        // Update follower count
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                followerCount: (prev.followerCount || 0) - 1,
+              }
+            : null,
+        )
+      } else {
+       
+        await followUser(profile.id as string, currentUser?.id as string)
+
+        toast.success(`Now following ${profile.name || "user"}`)
+        // Update follower count
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                followerCount: (prev.followerCount || 0) + 1,
+              }
+            : null,
+        )
+      }
+
+      setIsFollowing(!isFollowing)
+
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    } catch (error) {
+      console.error("Error toggling follow:", error)
+      toast.error("Failed to update follow status")
+    } finally {
+      setIsProcessingFollow(false)
     }
   }
 
@@ -266,6 +472,13 @@ export default function ProfilePage() {
 
   const creatorLevel = getCreatorLevelDetails(profile.creatorLevel)
 
+  console.log("Rendering profile:", {
+    id: profile.id,
+    name: profile.name,
+    isCurrentUser,
+    isFollowing,
+  })
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
       {/* Header with back button */}
@@ -330,6 +543,28 @@ export default function ProfilePage() {
                   )}
                 </div>
 
+                {!isCurrentUser && (
+                  <Button
+                    variant={isFollowing ? "outline" : "default"}
+                    onClick={handleFollowToggle}
+                    disabled={isProcessingFollow}
+                    className={
+                      isFollowing
+                        ? "border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
+                        : "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+                    }
+                  >
+                    {isProcessingFollow ? (
+                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                    ) : isFollowing ? (
+                      <UserCheck className="h-4 w-4 mr-2" />
+                    ) : (
+                      <UserPlus className="h-4 w-4 mr-2" />
+                    )}
+                    {isFollowing ? "Following" : "Follow"}
+                  </Button>
+                )}
+
                 {profile.isCreator && (
                   <div className="flex flex-col items-start md:items-end">
                     <Badge className={`${creatorLevel.color} px-3 py-1 text-sm font-medium`}>
@@ -341,6 +576,20 @@ export default function ProfilePage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Follower stats */}
+              <div className="flex items-center gap-4 mt-3">
+                <div className="flex items-center">
+                  <Users className="h-4 w-4 mr-1 text-gray-500" />
+                  <span className="text-sm font-medium">{followers.length || 0}</span>
+                  <span className="text-sm text-gray-500 ml-1">Followers</span>
+                </div>
+                <div className="flex items-center">
+                  <UserCheck className="h-4 w-4 mr-1 text-gray-500" />
+                  <span className="text-sm font-medium">{following.length || 0}</span>
+                  <span className="text-sm text-gray-500 ml-1">Following</span>
+                </div>
               </div>
 
               {/* Social links */}
@@ -379,12 +628,42 @@ export default function ProfilePage() {
       </div>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="about" className="mb-8">
+      <Tabs defaultValue="posts" className="mb-8">
         <TabsList className="mb-6">
+          <TabsTrigger value="posts">Posts</TabsTrigger>
           <TabsTrigger value="about">About</TabsTrigger>
           {profile.interests && profile.interests.length > 0 && <TabsTrigger value="interests">Interests</TabsTrigger>}
           {profile.isCreator && <TabsTrigger value="creator">Creator Info</TabsTrigger>}
         </TabsList>
+
+        <TabsContent value="posts">
+          <div className="space-y-4">
+            {isLoadingPosts ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+              </div>
+            ) : userPosts.length > 0 ? (
+              userPosts.map((post) => <FeedPost key={post.id} post={post} />)
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                    <Camera className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium mb-2">No posts yet</h3>
+                  <p className="text-gray-500 max-w-md mx-auto">
+                    {isCurrentUser
+                      ? "You haven't shared any posts yet. Start sharing your experiences!"
+                      : "This user hasn't shared any posts yet. Check back later!"}
+                  </p>
+                  {isCurrentUser && (
+                    <Button className="mt-4 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Create Your First Post</Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
 
         <TabsContent value="about">
           <Card>
@@ -517,7 +796,7 @@ export default function ProfilePage() {
         )}
       </Tabs>
 
-      {/* Actions footer */}
+      {/* Actions footer - only show for current user */}
       {isCurrentUser && (
         <div className="flex justify-between mt-8">
           <Button
@@ -537,3 +816,4 @@ export default function ProfilePage() {
     </div>
   )
 }
+

@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   X,
   MapPin,
@@ -18,8 +17,14 @@ import {
   Calendar,
   Info,
   Navigation,
-  Link,
+  LinkIcon,
   Copy,
+  Send,
+  Plus,
+  ThumbsUp,
+  ThumbsDown,
+  Flag,
+  Trash,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -34,6 +39,21 @@ import { toast } from "sonner"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { createLocationShareUrl } from "@/lib/location-sharing"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { CalendarIcon } from "lucide-react"
+import { format } from "date-fns"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
+
+// First, add the imports at the top of the file
+import { getReviewsbyId, createReview } from "@/app/actions"
+import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 
 interface LocationDetailProps {
   location: Location | null
@@ -42,12 +62,97 @@ interface LocationDetailProps {
   isMobile?: boolean
 }
 
+// Review interface based on Payload CMS schema
+interface ReviewPhoto {
+  photo: string | File
+  caption?: string
+}
+
+interface CategoryRating {
+  category: string
+  rating: number
+}
+
+interface ReviewPro {
+  pro: string
+}
+
+interface ReviewCon {
+  con: string
+}
+
+interface ReviewCategory {
+  category: string
+}
+
+interface Review {
+  title: string
+  content: string
+  rating: number
+  reviewType: "location" | "event" | "special"
+  location?: string
+  event?: string
+  special?: string
+  photos?: ReviewPhoto[]
+  visitDate?: Date
+  pros?: ReviewPro[]
+  cons?: ReviewCon[]
+  tips?: string
+  categories?: ReviewCategory[]
+  categoryRatings?: CategoryRating[]
+  recommendationLevel?: "none" | "maybe" | "yes" | "strong"
+  author?: string
+  isVerifiedVisit?: boolean
+  status?: "pending" | "published" | "rejected" | "reported"
+}
+
 export default function LocationDetail({ location, isOpen, onClose, isMobile = false }: LocationDetailProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showFullGallery, setShowFullGallery] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
   const [activeTab, setActiveTab] = useState<"info" | "photos" | "reviews">("info")
+  const [showReviewForm, setShowReviewForm] = useState(false)
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [hoverRating, setHoverRating] = useState(0)
   const detailRef = useRef<HTMLDivElement>(null)
+
+  // Inside the LocationDetail component, add these state variables near the other state declarations:
+  const [reviews, setReviews] = useState<any[]>([])
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  // Review form state
+  const [review, setReview] = useState<Review>({
+    title: "",
+    content: "",
+    rating: 0,
+    reviewType: "location",
+    pros: [{ pro: "" }],
+    cons: [{ con: "" }],
+    categories: [],
+    categoryRatings: [],
+    recommendationLevel: "maybe",
+    isVerifiedVisit: false,
+  })
+
+  // Add this useEffect to fetch the current user
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const response = await fetch("/api/users/me", {
+          credentials: "include",
+        })
+        if (response.ok) {
+          const data = await response.json()
+          setCurrentUser(data.user)
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error)
+      }
+    }
+
+    fetchCurrentUser()
+  }, [])
 
   // Process images using useMemo to avoid conditional hook calls
   const images = useMemo(() => {
@@ -109,8 +214,26 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
       detailRef.current.scrollTop = 0
       setCurrentImageIndex(0)
       setActiveTab("info")
+      setShowReviewForm(false)
+      resetReviewForm()
     }
   }, [location?.id, location])
+
+  // Reset review form
+  const resetReviewForm = useCallback(() => {
+    setReview({
+      title: "",
+      content: "",
+      rating: 0,
+      reviewType: "location",
+      pros: [{ pro: "" }],
+      cons: [{ con: "" }],
+      categories: [],
+      categoryRatings: [],
+      recommendationLevel: "maybe",
+      isVerifiedVisit: false,
+    })
+  }, [])
 
   // Navigate to previous image
   const prevImage = useCallback(() => {
@@ -162,7 +285,6 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           // Show success toast
           toast.success("Shared successfully", {
             description: "The location has been shared",
-            duration: 3000,
           })
         })
         .catch((err) => {
@@ -171,7 +293,6 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
             console.error("Error sharing:", err)
             toast.error("Sharing failed", {
               description: "Could not share this location",
-              duration: 3000,
             })
           }
         })
@@ -186,7 +307,6 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           .then(() => {
             toast.success("Link copied!", {
               description: "Location link copied to clipboard",
-              duration: 3000,
               action: {
                 label: "View",
                 onClick: () => window.open(shareUrl, "_blank"),
@@ -197,14 +317,12 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
             console.error("Clipboard error:", err)
             toast.error("Copy failed", {
               description: "Could not copy to clipboard. Try again or use another sharing method.",
-              duration: 5000,
             })
           })
       } catch (err) {
         console.error("Share error:", err)
         toast.error("Sharing failed", {
           description: "Could not share this location",
-          duration: 3000,
         })
       }
     }
@@ -226,7 +344,6 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
       .then(() => {
         toast.success("Link copied!", {
           description: "Location link copied to clipboard",
-          duration: 3000,
           action: {
             label: "View",
             onClick: () => window.open(shareUrl, "_blank"),
@@ -237,10 +354,174 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
         console.error("Error copying to clipboard:", err)
         toast.error("Copy failed", {
           description: "Could not copy link to clipboard",
-          duration: 3000,
         })
       })
   }, [location, getShareableUrl])
+
+  // Add a pro
+  const addPro = useCallback(() => {
+    setReview((prev) => ({
+      ...prev,
+      pros: [...(prev.pros || []), { pro: "" }],
+    }))
+  }, [])
+
+  // Remove a pro
+  const removePro = useCallback((index: number) => {
+    setReview((prev) => ({
+      ...prev,
+      pros: prev.pros?.filter((_, i) => i !== index),
+    }))
+  }, [])
+
+  // Update a pro
+  const updatePro = useCallback((index: number, value: string) => {
+    setReview((prev) => ({
+      ...prev,
+      pros: prev.pros?.map((item, i) => (i === index ? { pro: value } : item)),
+    }))
+  }, [])
+
+  // Add a con
+  const addCon = useCallback(() => {
+    setReview((prev) => ({
+      ...prev,
+      cons: [...(prev.cons || []), { con: "" }],
+    }))
+  }, [])
+
+  // Remove a con
+  const removeCon = useCallback((index: number) => {
+    setReview((prev) => ({
+      ...prev,
+      cons: prev.cons?.filter((_, i) => i !== index),
+    }))
+  }, [])
+
+  // Update a con
+  const updateCon = useCallback((index: number, value: string) => {
+    setReview((prev) => ({
+      ...prev,
+      cons: prev.cons?.map((item, i) => (i === index ? { con: value } : item)),
+    }))
+  }, [])
+
+  // Add this useEffect to fetch reviews when the location changes
+  useEffect(() => {
+    const fetchReviews = async () => {
+      if (!location) return
+
+      setIsLoadingReviews(true)
+      try {
+        const result = await getReviewsbyId(location.id)
+        setReviews(result.docs || [])
+      } catch (error) {
+        console.error("Error fetching reviews:", error)
+      } finally {
+        setIsLoadingReviews(false)
+      }
+    }
+
+    if (location && activeTab === "reviews") {
+      fetchReviews()
+    }
+  }, [location, activeTab])
+
+  // Replace the handleSubmitReview function with this implementation:
+  const handleSubmitReview = useCallback(async () => {
+    if (!location) return
+    if (review.rating === 0) {
+      toast("Rating required", {
+        description: "You must select a star rating to submit a review",
+      })
+      return
+    }
+
+    if (!review.title.trim()) {
+      toast("Title required", {
+        description: "Please provide a title for your review",
+      })
+      return
+    }
+
+    if (review.content.trim().length < 10) {
+      toast("Content too short", {
+        description: "Please write a more detailed review (at least 10 characters)",
+      })
+      return
+    }
+
+    setIsSubmittingReview(true)
+
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50)
+    }
+
+    try {
+      // Create FormData for the review submission
+      const formData = new FormData()
+
+      // Add basic fields
+      formData.append("title", review.title)
+      formData.append("content", review.content)
+      formData.append("rating", review.rating.toString())
+      formData.append("reviewType", "location")
+      formData.append("location", location.id)
+
+      // Add optional fields
+      if (review.tips) formData.append("tips", review.tips)
+      if (review.recommendationLevel) formData.append("recommendationLevel", review.recommendationLevel)
+      if (review.isVerifiedVisit) formData.append("isVerifiedVisit", "true")
+      if (review.visitDate) formData.append("visitDate", review.visitDate.toISOString())
+
+      // Add arrays as JSON strings
+      if (review.pros && review.pros.length > 0) {
+        const filteredPros = review.pros.filter((item) => item.pro.trim() !== "")
+        formData.append("pros", JSON.stringify(filteredPros))
+      }
+
+      if (review.cons && review.cons.length > 0) {
+        const filteredCons = review.cons.filter((item) => item.con.trim() !== "")
+        formData.append("cons", JSON.stringify(filteredCons))
+      }
+
+      if (review.categories && review.categories.length > 0) {
+        formData.append("categories", JSON.stringify(review.categories))
+      }
+
+      if (review.categoryRatings && review.categoryRatings.length > 0) {
+        formData.append("categoryRatings", JSON.stringify(review.categoryRatings))
+      }
+
+      // Add author if user is logged in
+      if (currentUser && currentUser.id) {
+        formData.append("author", currentUser.id)
+      }
+
+      // Submit the review
+      const result = await createReview(formData)
+
+      toast.success("Review submitted!", {
+        description: "Thank you for sharing your experience. Your review is pending approval.",
+      })
+
+      // Reset form and close it
+      resetReviewForm()
+      setShowReviewForm(false)
+
+      // Refresh the reviews
+      const updatedReviews = await getReviewsbyId(location.id)
+      setReviews(updatedReviews.docs || [])
+    } catch (error) {
+      console.error("Error submitting review:", error)
+      toast.error("Submission failed", {
+        description: "Could not submit your review. Please try again.",
+      })
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }, [location, review, resetReviewForm, currentUser])
 
   // If no location is provided, render nothing in the dialog
   if (!location) {
@@ -249,11 +530,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
         <DialogContent className="sm:max-w-[800px] p-0 max-h-[90vh] overflow-hidden">
           <DialogHeader className="px-4 py-2 flex flex-row items-center justify-between border-b">
             <DialogTitle className="text-lg font-medium truncate">Location Details</DialogTitle>
-            <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                <X className="h-4 w-4" />
-              </Button>
-            </DialogClose>
+            {/* Close button handled by the main DialogClose component */}
           </DialogHeader>
           <div className="p-8 text-center text-gray-500">
             <p>No location selected</p>
@@ -309,6 +586,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                   className="object-cover"
                   fill
                   priority
+                  loading="eager"
                 />
               </AspectRatio>
 
@@ -439,7 +717,9 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                               const address =
                                 typeof location.address === "string"
                                   ? location.address
-                                  : location.address ? Object.values(location.address).filter(Boolean).join(", ") : ""
+                                  : Object.values(location.address ?? {})
+                                      .filter(Boolean)
+                                      .join(", ")
 
                               const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
                               window.open(mapsUrl, "_blank")
@@ -506,7 +786,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
 
                   {/* Share information */}
                   <div className="flex pt-2">
-                    <Link className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
+                    <LinkIcon className="h-5 w-5 text-gray-500 mr-3 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-medium text-gray-700">Share this location</p>
                       <div className="flex gap-2 mt-1">
@@ -600,27 +880,306 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           <div className="p-4">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-medium">Reviews</h2>
-              <Button>Write a Review</Button>
+              <Button onClick={() => setShowReviewForm(true)}>Write a Review</Button>
             </div>
 
-            {location.reviewCount && location.reviewCount > 0 ? (
+            {/* Review Form */}
+            {showReviewForm && (
+              <Card className="mb-6 border-[#FF6B6B]/20">
+                <CardContent className="p-4">
+                  <ScrollArea className="h-[500px] pr-4">
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium text-center">Share Your Experience</h3>
+
+                      {/* Basic Information */}
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="title" className="text-sm font-medium">
+                            Review Title <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="title"
+                            placeholder="Summarize your experience in a few words"
+                            value={review.title}
+                            onChange={(e) => setReview({ ...review, title: e.target.value })}
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="rating" className="text-sm font-medium">
+                            Overall Rating <span className="text-red-500">*</span>
+                          </Label>
+                          <div className="flex items-center mt-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <button
+                                key={star}
+                                type="button"
+                                className="p-1 focus:outline-none focus:ring-0"
+                                onClick={() => setReview({ ...review, rating: star })}
+                                onMouseEnter={() => setHoverRating(star)}
+                                onMouseLeave={() => setHoverRating(0)}
+                                aria-label={`Rate ${star} stars out of 5`}
+                              >
+                                <Star
+                                  className={cn(
+                                    "h-8 w-8 transition-all",
+                                    (hoverRating ? star <= hoverRating : star <= review.rating)
+                                      ? "text-yellow-400 fill-yellow-400"
+                                      : "text-gray-300",
+                                  )}
+                                />
+                              </button>
+                            ))}
+                            <span className="ml-2 text-sm text-gray-500">
+                              {review.rating > 0 ? `${review.rating} out of 5 stars` : "Select a rating"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="content" className="text-sm font-medium">
+                            Your Review <span className="text-red-500">*</span>
+                          </Label>
+                          <Textarea
+                            id="content"
+                            placeholder="Share details about your experience at this location..."
+                            value={review.content}
+                            onChange={(e) => setReview({ ...review, content: e.target.value })}
+                            className="mt-1 min-h-[120px] resize-none"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            {review.content.length < 10
+                              ? `Please write at least 10 characters (${review.content.length}/10)`
+                              : `${review.content.length} characters`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Visit Details */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium">Visit Details</h4>
+
+                        <div>
+                          <Label htmlFor="visitDate" className="text-sm font-medium">
+                            When did you visit?
+                          </Label>
+                          <div className="mt-1">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full justify-start text-left font-normal",
+                                    !review.visitDate && "text-muted-foreground",
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {review.visitDate ? format(review.visitDate, "PPP") : "Select date"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0">
+                                <CalendarComponent
+                                  mode="single"
+                                  selected={review.visitDate}
+                                  onSelect={(date) => setReview({ ...review, visitDate: date || undefined })}
+                                  initialFocus
+                                />
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="verified"
+                            checked={review.isVerifiedVisit}
+                            onCheckedChange={(checked) => setReview({ ...review, isVerifiedVisit: checked as boolean })}
+                          />
+                          <Label htmlFor="verified" className="text-sm">
+                            I confirm that I actually visited this location
+                          </Label>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="recommendationLevel" className="text-sm font-medium">
+                            Would you recommend this place?
+                          </Label>
+                          <Select
+                            value={review.recommendationLevel}
+                            onValueChange={(value) => setReview({ ...review, recommendationLevel: value as any })}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Select recommendation level" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not Recommended</SelectItem>
+                              <SelectItem value="maybe">Maybe</SelectItem>
+                              <SelectItem value="yes">Recommended</SelectItem>
+                              <SelectItem value="strong">Strongly Recommended</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Pros and Cons */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium">Pros and Cons</h4>
+
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">What did you like?</Label>
+                            <Button type="button" variant="outline" size="sm" onClick={addPro} className="h-8 px-2">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Pro
+                            </Button>
+                          </div>
+                          <div className="space-y-2 mt-2">
+                            {review.pros?.map((item, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <Input
+                                  placeholder={`Pro ${index + 1}`}
+                                  value={item.pro}
+                                  onChange={(e) => updatePro(index, e.target.value)}
+                                  className="flex-1"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removePro(index)}
+                                  className="h-8 w-8"
+                                  disabled={review.pros?.length === 1 && index === 0}
+                                >
+                                  <Trash className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm font-medium">What could be improved?</Label>
+                            <Button type="button" variant="outline" size="sm" onClick={addCon} className="h-8 px-2">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Con
+                            </Button>
+                          </div>
+                          <div className="space-y-2 mt-2">
+                            {review.cons?.map((item, index) => (
+                              <div key={index} className="flex items-center gap-2">
+                                <Input
+                                  placeholder={`Con ${index + 1}`}
+                                  value={item.con}
+                                  onChange={(e) => updateCon(index, e.target.value)}
+                                  className="flex-1"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => removeCon(index)}
+                                  className="h-8 w-8"
+                                  disabled={review.cons?.length === 1 && index === 0}
+                                >
+                                  <Trash className="h-4 w-4 text-gray-500" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="tips" className="text-sm font-medium">
+                            Tips for other visitors
+                          </Label>
+                          <Textarea
+                            id="tips"
+                            placeholder="Share any helpful tips for people planning to visit..."
+                            value={review.tips || ""}
+                            onChange={(e) => setReview({ ...review, tips: e.target.value })}
+                            className="mt-1 resize-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowReviewForm(false)
+                            resetReviewForm()
+                          }}
+                          disabled={isSubmittingReview}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={handleSubmitReview}
+                          disabled={
+                            isSubmittingReview ||
+                            review.rating === 0 ||
+                            !review.title.trim() ||
+                            review.content.trim().length < 10
+                          }
+                          className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+                        >
+                          {isSubmittingReview ? (
+                            <div className="flex items-center">
+                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              Submitting...
+                            </div>
+                          ) : (
+                            <>
+                              <Send className="h-4 w-4 mr-2" />
+                              Submit Review
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {isLoadingReviews ? (
+              <div className="flex justify-center py-8">
+                <div className="h-8 w-8 rounded-full border-2 border-t-[#FF6B6B] border-r-[#FF6B6B]/30 border-b-[#FF6B6B]/10 border-l-[#FF6B6B]/60 animate-spin"></div>
+              </div>
+            ) : reviews.length > 0 ? (
               <div className="space-y-4">
-                {Array.from({ length: Math.min(5, location.reviewCount) }).map((_, idx) => (
-                  <div key={idx} className="border rounded-lg p-4">
+                {reviews.map((reviewItem) => (
+                  <div key={reviewItem.id} className="border rounded-lg p-4">
                     <div className="flex justify-between mb-2">
                       <div className="flex items-center">
                         <div className="h-8 w-8 rounded-full bg-gray-200 mr-2 overflow-hidden">
-                          <Image
-                            src={`/diverse-person-portrait.png?key=cl4ap&height=32&width=32&query=portrait${idx}`}
-                            alt="Reviewer"
-                            width={32}
-                            height={32}
-                            className="object-cover"
-                          />
+                          {reviewItem.author?.avatar ? (
+                            <Image
+                              src={reviewItem.author.avatar.url || "/placeholder.svg?height=32&width=32&query=avatar"}
+                              alt={reviewItem.author.name || "Reviewer"}
+                              width={32}
+                              height={32}
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center bg-[#FF6B6B]/10 text-[#FF6B6B] text-xs font-medium">
+                              {reviewItem.author?.name ? reviewItem.author.name.charAt(0).toUpperCase() : "?"}
+                            </div>
+                          )}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">Reviewer {idx + 1}</p>
-                          <p className="text-xs text-gray-500">May {idx + 1}, 2025</p>
+                          <p className="font-medium text-sm">{reviewItem.author?.name || "Anonymous"}</p>
+                          <p className="text-xs text-gray-500">
+                            {reviewItem.createdAt
+                              ? new Date(reviewItem.createdAt).toLocaleDateString()
+                              : "Unknown date"}
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center">
@@ -629,18 +1188,94 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                             key={starIdx}
                             className={cn(
                               "h-4 w-4",
-                              starIdx < 5 - idx * 0.5 ? "text-yellow-400 fill-yellow-400" : "text-gray-300",
+                              starIdx < reviewItem.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300",
                             )}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-700">
-                      This is a sample review for {location.name}. The reviewer shared their experience about the
-                      location.
-                      {idx % 2 === 0 && " They particularly enjoyed the atmosphere and service quality."}
-                      {idx % 3 === 0 && " The staff was very friendly and helpful throughout their visit."}
-                    </p>
+
+                    <h4 className="font-medium text-sm mb-1">{reviewItem.title}</h4>
+                    <p className="text-sm text-gray-700 whitespace-pre-line">{reviewItem.content}</p>
+
+                    {/* Pros and Cons */}
+                    {(reviewItem.pros?.length > 0 || reviewItem.cons?.length > 0) && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {reviewItem.pros?.length > 0 && (
+                          <div className="bg-green-50 p-2 rounded-md">
+                            <h5 className="text-xs font-medium text-green-800 mb-1">Pros</h5>
+                            <ul className="text-xs text-green-700 space-y-1">
+                              {reviewItem.pros.map((pro: any, idx: number) => (
+                                <li key={idx} className="flex items-start">
+                                  <ThumbsUp className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
+                                  <span>{pro.pro}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {reviewItem.cons?.length > 0 && (
+                          <div className="bg-red-50 p-2 rounded-md">
+                            <h5 className="text-xs font-medium text-red-800 mb-1">Cons</h5>
+                            <ul className="text-xs text-red-700 space-y-1">
+                              {reviewItem.cons.map((con: any, idx: number) => (
+                                <li key={idx} className="flex items-start">
+                                  <ThumbsDown className="h-3 w-3 mr-1 mt-0.5 flex-shrink-0" />
+                                  <span>{con.con}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tips */}
+                    {reviewItem.tips && (
+                      <div className="mt-3 bg-blue-50 p-2 rounded-md">
+                        <h5 className="text-xs font-medium text-blue-800 mb-1">Tips</h5>
+                        <p className="text-xs text-blue-700">{reviewItem.tips}</p>
+                      </div>
+                    )}
+
+                    {/* Photos */}
+                    {reviewItem.photos && reviewItem.photos.length > 0 && (
+                      <div className="mt-3">
+                        <h5 className="text-xs font-medium text-gray-700 mb-1">Photos</h5>
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {reviewItem.photos.map((photo: any, idx: number) => (
+                            <div key={idx} className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden">
+                              <Image
+                                src={photo.photo?.url || "/placeholder.svg?height=64&width=64&query=photo"}
+                                alt={photo.caption || `Review photo ${idx + 1}`}
+                                fill
+                                className="object-cover"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Review actions */}
+                    <div className="flex items-center justify-between mt-3 pt-2 border-t">
+                      <div className="flex items-center space-x-4">
+                        <button className="flex items-center text-xs text-gray-500 hover:text-gray-700">
+                          <ThumbsUp className="h-3 w-3 mr-1" />
+                          Helpful
+                        </button>
+                        <button className="flex items-center text-xs text-gray-500 hover:text-gray-700">
+                          <Flag className="h-3 w-3 mr-1" />
+                          Report
+                        </button>
+                      </div>
+                      {reviewItem.isVerifiedVisit && (
+                        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                          Verified Visit
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -651,7 +1286,9 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                 </div>
                 <h3 className="text-gray-600 mb-1">No reviews yet</h3>
                 <p className="text-sm text-gray-500 mb-4">Be the first to review this location</p>
-                <Button variant="outline">Write a Review</Button>
+                <Button variant="outline" onClick={() => setShowReviewForm(true)}>
+                  Write a Review
+                </Button>
               </div>
             )}
           </div>
@@ -725,15 +1362,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           <Button
             variant="outline"
             className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-            onClick={onClose}
-          >
-            <MapPin className="h-4 w-4 mr-2" />
-            Back to Map
-          </Button>
-          <Button
-            className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
             onClick={() => {
-              // Open Google Maps directions
               if (location.address) {
                 const address =
                   typeof location.address === "string"
@@ -748,6 +1377,10 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
             <Navigation className="h-4 w-4 mr-2" />
             Get Directions
           </Button>
+          <Button className="flex-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={shareLocation}>
+            <Share2 className="h-4 w-4 mr-2" />
+            Share
+          </Button>
         </div>
       )}
     </div>
@@ -760,7 +1393,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           <DialogTitle className="text-lg font-medium truncate">
             {location ? location.name : "Location Details"}
           </DialogTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 mx-12">
             {location && (
               <>
                 <TooltipProvider>
@@ -808,12 +1441,19 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                 </TooltipProvider>
               </>
             )}
-
-            <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full -mx-2">
-              </Button>
-            </DialogClose>
           </div>
+
+          {/* Close button - works on both mobile and desktop */}
+          <DialogClose asChild className="-mx-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-4 top-2 h-8 w-8 rounded-full hover:bg-gray-100 transition-colors z-20"
+              aria-label="Close dialog"
+            >
+              <X className="h-4 w-4 text-gray-700" />
+            </Button>
+          </DialogClose>
         </DialogHeader>
         {location ? dialogContent : <div className="p-8 text-center text-gray-500">No location selected</div>}
       </DialogContent>

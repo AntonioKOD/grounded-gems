@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { CollectionConfig } from 'payload';
 import { lexicalEditor } from '@payloadcms/richtext-lexical';
 
@@ -16,6 +17,56 @@ export const Specials: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     defaultColumns: ['title', 'status', 'startDate', 'endDate'],
+  },
+  hooks: {
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        if (!req.payload) return doc
+
+        // Handle new special creation
+        if (operation === "create" && doc.status === "published") {
+          try {
+            // If the special is for a specific location, notify users who follow that location
+            if (doc.location) {
+              const locationId = typeof doc.location === "object" ? doc.location.id : doc.location
+
+              // Find users who follow this location
+              // This would require a separate collection or field to track location followers
+              // For this example, we'll assume there's a locationFollowers collection
+              const { docs: followers } = await req.payload.find({
+                collection: "locationFollowers",
+                where: {
+                  location: { equals: locationId },
+                },
+              })
+
+              // Notify all followers
+              for (const follower of followers) {
+                await req.payload.create({
+                  collection: "notifications",
+                  data: {
+                    recipient: follower.user,
+                    type: "event_update", // Reusing this type for special offers
+                    title: `New special at a place you follow: ${doc.title}`,
+                    message: doc.shortDescription || doc.description.substring(0, 100),
+                    relatedTo: {
+                      relationTo: "specials",
+                      value: doc.id,
+                    },
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                  },
+                })
+              }
+            }
+          } catch (error) {
+            console.error("Error creating special offer notifications:", error)
+          }
+        }
+
+        return doc
+      },
+    ],
   },
   fields: [
     // Basic Information

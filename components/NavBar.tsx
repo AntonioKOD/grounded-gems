@@ -5,8 +5,20 @@ import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
-import useSWR from "swr"
-import { Menu, X, LogOut, UserCircle, Bell, Settings, Search, ChevronDown, Home, Info, Plus } from "lucide-react"
+import {
+  Menu,
+  X,
+  LogOut,
+  UserCircle,
+  Settings,
+  Search,
+  ChevronDown,
+  Home,
+  Plus,
+  Calendar,
+  MapPin,
+  LayoutList,
+} from "lucide-react"
 
 import { Button } from "./ui/button"
 import {
@@ -23,8 +35,7 @@ import { cn } from "@/lib/utils"
 import logo from "@/public/logo.svg"
 import { logoutUser } from "@/app/actions"
 import { Input } from "@/components/ui/input"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Badge } from "@/components/ui/badge"
+import NotificationCenter from "@/components/notifications/notification-center"
 
 interface UserData {
   id: string
@@ -33,10 +44,11 @@ interface UserData {
   avatar?: string
 }
 
-const fetcher = (url: string) =>
-  fetch(url, { credentials: "include" }).then((res) => (res.ok ? res.json().then((d) => d.user) : null))
+// Replace the fetcher function and SWR hook with:
+const NavBar = () => {
+  const [user, setUser] = useState<UserData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-export default function NavBar() {
   const router = useRouter()
   const pathname = usePathname()
   const [isScrolled, setIsScrolled] = useState(false)
@@ -44,17 +56,16 @@ export default function NavBar() {
   const [searchQuery, setSearchQuery] = useState("")
   const menuRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+
   // Add a new state for search visibility on mobile
   const [showMobileSearch, setShowMobileSearch] = useState(false)
-
-  // SWR for current user
-  const { data: user, mutate } = useSWR<UserData | null>("/api/users/me", fetcher)
 
   // Navigation links
   const navLinks = [
     { path: "/", label: "Home", icon: Home },
-    { path: "/about", label: "About", icon: Info },
-    
+    { path: "/explore", label: "Explore", icon: Search },
+    { path: "/map", label: "Locations", icon: MapPin },
+    { path: "/feed", label: "Feed", icon: LayoutList },
   ]
 
   // Scroll effect
@@ -94,12 +105,76 @@ export default function NavBar() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  // Logout handler
+  // Replace the useEffect that listens for authentication events with:
+  useEffect(() => {
+    const fetchUser = async () => {
+      setIsLoading(true)
+      try {
+        const response = await fetch("/api/users/me", {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
+        })
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            // Not authenticated
+            setUser(null)
+            return
+          }
+          throw new Error(`Failed to fetch user: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setUser(data.user)
+      } catch (error) {
+        console.error("Error fetching user:", error)
+        setUser(null)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    // Fetch user on component mount
+    fetchUser()
+
+    // Function to handle login success
+    const handleLoginSuccess = () => {
+      console.log("Login success event detected")
+      fetchUser()
+    }
+
+    // Function to handle logout success
+    const handleLogoutSuccess = () => {
+      console.log("Logout success event detected")
+      setUser(null)
+    }
+
+    // Add event listeners for auth changes
+    window.addEventListener("login-success", handleLoginSuccess)
+    window.addEventListener("logout-success", handleLogoutSuccess)
+
+    return () => {
+      window.removeEventListener("login-success", handleLoginSuccess)
+      window.removeEventListener("logout-success", handleLogoutSuccess)
+    }
+  }, [])
+
+  // Replace the handleLogout function with:
   const handleLogout = async () => {
-    await logoutUser()
-    // clear SWR cache so UI updates immediately
-    mutate(null, false)
-    router.push("/login")
+    try {
+      await logoutUser()
+      setUser(null)
+      // Dispatch logout event
+      window.dispatchEvent(new Event("logout-success"))
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
   }
 
   // Avatar initials
@@ -149,7 +224,6 @@ export default function NavBar() {
             </Link>
           </div>
 
-
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center space-x-1">
             {navLinks.map((link) => (
@@ -157,61 +231,45 @@ export default function NavBar() {
                 key={link.path}
                 href={link.path}
                 className={cn(
-                  "relative px-3 py-2 rounded-md font-medium transition-colors",
+                  "relative px-3 py-2 rounded-md font-medium transition-colors flex items-center",
                   pathname === link.path
                     ? "text-[#FF6B6B] bg-[#FF6B6B]/5"
                     : "text-gray-700 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/5",
                 )}
               >
+                <link.icon className="h-4 w-4 mr-2" />
                 {link.label}
               </Link>
             ))}
 
-            {/* Create Button */}
+            {/* Add Event Button */}
+            <Link href="/add-event" className="flex flex-col items-center mx-2">
+              <div className="h-10 w-10 rounded-full bg-[#FF6B6B] flex items-center justify-center">
+                <Calendar className="h-5 w-5 text-white" />
+              </div>
+              <span className="text-xs mt-1">Add Event</span>
+            </Link>
+
+            {/* Add Location Button */}
             {user && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={() => router.push("/add-location")}
-                      size="sm"
-                      className="ml-2 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white"
-                    >
-                      <Plus className="h-4 w-4 mr-1" />
-                      <span className="hidden lg:inline">Add Location</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Add a new location</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Link href="/add-location" className="flex flex-col items-center mx-2">
+                <div className="h-10 w-10 rounded-full bg-[#4ECDC4] flex items-center justify-center">
+                  <Plus className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-xs mt-1">Add Location</span>
+              </Link>
             )}
 
             {/* Auth / Profile */}
-            {user ? (
+            {isLoading ? (
+              // Loading state for user
+              <div className="flex items-center ml-2">
+                <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+              </div>
+            ) : user ? (
               <div className="flex items-center ml-2">
                 {/* Notifications */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="relative mr-1"
-                        onClick={() => router.push("/notifications")}
-                      >
-                        <Bell className="h-5 w-5" />
-                        <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-[#FF6B6B] text-[10px]">
-                          3
-                        </Badge>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Notifications</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                {user && <NotificationCenter userId={user.id} />}
 
                 {/* User Menu */}
                 <DropdownMenu>
@@ -266,32 +324,14 @@ export default function NavBar() {
 
           {/* Mobile Menu Toggle */}
           <div className="flex items-center md:hidden">
-            {user && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative mr-1"
-                onClick={() => router.push("/notifications")}
-              >
-                <Bell className="h-5 w-5" />
-                <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-[#FF6B6B] text-[10px]">
-                  3
-                </Badge>
-              </Button>
-            )}
+            {user && <NotificationCenter userId={user.id} />}
             <Button variant="ghost" size="icon" onClick={toggleMobileSearch} className="mr-1" aria-label="Search">
               <Search className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => {
-                if (isMenuOpen) {
-                  setIsMenuOpen(false)
-                } else {
-                  setIsMenuOpen(true)
-                }
-              }}
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-expanded={isMenuOpen}
               aria-controls="mobile-menu"
               aria-label={isMenuOpen ? "Close menu" : "Open menu"}
@@ -357,7 +397,17 @@ export default function NavBar() {
             ))}
 
             {/* User-specific actions */}
-            {user ? (
+            {isLoading ? (
+              <div className="my-2 px-3 py-2 bg-gray-50 rounded-md">
+                <div className="flex items-center space-x-3">
+                  <div className="h-10 w-10 rounded-full bg-gray-200 animate-pulse"></div>
+                  <div className="flex flex-col space-y-2">
+                    <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="h-3 w-32 bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            ) : user ? (
               <>
                 <div className="my-2 px-3 py-2 bg-gray-50 rounded-md">
                   <div className="flex items-center space-x-3">
@@ -392,7 +442,7 @@ export default function NavBar() {
                 </Link>
 
                 <Button
-                  onClick={() => router.push("/locations/add")}
+                  onClick={() => router.push("/add-location")}
                   className="mt-1 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -436,4 +486,12 @@ export default function NavBar() {
       </nav>
     </header>
   )
+}
+
+export default NavBar
+
+// Add this at the end of the file, outside the component
+export function notifyLoginSuccess() {
+  console.log("Notifying login success")
+  window.dispatchEvent(new Event("login-success"))
 }

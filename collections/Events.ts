@@ -17,6 +17,88 @@ export const Events: CollectionConfig = {
     useAsTitle: 'name',
     defaultColumns: ['name', 'startDate', 'status', 'isFeatured'],
   },
+  hooks: {
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        if (!req.payload) return doc
+
+        // Handle event updates
+        if (operation === "update") {
+          // Check if status has changed to postponed or cancelled
+          if (previousDoc.status !== doc.status && (doc.status === "postponed" || doc.status === "cancelled")) {
+            try {
+              // Find all users who are "going" or "interested" in this event
+              // This would require a separate collection to track event RSVPs
+              // For this example, we'll assume there's an eventRSVPs collection
+              const { docs: rsvps } = await req.payload.find({
+                collection: "eventRSVPs",
+                where: {
+                  event: { equals: doc.id },
+                },
+              })
+
+              // Notify all users who RSVP'd
+              for (const rsvp of rsvps) {
+                await req.payload.create({
+                  collection: "notifications",
+                  data: {
+                    recipient: rsvp.user,
+                    type: "event_update",
+                    title: `Event ${doc.status}: ${doc.name}`,
+                    message: `The event has been ${doc.status}. ${doc.status === "postponed" ? "New date will be announced soon." : ""}`,
+                    relatedTo: {
+                      relationTo: "events",
+                      value: doc.id,
+                    },
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                  },
+                })
+              }
+            } catch (error) {
+              console.error("Error creating event update notifications:", error)
+            }
+          }
+
+          // Check if date has changed
+          if (previousDoc.startDate !== doc.startDate) {
+            try {
+              // Find all users who are "going" or "interested"
+              const { docs: rsvps } = await req.payload.find({
+                collection: "eventRSVPs",
+                where: {
+                  event: { equals: doc.id },
+                },
+              })
+
+              // Notify all users who RSVP'd
+              for (const rsvp of rsvps) {
+                await req.payload.create({
+                  collection: "notifications",
+                  data: {
+                    recipient: rsvp.user,
+                    type: "event_update",
+                    title: `Date changed: ${doc.name}`,
+                    message: `The event date has been updated to ${new Date(doc.startDate).toLocaleDateString()}.`,
+                    relatedTo: {
+                      relationTo: "events",
+                      value: doc.id,
+                    },
+                    read: false,
+                    createdAt: new Date().toISOString(),
+                  },
+                })
+              }
+            } catch (error) {
+              console.error("Error creating event date change notifications:", error)
+            }
+          }
+        }
+
+        return doc
+      },
+    ],
+  },
   fields: [
     // Basic Information
     { name: 'name', type: 'text', required: true },
