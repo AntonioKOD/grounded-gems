@@ -1,371 +1,442 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect } from "react"
-import { useInView } from "react-intersection-observer"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import FeedPost from "./feed-post"
+import { Loader2, RefreshCw, Filter } from "lucide-react"
+
+import { PostCard } from "@/components/post/post-card"
+import CollapsiblePostForm from "@/components/post/collapsible-post-form"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Filter } from "lucide-react"
-import { getPersonalizedFeed, getFeedPosts, isLiked } from "@/app/actions"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
+import { getFeedPosts, getPersonalizedFeed, likePost, isLiked, sharePost, getFeedPostsByUser } from "@/app/actions"
 import type { Post } from "@/types/feed"
-import EmptyFeed from "./empty-feed"
 
-export default function FeedContainer() {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("for-you")
-  const [sortBy, setSortBy] = useState("recent")
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [user, setUser] = useState<{ id: string | number } | null>(null)
+interface FeedContainerProps {
+  userId?: string
+  initialPosts?: Post[]
+  showPostForm?: boolean
+  className?: string
+  feedType?: "personalized" | "all" | "user"
+  sortBy?: "recent" | "popular" | "trending"
+}
 
-  const { ref, inView } = useInView()
+export default function FeedContainer({
+  userId,
+  initialPosts = [],
+  showPostForm = true,
+  className = "",
+  feedType = "all",
+  sortBy = "recent",
+}: FeedContainerProps) {
+  const [posts, setPosts] = useState<Post[]>(initialPosts)
+  const [loading, setLoading] = useState<boolean>(true)
+  const [loadingMore, setLoadingMore] = useState<boolean>(false)
+  const [refreshing, setRefreshing] = useState<boolean>(false)
+  const [hasMore, setHasMore] = useState<boolean>(true)
+  const [page, setPage] = useState<number>(1)
+  const [user, setUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const [usedMockData, setUsedMockData] = useState<boolean>(false)
 
-  // Fetch user on component mount
+  // Fetch the current user (for post form and personalized feed)
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await fetch("/api/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!response.ok) {
-          console.error("Failed to fetch user:", response.status)
-          return null
-        }
-
+        const response = await fetch("/api/users/me")
+        if (!response.ok) throw new Error("Failed to fetch user")
         const data = await response.json()
-        return data.user
+        setUser(data.user)
       } catch (error) {
         console.error("Error fetching user:", error)
-        return null
+        // Don't show toast - they might not be logged in
       }
     }
 
-    fetchUser().then((userData) => {
-      setUser(userData)
-      console.log("User data fetched:", userData)
-    })
+    fetchUser()
   }, [])
 
-  // Load posts when tab, sort, or user changes
+  // Fetch posts based on feed type
   useEffect(() => {
-    loadPosts()
-  }, [activeTab, sortBy, user])
+    fetchPosts()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedType, sortBy, user, userId])
 
-  // Infinite scroll
-  useEffect(() => {
-    if (inView && hasMore && !isLoading) {
-      loadMorePosts()
-    }
-  }, [inView, hasMore])
-
-  const loadPosts = async () => {
-    setIsLoading(true)
+  // Fetch posts using server actions
+  const fetchPosts = async () => {
     try {
-      let newPosts: Post[] = []
+      setLoading(true)
+      setPage(1)
+      setUsedMockData(false)
 
-      if (activeTab === "for-you") {
-        if (user?.id) {
-          console.log("Fetching personalized feed for user:", user.id)
-          const rawPosts = await getPersonalizedFeed(String(user.id), 10)
-          console.log("Raw personalized posts:", rawPosts)
+      let fetchedPosts: Post[] = []
 
-          if (Array.isArray(rawPosts) && rawPosts.length > 0) {
-            newPosts = await Promise.all(
-              rawPosts.map(async (rawPost) => {
-                // Check if the post is liked by the current user
-                const postIsLiked = user?.id ? await isLiked(rawPost.id, String(user.id)) : false
+      if (feedType === "personalized" && user) {
+        // Fetch personalized feed if user is logged in
+        fetchedPosts = (await getPersonalizedFeed(user.id, 10, 0)) || []
+        console.log("Fetched personalized posts:", fetchedPosts.length)
+      } else if (feedType === "user" && userId) {
+        // Use the server action directly instead of fetch API
+        console.log(`Fetching posts for user ID: ${userId}`)
+        fetchedPosts = ((await getFeedPostsByUser(userId)) || []).map((post: any) => ({
+          id: post.id,
+          author: {
+            id: post.author?.id || userId,
+            name: post.author?.name || "User",
+            avatar: post.author?.avatar || "/diverse-avatars.png",
+          },
+          title: post.title || "",
+          content: post.content || "",
+          createdAt: post.createdAt || new Date().toISOString(),
+          image: post.image?.url || post.featuredImage?.url || post.image || null,
+          likeCount: post.likes?.length || post.likeCount || 0,
+          commentCount: post.comments?.length || post.commentCount || 0,
+          shareCount: post.shareCount || 0,
+          isLiked: false,
+          type: post.type || "post",
+          rating: post.rating || null,
+          location: post.location || (post.locationName ? { id: "loc_1", name: post.locationName } : undefined),
+          status: post.status || "published",
+        }))
+        console.log("Fetched user posts:", fetchedPosts.length)
 
-                // Ensure the post has all required fields for FeedPost component
-                return {
-                  id: String(rawPost.id),
-                  author:
-                    typeof rawPost.author === "object"
-                      ? rawPost.author
-                      : {
-                          id: typeof rawPost.author === "string" ? rawPost.author : "unknown",
-                          name: typeof rawPost.author === "object" && rawPost.author && (rawPost.author as { name: string }).name ? (rawPost.author as { name: string }).name : "Unknown User",
-                          avatar: typeof rawPost.author === "object" ? rawPost.author && (rawPost.author as {avatar: string}).avatar ? (rawPost.author as {avatar: string}).avatar : undefined : undefined,
-                        },
-                  content: rawPost.content || "",
-                  createdAt: rawPost.createdAt || new Date().toISOString(),
-                  type: rawPost.type || "post",
-                  title: rawPost.title,
-                  image: rawPost.image,
-                  likeCount: rawPost.likeCount || 0,
-                  commentCount: rawPost.commentCount || 0,
-                  isLiked: postIsLiked,
-                  rating: rawPost.rating,
-                  location: rawPost.location,
-                }
-              }),
-            )
-          }
-        } else {
-          console.log("No user found for personalized feed")
+        // Map the posts to match the expected format for PostCard if needed
+        if (fetchedPosts.length > 0) {
+          fetchedPosts = fetchedPosts.map((post: any) => {
+            return {
+              id: post.id,
+              author: {
+                id: post.author?.id || userId,
+                name: post.author?.name || "User",
+                avatar: post.author?.avatar || "/diverse-avatars.png",
+              },
+              title: post.title || "",
+              content: post.content || "",
+              createdAt: post.createdAt || new Date().toISOString(),
+              image: post.image?.url || post.featuredImage?.url || post.image || null,
+              likeCount: post.likes?.length || post.likeCount || 0,
+              commentCount: post.comments?.length || post.commentCount || 0,
+              shareCount: post.shareCount || 0,
+              isLiked: false,
+              type: post.type || "post",
+              rating: post.rating || null,
+              location: post.location || (post.locationName ? { id: "loc_1", name: post.locationName } : undefined),
+              status: post.status || "published",
+            }
+          })
         }
       } else {
-        // For "all" tab - use the new implementation
-        console.log("Fetching all posts with sort:", sortBy)
-        const fetchedPosts = await getFeedPosts("all", sortBy, 1)
-
-        // Check if each post is liked by the current user
-        if (user?.id) {
-          newPosts = await Promise.all(
-            fetchedPosts.map(async (post) => {
-              const postIsLiked = await isLiked(post.id, String(user.id))
-              return {
-                ...post,
-                isLiked: postIsLiked,
-              }
-            }),
-          )
-        } else {
-          newPosts = fetchedPosts
-        }
-
-        console.log("Fetched all posts:", newPosts.length)
+        // Fetch all posts with sorting
+        fetchedPosts = (await getFeedPosts(feedType, sortBy, 1)) || []
+        console.log("Fetched all posts:", fetchedPosts.length)
       }
 
-      console.log("Processed posts:", newPosts)
-      setPosts(newPosts)
-      setPage(1)
-      setHasMore(newPosts.length === 10) // Assuming 10 posts per page
+      // If no posts were fetched, use mock data
+      if (!fetchedPosts || fetchedPosts.length === 0) {
+        console.log("No posts found, using mock data")
+        setUsedMockData(true)
+      }
+
+      // Check if each post is liked by the current user
+      if (user && fetchedPosts.length > 0) {
+        const postsWithLikeStatus = await Promise.all(
+          fetchedPosts.map(async (post) => {
+            try {
+              const liked = await isLiked(post.id, user.id)
+              return { ...post, isLiked: liked }
+            } catch (error) {
+              console.error(`Error checking like status for post ${post.id}:`, error)
+              return post
+            }
+          }),
+        )
+        fetchedPosts = postsWithLikeStatus
+      }
+
+      if (fetchedPosts.length > 0) {
+        setPosts(fetchedPosts)
+        setHasMore(fetchedPosts.length >= 10 && !usedMockData) // Only show "load more" for real data
+      } else {
+        setPosts([])
+        setHasMore(false)
+      }
     } catch (error) {
-      console.error("Error loading posts:", error)
-      toast.error("Failed to load posts")
+      console.error("Error fetching posts:", error)
+      toast.error("Error loading posts. Please try again.")
+
+      // Use mock data if API fails
+      setUsedMockData(true)
+      setHasMore(false)
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const loadMorePosts = async () => {
-    if (isLoading) return
+  // Generate mock posts if needed
+  
 
-    setIsLoading(true)
+  // Refresh posts
+  const refreshPosts = async () => {
+    setRefreshing(true)
     try {
+      await fetchPosts()
+      toast.success("Feed refreshed")
+    } catch (error) {
+      console.error("Error refreshing posts:", error)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // Load more posts
+  const loadMorePosts = async () => {
+    try {
+      setLoadingMore(true)
       const nextPage = page + 1
-      let newPosts: Post[] = []
 
-      if (activeTab === "for-you" && user?.id) {
-        const offset = page * 10 // 10 posts per page
-        const rawPosts = await getPersonalizedFeed(String(user.id), 10, offset)
+      let morePosts: Post[] = []
 
-        if (Array.isArray(rawPosts) && rawPosts.length > 0) {
-          newPosts = await Promise.all(
-            rawPosts.map(async (rawPost) => {
-              // Check if the post is liked by the current user
-              const postIsLiked = await isLiked(rawPost.id, String(user.id))
-
-              return {
-                id: String(rawPost.id),
-                author:
-                  typeof rawPost.author === "object"
-                    ? rawPost.author
-                    : {
-                        id: typeof rawPost.author === "string" ? rawPost.author : "unknown",
-                        name: typeof rawPost.author === "object" && (rawPost.author as { name: string }).name ? (rawPost.author as { name: string }).name : "Unknown User",
-                        avatar: typeof rawPost.author === "object" && rawPost.author !== null && "avatar" in rawPost.author ? (rawPost.author as { avatar: string }).avatar : undefined,
-                      },
-                content: rawPost.content || "",
-                createdAt: rawPost.createdAt || new Date().toISOString(),
-                type: rawPost.type || "post",
-                title: rawPost.title,
-                image: rawPost.image,
-                likeCount: rawPost.likeCount || 0,
-                commentCount: rawPost.commentCount || 0,
-                isLiked: postIsLiked,
-                rating: rawPost.rating,
-                location: rawPost.location,
-              }
-            }),
-          )
-        }
+      if (feedType === "personalized" && user) {
+        morePosts = (await getPersonalizedFeed(user.id, 10, page * 10)) || []
+      } else if (feedType === "user" && userId) {
+        // For user posts, we don't have pagination yet, so just return empty
+        morePosts = []
       } else {
-        // For "all" tab - use the new implementation
-        const fetchedPosts = await getFeedPosts("all", sortBy, nextPage)
-
-        // Check if each post is liked by the current user
-        if (user?.id) {
-          newPosts = await Promise.all(
-            fetchedPosts.map(async (post) => {
-              const postIsLiked = await isLiked(post.id, String(user.id))
-              return {
-                ...post,
-                isLiked: postIsLiked,
-              }
-            }),
-          )
-        } else {
-          newPosts = fetchedPosts
-        }
+        morePosts = (await getFeedPosts(feedType, sortBy, nextPage)) || []
       }
 
-      if (newPosts.length > 0) {
-        setPosts((prev) => [...prev, ...newPosts])
+      // Check if each post is liked by the current user
+      if (user && morePosts.length > 0) {
+        const postsWithLikeStatus = await Promise.all(
+          morePosts.map(async (post) => {
+            try {
+              const liked = await isLiked(post.id, user.id)
+              return { ...post, isLiked: liked }
+            } catch (error) {
+              console.error(`Error checking like status for post ${post.id}:`, error)
+              return post
+            }
+          }),
+        )
+        morePosts = postsWithLikeStatus
+      }
+
+      if (morePosts.length > 0) {
+        setPosts([...posts, ...morePosts])
         setPage(nextPage)
-        setHasMore(newPosts.length === 10) // Assuming 10 posts per page
+        setHasMore(morePosts.length >= 10)
       } else {
         setHasMore(false)
       }
     } catch (error) {
       console.error("Error loading more posts:", error)
-      toast.error("Failed to load more posts")
+      toast.error("Error loading more posts. Please try again.")
     } finally {
-      setIsLoading(false)
+      setLoadingMore(false)
     }
   }
 
-  const refreshFeed = async () => {
-    setIsRefreshing(true)
-    try {
-      await loadPosts()
-      toast.success("Feed refreshed")
-    } catch (error) {
-      console.error("Error refreshing feed:", error)
-    } finally {
-      setIsRefreshing(false)
-    }
-  }
-
-  const renderForYouContent = () => {
+  // Handle like action using server action
+  const handleLike = async (postId: string) => {
     if (!user) {
-      return (
-        <div className="p-6 bg-gray-50 rounded-lg text-center">
-          <h3 className="text-lg font-medium mb-2">Sign in for personalized content</h3>
-          <p className="text-gray-500 mb-4">
-            Log in to see posts from people you follow and content tailored to your interests.
-          </p>
-          <Button asChild>
-            <a href="/login">Sign In</a>
-          </Button>
-        </div>
+      toast.error("Please log in to like posts")
+      return
+    }
+
+    try {
+      // Find the post
+      const post = posts.find((p) => p.id === postId)
+      if (!post) return
+
+      // Optimistic update
+      const isCurrentlyLiked = post.isLiked || false
+      const newLikeCount = isCurrentlyLiked ? (post.likeCount || 0) - 1 : (post.likeCount || 0) + 1
+
+      setPosts(
+        posts.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              isLiked: !isCurrentlyLiked,
+              likeCount: newLikeCount,
+            }
+          }
+          return p
+        }),
+      )
+
+      // Call server action
+      await likePost(postId, !isCurrentlyLiked, user.id)
+    } catch (error) {
+      console.error("Error liking post:", error)
+      toast.error("Failed to like post. Please try again.")
+
+      // Revert optimistic update on error
+      setPosts(
+        posts.map((p) => {
+          if (p.id === postId) {
+            const isCurrentlyLiked = p.isLiked || false
+            return {
+              ...p,
+              isLiked: isCurrentlyLiked,
+              likeCount: isCurrentlyLiked ? p.likeCount : (p.likeCount || 1) - 1,
+            }
+          }
+          return p
+        }),
       )
     }
-
-    if (isLoading && posts.length === 0) {
-      return (
-        <div className="py-8 flex justify-center">
-          <div className="h-8 w-8 rounded-full border-2 border-t-[#FF6B6B] border-r-[#FF6B6B]/30 border-b-[#FF6B6B]/10 border-l-[#FF6B6B]/60 animate-spin"></div>
-        </div>
-      )
-    }
-
-    if (posts.length === 0 && !isLoading) {
-      return <EmptyFeed type="personalized" />
-    }
-
-    return (
-      <div className="space-y-4">
-        {posts.map((post) => (
-          <FeedPost key={post.id} post={post} />
-        ))}
-      </div>
-    )
   }
 
-  const renderAllContent = () => {
-    if (isLoading && posts.length === 0) {
-      return (
-        <div className="py-8 flex justify-center">
-          <div className="h-8 w-8 rounded-full border-2 border-t-[#FF6B6B] border-r-[#FF6B6B]/30 border-b-[#FF6B6B]/10 border-l-[#FF6B6B]/60 animate-spin"></div>
-        </div>
-      )
-    }
-
-    if (posts.length === 0 && !isLoading) {
-      return <EmptyFeed type="all" />
-    }
-
-    return (
-      <div className="space-y-4">
-        {posts.map((post) => (
-          <FeedPost key={post.id} post={post} />
-        ))}
-      </div>
-    )
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const handleComment = (postId: string) => {
+    // Scroll to comments or open comment form
+    toast.info("Comment feature coming soon")
   }
 
-  const handlePostLikeUpdate = (postId: string, isLiked: boolean, likeCount: number) => {
-    setPosts((prevPosts) => prevPosts.map((post) => (post.id === postId ? { ...post, isLiked, likeCount } : post)))
+  const handleShare = async (postId: string) => {
+    try {
+      // Find the post
+      const post = posts.find((p) => p.id === postId)
+      if (!post) return
+
+      // Copy link to clipboard
+      const postUrl = `${window.location.origin}/posts/${postId}`
+      await navigator.clipboard.writeText(postUrl)
+
+      // Optimistic update
+      setPosts(
+        posts.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              shareCount: (p.shareCount || 0) + 1,
+            }
+          }
+          return p
+        }),
+      )
+
+      // Call server action if user is logged in
+      if (user) {
+        await sharePost(postId, user.id)
+      }
+
+      toast.success("Link copied to clipboard")
+    } catch (error) {
+      console.error("Error sharing post:", error)
+      toast.error("Failed to share post")
+
+      // Revert optimistic update
+      setPosts(
+        posts.map((p) => {
+          if (p.id === postId) {
+            return {
+              ...p,
+              shareCount: Math.max(0, (p.shareCount || 1) - 1),
+            }
+          }
+          return p
+        }),
+      )
+    }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Tabs defaultValue={activeTab} className="w-full" onValueChange={setActiveTab}>
-          <div className="flex items-center justify-between w-full">
-            <TabsList>
-              <TabsTrigger value="for-you">For You</TabsTrigger>
-              <TabsTrigger value="all">All Posts</TabsTrigger>
-            </TabsList>
-
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={refreshFeed}
-                disabled={isRefreshing}
-                className={isRefreshing ? "animate-spin" : ""}
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Filter className="h-4 w-4 mr-2" />
-                    Sort
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>Sort Posts</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuRadioGroup value={sortBy} onValueChange={setSortBy}>
-                    <DropdownMenuRadioItem value="recent">Most Recent</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="popular">Most Popular</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="trending">Trending</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-
-          <TabsContent value="for-you" className="mt-4">
-            {renderForYouContent()}
-          </TabsContent>
-
-          <TabsContent value="all" className="mt-4">
-            {renderAllContent()}
-          </TabsContent>
-        </Tabs>
+    <div className={`max-w-2xl mx-auto ${className}`}>
+      {/* Feed Header with Refresh Button */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold">
+          {feedType === "personalized" ? "For You" : feedType === "user" ? "User Posts" : "All Posts"}
+        </h2>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshPosts}
+            disabled={refreshing || loading}
+            className="flex items-center gap-1"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+          <Button variant="outline" size="sm" className="flex items-center gap-1">
+            <Filter className="h-4 w-4" />
+            Filter
+          </Button>
+        </div>
       </div>
 
-      {/* Loading indicator for infinite scroll */}
-      {hasMore && (
-        <div ref={ref} className="py-4 flex justify-center">
-          {isLoading && (
-            <div className="h-8 w-8 rounded-full border-2 border-t-[#FF6B6B] border-r-[#FF6B6B]/30 border-b-[#FF6B6B]/10 border-l-[#FF6B6B]/60 animate-spin"></div>
-          )}
+      {/* Post Form - only if showPostForm is true and user is logged in */}
+      {showPostForm && user && (
+        <>
+          <CollapsiblePostForm user={user} className="mb-6" />
+          <Separator className="my-6" />
+        </>
+      )}
+
+      {/* Mock Data Notice */}
+      {usedMockData && (
+        <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700">
+          <p>Showing example posts. Connect your API to see real posts.</p>
         </div>
       )}
+
+      {/* Posts */}
+      <div className="space-y-6">
+        {loading ? (
+          <Card className="p-8 flex justify-center items-center">
+            <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+          </Card>
+        ) : posts.length > 0 ? (
+          <>
+            {posts.map((post) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onLike={handleLike}
+                onComment={handleComment}
+                onShare={handleShare}
+                className="transition-all duration-300 hover:shadow-md"
+              />
+            ))}
+
+            {/* Load more button */}
+            {hasMore && (
+              <div className="flex justify-center pt-2 pb-8">
+                <Button
+                  variant="outline"
+                  onClick={loadMorePosts}
+                  disabled={loadingMore}
+                  className="min-w-[150px] border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Load More"
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
+        ) : (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <p className="mb-4 text-lg font-medium">No posts found</p>
+              {userId ? (
+                <p className="text-muted-foreground">This user hasn&apos;t posted anything yet.</p>
+              ) : feedType === "personalized" ? (
+                <p className="text-muted-foreground">Follow some users to see personalized posts!</p>
+              ) : (
+                <p className="text-muted-foreground">Be the first to share a post!</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   )
 }

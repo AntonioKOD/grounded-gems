@@ -6,6 +6,7 @@ export interface User {
     followerCount?: number
     followingCount?: number
     isFollowing?: boolean
+    status?: string
   }
   
   export interface Location {
@@ -16,6 +17,7 @@ export interface User {
   }
   
   export interface Post {
+    status?: string
     id: string
     author: User
     title?: string
@@ -29,6 +31,7 @@ export interface User {
     rating?: number
     location?: Location
     likes?: number
+   
   }
   
   export interface Comment {

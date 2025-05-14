@@ -1417,3 +1417,134 @@ export async function deleteNotification(notificationId: string): Promise<boolea
     return false
   }
 }
+
+
+export async function createPost(formData: FormData) {
+  try {
+    const payload = await getPayload({ config })
+
+    // Get current user
+    const user = await payload.findByID({
+      collection: "users",
+      id: formData.get("userId") as string, // Ensure `userId` is passed in `formData`
+      depth: 0,
+    });
+
+    if (!user) {
+      return {
+        success: false,
+        message: "User not found",
+      };
+    }
+
+    if (!user) {
+      return {
+        success: false,
+        message: "You must be logged in to create a post",
+      }
+    }
+
+    // Extract form data
+    const content = formData.get("content") as string
+    const title = formData.get("title") as string
+    const type = formData.get("type") as "post" | "review" | "recommendation"
+    const locationName = formData.get("locationName") as string
+    const rating = formData.get("rating") ? Number.parseInt(formData.get("rating") as string) : undefined
+    const image = formData.get("image") as File | null
+
+    // Validate required fields
+    if (!content) {
+      return {
+        success: false,
+        message: "Post content is required",
+      }
+    }
+
+    // Handle location if provided
+    let locationId = null
+    if (locationName && (type === "review" || type === "recommendation")) {
+      // Check if location exists
+      const { docs: existingLocations } = await payload.find({
+        collection: "locations",
+        where: {
+          name: { equals: locationName },
+        },
+        limit: 1,
+      })
+
+      if (existingLocations.length > 0) {
+        locationId = existingLocations[0].id
+      } else {
+        // Create new location
+        const newLocation = await payload.create({
+          collection: "locations",
+          data: {
+            name: locationName,
+            createdBy: user.id,
+            isVerified: false,
+          },
+        })
+        locationId = newLocation.id
+      }
+    }
+
+    // Handle image upload if provided
+    let imageId = null
+    if (image && image.size > 0) {
+      try {
+        // Convert the File to a Buffer that Payload can process
+        const uploadedImage = await payload.create({
+          collection: "media",
+          data: {
+            alt: title || `Post image by ${user.name || 'user'}`,
+          },
+          file: {
+            data: Buffer.from(await image.arrayBuffer()),
+            mimetype: image.type,
+            name: "",
+            size: 0
+          },
+        })
+
+        imageId = uploadedImage.id
+        console.log("Image uploaded successfully:", imageId)
+      } catch (uploadError) {
+        console.error("Error uploading image:", uploadError)
+        // Continue with post creation even if image upload fails
+      }
+    }
+
+    // Create post
+    const postData: any = {
+      content,
+      author: user.id,
+      type,
+      status: "published",
+    }
+
+    if (title) postData.title = title
+    if (locationId) postData.location = locationId
+    if (rating && type === "review") postData.rating = rating
+    if (imageId) postData.image = imageId
+
+    const post = await payload.create({
+      collection: "posts",
+      data: postData,
+    })
+
+    // Revalidate paths
+    revalidatePath("/feed")
+    revalidatePath(`/profile/${user.id}`)
+
+    return {
+      success: true,
+      postId: post.id,
+    }
+  } catch (error) {
+    console.error("Error creating post:", error)
+    return {
+      success: false,
+      message: "Failed to create post. Please try again.",
+    }
+  }
+}

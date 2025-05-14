@@ -9,6 +9,24 @@ const nextConfig: NextConfig = {
         hostname: "lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com",
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: "groundedgems.com",
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: "www.groundedgems.com",
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: "localhost",
+        port: '3000',
+        pathname: '/**',
       }
     ]
   }

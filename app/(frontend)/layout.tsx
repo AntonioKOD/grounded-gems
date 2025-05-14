@@ -8,6 +8,7 @@ import {Toaster} from 'sonner'
 
 
 
+
 export const metadata = {
   description: 'Find the hidden gems around you',
   title: 'Grounded Gems',
@@ -20,11 +21,14 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
     <html lang="en">
       <body>
         <NavBar />
+       
         <main>{children}</main>
+        
         <Footer/>
         <div className="md:hidden">
         <MobileNavigation />
         <Toaster/>
+        
       </div>
       </body>
     </html>

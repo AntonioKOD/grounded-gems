@@ -1,31 +1,51 @@
 import { Suspense } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import FeedContainer from "@/components/feed/feed-container"
-import FeedSkeleton from "@/components/feed/feed-skeleton"
-import FeedSidebar from "@/components/feed/feed-sidebar"
 
 export const metadata = {
-  title: "Community Feed | Local Explorer",
-  description: "Discover posts and recommendations from your favorite contributors",
+  title: "Community Feed",
+  description: "Check out the latest posts from the community",
 }
 
-export default function FeedPage() {
+export default async function FeedPage() {
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
-      <h1 className="text-3xl font-bold mb-6">Community Feed</h1>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main feed content */}
-        <div className="lg:col-span-8">
-          <Suspense fallback={<FeedSkeleton />}>
-            <FeedContainer />
-          </Suspense>
-        </div>
-
-        {/* Sidebar */}
-        <div className="lg:col-span-4">
-          <FeedSidebar />
-        </div>
+    <main className="container py-6 md:py-10">
+      <div className="mb-8 max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold tracking-tight">Community Feed</h1>
+        <p className="text-muted-foreground mt-2">
+          Discover the latest posts, reviews, and recommendations from the community.
+        </p>
       </div>
+
+      <Tabs defaultValue="for-you" className="max-w-2xl mx-auto">
+        <TabsList className="grid w-full grid-cols-2 mb-6">
+          <TabsTrigger value="for-you">For You</TabsTrigger>
+          <TabsTrigger value="all">All Posts</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="for-you">
+          <Suspense fallback={<FeedSkeleton />}>
+            <FeedContainer feedType="personalized" showPostForm={true} />
+          </Suspense>
+        </TabsContent>
+        
+        <TabsContent value="all">
+          <Suspense fallback={<FeedSkeleton />}>
+            <FeedContainer feedType="all" sortBy="recent" showPostForm={true} />
+          </Suspense>
+        </TabsContent>
+      </Tabs>
+    </main>
+  )
+}
+
+function FeedSkeleton() {
+  return (
+    <div className="space-y-6">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Skeleton key={i} className="w-full h-[300px] rounded-lg" />
+      ))}
     </div>
   )
 }
