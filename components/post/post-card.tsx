@@ -223,6 +223,7 @@ export function PostCard({ post, onLike, onComment, onShare, className = "" }: P
           <div className="mt-3 mb-2 rounded-md overflow-hidden relative">
             <div className="aspect-video relative">
               <Image
+              unoptimized={true}
                 src={post?.image || "/placeholder.svg"}
                 alt={post.title || "Post image"}
                 fill

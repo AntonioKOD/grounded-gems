@@ -1023,6 +1023,8 @@ export async function getPostById(postId: string): Promise<Post | null> {
           }
         : undefined,
     };
+    console.log(formattedPost.image)
+    console.log(post.image?.url)
 
     return formattedPost;
   } catch (error) {
