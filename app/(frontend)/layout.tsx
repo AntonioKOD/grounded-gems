@@ -5,6 +5,8 @@ import NavBar from '@/components/NavBar'
 import Footer from '@/components/footer';
 import MobileNavigation from '@/components/mobile-navigation';
 import {Toaster} from 'sonner'
+import {GoogleAnalytics} from '@next/third-parties/google'
+
 
 
 
@@ -25,6 +27,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         <main>{children}</main>
         
         <Footer/>
+        <GoogleAnalytics gaId='G-DM1Y9WQP6R' />
         <div className="md:hidden">
         <MobileNavigation />
         <Toaster/>

@@ -3,34 +3,16 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import {
-  Mail,
-  MapPin,
-  Loader2,
-  Calendar,
-  ExternalLink,
-  Instagram,
-  Twitter,
-  Youtube,
-  Globe,
-  Award,
-  Tag,
-  ChevronLeft,
-  LogOut,
-  Edit3,
-  Camera,
-  Users,
-  UserPlus,
-  UserCheck,
-} from "lucide-react"
+import { Mail, MapPin, Calendar, ExternalLink, Instagram, Twitter, Youtube, Globe, Award, Tag, ChevronLeft, LogOut, Edit3, Camera, UserPlus, UserCheck, Settings } from 'lucide-react'
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
+
+import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { followUser, unfollowUser, getFeedPostsByUser, getUserbyId, getFollowers, getFollowing } from "@/app/actions"
 import FeedPost from "@/components/feed/feed-post"
@@ -87,12 +69,26 @@ export default function ProfilePage() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null)
   const [followers, setFollowers] = useState<any[]>([])
   const [following, setFollowing] = useState<any[]>([])
+  const [activeTab, setActiveTab] = useState("posts")
+
+  // Helper function to normalize post data
+  const normalizePost = (post: any): any => {
+    // Ensure image is a valid non-empty string or null
+    const normalizedImage =
+      post.image && typeof post.image === "string" && post.image.trim() !== ""
+        ? post.image.trim()
+        : post.image?.url || post.featuredImage?.url || null
+
+    return {
+      ...post,
+      image: normalizedImage,
+    }
+  }
 
   useEffect(() => {
     const fetchProfile = async () => {
       setIsLoading(true)
       setError(null)
-
 
       try {
         const profileId = params.id as string
@@ -110,8 +106,6 @@ export default function ProfilePage() {
             setCurrentUser(currentUser)
             setCurrentUserId(currentUser.id)
             console.log("Current user fetched successfully:", currentUser)
-            console.log("Current user:", currentUser)
-            
           } else {
             console.log("Failed to fetch current user, status:", currentUserRes.status)
           }
@@ -169,8 +163,8 @@ export default function ProfilePage() {
             setFollowers(followers)
             const following = await getFollowing(profileId)
             setFollowing(following)
-  
-            if(followers.map((follower: any) => follower.id).includes(currentUser.id as string)) {
+
+            if (followers.map((follower: any) => follower.id).includes(currentUser?.id as string)) {
               setIsFollowing(true)
             }
           }
@@ -224,14 +218,13 @@ export default function ProfilePage() {
     }
 
     fetchProfile()
-  }, [userId])
+  }, [userId, params.id])
 
   // Fetch user posts
   useEffect(() => {
     const fetchUserPosts = async () => {
       if (!profile) return
 
-      
       setIsLoadingPosts(true)
       try {
         console.log(`Fetching posts for user ID: ${profile.id}`)
@@ -241,6 +234,9 @@ export default function ProfilePage() {
 
         // Map the posts to match the expected format if needed
         const formattedPosts = posts.map((post: any) => {
+          // Normalize the post
+          const normalizedPost = normalizePost(post)
+          
           // Ensure the post has all required fields for the FeedPost component
           return {
             id: post.id,
@@ -252,7 +248,7 @@ export default function ProfilePage() {
             title: post.title || "",
             content: post.content || "",
             createdAt: post.createdAt || new Date().toISOString(),
-            image: post.image?.url || post.featuredImage?.url || null,
+            image: normalizedPost.image,
             likeCount: post.likes?.length || 0,
             commentCount: post.comments?.length || 0,
             isLiked: false, // You might need to determine this based on current user
@@ -264,10 +260,11 @@ export default function ProfilePage() {
                   name: post.location.name,
                 }
               : undefined,
-              likes: post.likes?.length || 0,
+            likes: post.likes?.length || 0,
           }
         })
 
+        console.log("Normalized posts:", formattedPosts.map(p => ({ id: p.id, image: p.image })))
         setUserPosts(formattedPosts)
       } catch (error) {
         console.error("Error fetching user posts:", error)
@@ -289,9 +286,11 @@ export default function ProfilePage() {
         method: "POST",
         credentials: "include",
       })
+      toast.success("Successfully logged out")
       router.push("/login")
     } catch (error) {
       console.error("Logout failed:", error)
+      toast.error("Failed to log out")
     }
   }
 
@@ -313,7 +312,6 @@ export default function ProfilePage() {
             : null,
         )
       } else {
-       
         await followUser(profile.id as string, currentUser?.id as string)
 
         toast.success(`Now following ${profile.name || "user"}`)
@@ -438,14 +436,7 @@ export default function ProfilePage() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="flex justify-center items-center min-h-[70vh]">
-        <div className="text-center">
-          <Loader2 className="h-10 w-10 animate-spin text-[#FF6B6B] mx-auto mb-4" />
-          <p className="text-gray-500">Loading profile...</p>
-        </div>
-      </div>
-    )
+    return <ProfileSkeleton />
   }
 
   // Error state
@@ -480,339 +471,525 @@ export default function ProfilePage() {
   })
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-5xl">
-      {/* Header with back button */}
-      <div className="mb-6 flex items-center">
-        <Button variant="ghost" size="sm" className="text-gray-600 hover:text-[#FF6B6B]" onClick={() => router.back()}>
-          <ChevronLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
-      </div>
-
-      {/* Profile header card */}
-      <div className="relative mb-8 rounded-xl overflow-hidden">
-        {/* Cover image */}
-        <div className="h-48 md:h-64 bg-gradient-to-r from-[#FF6B6B]/80 to-[#FF9B6B]/80 relative">
-          {isCurrentUser && (
-            <Button
-              size="sm"
-              className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white"
+    <main className="bg-gray-50">
+      {/* Hero Section with Cover Image */}
+      <div className="relative w-full h-64 md:h-80 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] overflow-hidden">
+        {/* Back button */}
+        <div className="absolute top-4 left-4 z-10">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="bg-white/90 hover:bg-white border-0 shadow-sm" 
+            onClick={() => router.back()}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+        </div>
+        
+        {/* Actions for current user */}
+        {isCurrentUser && (
+          <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-white/90 hover:bg-white border-0 shadow-sm"
               onClick={() => router.push("/profile/edit")}
             >
               <Edit3 className="h-4 w-4 mr-1" />
               Edit Profile
             </Button>
-          )}
-        </div>
-
-        {/* Profile image and basic info */}
-        <div className="px-6 pb-6 pt-0 bg-white rounded-t-3xl -mt-6 relative z-10 shadow-sm">
-          <div className="flex flex-col md:flex-row gap-6 items-start md:items-end -mt-16 mb-6">
-            <div className="relative group">
-              <Avatar className="h-32 w-32 border-4 border-white shadow-md">
-                {profile.profileImage ? (
-                  <AvatarImage src={profile.profileImage.url || "/placeholder.svg"} alt={profile.name || "User"} />
-                ) : (
-                  <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B] text-4xl">{getInitials()}</AvatarFallback>
-                )}
-              </Avatar>
-              {isCurrentUser && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                  <Camera className="h-8 w-8 text-white" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <h1 className="text-3xl font-bold">{profile.name || "User"}</h1>
-                  <div className="flex items-center text-gray-600 mt-1">
-                    <Mail className="h-4 w-4 mr-2" />
-                    <span>{profile.email}</span>
-                  </div>
-                  {profile.location && (profile.location.city || profile.location.country) && (
-                    <div className="flex items-center text-gray-600 mt-1">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      <span>
-                        {[profile.location.city, profile.location.state, profile.location.country]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {!isCurrentUser && (
-                  <Button
-                    variant={isFollowing ? "outline" : "default"}
-                    onClick={handleFollowToggle}
-                    disabled={isProcessingFollow}
-                    className={
-                      isFollowing
-                        ? "border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10"
-                        : "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-                    }
-                  >
-                    {isProcessingFollow ? (
-                      <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
-                    ) : isFollowing ? (
-                      <UserCheck className="h-4 w-4 mr-2" />
-                    ) : (
-                      <UserPlus className="h-4 w-4 mr-2" />
-                    )}
-                    {isFollowing ? "Following" : "Follow"}
-                  </Button>
-                )}
-
-                {profile.isCreator && (
-                  <div className="flex flex-col items-start md:items-end">
-                    <Badge className={`${creatorLevel.color} px-3 py-1 text-sm font-medium`}>
-                      <Award className="h-4 w-4 mr-1" />
-                      {creatorLevel.title}
-                    </Badge>
-                    <div className="mt-2 w-full max-w-[200px]">
-                      <Progress value={creatorLevel.progress} className="h-2" />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Follower stats */}
-              <div className="flex items-center gap-4 mt-3">
-                <div className="flex items-center">
-                  <Users className="h-4 w-4 mr-1 text-gray-500" />
-                  <span className="text-sm font-medium">{followers.length || 0}</span>
-                  <span className="text-sm text-gray-500 ml-1">Followers</span>
-                </div>
-                <div className="flex items-center">
-                  <UserCheck className="h-4 w-4 mr-1 text-gray-500" />
-                  <span className="text-sm font-medium">{following.length || 0}</span>
-                  <span className="text-sm text-gray-500 ml-1">Following</span>
-                </div>
-              </div>
-
-              {/* Social links */}
-              {profile.socialLinks && profile.socialLinks.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {profile.socialLinks.map((link, index) => (
-                    <a
-                      key={index}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center px-3 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm transition-colors"
-                    >
-                      {getSocialIcon(link.platform)}
-                      <span className="ml-1 capitalize">{link.platform}</span>
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="bg-white/90 hover:bg-white border-0 shadow-sm"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="sr-only">Settings</span>
+            </Button>
           </div>
+        )}
 
-          {/* Member since */}
-          <div className="flex items-center text-sm text-gray-500 mb-4">
-            <Calendar className="h-4 w-4 mr-1" />
-            <span>Member since {formatDate(profile.createdAt)}</span>
-          </div>
-
-          {/* Bio */}
-          {profile.bio && (
-            <div className="mb-6">
-              <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
-            </div>
-          )}
-        </div>
+        {/* Decorative pattern overlay */}
+        <div className="absolute inset-0 opacity-10 bg-[url('/placeholder.svg?key=kj61m')] bg-repeat"></div>
+        
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/40"></div>
       </div>
 
-      {/* Tabs for different sections */}
-      <Tabs defaultValue="posts" className="mb-8">
-        <TabsList className="mb-6">
-          <TabsTrigger value="posts">Posts</TabsTrigger>
-          <TabsTrigger value="about">About</TabsTrigger>
-          {profile.interests && profile.interests.length > 0 && <TabsTrigger value="interests">Interests</TabsTrigger>}
-          {profile.isCreator && <TabsTrigger value="creator">Creator Info</TabsTrigger>}
-        </TabsList>
-
-        <TabsContent value="posts">
-          <div className="space-y-4">
-            {isLoadingPosts ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
-              </div>
-            ) : userPosts.length > 0 ? (
-              userPosts.map((post) => <FeedPost key={post.id} post={post} />)
-            ) : (
-              <Card>
-                <CardContent className="p-12 text-center">
-                  <div className="mx-auto w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-                    <Camera className="h-6 w-6 text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-medium mb-2">No posts yet</h3>
-                  <p className="text-gray-500 max-w-md mx-auto">
-                    {isCurrentUser
-                      ? "You haven't shared any posts yet. Start sharing your experiences!"
-                      : "This user hasn't shared any posts yet. Check back later!"}
-                  </p>
+      <div className="container max-w-5xl px-4 sm:px-6 -mt-24 relative z-10">
+        {/* Profile Card */}
+        <Card className="overflow-visible shadow-lg border-0 mb-8">
+          <CardContent className="p-0">
+            <div className="p-6 pb-0 relative">
+              {/* Avatar */}
+              <div className="flex flex-col md:flex-row gap-6 items-start md:items-end">
+                <div className="relative -mt-20 group z-20">
+                  <Avatar className="h-32 w-32 border-4 border-white shadow-md">
+                    {profile.profileImage ? (
+                      <AvatarImage src={profile.profileImage.url || "/placeholder.svg"} alt={profile.name || "User"} />
+                    ) : (
+                      <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B] text-4xl">
+                        {getInitials()}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
                   {isCurrentUser && (
-                    <Button className="mt-4 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Create Your First Post</Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="about">
-          <Card>
-            <CardHeader>
-              <CardTitle>About {profile.name || "User"}</CardTitle>
-              <CardDescription>Personal information and details</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Contact</h3>
-                  <div className="space-y-2">
-                    <div className="flex items-center text-gray-700">
-                      <Mail className="h-5 w-5 mr-2 text-[#FF6B6B]" />
-                      <span>{profile.email}</span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Camera className="h-8 w-8 text-white" />
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Location</h3>
-                  <div className="space-y-2">
-                    {profile.location ? (
-                      <div className="flex items-start text-gray-700">
-                        <MapPin className="h-5 w-5 mr-2 text-[#FF6B6B] mt-0.5" />
-                        <div>
-                          {profile.location.city && <div>{profile.location.city}</div>}
-                          {profile.location.state && <div>{profile.location.state}</div>}
-                          {profile.location.country && <div>{profile.location.country}</div>}
+                <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-8">
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900">{profile.name || "User"}</h1>
+                      
+                      <div className="flex flex-wrap items-center gap-3 mt-2">
+                        <div className="flex items-center text-gray-600">
+                          <Mail className="h-4 w-4 mr-1 text-gray-400" />
+                          <span className="text-sm">{profile.email}</span>
+                        </div>
+                        
+                        {profile.location && (profile.location.city || profile.location.country) && (
+                          <div className="flex items-center text-gray-600">
+                            <MapPin className="h-4 w-4 mr-1 text-gray-400" />
+                            <span className="text-sm">
+                              {[profile.location.city, profile.location.state, profile.location.country]
+                                .filter(Boolean)
+                                .join(", ")}
+                            </span>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center text-gray-600">
+                          <Calendar className="h-4 w-4 mr-1 text-gray-400" />
+                          <span className="text-sm">Joined {formatDate(profile.createdAt)}</span>
                         </div>
                       </div>
-                    ) : (
-                      <div className="text-gray-500">No location provided</div>
+                    </div>
+                    
+                    {/* Follow button for non-owners */}
+                    {!isCurrentUser && currentUser && (
+                      <Button
+                        variant={isFollowing ? "outline" : "default"}
+                        onClick={handleFollowToggle}
+                        disabled={isProcessingFollow}
+                        size="sm"
+                        className={
+                          isFollowing
+                            ? "border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10 min-w-[100px]"
+                            : "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 min-w-[100px]"
+                        }
+                      >
+                        {isProcessingFollow ? (
+                          <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                        ) : isFollowing ? (
+                          <UserCheck className="h-4 w-4 mr-2" />
+                        ) : (
+                          <UserPlus className="h-4 w-4 mr-2" />
+                        )}
+                        {isFollowing ? "Following" : "Follow"}
+                      </Button>
                     )}
                   </div>
-                </div>
-              </div>
 
-              <Separator className="my-6" />
-
-              <div>
-                <h3 className="text-lg font-medium mb-2">Bio</h3>
-                {profile.bio ? (
-                  <p className="text-gray-700">{profile.bio}</p>
-                ) : (
-                  <p className="text-gray-500">No bio provided</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {profile.interests && profile.interests.length > 0 && (
-          <TabsContent value="interests">
-            <Card>
-              <CardHeader>
-                <CardTitle>Interests</CardTitle>
-                <CardDescription>Things {profile.name || "this user"} is interested in</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {profile.interests.map((item, index) => (
-                    <Badge key={index} variant="secondary" className="px-3 py-1">
-                      <Tag className="h-3 w-3 mr-1" />
-                      {item.interest}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-
-        {profile.isCreator && (
-          <TabsContent value="creator">
-            <Card>
-              <CardHeader>
-                <CardTitle>Creator Profile</CardTitle>
-                <CardDescription>Information about {profile.name || "this user"} as a creator</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-6">
-                  <div className="flex items-center mb-2">
-                    <Award className="h-5 w-5 mr-2 text-[#FF6B6B]" />
-                    <h3 className="text-lg font-medium">{creatorLevel.title}</h3>
-                  </div>
-                  <p className="text-gray-700 mb-3">{creatorLevel.description}</p>
-                  <div className="w-full">
-                    <Progress value={creatorLevel.progress} className="h-2" />
-                    <div className="flex justify-between mt-1 text-xs text-gray-500">
-                      <span>Explorer</span>
-                      <span>Hunter</span>
-                      <span>Authority</span>
-                      <span>Expert</span>
+                  {/* Creator badge */}
+                  {profile.isCreator && (
+                    <div className="mt-4">
+                      <Badge className={`${creatorLevel.color} px-3 py-1 text-sm font-medium`}>
+                        <Award className="h-4 w-4 mr-1" />
+                        {creatorLevel.title}
+                      </Badge>
                     </div>
-                  </div>
-                </div>
-
-                <Separator className="my-6" />
-
-                <div>
-                  <h3 className="text-lg font-medium mb-3">Connect with {profile.name || "this creator"}</h3>
-                  {profile.socialLinks && profile.socialLinks.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                      {profile.socialLinks.map((link, index) => (
-                        <a
-                          key={index}
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center p-3 rounded-lg border border-gray-200 hover:border-[#FF6B6B] hover:bg-[#FF6B6B]/5 transition-colors"
-                        >
-                          <div className="h-8 w-8 rounded-full bg-[#FF6B6B]/10 flex items-center justify-center mr-3">
-                            {getSocialIcon(link.platform)}
-                          </div>
-                          <div>
-                            <div className="font-medium capitalize">{link.platform}</div>
-                            <div className="text-xs text-gray-500 truncate max-w-[150px]">{link.url}</div>
-                          </div>
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">No social links provided</p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        )}
-      </Tabs>
+              </div>
 
-      {/* Actions footer - only show for current user */}
-      {isCurrentUser && (
-        <div className="flex justify-between mt-8">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/profile/edit")}
-            className="border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
-          >
-            <Edit3 className="h-4 w-4 mr-2" />
-            Edit Profile
-          </Button>
-          <Button variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Log Out
-          </Button>
+              {/* Bio */}
+              {profile.bio && (
+                <div className="mt-6">
+                  <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
+                </div>
+              )}
+              
+              {/* Stats Row */}
+              <div className="flex flex-wrap gap-6 mt-6 pb-6 border-b">
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-bold text-gray-900">{userPosts.length}</span>
+                  <span className="text-sm text-gray-500">Posts</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-bold text-gray-900">{followers.length || profile.followerCount || 0}</span>
+                  <span className="text-sm text-gray-500">Followers</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-2xl font-bold text-gray-900">{following.length || profile.followingCount || 0}</span>
+                  <span className="text-sm text-gray-500">Following</span>
+                </div>
+                
+                {/* Social links */}
+                {profile.socialLinks && profile.socialLinks.length > 0 && (
+                  <div className="ml-auto flex flex-wrap gap-2 items-center">
+                    {profile.socialLinks.map((link, index) => (
+                      <a
+                        key={index}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+                        title={link.platform}
+                      >
+                        {getSocialIcon(link.platform)}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <div className="px-6">
+                <TabsList className="w-full justify-start border-b pb-0 bg-transparent h-auto rounded-none">
+                  <TabsTrigger 
+                    value="posts" 
+                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                  >
+                    Posts
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="about" 
+                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                  >
+                    About
+                  </TabsTrigger>
+                  {profile.interests && profile.interests.length > 0 && (
+                    <TabsTrigger 
+                      value="interests" 
+                      className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                    >
+                      Interests
+                    </TabsTrigger>
+                  )}
+                  {profile.isCreator && (
+                    <TabsTrigger 
+                      value="creator" 
+                      className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                    >
+                      Creator
+                    </TabsTrigger>
+                  )}
+                </TabsList>
+              </div>
+
+              <TabsContent value="posts" className="p-6 pt-4">
+                {isLoadingPosts ? (
+                  <div className="space-y-6">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <div key={i} className="space-y-3">
+                        <div className="flex items-center space-x-4">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="space-y-2">
+                            <Skeleton className="h-4 w-[200px]" />
+                            <Skeleton className="h-3 w-[150px]" />
+                          </div>
+                        </div>
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-[200px] w-full rounded-md" />
+                      </div>
+                    ))}
+                  </div>
+                ) : userPosts.length > 0 ? (
+                  <div className="space-y-6">
+                    {userPosts.map((post) => (
+                      <FeedPost key={post.id} post={post} />
+                    ))}
+                  </div>
+                ) : (
+                  <Card className="bg-gray-50 border border-dashed">
+                    <CardContent className="py-12 flex flex-col items-center justify-center text-center">
+                      <div className="bg-white p-3 rounded-full shadow-sm mb-4">
+                        <Camera className="h-6 w-6 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium mb-2">No posts yet</h3>
+                      <p className="text-gray-500 max-w-md mx-auto">
+                        {isCurrentUser
+                          ? "You haven't shared any posts yet. Start sharing your experiences!"
+                          : "This user hasn't shared any posts yet. Check back later!"}
+                      </p>
+                      {isCurrentUser && (
+                        <Button className="mt-6 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Create Your First Post</Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+
+              <TabsContent value="about" className="p-6 pt-4">
+                <Card className="bg-white border-0 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xl">About {profile.name || "User"}</CardTitle>
+                    <CardDescription>Personal information and details</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      <div>
+                        <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
+                          <Mail className="h-4 w-4 mr-2 text-[#FF6B6B]" />
+                          Contact Info
+                        </h3>
+                        <div className="space-y-3 pl-6">
+                          <div className="flex flex-col">
+                            <span className="text-sm text-gray-500">Email</span>
+                            <span className="text-gray-800">{profile.email}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
+                          <MapPin className="h-4 w-4 mr-2 text-[#FF6B6B]" />
+                          Location
+                        </h3>
+                        <div className="space-y-3 pl-6">
+                          {profile.location ? (
+                            <div className="flex flex-col">
+                              {profile.location.city && <span className="text-gray-800">{profile.location.city}</span>}
+                              {profile.location.state && <span className="text-gray-800">{profile.location.state}</span>}
+                              {profile.location.country && <span className="text-gray-800">{profile.location.country}</span>}
+                            </div>
+                          ) : (
+                            <span className="text-gray-500 italic">No location provided</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator className="my-6" />
+
+                    <div>
+                      <h3 className="text-base font-medium mb-3 text-gray-900">Bio</h3>
+                      {profile.bio ? (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 italic">No bio provided</p>
+                      )}
+                    </div>
+
+                    <Separator className="my-6" />
+
+                    <div>
+                      <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
+                        <Calendar className="h-4 w-4 mr-2 text-[#FF6B6B]" />
+                        Member Since
+                      </h3>
+                      <p className="text-gray-800">{formatDate(profile.createdAt)}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {profile.interests && profile.interests.length > 0 && (
+                <TabsContent value="interests" className="p-6 pt-4">
+                  <Card className="bg-white border-0 shadow-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xl">Interests</CardTitle>
+                      <CardDescription>Things {profile.name || "this user"} is interested in</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {profile.interests.map((item, index) => (
+                          <Badge key={index} variant="secondary" className="px-3 py-1 bg-[#FF6B6B]/10 text-[#FF6B6B] border-0">
+                            <Tag className="h-3 w-3 mr-1" />
+                            {item.interest}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
+
+              {profile.isCreator && (
+                <TabsContent value="creator" className="p-6 pt-4">
+                  <Card className="bg-white border-0 shadow-sm mb-6">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-xl">Creator Status</CardTitle>
+                      <CardDescription>Information about {profile.name || "this user"} as a creator</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-6">
+                        <div className="flex items-center mb-3">
+                          <div className="bg-[#FF6B6B]/10 p-2 rounded-full mr-3">
+                            <Award className="h-5 w-5 text-[#FF6B6B]" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-medium text-gray-900">{creatorLevel.title}</h3>
+                            <p className="text-gray-600 text-sm">{creatorLevel.description}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="mt-4">
+                          <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
+                            <div 
+                              className="h-2 rounded-full bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53]" 
+                              style={{ width: `${creatorLevel.progress}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-xs text-gray-500">
+                            <span>Explorer</span>
+                            <span>Hunter</span>
+                            <span>Authority</span>
+                            <span>Expert</span>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {profile.socialLinks && profile.socialLinks.length > 0 && (
+                    <Card className="bg-white border-0 shadow-sm">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xl">Connect</CardTitle>
+                        <CardDescription>Follow {profile.name || "this creator"} on social media</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {profile.socialLinks.map((link, index) => (
+                            <a
+                              key={index}
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center p-4 rounded-lg border border-gray-100 hover:border-[#FF6B6B] hover:shadow-sm transition-all group"
+                            >
+                              <div className="h-10 w-10 rounded-full bg-[#FF6B6B]/10 flex items-center justify-center mr-3 group-hover:bg-[#FF6B6B]/20 transition-colors">
+                                {getSocialIcon(link.platform)}
+                              </div>
+                              <div>
+                                <div className="font-medium capitalize text-gray-900">{link.platform}</div>
+                                <div className="text-xs text-gray-500 truncate max-w-[180px]">{link.url}</div>
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              )}
+            </Tabs>
+          </CardContent>
+          
+          {/* Actions footer - only show for current user */}
+          {isCurrentUser && (
+            <CardFooter className="px-6 py-4 border-t bg-gray-50">
+              <div className="w-full flex flex-wrap justify-between gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/profile/edit")}
+                  className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
+                >
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  className="flex-1 text-red-500 hover:text-red-700 hover:bg-red-50" 
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Log Out
+                </Button>
+              </div>
+            </CardFooter>
+          )}
+        </Card>
+      </div>
+    </main>
+  )
+}
+
+function ProfileSkeleton() {
+  return (
+    <div>
+      {/* Hero skeleton */}
+      <div className="w-full h-64 md:h-80 bg-gray-200 animate-pulse"></div>
+      
+      <div className="container max-w-5xl px-4 sm:px-6 -mt-24 relative z-10">
+        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+          {/* Avatar and header skeleton */}
+          <div className="p-6">
+            <div className="flex flex-col md:flex-row gap-6 items-start md:items-end">
+              <div className="relative -mt-20">
+                <div className="h-32 w-32 rounded-full bg-gray-200 border-4 border-white"></div>
+              </div>
+              
+              <div className="flex-1 space-y-4">
+                <div className="h-8 bg-gray-200 rounded-md w-48"></div>
+                <div className="flex flex-wrap gap-3">
+                  <div className="h-4 bg-gray-200 rounded-md w-36"></div>
+                  <div className="h-4 bg-gray-200 rounded-md w-40"></div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Bio skeleton */}
+            <div className="mt-6 space-y-2">
+              <div className="h-4 bg-gray-200 rounded-md w-full"></div>
+              <div className="h-4 bg-gray-200 rounded-md w-3/4"></div>
+            </div>
+            
+            {/* Stats skeleton */}
+            <div className="flex gap-6 mt-6 pb-6 border-b">
+              <div className="flex flex-col items-center">
+                <div className="h-6 bg-gray-200 rounded-md w-12 mb-1"></div>
+                <div className="h-4 bg-gray-200 rounded-md w-16"></div>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="h-6 bg-gray-200 rounded-md w-12 mb-1"></div>
+                <div className="h-4 bg-gray-200 rounded-md w-16"></div>
+              </div>
+              <div className="flex flex-col items-center">
+                <div className="h-6 bg-gray-200 rounded-md w-12 mb-1"></div>
+                <div className="h-4 bg-gray-200 rounded-md w-16"></div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Tabs skeleton */}
+          <div className="px-6 border-b">
+            <div className="flex gap-4 py-3">
+              <div className="h-5 bg-gray-200 rounded-md w-16"></div>
+              <div className="h-5 bg-gray-200 rounded-md w-16"></div>
+              <div className="h-5 bg-gray-200 rounded-md w-16"></div>
+            </div>
+          </div>
+          
+          {/* Content skeleton */}
+          <div className="p-6 space-y-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="space-y-3">
+                <div className="flex items-center space-x-4">
+                  <div className="h-10 w-10 rounded-full bg-gray-200"></div>
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded-md w-[200px]"></div>
+                    <div className="h-3 bg-gray-200 rounded-md w-[150px]"></div>
+                  </div>
+                </div>
+                <div className="h-4 bg-gray-200 rounded-md w-full"></div>
+                <div className="h-4 bg-gray-200 rounded-md w-full"></div>
+                <div className="h-[200px] bg-gray-200 rounded-md w-full"></div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
