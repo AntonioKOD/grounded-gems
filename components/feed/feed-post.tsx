@@ -254,6 +254,7 @@ export const FeedPost = memo(function FeedPost({ post, className = "", showInter
                 </div>
               )}
               <Image
+              unoptimized
                 src={post.image || "/placeholder.svg"}
                 alt={post.title || "Post image"}
                 fill
