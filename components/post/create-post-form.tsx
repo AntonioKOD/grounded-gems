@@ -265,6 +265,7 @@ export default function CreatePostForm({ onSuccess, onCancel, className }: Creat
       const formData = new FormData()
 
       // Add basic post data
+      formData.append('userId', user?.id || "")
       formData.append("content", postContent)
       formData.append("type", postType)
 
