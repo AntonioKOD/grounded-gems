@@ -112,12 +112,7 @@ export default function CollapsiblePostForm({ user, className = "" }: Collapsibl
               </div>
             </div>
 
-            <CreatePostForm
-              user = {user}
-              onCancel={handleCollapseForm}
-              onSuccess={handleCollapseForm}
-              className="border-0 shadow-none"
-            />
+            <CreatePostForm/>
           </CardContent>
         </Card>
       )}

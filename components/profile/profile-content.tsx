@@ -78,14 +78,7 @@ export default function ProfileContent({ userId }: ProfileContentProps) {
         <TabsContent value="posts" className="mt-0 space-y-4">
           {/* Show create post form only if this is the user's own profile */}
           {isOwnProfile && currentUser && (
-            <CreatePostForm
-              user={{
-                id: currentUser.id,
-                name: currentUser.name,
-                avatar: currentUser.avatar,
-              }}
-              variant="profile"
-            />
+            <CreatePostForm/>
           )}
 
           {posts.filter((post) => post.type === "post").length > 0 ? (

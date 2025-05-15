@@ -1308,6 +1308,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="relative w-full max-w-3xl aspect-[4/3]">
               <Image
+              unoptimized
                 src={images[currentImageIndex] || "/placeholder.svg?height=800&width=1200&query=gallery-image"}
                 alt={`${location.name} - Full Photo ${currentImageIndex + 1}`}
                 fill
@@ -1343,6 +1344,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
                   )}
                 >
                   <Image
+                  unoptimized
                     src={img || "/placeholder.svg?height=64&width=64&query=gallery-thumbnail"}
                     alt={`${location.name} thumbnail ${idx + 1}`}
                     width={64}
