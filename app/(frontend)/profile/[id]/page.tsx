@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { followUser, unfollowUser, getFeedPostsByUser, getUserbyId, getFollowers, getFollowing } from "@/app/actions"
-import FeedPost from "@/components/feed/feed-post"
+import { PostCard } from "@/components/post/post-card"
 import type { Post } from "@/types/feed"
 
 interface SocialLink {
@@ -263,6 +263,7 @@ export default function ProfilePage() {
             likes: post.likes?.length || 0,
           }
         })
+       
 
         console.log("Normalized posts:", formattedPosts.map(p => ({ id: p.id, image: p.image })))
         setUserPosts(formattedPosts)
@@ -494,7 +495,7 @@ export default function ProfilePage() {
               variant="outline" 
               size="sm" 
               className="bg-white/90 hover:bg-white border-0 shadow-sm"
-              onClick={() => router.push("/profile/edit")}
+              onClick={() => router.push(`/profile/${profile.id}/edit`)}
             >
               <Edit3 className="h-4 w-4 mr-1" />
               Edit Profile
@@ -705,8 +706,17 @@ export default function ProfilePage() {
                 ) : userPosts.length > 0 ? (
                   <div className="space-y-6">
                     {userPosts.map((post) => (
-                      <FeedPost key={post.id} post={post} />
-                    ))}
+                      (currentUser && (
+                      <PostCard 
+                        user={{
+                          id: currentUser.id,
+                          name: currentUser.name || "Unknown User",
+                          avatar: currentUser.profileImage?.url
+                        }} 
+                        key={post.id} 
+                        post={post} 
+                      />
+                    ))))}
                   </div>
                 ) : (
                   <Card className="bg-gray-50 border border-dashed">
@@ -892,7 +902,7 @@ export default function ProfilePage() {
               <div className="w-full flex flex-wrap justify-between gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => router.push("/profile/edit")}
+                  onClick={() => router.push(`/profile/${profile.id}/edit`)}
                   className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
                 >
                   <Edit3 className="h-4 w-4 mr-2" />

@@ -17,6 +17,7 @@ interface CollapsiblePostFormProps {
     avatar?: string
   }
   className?: string
+  onSuccess?: () => void
 }
 
 export default function CollapsiblePostForm({ user, className = "" }: CollapsiblePostFormProps) {

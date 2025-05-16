@@ -31,6 +31,7 @@ export interface User {
     rating?: number
     location?: Location
     likes?: number
+    comments?: Comment[]
    
   }
   

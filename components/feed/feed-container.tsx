@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { getFeedPosts, getPersonalizedFeed, likePost, isLiked, sharePost, getFeedPostsByUser } from "@/app/actions"
+import { getFeedPosts, getPersonalizedFeed, getFeedPostsByUser } from "@/app/actions"
 import type { Post } from "@/types/feed"
 
 interface FeedContainerProps {
@@ -75,6 +75,7 @@ export default function FeedContainer({
         // Fetch personalized feed if user is logged in
         fetchedPosts = (await getPersonalizedFeed(user.id, 10, 0)) || []
         console.log("Fetched personalized posts:", fetchedPosts.length)
+        console.log(fetchedPosts[0])
       } else if (feedType === "user" && userId) {
         // Use the server action directly instead of fetch API
         console.log(`Fetching posts for user ID: ${userId}`)
@@ -99,32 +100,7 @@ export default function FeedContainer({
           status: post.status || "published",
         }))
         console.log("Fetched user posts:", fetchedPosts.length)
-
-        // Map the posts to match the expected format for PostCard if needed
-        if (fetchedPosts.length > 0) {
-          fetchedPosts = fetchedPosts.map((post: any) => {
-            return {
-              id: post.id,
-              author: {
-                id: post.author?.id || userId,
-                name: post.author?.name || "User",
-                avatar: post.author?.avatar || "/diverse-avatars.png",
-              },
-              title: post.title || "",
-              content: post.content || "",
-              createdAt: post.createdAt || new Date().toISOString(),
-              image: post.image?.url || post.featuredImage?.url || post.image || null,
-              likeCount: post.likes?.length || post.likeCount || 0,
-              commentCount: post.comments?.length || post.commentCount || 0,
-              shareCount: post.shareCount || 0,
-              isLiked: false,
-              type: post.type || "post",
-              rating: post.rating || null,
-              location: post.location || (post.locationName ? { id: "loc_1", name: post.locationName } : undefined),
-              status: post.status || "published",
-            }
-          })
-        }
+        console.log(posts[0].commentCount)
       } else {
         // Fetch all posts with sorting
         fetchedPosts = (await getFeedPosts(feedType, sortBy, 1)) || []
@@ -135,22 +111,6 @@ export default function FeedContainer({
       if (!fetchedPosts || fetchedPosts.length === 0) {
         console.log("No posts found, using mock data")
         setUsedMockData(true)
-      }
-
-      // Check if each post is liked by the current user
-      if (user && fetchedPosts.length > 0) {
-        const postsWithLikeStatus = await Promise.all(
-          fetchedPosts.map(async (post) => {
-            try {
-              const liked = await isLiked(post.id, user.id)
-              return { ...post, isLiked: liked }
-            } catch (error) {
-              console.error(`Error checking like status for post ${post.id}:`, error)
-              return post
-            }
-          }),
-        )
-        fetchedPosts = postsWithLikeStatus
       }
 
       if (fetchedPosts.length > 0) {
@@ -171,9 +131,6 @@ export default function FeedContainer({
       setLoading(false)
     }
   }
-
-  // Generate mock posts if needed
-  
 
   // Refresh posts
   const refreshPosts = async () => {
@@ -205,22 +162,6 @@ export default function FeedContainer({
         morePosts = (await getFeedPosts(feedType, sortBy, nextPage)) || []
       }
 
-      // Check if each post is liked by the current user
-      if (user && morePosts.length > 0) {
-        const postsWithLikeStatus = await Promise.all(
-          morePosts.map(async (post) => {
-            try {
-              const liked = await isLiked(post.id, user.id)
-              return { ...post, isLiked: liked }
-            } catch (error) {
-              console.error(`Error checking like status for post ${post.id}:`, error)
-              return post
-            }
-          }),
-        )
-        morePosts = postsWithLikeStatus
-      }
-
       if (morePosts.length > 0) {
         setPosts([...posts, ...morePosts])
         setPage(nextPage)
@@ -236,110 +177,16 @@ export default function FeedContainer({
     }
   }
 
-  // Handle like action using server action
-  const handleLike = async (postId: string) => {
-    if (!user) {
-      toast.error("Please log in to like posts")
-      return
-    }
-
-    try {
-      // Find the post
-      const post = posts.find((p) => p.id === postId)
-      if (!post) return
-
-      // Optimistic update
-      const isCurrentlyLiked = post.isLiked || false
-      const newLikeCount = isCurrentlyLiked ? (post.likeCount || 0) - 1 : (post.likeCount || 0) + 1
-
-      setPosts(
-        posts.map((p) => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              isLiked: !isCurrentlyLiked,
-              likeCount: newLikeCount,
-            }
-          }
-          return p
-        }),
-      )
-
-      // Call server action
-      await likePost(postId, !isCurrentlyLiked, user.id)
-    } catch (error) {
-      console.error("Error liking post:", error)
-      toast.error("Failed to like post. Please try again.")
-
-      // Revert optimistic update on error
-      setPosts(
-        posts.map((p) => {
-          if (p.id === postId) {
-            const isCurrentlyLiked = p.isLiked || false
-            return {
-              ...p,
-              isLiked: isCurrentlyLiked,
-              likeCount: isCurrentlyLiked ? p.likeCount : (p.likeCount || 1) - 1,
-            }
-          }
-          return p
-        }),
-      )
-    }
-  }
-
+  // Handle comment action
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleComment = (postId: string) => {
     // Scroll to comments or open comment form
     toast.info("Comment feature coming soon")
   }
 
-  const handleShare = async (postId: string) => {
-    try {
-      // Find the post
-      const post = posts.find((p) => p.id === postId)
-      if (!post) return
-
-      // Copy link to clipboard
-      const postUrl = `${window.location.origin}/posts/${postId}`
-      await navigator.clipboard.writeText(postUrl)
-
-      // Optimistic update
-      setPosts(
-        posts.map((p) => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              shareCount: (p.shareCount || 0) + 1,
-            }
-          }
-          return p
-        }),
-      )
-
-      // Call server action if user is logged in
-      if (user) {
-        await sharePost(postId, user.id)
-      }
-
-      toast.success("Link copied to clipboard")
-    } catch (error) {
-      console.error("Error sharing post:", error)
-      toast.error("Failed to share post")
-
-      // Revert optimistic update
-      setPosts(
-        posts.map((p) => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              shareCount: Math.max(0, (p.shareCount || 1) - 1),
-            }
-          }
-          return p
-        }),
-      )
-    }
+  // Handle post update
+  const handlePostUpdate = (updatedPost: Post) => {
+    setPosts(posts.map((post) => (post.id === updatedPost.id ? updatedPost : post)))
   }
 
   return (
@@ -393,10 +240,13 @@ export default function FeedContainer({
             {posts.map((post) => (
               <PostCard
                 key={post.id}
-                post={post}
-                onLike={handleLike}
+                post={{
+                  ...post,
+                  commentCount: post.commentCount || 0, // Ensure commentCount is always defined
+                }}
+                user={user || { id: "", name: "" }}
                 onComment={handleComment}
-                onShare={handleShare}
+                onPostUpdated={handlePostUpdate}
                 className="transition-all duration-300 hover:shadow-md"
               />
             ))}
