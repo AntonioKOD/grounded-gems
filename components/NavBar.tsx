@@ -83,7 +83,7 @@ const NavBar = () => {
     if (!isLoggedIn) return []
 
     return [
-      { path: "/locations", label: "Locations", icon: MapPin, priority: "medium" },
+      { path: "/map", label: "Locations", icon: MapPin, priority: "medium" },
       { path: "/profile", label: "Profile", icon: UserCircle, priority: "medium" },
     ]
   }
@@ -245,7 +245,7 @@ const NavBar = () => {
             {user && (
               <>
                 {/* Add Event Button */}
-                <Link href="/add-event" className="flex flex-col items-center mx-2">
+                <Link href="/events/create" className="flex flex-col items-center mx-2">
                   <div className="h-10 w-10 rounded-full bg-[#FF6B6B] flex items-center justify-center">
                     <Calendar className="h-5 w-5 text-white" />
                   </div>
@@ -480,7 +480,7 @@ const NavBar = () => {
 
                   {/* Add Event Button - Mobile */}
                   <Link
-                    href="/add-event"
+                    href="/events/create"
                     className="flex items-center rounded-md px-3 py-2 font-medium text-gray-700 hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B]"
                     onClick={() => setMobileMenuOpen(false)}
                   >

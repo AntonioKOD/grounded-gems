@@ -22,14 +22,14 @@ export default function MobileNavigation() {
       active: pathname === "/events" || pathname.startsWith("/events/"),
     },
     {
-      href: "/add-event",
+      href: "/events/create",
       icon: Calendar,
       label: "Add Event",
       isCenter: true,
       active: pathname === "/add-event",
     },
     {
-      href: "/locations",
+      href: "/map",
       icon: MapPin,
       label: "Locations",
       active: pathname === "/locations" || pathname.startsWith("/locations/"),
