@@ -1,38 +1,58 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-'use client'
+"use client"
 
-import React, { useState } from 'react'
-import { signupUser } from '@/app/actions'
-import Link from 'next/link'
-import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { cn } from '@/lib/utils'
+import type React from "react"
+import { useState, useEffect } from "react"
+import { signupUser } from "@/app/actions"
+import Link from "next/link"
+import { Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { cn } from "@/lib/utils"
 
-type Status = 'idle' | 'loading' | 'success' | 'error' | 'resending' | 'resent'
+type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
 
 export default function SignupForm() {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' })
+  const [formData, setFormData] = useState<any>({
+    name: "",
+    email: "",
+    password: "",
+    coords: { latitude: null, longitude: null },
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState(0)
-  const [status, setStatus] = useState<Status>('idle')
-  const [error, setError] = useState<string>('')
+  const [status, setStatus] = useState<Status>("idle")
+  const [error, setError] = useState<string>("")
+
+  // Acquire geolocation on mount
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords: { latitude, longitude } }) => {
+          setFormData((prev: any) => ({
+            ...prev,
+            coords: {
+              ...prev.coords,
+              latitude,
+              longitude,
+            },
+          }))
+        },
+        (err) => {
+          console.warn("Geolocation unavailable or denied", err)
+        },
+      )
+    }
+  }, [])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
+    setFormData((prev: any) => ({ ...prev, [name]: value }))
 
-    if (name === 'password') {
+    if (name === "password") {
       let strength = 0
       if (value.length >= 8) strength += 1
       if (/[A-Z]/.test(value)) strength += 1
@@ -44,67 +64,67 @@ export default function SignupForm() {
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    setStatus('loading')
+    setError("")
+    setStatus("loading")
 
     try {
+      // Ensure we have coordinates
+      if (formData.coords.latitude == null || formData.coords.longitude == null) {
+        throw new Error("Please enable location to sign up.")
+      }
+      // Call signupUser with geolocation data included
       await signupUser(formData)
-      setStatus('success')
+      setStatus("success")
     } catch (err: any) {
-      setError(err.message || 'Signup failed. Please try again.')
-      setStatus('error')
+      setError(err.message || "Signup failed. Please try again.")
+      setStatus("error")
     }
   }
 
   async function resendVerification() {
-    setStatus('resending')
+    setStatus("resending")
     try {
-      await fetch('/api/resend-verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch("/api/resend-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
       })
-      setStatus('resent')
+      setStatus("resent")
     } catch {
-      setStatus('error')
-      setError('Could not resend email. Try again later.')
+      setStatus("error")
+      setError("Could not resend email. Try again later.")
     }
   }
 
-  // Render different UIs based on status
-  if (status === 'success' || status === 'resending' || status === 'resent') {
+  if (status === "success" || status === "resending" || status === "resent") {
     return (
       <div className="flex justify-center items-center min-h-[70vh] px-4">
         <Card className="w-full max-w-md text-center">
           <CardHeader>
             <CardTitle>Your account is created!</CardTitle>
             <CardDescription>
-              {status === 'success' && (
+              {status === "success" && (
                 <>
-                  <CheckCircle className="inline-block h-5 w-5 text-green-600" /> 
-                  We’ve sent a verification link to <strong>{formData.email}</strong>.  
-                  Please check your inbox.
+                  <CheckCircle className="inline-block h-5 w-5 text-green-600" /> We&apos;ve sent a verification link to{" "}
+                  <strong>{formData.email}</strong>. Please check your inbox.
                 </>
               )}
-              {status === 'resending' && 'Resending verification email…'}
-              {status === 'resent' && (
+              {status === "resending" && "Resending verification email…"}
+              {status === "resent" && (
                 <>
-                  <CheckCircle className="inline-block h-5 w-5 text-green-600" /> 
-                  Verification email resent!
+                  <CheckCircle className="inline-block h-5 w-5 text-green-600" /> Verification email resent!
                 </>
               )}
             </CardDescription>
           </CardHeader>
           <CardFooter className="flex flex-col gap-3">
-            {status === 'success' && (
+            {status === "success" && (
               <Button onClick={resendVerification} variant="outline">
                 Resend verification email
               </Button>
             )}
             <Link href="/login" passHref>
-              <Button asChild>
-                Go to Login
-              </Button>
+              <Button className="w-full">Go to Login</Button>
             </Link>
           </CardFooter>
         </Card>
@@ -119,18 +139,15 @@ export default function SignupForm() {
           <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
           <CardDescription>Enter your details to sign up</CardDescription>
         </CardHeader>
-
         <CardContent>
-          {status === 'error' && (
+          {status === "error" && (
             <Alert variant="destructive" className="mb-6">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Error</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-
           <form onSubmit={handleSignup} className="space-y-4">
-            {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
@@ -139,12 +156,10 @@ export default function SignupForm() {
                 placeholder="John Doe"
                 value={formData.name}
                 onChange={handleChange}
-                disabled={status === 'loading'}
+                disabled={status === "loading"}
                 required
               />
             </div>
-
-            {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -154,96 +169,80 @@ export default function SignupForm() {
                 placeholder="john@example.com"
                 value={formData.email}
                 onChange={handleChange}
-                disabled={status === 'loading'}
+                disabled={status === "loading"}
                 required
               />
             </div>
-
-            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
-                  disabled={status === 'loading'}
+                  disabled={status === "loading"}
                   required
                   className="pr-10"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(prev => !prev)}
+                  onClick={() => setShowPassword((p) => !p)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
                   tabIndex={-1}
                 >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-
-              {/* Strength Meter */}
               {formData.password && (
                 <div className="mt-2">
                   <div className="flex gap-1 mb-1">
-                    {[1, 2, 3, 4].map(level => (
+                    {[1, 2, 3, 4].map((level) => (
                       <div
                         key={level}
                         className={cn(
-                          'h-1.5 flex-1 rounded-full transition-colors',
+                          "h-1.5 flex-1 rounded-full transition-colors",
                           passwordStrength >= level
                             ? passwordStrength === 1
-                              ? 'bg-red-500'
+                              ? "bg-red-500"
                               : passwordStrength === 2
-                              ? 'bg-orange-500'
-                              : passwordStrength === 3
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                            : 'bg-gray-200'
+                                ? "bg-orange-500"
+                                : passwordStrength === 3
+                                  ? "bg-yellow-500"
+                                  : "bg-green-500"
+                            : "bg-gray-200",
                         )}
                       />
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {passwordStrength === 0 && 'Add a password'}
-                    {passwordStrength === 1 && 'Weak – at least 8 characters'}
-                    {passwordStrength === 2 && 'Fair – add numbers/symbols'}
-                    {passwordStrength === 3 && 'Good – add uppercase letters'}
-                    {passwordStrength === 4 && 'Strong password'}
+                    {passwordStrength === 0 && "Add a password"}
+                    {passwordStrength === 1 && "Weak – at least 8 characters"}
+                    {passwordStrength === 2 && "Fair – add numbers/symbols"}
+                    {passwordStrength === 3 && "Good – add uppercase letters"}
+                    {passwordStrength === 4 && "Strong password"}
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Submit */}
-            <Button
-              type="submit"
-              className="w-full mt-6"
-              disabled={
-                status === 'loading' ||
-                passwordStrength < 2
-              }
-            >
-              {status === 'loading' ? (
+            <Button type="submit" className="w-full" disabled={status === "loading"}>
+              {status === "loading" ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing up…
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating account...
                 </>
               ) : (
-                'Sign up'
+                "Sign Up"
               )}
             </Button>
           </form>
         </CardContent>
-
         <CardFooter className="flex justify-center border-t p-6">
           <p className="text-sm text-muted-foreground">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <Link href="/login" className="text-primary font-medium hover:underline">
               Log in
             </Link>

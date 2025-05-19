@@ -195,17 +195,18 @@ export const Users: CollectionConfig = {
       name: 'location',
       type: 'group',
       fields: [
+        { name: 'city', type: 'text' },
+        { name: 'state', type: 'text' },
+        { name: 'country', type: 'text' },
+        // New coordinates subgroup for geocoding
         {
-          name: 'city',
-          type: 'text',
-        },
-        {
-          name: 'state',
-          type: 'text',
-        },
-        {
-          name: 'country',
-          type: 'text',
+          name: 'coordinates',
+          type: 'group',
+          label: 'Coordinates',
+          fields: [
+            { name: 'latitude', type: 'number'},
+            { name: 'longitude', type: 'number'},
+          ],
         },
       ],
     },
@@ -281,6 +282,55 @@ export const Users: CollectionConfig = {
       admin: {
         description: 'Posts liked by this user',
       },
-    }
+    },
+    {
+      name: 'sportsPreferences',
+      type: 'group',
+      fields: [
+        {
+          name: 'sports',
+          type: 'select',
+          hasMany: true,
+          options: [
+            { label: 'Tennis', value: 'tennis' },
+            { label: 'Soccer', value: 'soccer' },
+            { label: 'Basketball', value: 'basketball' },
+            // Add more sports as needed
+          ],
+        },
+        {
+          name: 'skillLevel',
+          type: 'select',
+          options: [
+            { label: 'Beginner', value: 'beginner' },
+            { label: 'Intermediate', value: 'intermediate' },
+            { label: 'Advanced', value: 'advanced' },
+          ],
+        },
+        {
+          name: 'availability',
+          type: 'array',
+          fields: [
+            {
+              name: 'day',
+              type: 'select',
+              options: [
+                { label: 'Monday', value: 'monday' },
+                { label: 'Tuesday', value: 'tuesday' },
+                { label: 'Wednesday', value: 'wednesday' },
+                { label: 'Thursday', value: 'thursday' },
+                { label: 'Friday', value: 'friday' },
+                { label: 'Saturday', value: 'saturday' },
+                { label: 'Sunday', value: 'sunday' },
+              ],
+            },
+            {
+              name: 'timeSlot',
+              type: 'text',
+            },
+          ],
+        },
+      ],
+    },
   ],
 };

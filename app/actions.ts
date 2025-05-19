@@ -11,6 +11,8 @@ import { connect } from "http2";
 import { Comment, User } from "@/types/feed";
 import { Post } from "@/types/feed";
 import { Notification } from "@/types/notification";
+import {Where} from "payload";
+import { PayloadRequest } from "payload";
 
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
@@ -264,6 +266,10 @@ interface SignupInput {
   email: string;
   password: string;
   name: string;
+  coords: {
+    latitude: number;
+    longitude: number;
+  }
 }
 
 
@@ -277,6 +283,12 @@ export async function signupUser(data: SignupInput){
         email: data.email,
         password: data.password,
         name: data.name,
+        location: {
+          coordinates: {
+            latitude: data.coords.latitude,
+            longitude: data.coords.longitude,
+          }
+        }
       },
     
     })
@@ -1549,4 +1561,93 @@ export async function createPost(formData: FormData) {
       message: "Failed to create post. Please try again.",
     }
   }
+}
+
+
+export async function updateUserLocation(userId: string, coords: {latitude: number, longitude: number}) {
+  const payload = await getPayload({ config });
+
+  try {
+    // Update the user's location
+    const updatedUser = await payload.update({
+      collection: 'users',
+      id: userId,
+      depth: 0, // No need for relationships here
+      data: {
+        location: {
+          coordinates: {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          }
+        },
+      },
+    });
+
+
+    return updatedUser;
+  } catch (error) {
+    console.error('Error updating user location:', error);
+    throw error;
+  }
+}
+
+
+
+const SKILL_WEIGHT: Record<string, number> = {
+  beginner: 1,
+  intermediate: 2,
+  advanced: 3,
+};
+
+export async function runMatchAlgorithm(
+  participantIds: string[],
+  maxPlayers: number,
+  req: PayloadRequest
+): Promise<string[][]> {
+  // 1. Fetch user docs to get skill levels
+  const { docs: users } = await req.payload.find({
+    collection: 'users',
+    where: {
+      id: { in: participantIds },
+    } as Where,
+    depth: 0,
+  });
+
+  // 2. Build participants array with numeric weights
+  const participants = users.map(user => {
+    const pref = (user.sportsPreferences?.skillLevel as string) || 'intermediate';
+    const weight = SKILL_WEIGHT[pref] ?? SKILL_WEIGHT.intermediate;
+    return { id: user.id, weight };
+  });
+
+  // 3. Sort by weight descending (highest skill first)
+  participants.sort((a, b) => b.weight - a.weight);
+
+  // 4. Determine number of groups needed
+  const groupCount = Math.ceil(participants.length / maxPlayers);
+  const groups: string[][] = Array.from({ length: groupCount }, () => []);
+
+  // 5. Assign in serpentine (snake draft) order
+  let idx = 0;
+  let forward = true;
+  for (const p of participants) {
+    groups[idx].push(String(p.id));
+    if (forward) {
+      if (idx === groupCount - 1) {
+        forward = false;
+        idx--;
+      } else {
+        idx++;
+      }
+    } else {
+      if (idx === 0) {
+        forward = true;
+        idx++;
+      } else {
+        idx--;
+      }
+    }
+  }
+
+  return groups;
 }

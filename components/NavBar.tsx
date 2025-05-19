@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import type React from "react"
@@ -19,9 +21,10 @@ import {
   LayoutList,
   Search,
   ChevronDown,
+  Users,
 } from "lucide-react"
 
-import { Button } from "./ui/button"
+import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -35,7 +38,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { logoutUser } from "@/app/actions"
 import NotificationCenter from "@/components/notifications/notification-center"
-import { Input } from "./ui/input"
+import { Input } from "@/components/ui/input"
+import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface UserData {
   id: string
@@ -56,21 +60,32 @@ const NavBar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
-
   const router = useRouter()
   const pathname = usePathname()
+  const isTablet = useMediaQuery("(max-width: 1024px)")
+  const isMobile = useMediaQuery("(max-width: 640px)")
 
-  // Navigation links - only show Home for non-logged in users
-  const getNavLinks = (isLoggedIn: boolean) => {
-    const baseLinks = [{ path: "/", label: "Home", icon: Home }]
-
-    const loggedInLinks = [
-      { path: "/explore", label: "Explore", icon: LayoutList },
-      { path: "/map", label: "Map", icon: MapPin },
-      { path: "/feed", label: "Feed", icon: LayoutList },
+  // Zipf's Law Navigation Links - Prioritized by frequency of use
+  const getPrimaryNavLinks = (isLoggedIn: boolean) => {
+    // High frequency links - Always visible
+    const primaryLinks = [
+      { path: "/feed", label: "Feed", icon: LayoutList, priority: "high" },
+      { path: "/matchmaking", label: "Matchmaking", icon: Users, priority: "high" },
+      { path: "/events", label: "Events", icon: Calendar, priority: "high" },
     ]
 
-    return isLoggedIn ? [...baseLinks, ...loggedInLinks] : baseLinks
+    // Only show primary links for logged in users, otherwise just show Home
+    return isLoggedIn ? primaryLinks : [{ path: "/", label: "Home", icon: Home, priority: "high" }]
+  }
+
+  const getSecondaryNavLinks = (isLoggedIn: boolean) => {
+    // Medium frequency links - Secondary visibility
+    if (!isLoggedIn) return []
+
+    return [
+      { path: "/locations", label: "Locations", icon: MapPin, priority: "medium" },
+      { path: "/profile", label: "Profile", icon: UserCircle, priority: "medium" },
+    ]
   }
 
   // Scroll effect
@@ -111,6 +126,7 @@ const NavBar = () => {
 
         const data = await response.json()
         setUser(data.user)
+        // Update user location if available and coordinates exist
       } catch (error) {
         console.error("Error fetching user:", error)
         setUser(null)
@@ -167,7 +183,8 @@ const NavBar = () => {
       : u.email.charAt(0).toUpperCase()
 
   // Get navigation links based on login status
-  const navLinks = getNavLinks(!!user)
+  const primaryNavLinks = getPrimaryNavLinks(!!user)
+  const secondaryNavLinks = getSecondaryNavLinks(!!user)
 
   return (
     <header className="sticky top-0 z-50 mx-2">
@@ -186,21 +203,42 @@ const NavBar = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-1">
-            {/* Nav Links */}
-            {navLinks.map((link) => (
-              <Link
+            {/* Primary Nav Links - High Frequency (Zipf's Law) */}
+            {primaryNavLinks.map((link) => (
+              <Button
                 key={link.path}
-                href={link.path}
+                variant={pathname === link.path ? "default" : "ghost"}
+                size="sm"
                 className={cn(
-                  "relative px-3 py-2 rounded-md font-medium transition-colors flex items-center",
-                  pathname === link.path
-                    ? "text-[#FF6B6B] bg-[#FF6B6B]/5"
-                    : "text-gray-700 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/5",
+                  "h-9",
+                  pathname === link.path ? "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white" : "hover:bg-gray-100",
                 )}
+                asChild
               >
-                <link.icon className="h-4 w-4 mr-2" />
-                {link.label}
-              </Link>
+                <Link href={link.path}>
+                  <link.icon className="h-4 w-4 mr-2" />
+                  {link.label}
+                </Link>
+              </Button>
+            ))}
+
+            {/* Secondary Nav Links - Medium Frequency (Zipf's Law) */}
+            {secondaryNavLinks.map((link) => (
+              <Button
+                key={link.path}
+                variant={pathname === link.path ? "default" : "ghost"}
+                size="sm"
+                className={cn(
+                  "h-9",
+                  pathname === link.path ? "bg-[#FF6B6B]/80 hover:bg-[#FF6B6B]/90 text-white" : "hover:bg-gray-100",
+                )}
+                asChild
+              >
+                <Link href={link.path}>
+                  <link.icon className="h-4 w-4 mr-2" />
+                  {link.label}
+                </Link>
+              </Button>
             ))}
 
             {/* Action Buttons - Only show for logged in users */}
@@ -287,6 +325,7 @@ const NavBar = () => {
               </div>
             ) : (
               <div className="flex items-center space-x-2 ml-2">
+                {/* Auth buttons - Low frequency (Zipf's Law) */}
                 <Button variant="ghost" asChild className="hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B]">
                   <Link href="/login">Log in</Link>
                 </Button>
@@ -344,16 +383,34 @@ const NavBar = () => {
         {mobileMenuOpen && (
           <div className="md:hidden mt-3">
             <div className="flex flex-col space-y-1 px-2 pb-3 pt-1">
-              {/* Navigation Links */}
-              {navLinks.map((link) => (
+              {/* Primary Navigation Links - High Frequency (Zipf's Law) */}
+              {primaryNavLinks.map((link) => (
                 <Link
                   key={link.path}
                   href={link.path}
                   className={cn(
                     "flex items-center rounded-md px-3 py-2 font-medium",
                     pathname === link.path
-                      ? "bg-[#FF6B6B]/10 text-[#FF6B6B]"
+                      ? "bg-[#FF6B6B] text-white"
                       : "text-gray-700 hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B]",
+                  )}
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <link.icon className="mr-2 h-5 w-5" />
+                  {link.label}
+                </Link>
+              ))}
+
+              {/* Secondary Navigation Links - Medium Frequency (Zipf's Law) */}
+              {secondaryNavLinks.map((link) => (
+                <Link
+                  key={link.path}
+                  href={link.path}
+                  className={cn(
+                    "flex items-center rounded-md px-3 py-2 font-medium",
+                    pathname === link.path
+                      ? "bg-[#FF6B6B]/80 text-white"
+                      : "text-gray-600 hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B]",
                   )}
                   onClick={() => setMobileMenuOpen(false)}
                 >

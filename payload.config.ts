@@ -16,6 +16,7 @@ import {resendAdapter} from '@payloadcms/email-resend'
 import {vercelBlobStorage} from '@payloadcms/storage-vercel-blob'
 import { Posts } from './collections/Posts'
 import { Notifications } from './collections/Notifications'
+import { EventRSVPs } from './collections/EventRSVPs';
 
 
 
@@ -36,6 +37,7 @@ export default buildConfig({
     Subscribers,
     Posts,
     Notifications,
+    EventRSVPs
   ],
   
   secret: process.env.PAYLOAD_SECRET || '',

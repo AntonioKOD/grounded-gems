@@ -1,7 +1,7 @@
 import MapExplorer from "./map-explorer"
 
 export const metadata = {
-  title: "Explore Map | Local Explorer",
+  title: "Explore Map | Grounded Gems",
   description: "Discover events and locations near you with our interactive map",
 }
 
