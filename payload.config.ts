@@ -17,8 +17,7 @@ import { resendAdapter } from '@payloadcms/email-resend'
 import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
 
 export default buildConfig({
-  // Public-facing URL of your Payload server (used in email links, etc.)
-  serverURL: process.env.SERVER_URL || 'http://localhost:3000',
+  
 
   // Secret for signing tokens and encrypting data
   secret: process.env.PAYLOAD_SECRET || '',
