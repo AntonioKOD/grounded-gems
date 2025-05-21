@@ -35,7 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback} from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useAuth } from "@/hooks/use-auth"
@@ -452,7 +452,8 @@ const NavBar = () => {
                     <Button variant="ghost" className="p-1 flex items-center gap-2 hover:bg-[#FF6B6B]/5 rounded-full">
                       <Avatar className="h-8 w-8 border-2 border-[#FF6B6B]/20">
                         {user?.profileImage?.url ? (
-                          <AvatarImage src={user.profileImage.url || "/placeholder.svg"} alt={user.name || "User"} />
+
+                          <Image  unoptimized src={user.profileImage.url || "/placeholder.svg"} fill alt={user.name || "User"} />
                         ) : (
                           <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
                             {getInitials(user)}
@@ -659,7 +660,7 @@ const NavBar = () => {
                     <div className="flex items-center space-x-3">
                       <Avatar className="h-10 w-10 border-2 border-[#FF6B6B]/20">
                         {user?.profileImage?.url ? (
-                          <AvatarImage src={user.profileImage.url || "/placeholder.svg"} alt={user.name || "User"} />
+                          <Image unoptimized src={user.profileImage.url || "/placeholder.svg"} fill alt={user.name || "User"} />
                         ) : (
                           <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
                             {getInitials(user)}

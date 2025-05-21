@@ -172,6 +172,7 @@ export interface Event {
     name: string
     contactEmail?: string
     contactPhone?: string
+    profileImage?: string
   }
 
   // System fields

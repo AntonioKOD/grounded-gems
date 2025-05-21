@@ -402,6 +402,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
         <div className="h-64 md:h-80 w-full relative">
           {event?.image ? (
             <Image
+            unoptimized
               src={typeof event?.image === "string" ? event?.image : event.image.url}
               alt={event?.name}
               fill
@@ -409,6 +410,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
             />
           ) : (
             <Image
+            unoptimized
               src={`/placeholder.svg?height=800&width=1200&query=event`}
               alt={event?.name}
               fill
@@ -455,7 +457,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
                 <h3 className="text-sm font-medium text-gray-500 mb-2">Organized by</h3>
                 <div className="flex items-center">
                   <Avatar className="h-10 w-10 mr-3">
-                    <AvatarFallback>{getOrganizerName().charAt(0).toUpperCase()}</AvatarFallback>
+                    <Image  unoptimized src={getProfileImageUrl(event?.organizer.profileImage) || '/placeholder.svg'} fill alt="Image"/>
                   </Avatar>
                   <div>
                     <p className="font-medium">{getOrganizerName()}</p>

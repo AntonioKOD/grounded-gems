@@ -99,7 +99,7 @@ export function EventCard({ event, className, compact = false, userCoordinates }
         <Link href={`/events/${event.id}`} className="block">
           <div className="flex h-full">
             <div className="w-1/3 relative">
-              <Image src={getImageUrl() || "/placeholder.svg"} alt={event.name} fill className="object-cover" />
+              <Image unoptimized src={getImageUrl() || "/placeholder.svg"} alt={event.name} fill className="object-cover" />
 
               {/* Status badge for compact view */}
               {event.status !== "published" && (
@@ -164,7 +164,7 @@ export function EventCard({ event, className, compact = false, userCoordinates }
       <CardContent className="p-0">
         {/* Event Image */}
         <div className="relative h-40 w-full">
-          <Image src={getImageUrl() || "/placeholder.svg"} alt={event.name} fill className="object-cover" />
+          <Image unoptimized src={getImageUrl() || "/placeholder.svg"} alt={event.name} fill className="object-cover" />
 
           {/* Date overlay */}
           <div className="absolute top-3 left-3 bg-white rounded-md overflow-hidden shadow-md">
