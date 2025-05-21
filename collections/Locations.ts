@@ -1,6 +1,5 @@
 import { CollectionConfig } from 'payload';
 
-
 export const Locations: CollectionConfig = {
   slug: 'locations',
   labels: {
@@ -16,38 +15,46 @@ export const Locations: CollectionConfig = {
   hooks: {
     afterChange: [
       async ({ req, doc, previousDoc, operation }) => {
-        if (!req.payload) return doc
+        if (!req.payload) return doc;
 
-        // Handle location verification
-        if (operation === "update" && !previousDoc.isVerified && doc.isVerified) {
+        // Only handle when a location is marked verified
+        if (
+          operation === 'update' &&
+          previousDoc?.isVerified === false &&
+          doc.isVerified === true
+        ) {
           try {
+            // Determine the creator ID (string or object)
+            let creatorId: string | undefined;
+            if (typeof doc.createdBy === 'string') {
+              creatorId = doc.createdBy;
+            } else if (typeof doc.createdBy === 'object' && doc.createdBy?.id) {
+              creatorId = doc.createdBy.id as string;
+            }
+
             // Notify the creator that their location was verified
-            if (doc.createdBy) {
+            if (creatorId) {
               await req.payload.create({
-                collection: "notifications",
+                collection: 'notifications',
                 data: {
-                  recipient: doc.createdBy,
-                  type: "event_update", // Reusing this type for location updates
+                  recipient: creatorId,
+                  type: 'location_verified',
                   title: `Your location "${doc.name}" has been verified!`,
-                  message: "Your location listing is now verified and will be featured more prominently.",
+                  message: 'Your location listing is now verified and will be featured more prominently.',
                   relatedTo: {
-                    relationTo: "locations",
+                    relationTo: 'locations',
                     value: doc.id,
                   },
                   read: false,
-                  createdAt: new Date().toISOString(),
                 },
-              })
+              });
             }
-
-            // Optionally, notify users who have interacted with this location
-            // This would require tracking user interactions with locations
           } catch (error) {
-            console.error("Error creating location verification notification:", error)
+            console.error('Error creating location verification notification:', error);
           }
         }
 
-        return doc
+        return doc;
       },
     ],
   },
@@ -56,8 +63,6 @@ export const Locations: CollectionConfig = {
     { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },
     { name: 'description', type: 'text', required: true },
     { name: 'shortDescription', type: 'text' },
-
-    // Media
     { name: 'featuredImage', type: 'relationship', relationTo: 'media' },
     {
       name: 'gallery',
@@ -67,12 +72,8 @@ export const Locations: CollectionConfig = {
         { name: 'caption', type: 'text' },
       ],
     },
-
-    // Taxonomy
     { name: 'categories', type: 'relationship', relationTo: 'categories', hasMany: true },
     { name: 'tags', type: 'array', fields: [{ name: 'tag', type: 'text' }] },
-
-    // Location Details
     {
       name: 'address',
       type: 'group',
@@ -93,8 +94,6 @@ export const Locations: CollectionConfig = {
       ],
     },
     { name: 'neighborhood', type: 'text' },
-
-    // Contact & Business
     {
       name: 'contactInfo',
       type: 'group',
@@ -118,10 +117,7 @@ export const Locations: CollectionConfig = {
       name: 'businessHours',
       type: 'array',
       fields: [
-        {
-          name: 'day',
-          type: 'select',
-          options: [
+        { name: 'day', type: 'select', options: [
             { label: 'Sunday', value: 'Sunday' },
             { label: 'Monday', value: 'Monday' },
             { label: 'Tuesday', value: 'Tuesday' },
@@ -136,10 +132,7 @@ export const Locations: CollectionConfig = {
         { name: 'closed', type: 'checkbox', label: 'Closed this day' },
       ],
     },
-    {
-      name: 'priceRange',
-      type: 'select',
-      options: [
+    { name: 'priceRange', type: 'select', options: [
         { label: 'Free', value: 'free' },
         { label: 'Budget', value: 'budget' },
         { label: 'Moderate', value: 'moderate' },
@@ -147,10 +140,8 @@ export const Locations: CollectionConfig = {
         { label: 'Luxury', value: 'luxury' },
       ],
     },
-
-    // Visitor Info
     { name: 'bestTimeToVisit', type: 'array', fields: [{ name: 'season', type: 'text' }] },
-    { name: 'insiderTips', type: 'text'},
+    { name: 'insiderTips', type: 'text' },
     {
       name: 'accessibility',
       type: 'group',
@@ -160,8 +151,6 @@ export const Locations: CollectionConfig = {
         { name: 'other', type: 'text', label: 'Other accommodations' },
       ],
     },
-
-    // Creator & Status
     { name: 'createdBy', type: 'relationship', relationTo: 'users' },
     {
       name: 'status',
@@ -176,8 +165,6 @@ export const Locations: CollectionConfig = {
     },
     { name: 'isFeatured', type: 'checkbox' },
     { name: 'isVerified', type: 'checkbox' },
-
-    // Monetization & Analytics
     { name: 'visitVerificationCount', type: 'number' },
     { name: 'hasBusinessPartnership', type: 'checkbox' },
     {
@@ -189,8 +176,6 @@ export const Locations: CollectionConfig = {
         { name: 'details', type: 'text' },
       ],
     },
-
-    // SEO & Metadata
     {
       name: 'meta',
       type: 'group',
@@ -200,8 +185,6 @@ export const Locations: CollectionConfig = {
         { name: 'keywords', type: 'text' },
       ],
     },
-
-    // Virtual fields (read-only)
     { name: 'averageRating', type: 'number', admin: { readOnly: true } },
     { name: 'reviewCount', type: 'number', admin: { readOnly: true } },
   ],

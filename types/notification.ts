@@ -1,6 +1,6 @@
 import type { User } from "./feed"
 
-export type NotificationType = "follow" | "like" | "comment" | "mention" | "reminder" | "event_update"
+export type NotificationType = "follow" | "like" | "comment" | "mention" | "reminder" | "event_update" | 'event'
 
 export interface Notification {
   id: string
@@ -10,7 +10,7 @@ export interface Notification {
   message?: string
   relatedTo?: {
     id: string
-    collection: "posts" | "comments" | "users" | "locations"
+    collection: "posts" | "comments" | "users" | "locations" | 'events'
   }
   read: boolean
   createdAt: string

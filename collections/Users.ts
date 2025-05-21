@@ -1,6 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { CollectionConfig } from 'payload';
+
+
+const normalizeId = (val: any): string => {
+  if (typeof val === 'string') return val;
+  if (val?.id) return val.id;
+  if (val?._id) return val._id;
+  throw new Error(`Unable to normalize ID from value: ${JSON.stringify(val)}`);
+};
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -118,6 +127,11 @@ export const Users: CollectionConfig = {
         `;
       },
     },
+    tokenExpiration: 60 * 60 * 24 * 7,
+    cookies: {
+      secure: true,
+      sameSite: 'None',
+    },
   },
   admin: {
     useAsTitle: 'email',
@@ -125,72 +139,57 @@ export const Users: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: () => true,
-    delete: () => true,
+    update: ({ req, id }) => req.user?.id === id,
+    delete: ({ req, id }) => req.user?.id === id,
   },
   hooks: {
     afterChange: [
       async ({ req, doc, previousDoc, operation }) => {
-        // Only run on update operations
-        if (operation !== "update" || !req.payload) return doc
+        if (operation !== 'update' || !req.payload || !previousDoc) return doc;
 
-        // Check if the followers array has changed
-        const prevFollowers = previousDoc.followers || []
-        const newFollowers = doc.followers || []
+        const prevFollowers: any[] = previousDoc.followers || [];
+        const newFollowers: any[] = doc.followers || [];
 
-        // Find new followers (users who just followed this user)
-        const newFollowerIds = newFollowers.filter((followerId: string) => !prevFollowers.includes(followerId))
+        // Determine newly added follower IDs
+        const added = newFollowers
+          .map(normalizeId)
+          .filter(id => !prevFollowers.map(normalizeId).includes(id));
 
-        // Create notifications for new followers
-        if (newFollowerIds.length > 0) {
-          for (const followerId of newFollowerIds) {
-            try {
-              // Get follower details to include in notification
-              const follower = await req.payload.findByID({
-                collection: "users",
-                id: followerId,
-              })
+        for (const followerId of added) {
+          try {
+            // Do not notify if user follows themselves
+            if (followerId === doc.id) continue;
 
-              // Create notification for the user being followed
-              await req.payload.create({
-                collection: "notifications",
-                data: {
-                  recipient: doc.id,
-                  type: "follow",
-                  title: `${follower.name} started following you`,
-                  relatedTo: {
-                    relationTo: "users",
-                    value: followerId,
-                  },
-                  read: false,
-                  createdAt: new Date().toISOString(),
-                },
-              })
-            } catch (error) {
-              console.error("Error creating follow notification:", error)
-            }
+            // Fetch follower details
+            const follower = await req.payload.findByID({
+              collection: 'users',
+              id: followerId,
+            });
+
+            // Create notification for the user being followed
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: doc.id,
+                type: 'follow',
+                title: `${follower.name} started following you`,
+                relatedTo: { relationTo: 'users', value: followerId },
+                read: false,
+              },
+            });
+          } catch (error) {
+            req.payload.logger.error('Error creating follow notification:', error);
           }
         }
 
-        return doc
+        return doc;
       },
     ],
   },
   fields: [
-    {
-      name: 'name',
-      type: 'text',
-      required: true,
-    },
-    {
-      name: 'profileImage',
-      type: 'upload',
-      relationTo: 'media',
-    },
-    {
-      name: 'bio',
-      type: 'textarea',
-    },
+    { name: 'name', type: 'text', required: true },
+    { name: 'profileImage', type: 'upload', relationTo: 'media' },
+    { name: 'bio', type: 'textarea' },
     {
       name: 'location',
       type: 'group',
@@ -198,33 +197,19 @@ export const Users: CollectionConfig = {
         { name: 'city', type: 'text' },
         { name: 'state', type: 'text' },
         { name: 'country', type: 'text' },
-        // New coordinates subgroup for geocoding
         {
           name: 'coordinates',
           type: 'group',
           label: 'Coordinates',
           fields: [
-            { name: 'latitude', type: 'number'},
-            { name: 'longitude', type: 'number'},
+            { name: 'latitude', type: 'number' },
+            { name: 'longitude', type: 'number' },
           ],
         },
       ],
     },
-    {
-      name: 'interests',
-      type: 'array',
-      fields: [
-        {
-          name: 'interest',
-          type: 'text',
-        },
-      ],
-    },
-    {
-      name: 'isCreator',
-      type: 'checkbox',
-      defaultValue: false,
-    },
+    { name: 'interests', type: 'array', fields: [{ name: 'interest', type: 'text' }] },
+    { name: 'isCreator', type: 'checkbox', defaultValue: false },
     {
       name: 'creatorLevel',
       type: 'select',
@@ -234,102 +219,51 @@ export const Users: CollectionConfig = {
         { label: 'Local Authority', value: 'authority' },
         { label: 'Destination Expert', value: 'expert' },
       ],
-      admin: {
-        condition: (data) => data.isCreator,
-      },
+      admin: { condition: data => data.isCreator },
     },
     {
       name: 'socialLinks',
       type: 'array',
       fields: [
-        {
-          name: 'platform',
-          type: 'select',
-          options: [
-            { label: 'Instagram', value: 'instagram' },
-            { label: 'Twitter', value: 'twitter' },
-            { label: 'TikTok', value: 'tiktok' },
-            { label: 'YouTube', value: 'youtube' },
-            { label: 'Website', value: 'website' },
-          ],
-        },
-        {
-          name: 'url',
-          type: 'text',
-        },
+        { name: 'platform', type: 'select', options: [
+          { label: 'Instagram', value: 'instagram' },
+          { label: 'Twitter', value: 'twitter' },
+          { label: 'TikTok', value: 'tiktok' },
+          { label: 'YouTube', value: 'youtube' },
+          { label: 'Website', value: 'website' },
+        ] },
+        { name: 'url', type: 'text' },
       ],
     },
-    {
-      name: 'followers',
-      type: 'relationship',
-      relationTo: 'users',
-      hasMany: true,
-      admin: {
-        description: 'Users who follow this user',
-      },
-    },
-    {
-      name: 'following',
-      type: 'relationship',
-      relationTo: 'users',
-      hasMany: true,
-    },
-    {
-      name: 'likedPosts',
-      type: 'relationship',
-      relationTo: 'posts',
-      hasMany: true,
-      admin: {
-        description: 'Posts liked by this user',
-      },
-    },
+    { name: 'followers', type: 'relationship', relationTo: 'users', hasMany: true, admin: { description: 'Users who follow this user' } },
+    { name: 'following', type: 'relationship', relationTo: 'users', hasMany: true },
+    { name: 'likedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
     {
       name: 'sportsPreferences',
       type: 'group',
       fields: [
-        {
-          name: 'sports',
-          type: 'select',
-          hasMany: true,
-          options: [
-            { label: 'Tennis', value: 'tennis' },
-            { label: 'Soccer', value: 'soccer' },
-            { label: 'Basketball', value: 'basketball' },
-            // Add more sports as needed
-          ],
-        },
-        {
-          name: 'skillLevel',
-          type: 'select',
-          options: [
-            { label: 'Beginner', value: 'beginner' },
-            { label: 'Intermediate', value: 'intermediate' },
-            { label: 'Advanced', value: 'advanced' },
-          ],
-        },
-        {
-          name: 'availability',
-          type: 'array',
-          fields: [
-            {
-              name: 'day',
-              type: 'select',
-              options: [
-                { label: 'Monday', value: 'monday' },
-                { label: 'Tuesday', value: 'tuesday' },
-                { label: 'Wednesday', value: 'wednesday' },
-                { label: 'Thursday', value: 'thursday' },
-                { label: 'Friday', value: 'friday' },
-                { label: 'Saturday', value: 'saturday' },
-                { label: 'Sunday', value: 'sunday' },
-              ],
-            },
-            {
-              name: 'timeSlot',
-              type: 'text',
-            },
-          ],
-        },
+        { name: 'sports', type: 'select', hasMany: true, options: [
+          { label: 'Tennis', value: 'tennis' },
+          { label: 'Soccer', value: 'soccer' },
+          { label: 'Basketball', value: 'basketball' },
+        ] },
+        { name: 'skillLevel', type: 'select', options: [
+          { label: 'Beginner', value: 'beginner' },
+          { label: 'Intermediate', value: 'intermediate' },
+          { label: 'Advanced', value: 'advanced' },
+        ] },
+        { name: 'availability', type: 'array', fields: [
+          { name: 'day', type: 'select', options: [
+            { label: 'Monday', value: 'monday' },
+            { label: 'Tuesday', value: 'tuesday' },
+            { label: 'Wednesday', value: 'wednesday' },
+            { label: 'Thursday', value: 'thursday' },
+            { label: 'Friday', value: 'friday' },
+            { label: 'Saturday', value: 'saturday' },
+            { label: 'Sunday', value: 'sunday' },
+          ] },
+          { name: 'timeSlot', type: 'text' },
+        ] },
       ],
     },
   ],

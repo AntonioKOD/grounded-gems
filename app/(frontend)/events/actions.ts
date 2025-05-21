@@ -10,6 +10,7 @@ import type { EventFilterOptions } from "@/types/event-filter"
 import { LocationFormData } from "@/types/location"
 import type { Where } from "payload"
 
+import {cookies } from "next/headers"
 
 export async function createEvent(formData: EventFormData, userId: string, userName: string, userAvatar?: string) {
   try {
@@ -398,72 +399,143 @@ export async function getEventBySlug(slug: string) {
 
 
 
-function haversineDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const toRad = (deg: number) => deg * (Math.PI / 180);
-  const R = 6371; // Earth's radius in km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
+interface GetNearbyEventsParams {
+  userId?: string
+  radiusKm?: number
+  category?: string
+  eventType?: string
+  isMatchmaking?: boolean
+  limit?: number
+  offset?: number
+}
+
+// Haversine formula to calculate distance between two coordinates
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371 // Earth's radius in km
+  const dLat = (lat2 - lat1) * (Math.PI / 180)
+  const dLon = (lon2 - lon1) * (Math.PI / 180)
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
 }
 
-interface GetNearbyEventsParams {
-  userId: string;
-  radiusKm?: number;
-}
+export async function getNearbyEventsAction({
+  userId = "",
+  radiusKm = 50,
+  category = "",
+  eventType = "",
+  isMatchmaking = false,
+  limit = 12,
+  offset = 0,
+}: GetNearbyEventsParams = {}) {
+  try {
 
 
-export async function getNearbyEventsAction({ userId, radiusKm = 50 }: GetNearbyEventsParams) {
-  const payload = await getPayload({config});
+    const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map(c => `${c.name}=${c.value}`)
+    .join('; ')
+ 
+    const payload = await getPayload({config})
 
-  // 1. Fetch user document (must include coordinates in profile)
-  const userDoc = await payload.findByID({ collection: 'users', id: userId, depth: 0 });
-  if (!userDoc) {
-    throw new Error(`User with ID ${userId} not found.`);
-  }
-  // Assume userDoc.location.coordinates exist
-  const userCoords = (userDoc as any).location?.coordinates;
-  if (!userCoords || typeof userCoords.latitude !== 'number' || typeof userCoords.longitude !== 'number') {
-    throw new Error('User location coordinates are required for nearby search.');
-  }
-  const { latitude: userLat, longitude: userLng } = userCoords;
+    // Build the query conditions
+    const where: any = { status: { equals: "published" } }
 
-  // 2. Fetch all published events with location populated
-  const { docs: events } = await payload.find({
-    collection: 'events',
-    where: { status: { equals: 'published' } },
-    depth: 1,
-  });
+    // Add category filter if provided
+    if (category) {
+      where.category = { equals: category }
+    }
 
-  // 3. Compute distance and filter events within radius
-  const nearby = events
-    .map((ev: any) => {
-      const loc = ev.location;
-      const coords = loc?.coordinates;
-      if (!coords) return null;
-      const distance = haversineDistance(
-        userLat,
-        userLng,
-        coords.latitude,
-        coords.longitude
-      );
-      return { event: ev, distance };
+    // Add event type filter if provided
+    if (eventType) {
+      where.eventType = { equals: eventType }
+    }
+
+    // Add matchmaking filter if true
+    if (isMatchmaking) {
+      where.isMatchmaking = { equals: true }
+    }
+
+    // If no userId is provided, we can only return events without distance calculation
+    if (!userId) {
+      const { docs: events, totalDocs } = await payload.find({
+        collection: "events",
+        where,
+        depth: 1,
+        limit,
+        page: Math.floor(offset / limit) + 1,
+      })
+
+      // Return events without distance calculation
+      return events.map((event) => ({ event, distance: null }))
+    }
+
+    // 1. Try to fetch user document
+    let userCoords
+    try {
+      const userDoc = await payload.findByID({ collection: "users", id: userId, depth: 0 })
+      userCoords = (userDoc as any).location?.coordinates
+
+      // If user has no coordinates, we can't do a location-based search
+      if (!userCoords || typeof userCoords.latitude !== "number" || typeof userCoords.longitude !== "number") {
+        console.warn(`User ${userId} has no valid coordinates. Returning non-distance-based results.`)
+        const { docs: events } = await payload.find({
+          collection: "events",
+          where,
+          depth: 1,
+          limit,
+          page: Math.floor(offset / limit) + 1,
+        })
+        return events.map((event) => ({ event, distance: null }))
+      }
+    } catch (error) {
+      console.warn(`User with ID ${userId} not found or error occurred. Returning non-distance-based results.`)
+      const { docs: events } = await payload.find({
+        collection: "events",
+        where,
+        depth: 1,
+        limit,
+        page: Math.floor(offset / limit) + 1,
+      })
+      return events.map((event) => ({ event, distance: null }))
+    }
+
+    // 2. Fetch all published events with location populated
+    // Note: We fetch all events to calculate distances, then apply pagination after sorting
+    const { docs: events } = await payload.find({
+      collection: "events",
+      where,
+      depth: 1,
     })
-    .filter((item): item is { event: any; distance: number } => item !== null && item.distance <= radiusKm)
-    .sort((a, b) => a.distance - b.distance);
 
-  // Return array of events with computed distance
-  return nearby;
+    // 3. Compute distance and filter events within radius
+    const { latitude: userLat, longitude: userLng } = userCoords
+    const nearby = events
+      .map((ev: any) => {
+        const loc = ev.location
+        const coords = loc?.coordinates
+        if (!coords || typeof coords.latitude !== "number" || typeof coords.longitude !== "number") return null
+
+        const distance = haversineDistance(userLat, userLng, coords.latitude, coords.longitude)
+        return { event: ev, distance }
+      })
+      .filter((item): item is { event: any; distance: number } => item !== null && item.distance <= radiusKm)
+      .sort((a, b) => a.distance - b.distance)
+
+    // Apply pagination after sorting by distance
+    const paginatedResults = nearby.slice(offset, offset + limit)
+
+    // Return array of events with computed distance
+    return paginatedResults
+  } catch (error) {
+    console.error("Error in getNearbyEventsAction:", error)
+    return []
+  }
 }
+
 
 interface GetEventByIdParams {
   eventId: string;
@@ -814,6 +886,11 @@ export async function isAttending(eventId: string, userId: string) {
 }
 
 export async function getUserEventsByCategory(userId: string) {
+  const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map(c => `${c.name}=${c.value}`)
+    .join('; ')
   try {
     const payload = await getPayload({ config })
 

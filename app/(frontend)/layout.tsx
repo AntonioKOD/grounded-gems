@@ -1,33 +1,30 @@
-
-import React from 'react'
-import "./globals.css"; 
-import NavBar from '@/components/NavBar'
-import Footer from '@/components/footer';
-import MobileNavigation from '@/components/mobile-navigation';
-import {Toaster} from 'sonner'
-import {GoogleAnalytics} from '@next/third-parties/google'
-import Head  from 'next/head';
-
-
-
-
+import type React from "react"
+import "./globals.css"
+import NavBar from "@/components/NavBar"
+import Footer from "@/components/footer"
+import MobileNavigation from "@/components/mobile-navigation"
+import { Toaster } from "sonner"
+import { UserProvider } from "@/context/user-context"
+import { getServerSideUser } from "@/lib/auth"
 
 export const metadata = {
-  description: 'Find the hidden gems around you',
-  title: 'Grounded Gems',
+  description: "Find the hidden gems around you",
+  title: "Grounded Gems",
 }
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
   const { children } = props
 
+  // Fetch the user data on the server
+  const initialUser = await getServerSideUser()
+
   return (
     <html lang="en">
-      <Head>
+      <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
         <meta name="theme-color" content="#ffffff" />
         <meta name="description" content={metadata.description} />
-        <title>{metadata.title}</title>
         <meta name="keywords" content="community, local, events, recommendations, hidden gems" />
         <meta name="author" content="Grounded Gems Team" />
         <meta property="og:title" content={metadata.title} />
@@ -39,21 +36,18 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         <meta name="twitter:description" content={metadata.description} />
         <meta name="twitter:image" content="/og-image.jpg" />
         <meta name="apple-mobile-web-app-title" content="Grounded Gems" />
-      </Head>
+      </head>
       <body>
-        <NavBar />
-       
-        <main>{children}</main>
-        
-        <Footer/>
-        <GoogleAnalytics gaId='G-DM1Y9WQP6R' />
-        <div className="md:hidden">
-        <MobileNavigation />
-        <Toaster/>
-        
-      </div>
+        <UserProvider initialUser={initialUser}>
+          <NavBar />
+          {children}
+          <Footer />
+          <div className="md:hidden">
+            <MobileNavigation />
+          </div>
+          <Toaster />
+        </UserProvider>
       </body>
     </html>
   )
 }
-

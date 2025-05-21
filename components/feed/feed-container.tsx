@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useEffect } from "react"
-import { Loader2, RefreshCw, Filter } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { Loader2, RefreshCw, Filter } from 'lucide-react'
 
 import { PostCard } from "@/components/post/post-card"
 import CollapsiblePostForm from "@/components/post/collapsible-post-form"
@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { getFeedPosts, getPersonalizedFeed, getFeedPostsByUser } from "@/app/actions"
 import type { Post } from "@/types/feed"
+import { useAuth } from "@/hooks/use-auth"
 
 interface FeedContainerProps {
   userId?: string
@@ -36,101 +37,67 @@ export default function FeedContainer({
   const [refreshing, setRefreshing] = useState<boolean>(false)
   const [hasMore, setHasMore] = useState<boolean>(true)
   const [page, setPage] = useState<number>(1)
-  const [user, setUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
   const [usedMockData, setUsedMockData] = useState<boolean>(false)
+  const isMounted = useRef(true)
+  const initialLoadComplete = useRef(false)
 
-  // Fetch the current user (for post form and personalized feed)
+  // Get user data from auth context
+  const { user, isLoading: isUserLoading, isAuthenticated } = useAuth()
+
+  // Cleanup on unmount
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const response = await fetch("/api/users/me")
-        if (!response.ok) throw new Error("Failed to fetch user")
-        const data = await response.json()
-        setUser(data.user)
-      } catch (error) {
-        console.error("Error fetching user:", error)
-        // Don't show toast - they might not be logged in
-      }
+    return () => {
+      isMounted.current = false
     }
-
-    fetchUser()
   }, [])
 
   // Fetch posts based on feed type
-  useEffect(() => {
-    fetchPosts()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feedType, sortBy, user, userId])
-
-  // Fetch posts using server actions
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
+    setLoading(true)
+    setPage(1)
+    setUsedMockData(false)
+  
     try {
-      setLoading(true)
-      setPage(1)
-      setUsedMockData(false)
-
       let fetchedPosts: Post[] = []
-
-      if (feedType === "personalized" && user) {
-        // Fetch personalized feed if user is logged in
-        fetchedPosts = (await getPersonalizedFeed(user.id, 10, 0)) || []
-        console.log("Fetched personalized posts:", fetchedPosts.length)
-        console.log(fetchedPosts[0])
+  
+      if (feedType === "personalized") {
+        if (isAuthenticated && user) {
+          fetchedPosts = (await getPersonalizedFeed(user.id, 10, 0)) ?? []
+        } else {
+          fetchedPosts = await getFeedPosts("all", sortBy, 1)
+        }
       } else if (feedType === "user" && userId) {
-        // Use the server action directly instead of fetch API
-        console.log(`Fetching posts for user ID: ${userId}`)
-        fetchedPosts = ((await getFeedPostsByUser(userId)) || []).map((post: any) => ({
-          id: post.id,
-          author: {
-            id: post.author?.id || userId,
-            name: post.author?.name || "User",
-            avatar: post.author?.avatar || "/diverse-avatars.png",
-          },
-          title: post.title || "",
-          content: post.content || "",
-          createdAt: post.createdAt || new Date().toISOString(),
-          image: post.image?.url || post.featuredImage?.url || post.image || null,
-          likeCount: post.likes?.length || post.likeCount || 0,
-          commentCount: post.comments?.length || post.commentCount || 0,
-          shareCount: post.shareCount || 0,
-          isLiked: false,
-          type: post.type || "post",
-          rating: post.rating || null,
-          location: post.location || (post.locationName ? { id: "loc_1", name: post.locationName } : undefined),
-          status: post.status || "published",
-        }))
-        console.log("Fetched user posts:", fetchedPosts.length)
-        console.log(posts[0].commentCount)
+        fetchedPosts = (await getFeedPostsByUser(userId)) as Post[]
       } else {
-        // Fetch all posts with sorting
-        fetchedPosts = (await getFeedPosts(feedType, sortBy, 1)) || []
-        console.log("Fetched all posts:", fetchedPosts.length)
+        fetchedPosts = await getFeedPosts(feedType, sortBy, 1)
       }
-
-      // If no posts were fetched, use mock data
-      if (!fetchedPosts || fetchedPosts.length === 0) {
-        console.log("No posts found, using mock data")
-        setUsedMockData(true)
-      }
-
-      if (fetchedPosts.length > 0) {
-        setPosts(fetchedPosts)
-        setHasMore(fetchedPosts.length >= 10 && !usedMockData) // Only show "load more" for real data
-      } else {
-        setPosts([])
-        setHasMore(false)
-      }
-    } catch (error) {
-      console.error("Error fetching posts:", error)
-      toast.error("Error loading posts. Please try again.")
-
-      // Use mock data if API fails
-      setUsedMockData(true)
+  
+      setPosts(fetchedPosts)
+      setHasMore(fetchedPosts.length >= 10)
+    } catch (err) {
+      console.error("Error fetching posts:", err)
+      toast.error("Error loading posts")
+      setPosts([])
       setHasMore(false)
     } finally {
       setLoading(false)
     }
-  }
+  }, [feedType, sortBy, isAuthenticated, user, userId])
+  // Initial data loading
+  useEffect(() => {
+    // Skip if component is not mounted
+    if (!isMounted.current) return
+
+    // If we're still loading user data, wait
+    if (isUserLoading) return
+
+    // If this is the first load, fetch posts
+    if (!initialLoadComplete.current) {
+      console.log("Initial data loading for feed type:", feedType)
+      fetchPosts()
+      initialLoadComplete.current = true
+    }
+  }, [isUserLoading, fetchPosts, feedType])
 
   // Refresh posts
   const refreshPosts = async () => {
@@ -141,37 +108,38 @@ export default function FeedContainer({
     } catch (error) {
       console.error("Error refreshing posts:", error)
     } finally {
-      setRefreshing(false)
+      if (isMounted.current) {
+        setRefreshing(false)
+      }
     }
   }
 
   // Load more posts
   const loadMorePosts = async () => {
+    setLoadingMore(true)
+    const nextPage = page + 1
+  
     try {
-      setLoadingMore(true)
-      const nextPage = page + 1
-
       let morePosts: Post[] = []
-
+  
       if (feedType === "personalized" && user) {
-        morePosts = (await getPersonalizedFeed(user.id, 10, page * 10)) || []
+        morePosts = (await getPersonalizedFeed(user.id, 10, nextPage * 10)) ?? []
       } else if (feedType === "user" && userId) {
-        // For user posts, we don't have pagination yet, so just return empty
-        morePosts = []
+        morePosts = (await getFeedPostsByUser(userId)) as Post[] // Cast the response to Post[]
       } else {
-        morePosts = (await getFeedPosts(feedType, sortBy, nextPage)) || []
+        morePosts = await getFeedPosts(feedType, sortBy, nextPage)
       }
-
-      if (morePosts.length > 0) {
-        setPosts([...posts, ...morePosts])
+  
+      if (morePosts.length) {
+        setPosts((prev) => [...prev, ...morePosts])
         setPage(nextPage)
         setHasMore(morePosts.length >= 10)
       } else {
         setHasMore(false)
       }
-    } catch (error) {
-      console.error("Error loading more posts:", error)
-      toast.error("Error loading more posts. Please try again.")
+    } catch (err) {
+      console.error("Error loading more posts:", err)
+      toast.error("Error loading more posts")
     } finally {
       setLoadingMore(false)
     }
@@ -189,8 +157,11 @@ export default function FeedContainer({
     setPosts(posts.map((post) => (post.id === updatedPost.id ? updatedPost : post)))
   }
 
+
   return (
     <div className={`max-w-2xl mx-auto ${className}`}>
+    
+
       {/* Feed Header with Refresh Button */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold">
@@ -215,9 +186,16 @@ export default function FeedContainer({
       </div>
 
       {/* Post Form - only if showPostForm is true and user is logged in */}
-      {showPostForm && user && (
+      {showPostForm && user && user.name && (
         <>
-          <CollapsiblePostForm user={user} className="mb-6" />
+          <CollapsiblePostForm
+            user={{
+              id: user.id,
+              name: user.name,
+              avatar: user.profileImage?.url || user.avatar,
+            }}
+            className="mb-6"
+          />
           <Separator className="my-6" />
         </>
       )}
@@ -244,7 +222,11 @@ export default function FeedContainer({
                   ...post,
                   commentCount: post.commentCount || 0, // Ensure commentCount is always defined
                 }}
-                user={user || { id: "", name: "" }}
+                user={{
+                  id: user?.id || "",
+                  name: user?.name || "",
+                  avatar: user?.profileImage?.url || user?.avatar
+                }}
                 onComment={handleComment}
                 onPostUpdated={handlePostUpdate}
                 className="transition-all duration-300 hover:shadow-md"

@@ -1,10 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
-
+import { useState, useEffect } from "react"
 import type React from "react"
 
-import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter, usePathname } from "next/navigation"
@@ -21,7 +19,10 @@ import {
   LayoutList,
   Search,
   ChevronDown,
-  Users,
+  Bell,
+  Check,
+  Heart,
+  MessageSquare,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -36,33 +37,34 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
-import { logoutUser } from "@/app/actions"
-import NotificationCenter from "@/components/notifications/notification-center"
-import { Input } from "@/components/ui/input"
 import { useMediaQuery } from "@/hooks/use-media-query"
-
-interface UserData {
-  id: string
-  email: string
-  name?: string
-  avatar?: string
-  profileImage?: {
-    url: string
-    alt?: string
-  }
-}
+import { useAuth } from "@/hooks/use-auth"
+import {
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  
+} from "@/app/actions"
+import type { Notification } from "@/types/notification"
+import { formatDistanceToNow } from "date-fns"
+import { toast } from "sonner"
 
 const NavBar = () => {
+  // Get user data from auth context
+  const { user, isLoading, isAuthenticated, logout } = useAuth()
+
   // State
-  const [user, setUser] = useState<UserData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isScrolled, setIsScrolled] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isTablet = useMediaQuery("(max-width: 1024px)")
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isMobile = useMediaQuery("(max-width: 640px)")
 
   // Zipf's Law Navigation Links - Prioritized by frequency of use
@@ -70,7 +72,6 @@ const NavBar = () => {
     // High frequency links - Always visible
     const primaryLinks = [
       { path: "/feed", label: "Feed", icon: LayoutList, priority: "high" },
-      { path: "/matchmaking", label: "Matchmaking", icon: Users, priority: "high" },
       { path: "/events", label: "Events", icon: Calendar, priority: "high" },
     ]
 
@@ -82,11 +83,37 @@ const NavBar = () => {
     // Medium frequency links - Secondary visibility
     if (!isLoggedIn) return []
 
-    return [
-      { path: "/map", label: "Locations", icon: MapPin, priority: "medium" },
-      { path: "/profile", label: "Profile", icon: UserCircle, priority: "medium" },
-    ]
+    return [{ path: "/map", label: "Locations", icon: MapPin, priority: "medium" }]
   }
+
+  // Fetch notifications
+  useEffect(() => {
+    if (!user) return
+
+    const fetchNotifications = async () => {
+      setIsLoadingNotifications(true)
+      try {
+        // Fetch notifications
+        const notificationsData = await getNotifications(user.id, 5)
+        setNotifications(notificationsData)
+
+        // Fetch unread count
+        const count = await getUnreadNotificationCount(user.id)
+        setUnreadCount(count)
+      } catch (error) {
+        console.error("Error fetching notifications:", error)
+      } finally {
+        setIsLoadingNotifications(false)
+      }
+    }
+
+    fetchNotifications()
+
+    // Set up polling for notifications (every 30 seconds)
+    const intervalId = setInterval(fetchNotifications, 30000)
+
+    return () => clearInterval(intervalId)
+  }, [user])
 
   // Scroll effect
   useEffect(() => {
@@ -98,93 +125,136 @@ const NavBar = () => {
   // Close menu when route changes
   useEffect(() => {
     setMobileMenuOpen(false)
-    setMobileSearchOpen(false)
   }, [pathname])
-
-  // Fetch user data
-  useEffect(() => {
-    const fetchUser = async () => {
-      setIsLoading(true)
-      try {
-        const response = await fetch("/api/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-          },
-        })
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            setUser(null)
-            return
-          }
-          throw new Error(`Failed to fetch user: ${response.status}`)
-        }
-
-        const data = await response.json()
-        setUser(data.user)
-        // Update user location if available and coordinates exist
-      } catch (error) {
-        console.error("Error fetching user:", error)
-        setUser(null)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchUser()
-
-    // Auth event listeners
-    const handleLoginSuccess = () => fetchUser()
-    const handleLogoutSuccess = () => setUser(null)
-
-    window.addEventListener("login-success", handleLoginSuccess)
-    window.addEventListener("logout-success", handleLogoutSuccess)
-
-    return () => {
-      window.removeEventListener("login-success", handleLoginSuccess)
-      window.removeEventListener("logout-success", handleLogoutSuccess)
-    }
-  }, [])
 
   // Handle logout
   const handleLogout = async () => {
     try {
-      await logoutUser()
-      setUser(null)
-      window.dispatchEvent(new Event("logout-success"))
-      router.push("/login")
+      await logout()
     } catch (error) {
       console.error("Logout failed:", error)
     }
   }
 
-  // Search handler
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery)}`)
-      setSearchQuery("")
-      setMobileSearchOpen(false)
+  // Mark notification as read
+  const handleMarkAsRead = async (notificationId: string, e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent the parent click handler from firing
+
+    try {
+      const success = await markNotificationAsRead(notificationId)
+      if (success) {
+        // Update local state
+        setNotifications((prev) =>
+          prev.map((notification) =>
+            notification.id === notificationId ? { ...notification, read: true } : notification,
+          ),
+        )
+        setUnreadCount((prev) => Math.max(0, prev - 1))
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error)
+    }
+  }
+
+  // Mark all notifications as read
+  const handleMarkAllAsRead = async (e: React.MouseEvent) => {
+    e.stopPropagation() // Prevent the parent click handler from firing
+
+    if (!user) return
+
+    try {
+      const success = await markAllNotificationsAsRead(user.id)
+      if (success) {
+        // Update local state
+        setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })))
+        setUnreadCount(0)
+        toast.success("All notifications marked as read")
+      }
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error)
+    }
+  }
+
+  // Handle notification click
+  const handleNotificationClick = async (notification: Notification) => {
+    // Mark as read if not already read
+    if (!notification.read) {
+      await markNotificationAsRead(notification.id)
+
+      // Update local state
+      setNotifications((prev) => prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)))
+      setUnreadCount((prev) => Math.max(0, prev - 1))
+    }
+
+    // Navigate based on notification type and related content
+    if (notification.relatedTo) {
+      const { collection, id } = notification.relatedTo
+
+      switch (collection) {
+        case "events":
+          router.push(`/events/${id}`)
+          break
+        case "posts":
+          router.push(`/posts/${id}`)
+          break
+        case "users":
+          router.push(`/profile/${id}`)
+          break
+        default:
+          // Default fallback
+          router.push("/feed")
+      }
+    } else {
+      // If no specific related content, go to notifications page
+      router.push("/notifications")
+    }
+  }
+
+  // Get notification icon
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "event":
+        return <Calendar className="h-4 w-4" />
+      case "follow":
+        return <UserCircle className="h-4 w-4" />
+      case "like":
+        return <Heart className="h-4 w-4" />
+      case "comment":
+        return <MessageSquare className="h-4 w-4" />
+      default:
+        return <Bell className="h-4 w-4" />
+    }
+  }
+
+  // Get notification icon background
+  const getIconBackground = (type: string) => {
+    switch (type) {
+      case "event":
+        return "bg-[#FF6B6B]/10 text-[#FF6B6B]"
+      case "follow":
+        return "bg-blue-100 text-blue-600"
+      case "like":
+        return "bg-pink-100 text-pink-600"
+      case "comment":
+        return "bg-purple-100 text-purple-600"
+      default:
+        return "bg-gray-100 text-gray-600"
     }
   }
 
   // Get user initials for avatar
-  const getInitials = (u: UserData) =>
+  const getInitials = (u: any) =>
     u.name
       ? u.name
           .split(" ")
-          .map((n) => n[0])
+          .map((n: string) => n[0])
           .join("")
           .toUpperCase()
       : u.email.charAt(0).toUpperCase()
 
   // Get navigation links based on login status
-  const primaryNavLinks = getPrimaryNavLinks(!!user)
-  const secondaryNavLinks = getSecondaryNavLinks(!!user)
+  const primaryNavLinks = getPrimaryNavLinks(isAuthenticated)
+  const secondaryNavLinks = getSecondaryNavLinks(isAuthenticated)
 
   return (
     <header className="sticky top-0 z-50 mx-2">
@@ -262,17 +332,112 @@ const NavBar = () => {
               </>
             )}
 
-            {/* Desktop Search */}
-            <form onSubmit={handleSearch} className="relative mx-2">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                className="pl-10 pr-4 py-2 h-9 w-40 focus:w-60 transition-all duration-300 bg-gray-50 border-gray-200"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </form>
+            {/* Desktop Search Icon */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mx-2 h-10 w-10 rounded-full hover:bg-gray-100"
+              onClick={() => router.push("/search")}
+            >
+              <Search className="h-5 w-5 text-gray-600" />
+            </Button>
+
+            {/* Notifications Dropdown */}
+            {user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="mx-2 h-10 w-10 rounded-full hover:bg-gray-100 relative"
+                  >
+                    <Bell className="h-5 w-5 text-gray-600" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-0 right-0 h-4 w-4 bg-[#FF6B6B] rounded-full flex items-center justify-center text-[10px] text-white font-medium">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="font-normal flex justify-between items-center">
+                    <span className="font-semibold text-base">Notifications</span>
+                    {unreadCount > 0 && (
+                      <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={handleMarkAllAsRead}>
+                        <Check className="mr-1 h-3 w-3" />
+                        Mark all as read
+                      </Button>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {isLoadingNotifications ? (
+                    <div className="p-4 space-y-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="flex items-start space-x-3">
+                          <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
+                            <div className="h-3 w-full bg-gray-200 rounded animate-pulse"></div>
+                            <div className="h-3 w-1/3 bg-gray-200 rounded animate-pulse"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : notifications.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {notifications.map((notification) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className={cn(
+                            "flex flex-col items-start p-3 cursor-pointer",
+                            !notification.read && "bg-[#FF6B6B]/5",
+                          )}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex items-start w-full">
+                            <div
+                              className={cn(
+                                "h-8 w-8 rounded-full flex items-center justify-center mr-3",
+                                getIconBackground(notification.type),
+                              )}
+                            >
+                              {getNotificationIcon(notification.type)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{notification.title}</div>
+                              <div className="text-xs text-gray-500 mt-1">{notification.message}</div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                              </div>
+                            </div>
+                            {!notification.read && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 rounded-full hover:bg-gray-100"
+                                onClick={(e) => handleMarkAsRead(notification.id, e)}
+                              >
+                                <Check className="h-3 w-3" />
+                                <span className="sr-only">Mark as read</span>
+                              </Button>
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-sm text-gray-500">No notifications yet</div>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="justify-center text-sm text-[#FF6B6B]"
+                    onClick={() => router.push("/notifications")}
+                  >
+                    View all notifications
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {/* User Menu / Auth Buttons */}
             {isLoading ? (
@@ -281,9 +446,6 @@ const NavBar = () => {
               </div>
             ) : user ? (
               <div className="flex items-center ml-2">
-                {/* Notifications */}
-                {user && <NotificationCenter userId={user.id} />}
-
                 {/* User Menu */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -338,12 +500,100 @@ const NavBar = () => {
 
           {/* Mobile Menu Controls */}
           <div className="flex items-center md:hidden">
-            {user && <NotificationCenter userId={user.id} />}
-
-            {/* Search Toggle */}
-            <Button variant="ghost" size="icon" onClick={() => setMobileSearchOpen(!mobileSearchOpen)} className="mr-1">
+            {/* Search Icon */}
+            <Button variant="ghost" size="icon" onClick={() => router.push("/search")} className="mr-1">
               <Search className="h-5 w-5" />
             </Button>
+
+            {/* Notifications Icon */}
+            {user && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="mr-1 relative">
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <span className="absolute top-0 right-0 h-3 w-3 bg-[#FF6B6B] rounded-full"></span>
+                    )}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-72">
+                  <DropdownMenuLabel className="font-normal flex justify-between items-center">
+                    <span className="font-semibold">Notifications</span>
+                    {unreadCount > 0 && (
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleMarkAllAsRead}>
+                        <Check className="mr-1 h-3 w-3" />
+                        Mark all read
+                      </Button>
+                    )}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {isLoadingNotifications ? (
+                    <div className="p-4 space-y-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="flex items-start space-x-3">
+                          <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
+                            <div className="h-3 w-full bg-gray-200 rounded animate-pulse"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : notifications.length > 0 ? (
+                    <div className="max-h-[300px] overflow-y-auto">
+                      {notifications.map((notification) => (
+                        <DropdownMenuItem
+                          key={notification.id}
+                          className={cn(
+                            "flex flex-col items-start p-3 cursor-pointer",
+                            !notification.read && "bg-[#FF6B6B]/5",
+                          )}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex items-start w-full">
+                            <div
+                              className={cn(
+                                "h-8 w-8 rounded-full flex items-center justify-center mr-3",
+                                getIconBackground(notification.type),
+                              )}
+                            >
+                              {getNotificationIcon(notification.type)}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{notification.title}</div>
+                              <div className="text-xs text-gray-500 mt-1">{notification.message}</div>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                              </div>
+                            </div>
+                            {!notification.read && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 rounded-full hover:bg-gray-100"
+                                onClick={(e) => handleMarkAsRead(notification.id, e)}
+                              >
+                                <Check className="h-3 w-3" />
+                                <span className="sr-only">Mark as read</span>
+                              </Button>
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-6 text-center text-sm text-gray-500">No notifications yet</div>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="justify-center text-sm text-[#FF6B6B]"
+                    onClick={() => router.push("/notifications")}
+                  >
+                    View all notifications
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
 
             {/* Menu Toggle */}
             <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -351,33 +601,6 @@ const NavBar = () => {
             </Button>
           </div>
         </div>
-
-        {/* Mobile Search */}
-        {mobileSearchOpen && (
-          <div className="md:hidden mt-3 px-2">
-            <form onSubmit={handleSearch} className="relative w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <Input
-                id="mobile-search-input"
-                type="search"
-                placeholder="Search..."
-                className="pl-10 pr-10 py-2 h-10 bg-gray-50 border-gray-200"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                autoFocus
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setMobileSearchOpen(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </form>
-          </div>
-        )}
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
@@ -457,6 +680,20 @@ const NavBar = () => {
                   >
                     <UserCircle className="mr-2 h-5 w-5" />
                     View Profile
+                  </Link>
+
+                  <Link
+                    href="/notifications"
+                    className="flex items-center rounded-md px-3 py-2 font-medium text-gray-700 hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B] relative"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Bell className="mr-2 h-5 w-5" />
+                    Notifications
+                    {unreadCount > 0 && (
+                      <span className="ml-2 bg-[#FF6B6B] text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                   </Link>
 
                   <Link

@@ -1,5 +1,7 @@
 import MapExplorer from "./map-explorer"
 
+export const dynamic = 'force-dynamic' 
+
 export const metadata = {
   title: "Explore Map | Grounded Gems",
   description: "Discover events and locations near you with our interactive map",

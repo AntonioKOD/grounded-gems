@@ -2,8 +2,10 @@ import { Suspense } from "react"
 import NotificationsPage from "@/components/notifications/notifications-page"
 import NotificationsPageSkeleton from "@/components/notifications/notifications-page-skeleton"
 
+export const dynamic = 'force-dynamic' 
+
 export const metadata = {
-  title: "Notifications | Local Explorer",
+  title: "Notifications | Grounded Gems",
   description: "View your notifications and activity updates",
 }
 

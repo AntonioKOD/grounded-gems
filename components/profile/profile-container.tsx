@@ -169,7 +169,7 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
         followers={followers}
         setFollowers={setFollowers}
       />
-      <ProfileContent profileUser={profileUser} currentUser={currentUser} isCurrentUser={isCurrentUser} />
+      <ProfileContent initialUserData={profileUser} userId={userId} />
     </>
   )
 }

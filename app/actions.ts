@@ -22,6 +22,8 @@ declare module "@/types/feed" {
 }
 
 
+
+
 export async function getReviewsbyId(id: string) {
   const payload = await getPayload({ config: config })
   const result = await payload.find({
@@ -473,6 +475,11 @@ export async function getUserbyId(id: string) {
 
 export async function getFeedPostsByUser(id: string) {
   const payload = await getPayload({ config })
+  const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ") 
 
   const { docs } = await payload.find({
     collection: 'posts',
@@ -794,6 +801,11 @@ export async function sharePost(postId: string, currentUserId: string): Promise<
 
 export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, offset = 0) {
   console.log(`Getting personalized feed for user ${currentUserId}, pageSize: ${pageSize}, offset: ${offset}`)
+  const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ") 
 
   try {
     const payload = await getPayload({ config })
@@ -912,8 +924,16 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
 
 export async function getFeedPosts(feedType: string, sortBy: string, page: number): Promise<Post[]> {
   console.log(`Getting feed posts: type=${feedType}, sort=${sortBy}, page=${page}`)
+  const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ") 
 
   try {
+
+    
+
     const payload = await getPayload({ config })
     const pageSize = 10
     const skip = (page - 1) * pageSize
@@ -993,6 +1013,11 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
 
 export async function getPostById(postId: string): Promise<Post | null> {
   console.log(`Getting post by ID: ${postId}`);
+  const cookieStore = await cookies()
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ") 
 
   try {
     const payload = await getPayload({ config });
@@ -1316,7 +1341,7 @@ export async function getNotifications(userId: string, limit = 10): Promise<Noti
       },
       sort: "-createdAt",
       limit,
-      depth: 1, // Load related entities
+      depth: 2, // Load related entities
     })
 
     return notifications.map((notification) => ({
@@ -1650,4 +1675,26 @@ export async function runMatchAlgorithm(
   }
 
   return groups;
+}
+
+
+export async function getRecentNotifications(userId: string, limit = 5){
+  const payload = await getPayload({config});
+
+  try {
+    const {docs} = await payload.find({
+      collection: 'notifications',
+      where: {
+        recipient: { equals: userId},
+      
+      },
+      sort: '-createdAt',
+      limit,
+      depth: 0,
+    })
+  }
+  catch (error) {
+    console.error('Error fetching recent notifications:', error);
+    throw error;
+  }
 }

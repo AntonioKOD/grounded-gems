@@ -1,10 +1,15 @@
+// app/events/create/page.tsx
+
 import { Suspense } from "react"
 import type { Metadata } from "next"
 import CreateEventForm from "@/components/event/create-event-form"
 import { Skeleton } from "@/components/ui/skeleton"
 
+// 1️⃣ Tell Next.js this segment must always be rendered dynamically
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
-  title: "Create Event | Local Explorer",
+  title: "Create Event | Grounded Gems",
   description: "Create a new event and invite others to join",
 }
 

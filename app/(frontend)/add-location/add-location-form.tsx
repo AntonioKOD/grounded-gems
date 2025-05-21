@@ -4,7 +4,7 @@
 
 import type React from "react"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, use } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
@@ -40,6 +40,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/hooks/use-auth"
 import {
   Dialog,
   DialogContent,
@@ -82,7 +83,7 @@ export default function AddLocationForm() {
 
   // State for categories and user data
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
-  const [user, setUser] = useState<UserData | null>(null)
+  const {user, isLoading} = useAuth()
   const [formProgress, setFormProgress] = useState(0)
 
   // Dialog states
@@ -214,36 +215,12 @@ export default function AddLocationForm() {
       }
     }
 
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!res.ok) {
-          throw new Error("Failed to fetch user data")
-        }
-
-        const { user } = await res.json()
-        setUser(user)
-      } catch (error) {
-        console.error("Error fetching user:", error)
-        toast({
-          title: "Authentication Error",
-          description: "Please log in to add a location.",
-          variant: "destructive",
-        })
-        router.push("/login")
-      }
+    if(!user){
+      router.push("/login?callbackUrl=/add-location")
     }
 
     fetchCategories()
-    fetchUser()
-  }, [toast, router])
+  }, [toast, router, user])
 
   // Calculate form progress
   useEffect(() => {

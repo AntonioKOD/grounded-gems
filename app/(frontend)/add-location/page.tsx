@@ -2,6 +2,8 @@ import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import AddLocationForm from "./add-location-form"
 
+export const dynamic = 'force-dynamic'
+
 export default function AddLocationPage() {
   return (
     <div className="min-h-screen bg-gray-50">

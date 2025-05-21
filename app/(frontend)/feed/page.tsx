@@ -3,16 +3,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import FeedContainer from "@/components/feed/feed-container"
 
+export const dynamic = 'force-dynamic'
 export const metadata = {
-  title: "Community Feed",
-  description: "Check out the latest posts from the community",
+  title: "Local Buzz| Grounded Gems",
+  description: "Dive into the buzz at Grounded Gems! Uncover fresh finds, genuine reviews, and hidden gems recommended by fellow explorers. Join the conversation and discover what everyone’s loving right now!",
 }
 
 export default async function FeedPage() {
   return (
     <main className="container py-6 md:py-10">
       <div className="mb-8 max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold tracking-tight">Community Feed</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Local Buzz</h1>
         <p className="text-muted-foreground mt-2">
           Discover the latest posts, reviews, and recommendations from the community.
         </p>
@@ -21,7 +22,7 @@ export default async function FeedPage() {
       <Tabs defaultValue="for-you" className="max-w-2xl mx-auto">
         <TabsList className="grid w-full grid-cols-2 mb-6">
           <TabsTrigger value="for-you">For You</TabsTrigger>
-          <TabsTrigger value="all">All Posts</TabsTrigger>
+          <TabsTrigger value="all">Everyone&apos;s Talking</TabsTrigger>
         </TabsList>
         
         <TabsContent value="for-you">

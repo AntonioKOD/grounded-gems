@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, memo, useCallback, useEffect } from "react"
+import { useState, memo, useCallback } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -36,13 +37,12 @@ import type { Post } from "@/types/feed"
 
 interface FeedPostProps {
   post: Post
+  user: any // Accept user from parent component
   className?: string
   showInteractions?: boolean
 }
 
-export const FeedPost = memo(function FeedPost({ post, className = "", showInteractions = true }: FeedPostProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [user, setUser] = useState<any>(null)
+export const FeedPost = memo(function FeedPost({ post, user, className = "", showInteractions = true }: FeedPostProps) {
   const [expanded, setExpanded] = useState(false)
   const [isLiked, setIsLiked] = useState(post.isLiked || false)
   const [likeCount, setLikeCount] = useState(post.likeCount || 0)
@@ -50,26 +50,6 @@ export const FeedPost = memo(function FeedPost({ post, className = "", showInter
   const [shareCount, setShareCount] = useState(post.shareCount || 0)
   const [isSaved, setIsSaved] = useState(false)
   const [isLoadingImage, setIsLoadingImage] = useState(true)
-
-  // Fetch current user
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
-      try {
-        const response = await fetch("/api/users/me", {
-          credentials: "include",
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          setUser(data.user)
-        }
-      } catch (err) {
-        console.error("Error fetching current user:", err)
-      }
-    }
-
-    fetchCurrentUser()
-  }, [])
 
   // Determine if content should be truncated
   const isLongContent = post.content.length > 280
@@ -315,7 +295,7 @@ export const FeedPost = memo(function FeedPost({ post, className = "", showInter
               disabled={isSharing}
             >
               <Share2 className="h-4 w-4" />
-              <span className="sr-only sm:not-sr-only sm:inline" onClick={handleShare}>Share</span>
+              <span className="sr-only sm:not-sr-only sm:inline">Share</span>
             </Button>
           </div>
         </CardFooter>

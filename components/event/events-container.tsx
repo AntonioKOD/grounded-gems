@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import type React from "react"
+
+import { useState, useEffect, useCallback, useMemo, useTransition, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { Calendar, Filter, Plus, Loader2, UserCircle } from "lucide-react"
+import { Calendar, Filter, Plus, Loader2, UserCircle, MapPin, Clock, ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
 import { EventCard } from "@/components/event/event-card"
 import EventsFilter from "@/components/event/events-filter"
 import { getNearbyEventsAction, getUserEventsByCategory } from "@/app/(frontend)/events/actions"
@@ -15,18 +17,32 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { updateUserLocation } from "@/app/actions"
 import type { EventFilterOptions } from "@/types/event-filter"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useAuth } from "@/hooks/use-auth"
 
-export default function EventsContainer() {
+export default function EventsContainer({
+  initialUserId,
+}: {
+  initialUserId?: string
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [isPending, startTransition] = useTransition()
+  const isMounted = useRef(true)
+
+  // Get user data from auth context
+  const { user, isLoading: isUserLoading, isAuthenticated } = useAuth()
 
   // State
   const [events, setEvents] = useState<Event[]>([])
   const [totalEvents, setTotalEvents] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true) // Start with loading state
   const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "all")
   const [showFilters, setShowFilters] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
   const [userCoordinates, setUserCoordinates] = useState<{
     latitude: number | null
     longitude: number | null
@@ -34,6 +50,11 @@ export default function EventsContainer() {
     latitude: null,
     longitude: null,
   })
+  const [searchQuery, setSearchQuery] = useState("")
+  const [sortOption, setSortOption] = useState("distance")
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [viewMode, setViewMode] = useState("grid") // grid or list
+  const [isFilterApplied, setIsFilterApplied] = useState(false)
 
   // My Events tab state
   const [createdEvents, setCreatedEvents] = useState<Event[]>([])
@@ -49,13 +70,67 @@ export default function EventsContainer() {
     limit: 12,
     offset: 0,
     status: "published",
+    userId: user?.id || initialUserId || "",
   })
+  useEffect(() => {
+    // Only fetch when on "My Events" tab and user is ready
+    if (!isAuthenticated) return
+
+    setIsLoadingMyEvents(true)
+    if (!user?.id) return
+    getUserEventsByCategory(user.id)
+      .then(({ success, createdEvents, joinedEvents, error }) => {
+        if (success) {
+          setCreatedEvents((createdEvents || []) as Event[])
+          setJoinedEvents((joinedEvents || []) as Event[])
+        } else {
+          toast.error(error || 'Could not load your events')
+        }
+      })
+      .catch((err) => {
+        console.error('Error in getUserEventsByCategory:', err)
+        toast.error('Failed to load your events')
+      })
+      .finally(() => {
+        setIsLoadingMyEvents(false)
+      })
+  }, [isAuthenticated, user?.id])
+
+  // Update userId in eventOptions when user data changes
+  useEffect(() => {
+    if (user?.id && user.id !== eventOptions.userId) {
+      setEventOptions((prev) => ({
+        ...prev,
+        userId: user.id,
+      }))
+    }
+  }, [user, eventOptions.userId])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false
+    }
+  }, [])
+
+  // Check if any filters are applied
+  useEffect(() => {
+    const hasFilters =
+      !!eventOptions.category || !!eventOptions.eventType || eventOptions.isMatchmaking || eventOptions.radiusKm !== 25
+
+    setIsFilterApplied(hasFilters)
+  }, [eventOptions])
 
   // Get user's geolocation
   useEffect(() => {
+    if (!isMounted.current) return
+
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         ({ coords: { latitude, longitude } }) => {
+          if (!isMounted.current) return
+
+          console.log("Geolocation obtained:", { latitude, longitude })
           setUserCoordinates({ latitude, longitude })
 
           // Update event options with coordinates
@@ -63,104 +138,66 @@ export default function EventsContainer() {
             ...prev,
             coordinates: { latitude, longitude },
           }))
+
+          // Update user location if we have a user
+          if (user?.id && latitude && longitude) {
+            updateUserLocation(user.id, { latitude, longitude }).catch(console.error)
+          }
         },
         (err) => {
-          console.warn("Geolocation unavailable or denied", err)
-          toast.error("Location access denied. Some features may be limited.")
+          console.warn("Geolocation unavailable or denied:", err)
+          if (isMounted.current) {
+            toast.error("Location access denied. Some features may be limited.")
+          }
         },
+        { timeout: 10000, enableHighAccuracy: true },
       )
     }
-  }, [])
+  }, [user])
 
-  // Fetch current user and update their location
-  useEffect(() => {
-    const fetchCurrentUser = async () => {
+  // Load events with specific options
+  const loadEventsWithOptions = useCallback(
+    async (options: EventFilterOptions) => {
+      setIsLoading(true)
       try {
-        const response = await fetch("/api/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          const user = data.user
-          setCurrentUser(user)
-
-          // Only update user location if we have valid coordinates
-          if (userCoordinates.latitude && userCoordinates.longitude) {
-            await updateUserLocation(user.id, {
-              latitude: userCoordinates.latitude,
-              longitude: userCoordinates.longitude,
-            })
-          }
-
-          // Update event options with user ID
-          setEventOptions((prev) => ({
-            ...prev,
-            userId: user.id,
-          }))
+        // Invoke the server action (cookies auto-read server-side)
+        const nearby = await getNearbyEventsAction(options)
+  
+        if (Array.isArray(nearby)) {
+          // Map to Event[] and update state
+          setEvents(nearby.map(item => item.event as Event))
+          setTotalEvents(nearby.length)
+        } else {
+          console.error('Unexpected response from getNearbyEventsAction:', nearby)
+          setEvents([])
+          setTotalEvents(0)
         }
       } catch (error) {
-        console.error("Error fetching current user:", error)
-      }
-    }
-
-    fetchCurrentUser()
-  }, [userCoordinates])
-
-  // Load events based on current options
-  const loadEvents = useCallback(async () => {
-    setIsLoading(true)
-
-    try {
-      // Create a copy of the current options
-      const options: EventFilterOptions = { ...eventOptions }
-
-      // Apply tab-specific filters
-      if (activeTab === "my-events") {
-        // My Events tab is handled separately
-        setIsLoading(false)
-        return
-      } else if (activeTab === "matchmaking") {
-        // For matchmaking tab, ensure we're only showing matchmaking events
-        options.isMatchmaking = true
-      }
-
-      // Ensure userId is provided before calling the action
-      if (!options.userId) {
+        console.error('Error loading events:', error)
+        toast.error('Failed to load events')
         setEvents([])
         setTotalEvents(0)
-        return
+      } finally {
+        setIsLoading(false)
       }
-      // Call the action with properly structured options
-      const response = await getNearbyEventsAction({
-        userId: options.userId,
-        radiusKm: options.radiusKm,
-      })
+    },
+    []  // dependencies only if constants or stable callbacks are used
+  )
 
-      // Update state with the results
-      setEvents(response.map((item) => item.event as Event))
-      setTotalEvents(response.length)
-    } catch (error) {
-      console.error("Error loading events:", error)
-      toast.error("Failed to load events")
-      setEvents([])
-      setTotalEvents(0)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [eventOptions, activeTab, currentUser?.id])
+  // Load events based on current options
+  const loadEvents = useCallback(() => {
+    loadEventsWithOptions(eventOptions)
+  }, [eventOptions, loadEventsWithOptions])
 
   // Load My Events data
   const loadMyEvents = useCallback(async () => {
-    if (!currentUser || activeTab !== "my-events") return
+    if (!user?.id || activeTab !== "my-events" || !isMounted.current) return
 
     setIsLoadingMyEvents(true)
     try {
-      const eventsData = await getUserEventsByCategory(currentUser.id)
+      const eventsData = await getUserEventsByCategory(user.id)
+
+      if (!isMounted.current) return
 
       if (eventsData.success) {
         setCreatedEvents((eventsData.createdEvents || []) as Event[])
@@ -170,29 +207,45 @@ export default function EventsContainer() {
       }
     } catch (error) {
       console.error("Error loading my events:", error)
-      toast.error("Failed to load your events")
+      if (isMounted.current) {
+        toast.error("Failed to load your events")
+      }
     } finally {
-      setIsLoadingMyEvents(false)
+      if (isMounted.current) {
+        setIsLoadingMyEvents(false)
+      }
     }
-  }, [currentUser, activeTab])
+  }, [user, activeTab])
 
-  // Load events when options or tab changes
+  // Initial data loading
   useEffect(() => {
+    // Skip if component is not mounted
+    if (!isMounted.current) return
+
+    // If we're on the my-events tab, load my events
     if (activeTab === "my-events") {
       loadMyEvents()
-    } else {
-      loadEvents()
+      return
     }
-  }, [loadEvents, loadMyEvents, activeTab])
+
+    // If we're still loading user data, wait
+    if (isUserLoading) return
+
+    // Load events with current options
+    console.log("Initial data loading with options:", eventOptions)
+    loadEvents()
+  }, [activeTab, isUserLoading, loadEvents, loadMyEvents])
 
   // Handle tab change
   const handleTabChange = (value: string) => {
     setActiveTab(value)
 
     // Update URL
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("tab", value)
-    router.push(`/events?${params.toString()}`)
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("tab", value)
+      router.push(`/events?${params.toString()}`)
+    })
   }
 
   // Handle filter change
@@ -204,15 +257,17 @@ export default function EventsContainer() {
     }))
 
     // Update URL
-    const params = new URLSearchParams(searchParams.toString())
-    Object.entries(newFilters).forEach(([key, value]) => {
-      if (value) {
-        params.set(key, String(value))
-      } else {
-        params.delete(key)
-      }
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      Object.entries(newFilters).forEach(([key, value]) => {
+        if (value) {
+          params.set(key, String(value))
+        } else {
+          params.delete(key)
+        }
+      })
+      router.push(`/events?${params.toString()}`)
     })
-    router.push(`/events?${params.toString()}`)
   }
 
   // Handle radius change
@@ -224,32 +279,85 @@ export default function EventsContainer() {
     }))
 
     // Update URL
-    const params = new URLSearchParams(searchParams.toString())
-    params.set("radius", String(radius))
-    router.push(`/events?${params.toString()}`)
+    startTransition(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("radius", String(radius))
+      router.push(`/events?${params.toString()}`)
+    })
   }
 
-  // Handle load more
+  useEffect(() => {
+    // Skip loading if on "My Events" tab or user not ready
+    if (activeTab !== 'all') return
+    loadEventsWithOptions(eventOptions)
+  }, [activeTab, eventOptions, loadEventsWithOptions])
+  
+  // Optionally, handle "Load More" by updating offset
   const handleLoadMore = () => {
-    setEventOptions((prev) => ({
-      ...prev,
-      offset: prev.offset! + prev.limit!,
-    }))
+    setEventOptions(prev => ({ ...prev, offset: (prev.offset || 0) + (prev.limit || 0) }))
   }
+
+  // Handle search
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Implement search functionality here
+    toast.info(`Searching for "${searchQuery}"`)
+  }
+
+  // Handle sort change
+  const handleSortChange = (option: string) => {
+    setSortOption(option)
+    // Implement sorting logic here
+  }
+
+  // Handle clear filters
+  const handleClearFilters = () => {
+    setEventOptions({
+      radiusKm: 25,
+      limit: 12,
+      offset: 0,
+      status: "published",
+      userId: user?.id || initialUserId || "",
+      coordinates:
+        userCoordinates.latitude && userCoordinates.longitude
+          ? { latitude: userCoordinates.latitude, longitude: userCoordinates.longitude }
+          : undefined,
+    })
+
+    // Update URL
+    startTransition(() => {
+      const params = new URLSearchParams()
+      params.set("tab", activeTab)
+      router.push(`/events?${params.toString()}`)
+    })
+  }
+
+  // Filter events by search query
+  const filteredEvents = useMemo(() => {
+    if (!searchQuery.trim()) return events
+
+    return events.filter(
+      (event) =>
+        (event.name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (event.description || "").toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+  }, [events, searchQuery])
 
   // Render My Events tab content
   const renderMyEventsContent = () => {
     // If user is not logged in
-    if (!currentUser) {
+    if (!isAuthenticated) {
       return (
-        <div className="text-center py-12 px-4 border rounded-lg bg-gray-50">
+        <div className="text-center py-12 px-4 border rounded-lg bg-gray-50 shadow-sm">
           <UserCircle className="h-16 w-16 mx-auto text-gray-300 mb-4" />
           <h3 className="text-lg font-medium mb-2">Sign in to view your events</h3>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
             You need to be signed in to view your events. Please sign in or create an account.
           </p>
           <div className="flex gap-4 justify-center">
-            <Button onClick={() => router.push("/login")}>Sign In</Button>
+            <Button onClick={() => router.push("/login")} className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+              Sign In
+            </Button>
             <Button variant="outline" onClick={() => router.push("/signup")}>
               Create Account
             </Button>
@@ -261,8 +369,43 @@ export default function EventsContainer() {
     // If loading
     if (isLoadingMyEvents) {
       return (
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+        <div className="space-y-8">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-7 w-48" />
+              <Skeleton className="h-9 w-32" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="border rounded-lg p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <div className="flex gap-2 mt-2">
+                    <Skeleton className="h-8 w-20" />
+                    <Skeleton className="h-8 w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Skeleton className="h-px w-full" />
+
+          <div className="space-y-4">
+            <Skeleton className="h-7 w-48" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1, 2].map((i) => (
+                <div key={i} className="border rounded-lg p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <div className="flex gap-2 mt-2">
+                    <Skeleton className="h-8 w-20" />
+                    <Skeleton className="h-8 w-20" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )
     }
@@ -283,13 +426,15 @@ export default function EventsContainer() {
         </div>
 
         {events.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-track-gray-100">
             {events.map((event) => (
-              <EventCard key={event.id} event={event} compact={true} userCoordinates={userCoordinates} />
+              <div key={event.id}>
+                <EventCard event={event} compact={true} userCoordinates={userCoordinates} />
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 border rounded-lg bg-gray-50">
+          <div className="text-center py-8 border rounded-lg bg-gray-50 shadow-sm">
             <Calendar className="h-12 w-12 mx-auto text-gray-300 mb-2" />
             <p className="text-gray-500">{emptyMessage}</p>
           </div>
@@ -316,82 +461,36 @@ export default function EventsContainer() {
     )
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <Tabs defaultValue={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid grid-cols-3 w-full sm:w-auto">
-            <TabsTrigger value="all">All Events</TabsTrigger>
-            <TabsTrigger value="my-events">My Events</TabsTrigger>
-          </TabsList>
-
-          {/* Tab Content */}
-          <TabsContent value="my-events" className="mt-6">
-            {renderMyEventsContent()}
-          </TabsContent>
-
-          <TabsContent value="all" className="mt-6">
-            {renderEventsGrid()}
-          </TabsContent>
-
-          <TabsContent value="matchmaking" className="mt-6">
-            {renderEventsGrid()}
-          </TabsContent>
-        </Tabs>
-
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-1"
-          >
-            <Filter className="h-4 w-4" />
-            Filters
-          </Button>
-
-          <Button asChild className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 flex-1 sm:flex-auto">
-            <Link href="/events/create">
-              <Plus className="h-4 w-4 mr-1" />
-              Create Event
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* Filters */}
-      {showFilters && (
-        <EventsFilter
-          filters={{
-            category: eventOptions.category || "",
-            eventType: eventOptions.eventType || "",
-            isMatchmaking: eventOptions.isMatchmaking || false,
-          }}
-          radius={eventOptions.radiusKm || 25}
-          onRadiusChange={handleRadiusChange}
-          onFilterChange={handleFilterChange}
-          onClose={() => setShowFilters(false)}
-        />
-      )}
-    </div>
-  )
-
   // Helper function to render events grid
   function renderEventsGrid() {
     if (isLoading) {
       return (
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="border rounded-lg p-4 space-y-3">
+              <Skeleton className="h-40 w-full rounded-md" />
+              <Skeleton className="h-6 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-20" />
+                <Skeleton className="h-8 w-20" />
+              </div>
+            </div>
+          ))}
         </div>
       )
     }
 
-    if (events.length > 0) {
+    const displayEvents = searchQuery ? filteredEvents : events
+
+    if (displayEvents.length > 0) {
       return (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} userCoordinates={userCoordinates} />
+            {displayEvents.map((event) => (
+              <div key={event.id}>
+                <EventCard event={event} userCoordinates={userCoordinates} />
+              </div>
             ))}
           </div>
 
@@ -402,9 +501,9 @@ export default function EventsContainer() {
                 variant="outline"
                 className="border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
                 onClick={handleLoadMore}
-                disabled={isLoading}
+                disabled={isLoading || isPending}
               >
-                {isLoading ? (
+                {isLoading || isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Loading...
@@ -419,21 +518,226 @@ export default function EventsContainer() {
       )
     }
 
+    // No events found
     return (
       <div className="text-center py-12 px-4 border rounded-lg bg-gray-50">
-        <div className="mx-auto w-12 h-12 rounded-full bg-[#FF6B6B]/10 flex items-center justify-center mb-4">
-          <Calendar className="h-6 w-6 text-[#FF6B6B]" />
+        <div className="mx-auto w-16 h-16 rounded-full bg-[#FF6B6B]/10 flex items-center justify-center mb-4">
+          <Calendar className="h-8 w-8 text-[#FF6B6B]" />
         </div>
-        <h3 className="text-lg font-medium mb-2">No events found</h3>
+        <h3 className="text-xl font-medium mb-2">No events found</h3>
         <p className="text-gray-500 mb-6 max-w-md mx-auto">
-          {activeTab === "matchmaking"
-            ? "No matchmaking events found. Try adjusting your preferences or create your own matchmaking event!"
+          {searchQuery
+            ? `No events match your search for "${searchQuery}". Try different keywords.`
             : "No events match your current filters. Try adjusting your filters or create your own event!"}
         </p>
-        <Button asChild className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
-          <Link href="/events/create">Create Event</Link>
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          {isFilterApplied && (
+            <Button
+              variant="outline"
+              onClick={handleClearFilters}
+              className="border-[#FF6B6B] text-[#FF6B6B]"
+              disabled={isPending}
+            >
+              Clear Filters
+            </Button>
+          )}
+          <Button asChild className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+            <Link href="/events/create">Create Event</Link>
+          </Button>
+        </div>
       </div>
     )
   }
+
+  return (
+    <div className="space-y-6">
+      {/* Header with search, filters and actions */}
+      <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+        <div className="flex flex-col gap-5">
+          {/* Top row with search and action buttons */}
+          <div className="flex flex-col md:flex-row gap-4 items-stretch md:items-center">
+            <form onSubmit={handleSearch} className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                type="search"
+                placeholder="Search events..."
+                className="pl-10 pr-4 py-2 h-11 bg-gray-50 border-gray-200 w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </form>
+
+            <div className="flex gap-3">
+              <Button
+                variant={isFilterApplied ? "default" : "outline"}
+                onClick={() => setShowFilters(!showFilters)}
+                className={cn("flex items-center gap-2 h-11", isFilterApplied && "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90")}
+                disabled={isPending}
+              >
+                {isFilterApplied ? <SlidersHorizontal className="h-4 w-4" /> : <Filter className="h-4 w-4" />}
+                {isFilterApplied
+                  ? `Filters (${Object.values(eventOptions).filter((v) => v && typeof v !== "object" && v !== "published" && v !== 25).length})`
+                  : "Filters"}
+              </Button>
+
+              <Button asChild className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 h-11">
+                <Link href="/events/create" className="flex items-center gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Event
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          {/* Second row with tabs and sort */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <Tabs defaultValue={activeTab} onValueChange={handleTabChange} className="w-full">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <TabsList className="grid grid-cols-2 w-full sm:w-auto">
+                  <TabsTrigger
+                    value="all"
+                    className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white"
+                    disabled={isPending}
+                  >
+                    All Events
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="my-events"
+                    className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white"
+                    disabled={isPending}
+                  >
+                    My Events
+                  </TabsTrigger>
+                </TabsList>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  {isFilterApplied && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleClearFilters}
+                      className="text-gray-500 hover:text-gray-700"
+                      disabled={isPending}
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Clear Filters
+                    </Button>
+                  )}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex items-center gap-1 ml-auto"
+                        disabled={isPending}
+                      >
+                        Sort: {sortOption === "distance" ? "Nearest" : sortOption === "date" ? "Upcoming" : "Popular"}
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleSortChange("distance")}>
+                        <MapPin className="h-4 w-4 mr-2" />
+                        Nearest
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSortChange("date")}>
+                        <Clock className="h-4 w-4 mr-2" />
+                        Upcoming
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSortChange("popular")}>
+                        <UserCircle className="h-4 w-4 mr-2" />
+                        Popular
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
+              {/* Applied filters display */}
+              {isFilterApplied && (
+                <div className="flex flex-wrap gap-2 items-center mt-4">
+                  <span className="text-sm text-gray-500">Active filters:</span>
+                  {eventOptions.category && (
+                    <Badge variant="outline" className="bg-gray-100">
+                      Category: {eventOptions.category}
+                      <button
+                        className="ml-1 hover:text-red-500"
+                        onClick={() => handleFilterChange({ category: "" })}
+                        disabled={isPending}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {eventOptions.eventType && (
+                    <Badge variant="outline" className="bg-gray-100">
+                      Type: {eventOptions.eventType}
+                      <button
+                        className="ml-1 hover:text-red-500"
+                        onClick={() => handleFilterChange({ eventType: "" })}
+                        disabled={isPending}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {eventOptions.isMatchmaking && (
+                    <Badge variant="outline" className="bg-gray-100">
+                      Matchmaking
+                      <button
+                        className="ml-1 hover:text-red-500"
+                        onClick={() => handleFilterChange({ isMatchmaking: false })}
+                        disabled={isPending}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                  {eventOptions.radiusKm !== 25 && (
+                    <Badge variant="outline" className="bg-gray-100">
+                      Within {eventOptions.radiusKm}km
+                      <button
+                        className="ml-1 hover:text-red-500"
+                        onClick={() => handleRadiusChange(25)}
+                        disabled={isPending}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  )}
+                </div>
+              )}
+
+              {/* Tab Content */}
+              <TabsContent value="my-events" className="mt-6">
+                {renderMyEventsContent()}
+              </TabsContent>
+
+              <TabsContent value="all" className="mt-6">
+                {renderEventsGrid()}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      {showFilters && (
+        <div className="bg-white rounded-lg shadow-sm p-5 border border-gray-100">
+          <EventsFilter
+            filters={{
+              category: eventOptions.category || "",
+              eventType: eventOptions.eventType || "",
+              isMatchmaking: eventOptions.isMatchmaking || false,
+            }}
+            radius={eventOptions.radiusKm || 25}
+            onRadiusChange={handleRadiusChange}
+            onFilterChange={handleFilterChange}
+            onClose={() => setShowFilters(false)}
+          />
+        </div>
+      )}
+    </div>
+  )
 }

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import EventDetailContainer from "@/components/event/event-detail-container"
 import { getEventById } from "@/app/(frontend)/events/actions"
 
+export const dynamic = 'force-dynamic'
 // Params now comes in as a Promise<{ id: string }>
 type AsyncParams = Promise<{ id: string }>
 
