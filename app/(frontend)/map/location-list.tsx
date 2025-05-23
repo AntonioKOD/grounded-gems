@@ -2,9 +2,16 @@
 
 import type React from "react"
 
-import { useState, useCallback, useMemo } from "react"
-import { Search, MapPin, Star, Filter, Heart, X } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { useState, useCallback, useMemo, useEffect } from "react"
+import { 
+  Star, 
+  MapPin, 
+  Bookmark, 
+  Bell, 
+  X,
+  Filter,
+  Calendar
+} from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -22,11 +29,14 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Image from "next/image"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
-
+import { toast } from "sonner"
+import { toggleSaveLocationAction, toggleSubscribeLocationAction, getSavedLocationsAction, getUserLocationDataAction } from "@/app/actions"
+import LocationInteractions from "@/components/location/location-interactions"
 
 interface LocationListProps {
   locations: Location[]
@@ -34,6 +44,13 @@ interface LocationListProps {
   onLocationSelect: (location: Location) => void
   isLoading?: boolean
   onViewDetail?: (location: Location) => void
+  currentUser?: { id: string; name?: string; email?: string }
+}
+
+interface SavedLocationItem {
+  id: string
+  location: Location
+  createdAt: string
 }
 
 // Helper to get image URL
@@ -50,7 +67,7 @@ const getLocationImageUrl = (location: Location): string => {
     return location.imageUrl
   }
 
-  return "/placeholder.svg?key=iyzeg"
+  return "/placeholder.svg"
 }
 
 export default function LocationList({
@@ -59,12 +76,72 @@ export default function LocationList({
   onLocationSelect,
   isLoading = false,
   onViewDetail,
+  currentUser,
 }: LocationListProps) {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [sortBy, setSortBy] = useState<"relevance" | "distance" | "rating">("relevance")
+  const [savedLocations, setSavedLocations] = useState<Set<string>>(new Set())
+  const [subscribedLocations, setSubscribedLocations] = useState<Set<string>>(new Set())
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [savedLocationsList, setSavedLocationsList] = useState<SavedLocationItem[]>([])
+  const [showSavedLocations, setShowSavedLocations] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  
-  const [favoriteLocations, setFavoriteLocations] = useState<Set<string>>(new Set())
+  const [sortBy, setSortBy] = useState<"relevance" | "distance" | "rating">("relevance")
+
+  // Load user location data on mount
+  useEffect(() => {
+    const loadUserLocationData = async () => {
+      try {
+        const userData = await getUserLocationDataAction()
+        setSavedLocations(new Set(userData.savedLocations))
+        setSubscribedLocations(new Set(userData.subscribedLocations))
+        
+        // Also load saved locations with full data for the modal
+        const savedWithData = await getSavedLocationsAction()
+        setSavedLocationsList(savedWithData)
+        console.log('Loaded saved locations IDs:', userData.savedLocations)
+        console.log('Loading status changed, forcing refresh with refreshTrigger')
+        setRefreshTrigger(prev => prev + 1) // Force initial render
+      } catch (error) {
+        console.error('Error loading user location data:', error)
+      }
+    }
+
+    loadUserLocationData()
+  }, [])
+
+  // Listen for location save events to refresh UI
+  useEffect(() => {
+    const handleLocationSaved = () => {
+      setRefreshTrigger(prev => prev + 1) // Force re-render of location cards
+    }
+
+    const handleLocationInteractionUpdated = (event: CustomEvent) => {
+      const { locationId, type, isActive } = event.detail
+      
+      // Update local state based on interaction changes from location detail
+      if (type === 'save') {
+        setSavedLocations(prev => {
+          const newSet = new Set(prev)
+          if (isActive) {
+            newSet.add(locationId)
+          } else {
+            newSet.delete(locationId)
+          }
+          return newSet
+        })
+      }
+      
+      // Force re-render to update UI
+      setRefreshTrigger(prev => prev + 1)
+    }
+
+    document.addEventListener('locationSaved', handleLocationSaved)
+    document.addEventListener('locationInteractionUpdated', handleLocationInteractionUpdated as EventListener)
+    
+    return () => {
+      document.removeEventListener('locationSaved', handleLocationSaved)
+      document.removeEventListener('locationInteractionUpdated', handleLocationInteractionUpdated as EventListener)
+    }
+  }, [])
 
   // Extract all unique categories from locations
   const allCategories = useMemo(() => {
@@ -81,18 +158,9 @@ export default function LocationList({
     }, [] as string[])
   }, [locations])
 
-  // Filter locations based on search query and selected categories
+  // Filter locations based on selected categories
   const filteredLocations = useMemo(() => {
     return locations.filter((location) => {
-      // Search query filter
-      const matchesSearch =
-        searchQuery === "" ||
-        location.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (location.description && location.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (location.address &&
-          typeof location.address === "string" &&
-          location.address.toLowerCase().includes(searchQuery.toLowerCase()))
-
       // Category filter
       const matchesCategory =
         selectedCategories.length === 0 ||
@@ -102,9 +170,9 @@ export default function LocationList({
             return categoryName && selectedCategories.includes(categoryName)
           }))
 
-      return matchesSearch && matchesCategory
+      return matchesCategory
     })
-  }, [locations, searchQuery, selectedCategories])
+  }, [locations, selectedCategories])
 
   // Sort locations
   const sortedLocations = useMemo(() => {
@@ -119,11 +187,6 @@ export default function LocationList({
       return 0
     })
   }, [filteredLocations, sortBy])
-
-  // Handle search input change
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value)
-  }, [])
 
   // Handle category selection
   const handleCategoryChange = useCallback((category: string, checked: boolean) => {
@@ -141,20 +204,6 @@ export default function LocationList({
     setSortBy("relevance")
   }, [])
 
-  // Toggle favorite status for a location
-  const toggleFavorite = useCallback((e: React.MouseEvent, locationId: string) => {
-    e.stopPropagation()
-    setFavoriteLocations((prev) => {
-      const newFavorites = new Set(prev)
-      if (newFavorites.has(locationId)) {
-        newFavorites.delete(locationId)
-      } else {
-        newFavorites.add(locationId)
-      }
-      return newFavorites
-    })
-  }, [])
-
   // View location details
   const viewLocationDetails = useCallback(
     (e: React.MouseEvent, location: Location) => {
@@ -167,130 +216,433 @@ export default function LocationList({
     [onViewDetail],
   )
 
-  // Close location details
+  // Using a function to check if location is saved/subscribed to avoid re-renders
+  const isLocationSaved = useCallback((locationId: string) => {
+    const isSaved = savedLocations.has(locationId)
+    // Debug logging for the first few locations
+    if (Math.random() < 0.1) { // Only log occasionally to avoid spam
+      console.log(`Location ${locationId} saved status:`, isSaved, 'All saved IDs:', Array.from(savedLocations))
+    }
+    return isSaved
+  }, [savedLocations])
   
+  const isLocationSubscribed = useCallback((locationId: string) => {
+    const isSubscribed = subscribedLocations.has(locationId)
+    return isSubscribed
+  }, [subscribedLocations])
+  
+  // Handle saving/liking locations
+  const handleSaveLocation = useCallback(async (e: React.MouseEvent, location: Location) => {
+    e.stopPropagation()
+    try {
+      // Call server action
+      const result = await toggleSaveLocationAction(location.id)
+      
+      if (result.success) {
+        // Update local state
+        setSavedLocations(prev => {
+          const newSet = new Set(prev)
+          if (result.isSaved) {
+            newSet.add(location.id)
+          } else {
+            newSet.delete(location.id)
+          }
+          return newSet
+        })
+        
+        // Refresh saved locations list
+        const saved = await getSavedLocationsAction()
+        setSavedLocationsList(saved)
+        
+        // Send browser notification for save action (if enabled in preferences)
+        if (result.isSaved && typeof window !== 'undefined') {
+          try {
+            const { showNotificationWithPreferences, formatNotificationMessage } = await import('@/lib/notifications')
+            const message = formatNotificationMessage('location_saved', {
+              locationName: location.name
+            })
+            await showNotificationWithPreferences('SPECIAL_OFFER', message, {
+              locationId: location.id,
+              type: 'location',
+              action: 'saved'
+            })
+          } catch (notificationError) {
+            console.error('Error showing save notification:', notificationError)
+          }
+        }
+        
+        toast.success(result.message, {
+          description: result.isSaved 
+            ? "You can find this location in your saved places"
+            : "You will no longer see this in your saved locations",
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              // Toggle back
+              await toggleSaveLocationAction(location.id)
+              setSavedLocations(prev => {
+                const newSet = new Set(prev)
+                if (result.isSaved) {
+                  newSet.delete(location.id)
+                } else {
+                  newSet.add(location.id)
+                }
+                return newSet
+              })
+              // Refresh saved locations list again
+              const saved = await getSavedLocationsAction()
+              setSavedLocationsList(saved)
+              document.dispatchEvent(new CustomEvent('locationSaved', { detail: { locationId: location.id } }))
+            }
+          }
+        })
+        
+        // Force re-render
+        document.dispatchEvent(new CustomEvent('locationSaved', { detail: { locationId: location.id } }))
+        
+        // Emit event to notify location detail about interaction changes
+        document.dispatchEvent(new CustomEvent('locationInteractionUpdated', {
+          detail: {
+            locationId: location.id,
+            type: 'save',
+            isActive: result.isSaved,
+            interactionType: 'save'
+          }
+        }))
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      console.error('Error saving/unsaving location:', error)
+      toast.error("Something went wrong", {
+        description: "Please try again later"
+      })
+    }
+  }, [setSavedLocationsList])
+  
+  // Handle subscribing to locations
+  const handleSubscribeLocation = useCallback(async (e: React.MouseEvent, location: Location) => {
+    e.stopPropagation()
+    try {
+      // Call server action
+      const result = await toggleSubscribeLocationAction(location.id, 'all')
+      
+      if (result.success) {
+        // Update local state
+        setSubscribedLocations(prev => {
+          const newSet = new Set(prev)
+          if (result.isSubscribed) {
+            newSet.add(location.id)
+          } else {
+            newSet.delete(location.id)
+          }
+          return newSet
+        })
+        
+        toast.success(result.message, {
+          description: result.isSubscribed
+            ? "You'll receive updates when events happen at this location"
+            : "You'll no longer receive updates about this location",
+          action: {
+            label: "Undo",
+            onClick: async () => {
+              // Toggle back
+              await toggleSubscribeLocationAction(location.id, 'all')
+              setSubscribedLocations(prev => {
+                const newSet = new Set(prev)
+                if (result.isSubscribed) {
+                  newSet.delete(location.id)
+                } else {
+                  newSet.add(location.id)
+                }
+                return newSet
+              })
+            }
+          }
+        })
+      } else {
+        toast.error(result.message)
+      }
+    } catch (error) {
+      console.error('Error subscribing/unsubscribing to location:', error)
+      toast.error("Something went wrong", {
+        description: "Please try again later"
+      })
+    }
+  }, [])
 
-  // LocationCard component for consistent rendering
+  // LocationCard component for consistent rendering with memo
   const LocationCard = useCallback(
     ({ location }: { location: Location }) => {
-      const isFavorite = favoriteLocations.has(location.id)
       const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
       const primaryColor = getCategoryColor(primaryCategory)
+      const isSaved = isLocationSaved(location.id)
+      const isSubscribed = isLocationSubscribed(location.id)
 
       return (
-        <Card
-          key={location.id}
+                <Card
           className={cn(
-            "overflow-hidden transition-all border hover:shadow-md group mb-2",
+            "transition-all duration-300 hover:shadow-xl relative group overflow-hidden",
+            "bg-white hover:bg-gray-50/50",
+            "border border-gray-200 hover:border-[#4ECDC4]/30",
             selectedLocation?.id === location.id
-              ? "border-[#FF6B6B] bg-[#FF6B6B]/5"
-              : "border-gray-200 hover:border-[#FF6B6B]/30",
+              ? "shadow-xl ring-2 ring-[#FF6B6B] bg-white border-[#FF6B6B]/50"
+              : "shadow-md hover:shadow-xl"
           )}
-          onClick={() => onLocationSelect(location)}
         >
           <CardContent className="p-0">
-            <div className="flex">
-              <div className="w-20 h-20 relative flex-shrink-0">
+            {/* Action buttons in top-right corner */}
+            <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-all duration-300">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
+                        "backdrop-blur-sm hover:scale-110 active:scale-95",
+                        isSaved 
+                          ? "bg-[#FF6B6B] border-[#FF6B6B] text-white shadow-lg hover:bg-[#FF6B6B]/90" 
+                          : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#FF6B6B] hover:text-[#FF6B6B]"
+                      )}
+                      onClick={(e) => handleSaveLocation(e, location)}
+                    >
+                      <Bookmark 
+                        className={cn(
+                          "h-4 w-4 transition-all duration-200",
+                          isSaved ? "fill-white" : "hover:scale-110"
+                        )} 
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
+                    {isSaved ? "Remove from saved" : "Save location"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
+                        "backdrop-blur-sm hover:scale-110 active:scale-95",
+                        isSubscribed 
+                          ? "bg-[#4ECDC4] border-[#4ECDC4] text-white shadow-lg hover:bg-[#4ECDC4]/90" 
+                          : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#4ECDC4] hover:text-[#4ECDC4]"
+                      )}
+                      onClick={(e) => handleSubscribeLocation(e, location)}
+                    >
+                      <Bell 
+                        className={cn(
+                          "h-4 w-4 transition-all duration-200",
+                          isSubscribed ? "fill-white" : "hover:scale-110"
+                        )} 
+                      />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
+                    {isSubscribed ? "Turn off notifications" : "Get notifications"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            
+            {/* Location Image */}
+            <div className="relative h-40 w-full overflow-hidden cursor-pointer" onClick={() => onLocationSelect(location)}>
+              <div className="absolute inset-0">
                 <Image
-                  src={getLocationImageUrl(location) || "/placeholder.svg"}
+                  src={getLocationImageUrl(location)}
                   alt={location.name}
                   fill
                   className="object-cover"
-                />
-                <div
-                  className="absolute inset-0 opacity-30"
-                  style={{
-                    background: `linear-gradient(to bottom, transparent 50%, ${primaryColor || "#000"} 100%)`,
+                  onError={(e) => {
+                    // Prevent infinite loop by checking if we're already showing placeholder
+                    const target = e.currentTarget as HTMLImageElement;
+                    if (!target.src.includes('placeholder.svg')) {
+                      target.src = "/placeholder.svg"
+                      // Remove the onError handler to prevent further errors
+                      target.onerror = null;
+                    }
                   }}
-                ></div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => toggleFavorite(e, location.id)}
-                  className="absolute top-1 right-1 h-6 w-6 bg-white/70 hover:bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Heart className={cn("h-3 w-3", isFavorite ? "fill-[#FF6B6B] text-[#FF6B6B]" : "text-gray-600")} />
-                </Button>
+                />
               </div>
-              <div className="p-2 flex-1 min-w-0">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-medium text-gray-900 truncate text-sm">{location.name}</h3>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={(e) => toggleFavorite(e, location.id)}
-                    className="h-6 w-6 text-gray-400 hover:text-[#FF6B6B] -mt-0.5 -mr-0.5"
+              
+              {/* Light gradient overlay for better text visibility */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+            </div>
+            
+            {/* Content section */}
+            <div className="p-4 bg-white">
+              {/* Location name and category */}
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h3 className="font-bold text-lg text-[#333333] leading-tight flex-1">
+                  {location.name}
+                </h3>
+                
+                {primaryCategory && (
+                  <Badge 
+                    className="text-xs font-medium border-0 shadow-sm flex-shrink-0"
+                    style={{
+                      backgroundColor: `${primaryColor}20`,
+                      color: primaryColor,
+                      borderColor: primaryColor
+                    }}
                   >
-                    <Heart className={cn("h-3 w-3", isFavorite ? "fill-[#FF6B6B] text-[#FF6B6B]" : "text-gray-600")} />
-                  </Button>
-                </div>
-
-                {/* Rating */}
+                    {typeof primaryCategory === 'string' ? primaryCategory : primaryCategory.name}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* Rating and address */}
+              <div className="space-y-2 mb-4">
                 {location.averageRating && (
-                  <div className="flex items-center mt-0.5">
-                    <div className="flex items-center">
-                      <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />
-                      <span className="ml-1 text-xs font-medium text-gray-700">
-                        {location.averageRating.toFixed(1)}
-                      </span>
+                  <div className="flex items-center">
+                    <div className="flex items-center bg-[#FFE66D] text-[#333333] px-2 py-1 rounded-full text-xs font-medium">
+                      <Star className="h-3 w-3 text-[#333333] fill-[#333333] mr-1" />
+                      <span>{location.averageRating.toFixed(1)}</span>
+                      {location.reviewCount && (
+                        <span className="ml-1 opacity-80">({location.reviewCount})</span>
+                      )}
                     </div>
-                    {location.reviewCount && (
-                      <span className="text-xs text-gray-500 ml-1">({location.reviewCount})</span>
-                    )}
                   </div>
                 )}
-
-                {/* Address */}
+                
                 {location.address && (
-                  <div className="flex items-center mt-0.5 text-xs text-gray-500">
-                    <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                    <p className="truncate">
-                      {typeof location.address === "string"
-                        ? location.address
-                        : Object.values(location.address).filter(Boolean).join(", ")}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 flex-shrink-0 text-[#4ECDC4]" />
+                    <span className="text-sm text-[#666666] truncate">
+                      {typeof location.address === 'string' 
+                        ? location.address 
+                        : location.address?.city || 'Address not available'}
+                    </span>
                   </div>
                 )}
-
-                {/* Categories */}
-                {location.categories && location.categories.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {location.categories.slice(0, 2).map((category, idx) => {
-                      const color = getCategoryColor(category)
-                      const name = typeof category === "string" ? category : category?.name || "Category"
-
-                      return (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className="px-1.5 py-0 h-4 text-[10px] font-medium rounded-full"
-                          style={{
-                            backgroundColor: `${color}10`,
-                            color: color,
-                            borderColor: `${color}30`,
-                          }}
-                        >
-                          {name}
-                        </Badge>
-                      )
-                    })}
-
-                    {location.categories.length > 2 && (
-                      <span className="text-[10px] text-gray-500 flex items-center">
-                        +{location.categories.length - 2}
-                      </span>
-                    )}
-                  </div>
+              </div>
+              
+              {/* Action button */}
+              <Button
+                variant="default"
+                size="sm"
+                className={cn(
+                  "w-full h-10 text-sm font-medium transition-all duration-200",
+                  "bg-[#FF6B6B] text-white border-[#FF6B6B] hover:bg-[#FF6B6B]/90",
+                  "hover:shadow-lg hover:scale-[1.02] active:scale-95 shadow-sm"
                 )}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (onViewDetail) {
+                    onViewDetail(location)
+                  }
+                }}
+              >
+                View Details
+              </Button>
 
-                {/* View Details Button */}
+              <div className="flex items-center gap-2 mt-3">
+                <LocationInteractions 
+                  location={location}
+                  currentUserId={currentUser?.id}
+                  className="flex-1"
+                  compact={true}
+                />
+                
+                {/* Event Request Button */}
                 <Button
                   size="sm"
-                  variant="default"
-                  className="w-full mt-2 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white h-7 text-xs"
-                  onClick={(e) => viewLocationDetails(e, location)}
+                  variant="outline"
+                  className="border-orange-500 text-orange-600 hover:bg-orange-50 flex-shrink-0"
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    
+                    if (!currentUser) {
+                      toast.error('Please log in to request an event')
+                      return
+                    }
+                    
+                    // Create a simple event request modal
+                    const modal = document.createElement('div')
+                    modal.className = 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'
+                    modal.innerHTML = `
+                      <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                        <div class="flex items-center justify-between p-4 border-b">
+                          <h3 class="text-lg font-semibold">Request Event</h3>
+                          <button id="close-modal" class="p-1 hover:bg-gray-100 rounded">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                          </button>
+                        </div>
+                        <div class="p-4 space-y-3">
+                          <p class="text-sm text-gray-600">Request to host an event at <strong>${location.name}</strong></p>
+                          <input type="text" id="quick-event-title" placeholder="Event title" class="w-full px-3 py-2 border rounded-md" />
+                          <textarea id="quick-event-description" placeholder="Brief description" rows="2" class="w-full px-3 py-2 border rounded-md"></textarea>
+                          <div class="grid grid-cols-2 gap-2">
+                            <input type="date" id="quick-event-date" class="px-3 py-2 border rounded-md" />
+                            <input type="time" id="quick-event-time" class="px-3 py-2 border rounded-md" />
+                          </div>
+                          <div class="flex gap-2 pt-2">
+                            <button id="cancel-request" class="flex-1 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+                            <button id="submit-request" class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">Submit</button>
+                          </div>
+                        </div>
+                      </div>
+                    `
+                    
+                    document.body.appendChild(modal)
+                    
+                    const closeModal = () => document.body.removeChild(modal)
+                    
+                    modal.querySelector('#close-modal')?.addEventListener('click', closeModal)
+                    modal.querySelector('#cancel-request')?.addEventListener('click', closeModal)
+                    modal.addEventListener('click', (e) => {
+                      if (e.target === modal) closeModal()
+                    })
+                    
+                    modal.querySelector('#submit-request')?.addEventListener('click', async () => {
+                      const title = (modal.querySelector('#quick-event-title') as HTMLInputElement)?.value
+                      const description = (modal.querySelector('#quick-event-description') as HTMLTextAreaElement)?.value
+                      const date = (modal.querySelector('#quick-event-date') as HTMLInputElement)?.value
+                      const time = (modal.querySelector('#quick-event-time') as HTMLInputElement)?.value
+                      
+                      if (!title || !description || !date || !time) {
+                        toast.error('Please fill in all fields')
+                        return
+                      }
+                      
+                      try {
+                        const response = await fetch('/api/locations/event-requests', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            eventTitle: title,
+                            eventDescription: description,
+                            eventType: 'other',
+                            locationId: location.id,
+                            requestedDate: date,
+                            requestedTime: time,
+                            expectedAttendees: 10, // Default value
+                          }),
+                        })
+                        
+                        if (response.ok) {
+                          toast.success('Event request submitted!')
+                          closeModal()
+                        } else {
+                          toast.error('Failed to submit request')
+                        }
+                      } catch {
+                        toast.error('Failed to submit request')
+                      }
+                    })
+                  }}
                 >
-                  View Details
+                  <Calendar className="h-4 w-4 mr-1" />
+                  Event
                 </Button>
               </div>
             </div>
@@ -298,48 +650,92 @@ export default function LocationList({
         </Card>
       )
     },
-    [selectedLocation, onLocationSelect, favoriteLocations, toggleFavorite, viewLocationDetails],
+    [selectedLocation, onLocationSelect, viewLocationDetails, isLocationSaved, isLocationSubscribed, handleSaveLocation, handleSubscribeLocation, refreshTrigger, currentUser],
   )
 
   return (
     <div className="flex flex-col h-full">
-      {/* Search and filter header */}
+      {/* Header with location count and bookmark button */}
       <div className="p-3 border-b sticky top-0 bg-white z-10">
-        <div className="relative mb-2">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            placeholder="Search locations..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            className="pl-9 bg-gray-50 border-gray-200 focus:ring-[#FF6B6B]/20 focus:border-[#FF6B6B]"
-          />
-        </div>
-
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">
             {filteredLocations.length} {filteredLocations.length === 1 ? "location" : "locations"}
           </p>
 
           <div className="flex gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={favoriteLocations.size > 0 ? "secondary" : "outline"}
-                    size="sm"
-                    className={cn(
-                      "h-8 w-8 p-0",
-                      favoriteLocations.size > 0 && "bg-[#FF6B6B]/10 text-[#FF6B6B] border-[#FF6B6B]",
-                    )}
-                  >
-                    <Heart className={cn("h-4 w-4", favoriteLocations.size > 0 && "fill-[#FF6B6B]")} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Favorites ({favoriteLocations.size})</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {/* Bookmark button that opens saved locations modal */}
+            <Dialog open={showSavedLocations} onOpenChange={setShowSavedLocations}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white hover:bg-gray-50 h-8"
+                >
+                  <Bookmark className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+                <DialogHeader>
+                  <DialogTitle>Saved Locations</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto">
+                  {savedLocationsList.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Bookmark className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-gray-500 mb-2">No saved locations yet</p>
+                      <p className="text-sm text-gray-400">
+                        Start exploring and bookmark your favorite places
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {savedLocationsList.map((savedItem) => {
+                        const location = savedItem.location
+                        if (!location) return null
+                        
+                        return (
+                          <div key={savedItem.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                            <div className="flex gap-3">
+                              <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                                <img
+                                  src={getLocationImageUrl(location) || "/placeholder.svg"}
+                                  alt={location.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 truncate">
+                                  {location.name}
+                                </h4>
+                                {(typeof location.address === 'string' && location.address) && (
+                                  <p className="text-sm text-gray-500 line-clamp-1">
+                                    {location.address}
+                                  </p>
+                                )}
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Saved {new Date(savedItem.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 w-full"
+                              onClick={() => {
+                                onLocationSelect(location)
+                                setShowSavedLocations(false)
+                              }}
+                            >
+                              View on Map
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             <Sheet>
               <SheetTrigger asChild>
@@ -458,7 +854,7 @@ export default function LocationList({
       {/* Location list with improved visual design */}
       <div className="flex-1 overflow-y-auto bg-gray-50/50 p-3">
         {filteredLocations.length > 0 ? (
-          <div className="space-y-0">
+          <div className="space-y-4">
             {sortedLocations.map((location) => (
               <LocationCard key={location.id} location={location} />
             ))}
@@ -476,7 +872,6 @@ export default function LocationList({
               variant="outline"
               className="mt-4"
               onClick={() => {
-                setSearchQuery("")
                 setSelectedCategories([])
               }}
             >
@@ -485,8 +880,6 @@ export default function LocationList({
           </div>
         )}
       </div>
-
-
 
       {/* Loading state */}
       {isLoading && (

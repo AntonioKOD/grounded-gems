@@ -65,6 +65,29 @@ export const Notifications: CollectionConfig = {
         { label: "Mention", value: "mention" },
         { label: "Reminder", value: "reminder" },
         { label: "Event Update", value: "event_update" },
+        // Location-based notifications
+        { label: "Location Liked", value: "location_liked" },
+        { label: "Location Shared", value: "location_shared" },
+        { label: "Location Visited", value: "location_visited" },
+        { label: "Location Saved", value: "location_saved" },
+        { label: "Location Reviewed", value: "location_reviewed" },
+        { label: "Location Verified", value: "location_verified" },
+        { label: "Location Featured", value: "location_featured" },
+        { label: "Location Published", value: "location_published" },
+        { label: "Location Milestone", value: "location_milestone" },
+        { label: "Location Interaction", value: "location_interaction" },
+        // Event request notifications
+        { label: "Event Request Received", value: "event_request_received" },
+        { label: "Event Request Approved", value: "event_request_approved" },
+        { label: "Event Request Denied", value: "event_request_denied" },
+        // Other notifications
+        { label: "New Review", value: "new_review" },
+        { label: "Location Visit", value: "location_visit" },
+        { label: "Business Hours Update", value: "business_hours_update" },
+        { label: "Special Offer", value: "special_offer" },
+        { label: "Proximity Alert", value: "proximity_alert" },
+        { label: "Check-in", value: "check_in" },
+        { label: "Location Trending", value: "location_trending" },
       ],
     },
     {
@@ -79,8 +102,69 @@ export const Notifications: CollectionConfig = {
     {
       name: "relatedTo",
       type: "relationship",
-      relationTo: ["posts", "users", "locations", "events", "specials"],
+      relationTo: ["posts", "users", "locations", "events", "specials", "eventRequests"],
       hasMany: false,
+    },
+    {
+      name: "actionBy",
+      type: "relationship",
+      relationTo: "users",
+      label: "Action performed by",
+      admin: {
+        description: "User who performed the action that triggered this notification",
+      },
+    },
+    {
+      name: "metadata",
+      type: "json",
+      label: "Additional Data",
+      admin: {
+        description: "Additional context data for the notification",
+      },
+    },
+    {
+      name: "actionRequired",
+      type: "checkbox",
+      label: "Requires Action",
+      defaultValue: false,
+      admin: {
+        description: "Whether this notification requires user action (e.g., approval)",
+      },
+    },
+    {
+      name: "actionStatus",
+      type: "select",
+      label: "Action Status",
+      options: [
+        { label: "Pending", value: "pending" },
+        { label: "Approved", value: "approved" },
+        { label: "Denied", value: "denied" },
+        { label: "Expired", value: "expired" },
+      ],
+      admin: {
+        condition: (data) => data.actionRequired,
+        description: "Status of the action if this notification requires one",
+      },
+    },
+    {
+      name: "expiresAt",
+      type: "date",
+      label: "Expires At",
+      admin: {
+        description: "When this notification expires (for time-sensitive notifications)",
+      },
+    },
+    {
+      name: "priority",
+      type: "select",
+      label: "Priority",
+      defaultValue: "normal",
+      options: [
+        { label: "Low", value: "low" },
+        { label: "Normal", value: "normal" },
+        { label: "High", value: "high" },
+        { label: "Urgent", value: "urgent" },
+      ],
     },
     {
       name: "read",

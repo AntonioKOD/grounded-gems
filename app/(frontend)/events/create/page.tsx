@@ -5,7 +5,7 @@ import type { Metadata } from "next"
 import CreateEventForm from "@/components/event/create-event-form"
 import { Skeleton } from "@/components/ui/skeleton"
 
-// 1️⃣ Tell Next.js this segment must always be rendered dynamically
+// Prevent static generation
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {

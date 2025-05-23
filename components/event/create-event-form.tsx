@@ -10,7 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { format } from "date-fns"
-import { Upload, X, Loader2 } from "lucide-react"
+import { Upload, X, Loader2, Calendar } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -25,6 +25,11 @@ import type { EventFormData } from "@/types/event"
 // Import the LocationSearch component
 import { LocationSearch } from "@/components/event/location-search"
 
+interface LocationWithCategories {
+  id: string
+  name: string
+  categories?: Array<string | { name: string }>
+}
 
 // Define the form schema with Zod
 const eventFormSchema = z
@@ -90,21 +95,64 @@ const eventFormSchema = z
 
 type EventFormValues = z.infer<typeof eventFormSchema>
 
+// Helper function to map event request types to form values
+const mapEventTypeToFormValue = (eventType: string): "workshop" | "concert" | "meetup" | "webinar" | "sports_matchmaking" | "sports_tournament" | "social_event" | "other_event" | undefined => {
+  const mapping: { [key: string]: "workshop" | "concert" | "meetup" | "webinar" | "sports_matchmaking" | "sports_tournament" | "social_event" | "other_event" } = {
+    'private_party': 'social_event',
+    'corporate_event': 'meetup',
+    'birthday_party': 'social_event',
+    'wedding_reception': 'social_event',
+    'business_meeting': 'meetup',
+    'product_launch': 'meetup',
+    'community_event': 'social_event',
+    'fundraiser': 'social_event',
+    'workshop': 'workshop',
+    'other': 'other_event'
+  }
+  return mapping[eventType]
+}
+
+// Helper function to check if location requires reservations
+const locationRequiresReservation = (location: LocationWithCategories | undefined): boolean => {
+  if (!location || !location.categories) return false
+  
+  // Categories that typically require reservations/permission
+  const reservationRequiredCategories = [
+    'Restaurant', 'Bar', 'Cafe', 'Hotel', 'Theater', 'Museum', 
+    'Gallery', 'Venue', 'Event Space', 'Conference Center',
+    'Wedding Venue', 'Banquet Hall', 'Club', 'Lounge'
+  ]
+  
+  const locationCategories = Array.isArray(location.categories) 
+    ? location.categories.map((cat: string | { name: string }) => typeof cat === 'string' ? cat : cat.name)
+    : []
+  
+  return locationCategories.some((category: string) => 
+    reservationRequiredCategories.some(reqCat => 
+      category.toLowerCase().includes(reqCat.toLowerCase())
+    )
+  )
+}
+
 export default function CreateEventForm() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // State
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<{
+    id: string
+    name: string
+    email: string
+    avatar?: string
+  } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState("basic")
   const [eventImage, setEventImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<number>(0)
-  const [locations, setLocations] = useState<{ id: string; name: string }[]>([])
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [locations, setLocations] = useState<LocationWithCategories[]>([])
   const [isLoadingLocations, setIsLoadingLocations] = useState(true)
-  // Add this state at the top of your component:
   const [selectedLocation, setSelectedLocation] = useState<{
     id: string
     name: string
@@ -136,7 +184,12 @@ export default function CreateEventForm() {
   const watchCategory = form.watch("category")
   const watchEventType = form.watch("eventType")
 
-  // Fetch current user
+  // Watch location to show reservation notice
+  const watchLocation = form.watch("location")
+  const selectedLocationData = locations.find(loc => loc.id === watchLocation)
+  const requiresReservation = locationRequiresReservation(selectedLocationData)
+
+  // Fetch current user and handle URL parameters from approved event requests or public space redirects
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
@@ -157,7 +210,57 @@ export default function CreateEventForm() {
     }
 
     fetchCurrentUser()
-  }, [router])
+
+    // Handle URL parameters from approved event requests or public space redirects
+    const urlParams = new URLSearchParams(window.location.search)
+    const locationId = urlParams.get('locationId')
+    const locationName = urlParams.get('locationName')
+    const requestId = urlParams.get('requestId')
+    const eventTitle = urlParams.get('eventTitle')
+    const eventType = urlParams.get('eventType')
+    const date = urlParams.get('date')
+    const time = urlParams.get('time')
+    const attendees = urlParams.get('attendees')
+
+    if (locationId) {
+      // Set location ID (works for both approved requests and public space redirects)
+      form.setValue('location', locationId)
+      
+      if (requestId) {
+        // Pre-fill form with data from approved event request
+        if (eventTitle) {
+          form.setValue('name', decodeURIComponent(eventTitle))
+        }
+        if (eventType) {
+          const mappedEventType = mapEventTypeToFormValue(eventType)
+          if (mappedEventType) {
+            form.setValue('eventType', mappedEventType)
+          }
+        }
+        if (date) {
+          form.setValue('startDate', new Date(date))
+        }
+        if (time) {
+          form.setValue('startTime', time)
+        }
+        if (attendees) {
+          form.setValue('capacity', parseInt(attendees, 10))
+        }
+        
+        // Show success notification about the approved request
+        toast.success('Event request approved!', {
+          description: 'Your event request has been approved. Please complete the event details below.',
+          duration: 5000
+        })
+      } else if (locationName) {
+        // Handle public space redirect
+        toast.info('Public Space Event', {
+          description: `You can create events directly at ${decodeURIComponent(locationName)}. No approval needed!`,
+          duration: 5000
+        })
+      }
+    }
+  }, [router, form])
 
   // Fetch locations
   useEffect(() => {
@@ -247,35 +350,69 @@ export default function CreateEventForm() {
     setIsSubmitting(true)
 
     try {
-      // Prepare form data
-      const formData: EventFormData = {
-        ...data,
-        startDate: format(data.startDate, "yyyy-MM-dd"),
-        endDate: data.endDate ? format(data.endDate, "yyyy-MM-dd") : undefined,
-        image: eventImage,
-        locationType: "physical", // or "online" or "hybrid" based on your needs
-        organizer: {
-          id: currentUser.id as string,
-          name: currentUser.name,
-          profileImage: currentUser.avatar
-        },
-        visibility: "public" // or "private" based on your needs
-      }
+      // Get the selected location details
+      const selectedLocationData = locations.find(loc => loc.id === data.location)
+      
+      // Check if this location requires reservations
+      const requiresReservation = locationRequiresReservation(selectedLocationData)
+      
+      if (requiresReservation) {
+        // Create an event request instead of a direct event
+        const eventRequestData = {
+          eventTitle: data.name,
+          eventDescription: data.description || '',
+          eventType: data.eventType || 'other',
+          locationId: data.location,
+          requestedDate: format(data.startDate, "yyyy-MM-dd"),
+          requestedTime: data.startTime || '09:00',
+          expectedAttendees: data.capacity || 10,
+          specialRequests: `Category: ${data.category || 'other'}\n` +
+                          `End Date: ${data.endDate ? format(data.endDate, "yyyy-MM-dd") : 'Same day'}\n` +
+                          `End Time: ${data.endTime || 'TBD'}\n` +
+                          `Status: ${data.status || 'published'}`
+        }
 
-      // Create event
-      const result = await createEvent(formData, currentUser.id, currentUser.name, currentUser.avatar)
+        // Create event request using the existing action
+        const { createEventRequest } = await import('@/app/actions')
+        const result = await createEventRequest(eventRequestData)
 
-      if (result.success) {
-        toast.success("Event created successfully!")
-
-        // Redirect to event page
-        if (result.eventId) {
-          router.push(`/events/${result.eventId}`)
+        if (result.success) {
+          toast.success("Event request submitted successfully! The location owner will review your request.")
+          router.push("/events/requests")
         } else {
-          router.push("/events")
+          throw new Error(result.message || "Failed to submit event request")
         }
       } else {
-        throw new Error(result.error || "Failed to create event")
+        // Create event directly for locations that don't require reservations
+        const formData: EventFormData = {
+          ...data,
+          startDate: format(data.startDate, "yyyy-MM-dd"),
+          endDate: data.endDate ? format(data.endDate, "yyyy-MM-dd") : undefined,
+          image: eventImage,
+          locationType: "physical",
+          organizer: {
+            id: currentUser.id as string,
+            name: currentUser.name,
+            profileImage: currentUser.avatar
+          },
+          visibility: "public"
+        }
+
+        // Create event directly
+        const result = await createEvent(formData, currentUser.id, currentUser.name, currentUser.avatar)
+
+        if (result.success) {
+          toast.success("Event created successfully!")
+
+          // Redirect to event page
+          if (result.eventId) {
+            router.push(`/events/${result.eventId}`)
+          } else {
+            router.push("/events")
+          }
+        } else {
+          throw new Error(result.error || "Failed to create event")
+        }
       }
     } catch (error) {
       console.error("Error creating event:", error)
@@ -340,6 +477,22 @@ export default function CreateEventForm() {
           <CardHeader>
             <CardTitle>Create a New Event</CardTitle>
             <CardDescription>Fill out the form below to create your event</CardDescription>
+            {/* Show notice if location requires reservation */}
+            {selectedLocationData && requiresReservation && (
+              <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                <div className="flex items-start gap-2">
+                  <Calendar className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm">
+                    <p className="text-orange-800 font-medium">
+                      Event Request Required
+                    </p>
+                    <p className="text-orange-700">
+                      This location requires permission for events. Your request will be sent to the location owner for approval.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </CardHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -805,10 +958,19 @@ export default function CreateEventForm() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {requiresReservation ? 'Submitting Request...' : 'Creating Event...'}
                 </>
               ) : (
-                "Create Event"
+                <>
+                  {requiresReservation ? (
+                    <>
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Submit Event Request
+                    </>
+                  ) : (
+                    "Create Event"
+                  )}
+                </>
               )}
             </Button>
           </CardContent>

@@ -12,7 +12,7 @@ const REVIEWS = [
   {
     id: 1,
     name: "Sarah Johnson",
-    avatar: "/placeholder.svg?height=40&width=40&query=woman profile avatar",
+    avatar: "/placeholder.svg",
     date: "July 28, 2023",
     rating: 5,
     comment:
@@ -23,7 +23,7 @@ const REVIEWS = [
   {
     id: 2,
     name: "Michael Rodriguez",
-    avatar: "/placeholder.svg?height=40&width=40&query=man profile avatar",
+    avatar: "/placeholder.svg",
     date: "July 25, 2023",
     rating: 4,
     comment:
@@ -34,7 +34,7 @@ const REVIEWS = [
   {
     id: 3,
     name: "Emily Chen",
-    avatar: "/placeholder.svg?height=40&width=40&query=woman profile avatar asian",
+    avatar: "/placeholder.svg",
     date: "July 22, 2023",
     rating: 5,
     comment:
@@ -45,7 +45,7 @@ const REVIEWS = [
   {
     id: 4,
     name: "David Wilson",
-    avatar: "/placeholder.svg?height=40&width=40&query=man profile avatar beard",
+    avatar: "/placeholder.svg",
     date: "July 20, 2023",
     rating: 3,
     comment:

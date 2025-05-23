@@ -287,3 +287,26 @@ export interface EventFormData {
   isMatchmaking?: boolean
   matchmakingPreferences?: MatchmakingPreferences
 }
+
+
+
+export interface AppEvent {
+  id: string
+  name: string
+  description: string
+  date: string             // ISO timestamp or formatted date
+  location: {
+    coordinates: {
+      latitude: number
+      longitude: number
+    }
+    address?: string
+    city?: string
+    state?: string
+    country?: string
+  }
+  category?: string
+  image?: string           // URL or path
+  distance?: number        // if calculated client- or server-side
+  attendeesCount?: number
+}

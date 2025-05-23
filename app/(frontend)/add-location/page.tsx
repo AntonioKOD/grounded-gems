@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react"
 import Link from "next/link"
 import AddLocationForm from "./add-location-form"
 
+// Prevent static generation
 export const dynamic = 'force-dynamic'
 
 export default function AddLocationPage() {

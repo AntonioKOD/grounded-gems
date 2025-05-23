@@ -2,7 +2,7 @@
 import { CollectionConfig } from 'payload';
 import { extractMentions, findUserIdsByUsernames } from '../payload-utils/notification-helpers';
 
-const normalizeId = (val: any): string => {
+const normalizeId = (val: string | { id?: string; _id?: string } | null | undefined): string => {
   if (typeof val === 'string') return val;
   if (val?.id) return val.id;
   if (val?._id) return val._id;

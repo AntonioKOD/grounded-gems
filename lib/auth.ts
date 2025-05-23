@@ -3,27 +3,23 @@ import { cookies } from "next/headers"
 export async function getServerSideUser() {
   try {
     const cookieStore = await cookies()
-    const authCookie = cookieStore.get("auth_token")?.value
+    const payloadToken = cookieStore.get("payload-token")?.value
 
-    if (!authCookie) {
+    if (!payloadToken) {
       console.log("No auth cookie found")
       return null
     }
 
-    // Add a timeout to the fetch to prevent hanging
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/me`, {
+    // Use Payload's built-in /api/users/me endpoint for authentication
+    // This works because we're making the request with the same cookie
+    const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000'
+    const response = await fetch(`${baseUrl}/api/users/me`, {
       headers: {
-        Cookie: `auth_token=${authCookie}`,
+        Cookie: `payload-token=${payloadToken}`,
         "Content-Type": "application/json",
       },
       cache: "no-store",
-      signal: controller.signal,
     })
-
-    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.log(`Failed to fetch user: ${response.status}`)
@@ -31,10 +27,9 @@ export async function getServerSideUser() {
     }
 
     const data = await response.json()
-    return data.user
+    return data.user || null
   } catch (error) {
     console.error("Error fetching user data:", error)
-    // Return null on error, but don't let errors crash the app
     return null
   }
 }

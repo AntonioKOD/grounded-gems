@@ -13,6 +13,7 @@ import { Post } from "@/types/feed";
 import { Notification } from "@/types/notification";
 import {Where} from "payload";
 import { PayloadRequest } from "payload";
+import { getServerSideUser } from "@/lib/auth";
 
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
@@ -262,6 +263,49 @@ export async function createLocation(data: LocationFormData) {
   return created;
 }
 
+export async function updateLocation(locationId: string, data: Partial<LocationFormData>) {
+  const payload = await getPayload({config: config});
+  
+  // If address data is provided, re-geocode to get new coordinates
+  let coordinates;
+  if (data.address) {
+    const { street, city, state, zip, country } = data.address;
+    const fullAddress = [street, city, state, zip, country]
+      .filter(Boolean)
+      .join(', ');
+
+    if (fullAddress.trim()) {
+      try {
+        const geoRes = await fetch(
+          `https://api.mapbox.com/geocoding/v5/mapbox.places/` +
+            `${encodeURIComponent(fullAddress)}.json` +
+            `?access_token=${process.env.NEXT_SECRET_MAPBOX_ACCESS_TOKEN}`
+        );
+        
+        if (geoRes.ok) {
+          const geoJson = await geoRes.json();
+          const [longitude = 0, latitude = 0] =
+            geoJson.features?.[0]?.geometry?.coordinates || [];
+          coordinates = { latitude, longitude };
+        }
+      } catch (error) {
+        console.error('Geocoding failed during update:', error);
+        // Continue without updating coordinates if geocoding fails
+      }
+    }
+  }
+
+  // Update the document in Payload
+  const updateData = coordinates ? { ...data, coordinates } : data;
+  
+  const updated = await payload.update({
+    collection: 'locations',
+    id: locationId,
+    data: updateData,
+  });
+
+  return updated;
+}
 
 
 interface SignupInput {
@@ -436,6 +480,78 @@ export async function createReview(data: FormData) {
         createdAt: new Date().toISOString(),
       },
     })
+
+    // Notify location creator about the new review (if it's for a location)
+    if (reviewData.reviewType === 'location' && reviewData.location && reviewData.author) {
+      try {
+        // Get the location details to find the creator
+        const location = await payload.findByID({
+          collection: 'locations',
+          id: reviewData.location,
+        })
+
+        if (location) {
+          const creatorId = typeof location.createdBy === 'string' 
+            ? location.createdBy 
+            : location.createdBy?.id
+
+          // Only notify if the reviewer is not the location creator
+          if (creatorId && creatorId !== reviewData.author) {
+            // Get reviewer details for the notification
+            const reviewer = await payload.findByID({
+              collection: 'users',
+              id: reviewData.author,
+            })
+
+            console.log('Creating review notification for location creator:', {
+              creatorId,
+              locationName: location.name,
+              reviewTitle: reviewData.title,
+              reviewRating: reviewData.rating,
+              reviewedBy: reviewer?.name
+            })
+            
+            const notification = await payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: creatorId,
+                type: 'location_reviewed',
+                title: `New review for ${location.name}`,
+                message: `${reviewer?.name || 'Someone'} left a ${reviewData.rating || 'unrated'}-star review: "${reviewData.title}"`,
+                actionBy: reviewData.author,
+                priority: (reviewData.rating && reviewData.rating >= 4) ? 'normal' : 'high', // Higher priority for negative reviews
+                relatedTo: {
+                  relationTo: 'locations',
+                  value: reviewData.location,
+                },
+                metadata: {
+                  locationName: location.name,
+                  reviewTitle: reviewData.title,
+                  reviewRating: reviewData.rating,
+                  reviewId: review.id,
+                },
+                read: false,
+              },
+            })
+            
+            console.log('Review notification created successfully:', notification.id)
+          }
+        }
+      } catch (notificationError) {
+        console.error('Error creating review notification:', notificationError)
+        // Don't fail the review creation if notification fails
+      }
+    }
+
+    // Check and notify milestones after review creation
+    if (reviewData.reviewType === 'location' && reviewData.location) {
+      try {
+        await checkAndNotifyMilestones(reviewData.location, 'review')
+      } catch (milestoneError) {
+        console.error('Error checking review milestones:', milestoneError)
+        // Don't fail the review creation
+      }
+    }
 
     return review
   } catch (error) {
@@ -1686,15 +1802,1867 @@ export async function getRecentNotifications(userId: string, limit = 5){
       collection: 'notifications',
       where: {
         recipient: { equals: userId},
-      
       },
       sort: '-createdAt',
       limit,
-      depth: 0,
+      depth: 2,
     })
+
+    console.log(`Found ${docs.length} recent notifications for user ${userId}`)
+    
+    return docs.map((notification) => ({
+      id: String(notification.id),
+      recipient: notification.recipient,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      relatedTo: notification.relatedTo
+        ? {
+            id: typeof notification.relatedTo === "object" ? notification.relatedTo.id : notification.relatedTo,
+            collection: notification.relatedTo.relationTo,
+          }
+        : undefined,
+      read: notification.read,
+      createdAt: notification.createdAt,
+      actionBy: notification.actionBy,
+      metadata: notification.metadata,
+      priority: notification.priority,
+      actionRequired: notification.actionRequired,
+    }))
   }
   catch (error) {
     console.error('Error fetching recent notifications:', error);
-    throw error;
+    return []
+  }
+}
+
+// Test notification function
+export async function createTestNotification(userId: string): Promise<{ success: boolean; message: string }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    console.log('Creating test notification for user:', userId)
+    
+    // First verify the user exists
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+    })
+    
+    if (!user) {
+      return {
+        success: false,
+        message: `User with ID ${userId} not found`
+      }
+    }
+    
+    console.log('User found:', user.name)
+    
+    const notification = await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: userId,
+        type: 'reminder',
+        title: 'Test Notification',
+        message: 'This is a test notification to verify the system is working.',
+        priority: 'normal',
+        read: false,
+      },
+    })
+    
+    console.log('Test notification created successfully:', notification.id)
+    
+    return {
+      success: true,
+      message: `Test notification created with ID: ${notification.id}`
+    }
+  } catch (error) {
+    console.error('Error creating test notification:', error)
+    return {
+      success: false,
+      message: `Failed to create test notification: ${error}`
+    }
+  }
+}
+
+// Debug function to check notification system
+export async function debugNotificationSystem(): Promise<{ success: boolean; message: string; details?: unknown }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    console.log('=== Debugging Notification System ===')
+    
+    // Check if collections exist
+    const collections = payload.config.collections
+    const notificationCollection = collections.find(c => c.slug === 'notifications')
+    const usersCollection = collections.find(c => c.slug === 'users')
+    const locationsCollection = collections.find(c => c.slug === 'locations')
+    
+    console.log('Collections status:', {
+      notifications: !!notificationCollection,
+      users: !!usersCollection,
+      locations: !!locationsCollection
+    })
+    
+    // Try to fetch some sample data
+    const { docs: notifications } = await payload.find({
+      collection: 'notifications',
+      limit: 5,
+    })
+    
+    const { docs: users } = await payload.find({
+      collection: 'users',
+      limit: 3,
+    })
+    
+    const { docs: locations } = await payload.find({
+      collection: 'locations',
+      limit: 3,
+    })
+    
+    console.log('Sample data counts:', {
+      notifications: notifications.length,
+      users: users.length,
+      locations: locations.length
+    })
+    
+    return {
+      success: true,
+      message: 'Notification system debug complete',
+      details: {
+        collections: {
+          notifications: !!notificationCollection,
+          users: !!usersCollection,
+          locations: !!locationsCollection
+        },
+        counts: {
+          notifications: notifications.length,
+          users: users.length,
+          locations: locations.length
+        },
+        sampleUser: users[0] ? { id: users[0].id, name: users[0].name } : null,
+        sampleLocation: locations[0] ? { id: locations[0].id, name: locations[0].name } : null,
+        allNotifications: notifications.map(n => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          recipient: typeof n.recipient === 'string' ? n.recipient : n.recipient?.id,
+          read: n.read
+        }))
+      }
+    }
+  } catch (error) {
+    console.error('Error debugging notification system:', error)
+    return {
+      success: false,
+      message: `Debug failed: ${error}`,
+      details: { error }
+    }
+  }
+}
+
+// Function to create multiple test notifications for debugging
+export async function createMultipleTestNotifications(userId: string): Promise<{ success: boolean; message: string; count?: number }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    console.log('Creating multiple test notifications for user:', userId)
+    
+    // Verify user exists
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+    })
+    
+    if (!user) {
+      return {
+        success: false,
+        message: `User with ID ${userId} not found`
+      }
+    }
+    
+    // Create different types of test notifications
+    const testNotifications = [
+      {
+        type: 'location_liked',
+        title: 'Someone liked your location!',
+        message: 'John Doe liked your location "Central Park"',
+        priority: 'normal' as const
+      },
+      {
+        type: 'event_request_received',
+        title: 'New event request',
+        message: 'Sarah wants to host a birthday party at your restaurant',
+        priority: 'high' as const,
+        actionRequired: true
+      },
+      {
+        type: 'location_reviewed',
+        title: 'New review received',
+        message: 'Mike left a 5-star review for your coffee shop',
+        priority: 'normal' as const
+      },
+      {
+        type: 'location_verified',
+        title: 'Location verified!',
+        message: 'Your location "Downtown Bistro" has been verified',
+        priority: 'high' as const
+      },
+      {
+        type: 'reminder',
+        title: 'Welcome to Sacavia!',
+        message: 'Thanks for joining our community. Start exploring amazing locations!',
+        priority: 'low' as const
+      }
+    ]
+    
+    const createdNotifications = []
+    
+    for (const notificationData of testNotifications) {
+      const notification = await payload.create({
+        collection: 'notifications',
+        data: {
+          recipient: userId,
+          ...notificationData,
+          read: false,
+        },
+      })
+      createdNotifications.push(notification.id)
+    }
+    
+    console.log(`Created ${createdNotifications.length} test notifications`)
+    
+    return {
+      success: true,
+      message: `Created ${createdNotifications.length} test notifications`,
+      count: createdNotifications.length
+    }
+  } catch (error) {
+    console.error('Error creating test notifications:', error)
+    return {
+      success: false,
+      message: `Failed to create test notifications: ${error}`
+    }
+  }
+}
+
+// Add location subscription and saving functionality
+
+export interface LocationSubscription {
+  userId: string
+  locationId: string
+  notificationType: 'all' | 'events' | 'updates' | 'specials'
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface SavedLocation {
+  userId: string
+  locationId: string
+  createdAt: Date
+}
+
+/**
+ * Subscribe to notifications for a location
+ */
+export async function subscribeToLocation(userId: string, locationId: string, notificationType: 'all' | 'events' | 'updates' | 'specials' = 'all'): Promise<boolean> {
+  try {
+    const payload = await getPayload({ config });
+    
+    // Check if subscription already exists
+    const existingSubscriptions = await payload.find({
+      collection: 'locationSubscriptions',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { location: { equals: locationId } }
+        ]
+      }
+    });
+    
+    if (existingSubscriptions.docs.length > 0) {
+      // Update existing subscription
+      await payload.update({
+        collection: 'locationSubscriptions',
+        id: existingSubscriptions.docs[0].id,
+        data: {
+          notificationType,
+          isActive: true,
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      // Create new subscription
+      await payload.create({
+        collection: 'locationSubscriptions',
+        data: {
+          user: userId,
+          location: locationId,
+          notificationType,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error subscribing to location:', error);
+    return false;
+  }
+}
+
+/**
+ * Unsubscribe from notifications for a location
+ */
+export async function unsubscribeFromLocation(userId: string, locationId: string): Promise<boolean> {
+  try {
+    const payload = await getPayload({ config });
+    
+    // Find existing subscription
+    const existingSubscriptions = await payload.find({
+      collection: 'locationSubscriptions',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { location: { equals: locationId } }
+        ]
+      }
+    });
+    
+    if (existingSubscriptions.docs.length > 0) {
+      // Update existing subscription to inactive
+      await payload.update({
+        collection: 'locationSubscriptions',
+        id: existingSubscriptions.docs[0].id,
+        data: {
+          isActive: false,
+          updatedAt: new Date()
+        }
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error unsubscribing from location:', error);
+    return false;
+  }
+}
+
+/**
+ * Save a location for a user
+ */
+export async function saveLocation(userId: string, locationId: string): Promise<boolean> {
+  try {
+    const payload = await getPayload({ config });
+    
+    // More flexible ID validation - just check if they exist and are strings
+    if (!userId || !locationId || typeof userId !== 'string' || typeof locationId !== 'string') {
+      console.error('Invalid ID format - must be non-empty strings:', { userId, locationId });
+      return false;
+    }
+    
+    // Debug logging to see what IDs we're working with
+    console.log('saveLocation called with:', { userId, locationId });
+    console.log('userId length:', userId.length);
+    console.log('locationId length:', locationId.length);
+    
+    // Check if already saved
+    const existingSaved = await payload.find({
+      collection: 'savedLocations',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { location: { equals: locationId } }
+        ]
+      }
+    });
+    
+    if (existingSaved.docs.length === 0) {
+      // Create new saved location
+      await payload.create({
+        collection: 'savedLocations',
+        data: {
+          user: userId,
+          location: locationId,
+          createdAt: new Date()
+        }
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error saving location:', error);
+    return false;
+  }
+}
+
+/**
+ * Unsave a location for a user
+ */
+export async function unsaveLocation(userId: string, locationId: string): Promise<boolean> {
+  try {
+    const payload = await getPayload({ config });
+    
+    // More flexible ID validation - just check if they exist and are strings
+    if (!userId || !locationId || typeof userId !== 'string' || typeof locationId !== 'string') {
+      console.error('Invalid ID format - must be non-empty strings:', { userId, locationId });
+      return false;
+    }
+    
+    // Debug logging to see what IDs we're working with
+    console.log('unsaveLocation called with:', { userId, locationId });
+    console.log('userId length:', userId.length);
+    console.log('locationId length:', locationId.length);
+    
+    // Find saved location
+    const existingSaved = await payload.find({
+      collection: 'savedLocations',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { location: { equals: locationId } }
+        ]
+      }
+    });
+    
+    if (existingSaved.docs.length > 0) {
+      // Delete saved location
+      await payload.delete({
+        collection: 'savedLocations',
+        id: existingSaved.docs[0].id
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error unsaving location:', error);
+    return false;
+  }
+}
+
+/**
+ * Get all saved locations for a user
+ */
+export async function getSavedLocations(userId: string): Promise<string[]> {
+  try {
+    const payload = await getPayload({ config });
+    
+    const savedLocations = await payload.find({
+      collection: 'savedLocations',
+      where: {
+        user: { equals: userId }
+      },
+      depth: 1
+    });
+    
+    return savedLocations.docs.map((doc: any) => {
+      // Handle both relationship object and ID string
+      if (typeof doc.location === 'object' && doc.location?.id) {
+        return doc.location.id;
+      }
+      return doc.location;
+    });
+  } catch (error) {
+    console.error('Error getting saved locations:', error);
+    return [];
+  }
+}
+
+/**
+ * Get saved locations with full location data for display
+ */
+export async function getSavedLocationsWithData(userId: string): Promise<any[]> {
+  try {
+    const payload = await getPayload({ config });
+    
+    const savedLocations = await payload.find({
+      collection: 'savedLocations',
+      where: {
+        user: { equals: userId }
+      },
+      depth: 2
+    });
+    
+    return savedLocations.docs.map((doc: any) => ({
+      id: doc.id,
+      location: doc.location,
+      createdAt: doc.createdAt
+    })).filter((item: any) => item.location); // Filter out any null locations
+  } catch (error) {
+    console.error('Error getting saved locations with data:', error);
+    return [];
+  }
+}
+
+/**
+ * Get all location subscriptions for a user
+ */
+export async function getLocationSubscriptions(userId: string): Promise<string[]> {
+  try {
+    const payload = await getPayload({ config });
+    
+    const subscriptions = await payload.find({
+      collection: 'locationSubscriptions',
+      where: {
+        and: [
+          { user: { equals: userId } },
+          { isActive: { equals: true } }
+        ]
+      }
+    });
+    
+    return subscriptions.docs.map((doc: any) => {
+      // Handle both relationship object and ID string
+      if (typeof doc.location === 'object' && doc.location?.id) {
+        return doc.location.id;
+      }
+      return doc.location;
+    });
+  } catch (error) {
+    console.error('Error getting location subscriptions:', error);
+    return [];
+  }
+}
+
+// Client-callable server actions for location interactions
+
+/**
+ * Toggle save status for a location
+ */
+export async function toggleSaveLocationAction(locationId: string): Promise<{ success: boolean; isSaved: boolean; message: string }> {
+  'use server'
+  
+  try {
+    // Get the current user from cookies or auth
+    const user = await getServerSideUser();
+    
+    if (!user) {
+      return {
+        success: false,
+        isSaved: false,
+        message: "Please log in to save locations"
+      };
+    }
+    
+    // Check if already saved
+    const savedLocations = await getSavedLocations(user.id);
+    const isSaved = savedLocations.includes(locationId);
+    
+    if (isSaved) {
+      const success = await unsaveLocation(user.id, locationId);
+      return {
+        success,
+        isSaved: false,
+        message: success ? "Location removed from saved" : "Failed to unsave location"
+      };
+    } else {
+      const success = await saveLocation(user.id, locationId);
+      return {
+        success,
+        isSaved: true,
+        message: success ? "Location saved successfully" : "Failed to save location"
+      };
+    }
+  } catch (error) {
+    console.error('Error toggling save location:', error);
+    return {
+      success: false,
+      isSaved: false,
+      message: "Something went wrong"
+    };
+  }
+}
+
+/**
+ * Toggle subscription status for a location
+ */
+export async function toggleSubscribeLocationAction(locationId: string, notificationType: 'all' | 'events' | 'updates' | 'specials' = 'all'): Promise<{ success: boolean; isSubscribed: boolean; message: string }> {
+  'use server'
+  
+  try {
+    // Get the current user from cookies or auth
+    const user = await getServerSideUser();
+    
+    if (!user) {
+      return {
+        success: false,
+        isSubscribed: false,
+        message: "Please log in to subscribe to notifications"
+      };
+    }
+    
+    // Check if already subscribed
+    const subscribedLocations = await getLocationSubscriptions(user.id);
+    const isSubscribed = subscribedLocations.includes(locationId);
+    
+    if (isSubscribed) {
+      const success = await unsubscribeFromLocation(user.id, locationId);
+      return {
+        success,
+        isSubscribed: false,
+        message: success ? "Notifications turned off" : "Failed to unsubscribe"
+      };
+    } else {
+      const success = await subscribeToLocation(user.id, locationId, notificationType);
+      return {
+        success,
+        isSubscribed: true,
+        message: success ? "Notifications enabled" : "Failed to subscribe"
+      };
+    }
+  } catch (error) {
+    console.error('Error toggling subscription:', error);
+    return {
+      success: false,
+      isSubscribed: false,
+      message: "Something went wrong"
+    };
+  }
+}
+
+/**
+ * Get user's saved and subscribed locations
+ */
+export async function getUserLocationDataAction(): Promise<{ savedLocations: string[]; subscribedLocations: string[] }> {
+  'use server'
+  
+  try {
+    // Get the current user from cookies or auth
+    const user = await getServerSideUser();
+    
+    if (!user) {
+      return {
+        savedLocations: [],
+        subscribedLocations: []
+      };
+    }
+    
+    const savedLocations = await getSavedLocations(user.id);
+    const subscribedLocations = await getLocationSubscriptions(user.id);
+    
+    return {
+      savedLocations,
+      subscribedLocations
+    };
+  } catch (error) {
+    console.error('Error getting user location data:', error);
+    return {
+      savedLocations: [],
+      subscribedLocations: []
+    };
+  }
+}
+
+/**
+ * Get user's saved locations with full location data for display
+ */
+export async function getSavedLocationsAction(): Promise<any[]> {
+  'use server'
+  
+  try {
+    // Get the current user from cookies or auth
+    const user = await getServerSideUser();
+    
+    if (!user) {
+      return [];
+    }
+    
+    const savedLocationsWithData = await getSavedLocationsWithData(user.id);
+    return savedLocationsWithData;
+  } catch (error) {
+    console.error('Error getting saved locations action:', error);
+    return [];
+  }
+}
+
+// Location Interaction functions
+export async function recordLocationInteraction(
+  locationId: string, 
+  interactionType: string, 
+  metadata?: any,
+  coordinates?: { latitude: number; longitude: number }
+): Promise<{ success: boolean; message: string }> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return { success: false, message: 'Authentication required' }
+    }
+
+    const payload = await getPayload({ config })
+
+    // Get location details to find the creator
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) {
+      return { success: false, message: 'Location not found' }
+    }
+
+    // For unique interactions, check if it already exists
+    const uniqueInteractions = ['like', 'save', 'subscribe']
+    
+    if (uniqueInteractions.includes(interactionType)) {
+      const existing = await payload.find({
+        collection: 'locationInteractions',
+        where: {
+          user: { equals: user.id },
+          location: { equals: locationId },
+          type: { equals: interactionType },
+        },
+        limit: 1,
+      })
+
+      if (existing.docs.length > 0) {
+        return { 
+          success: false, 
+          message: `You have already ${interactionType}d this location` 
+        }
+      }
+    }
+
+    // Create the interaction
+    await payload.create({
+      collection: 'locationInteractions',
+      data: {
+        user: user.id,
+        location: locationId,
+        type: interactionType,
+        metadata: {
+          ...metadata,
+          timestamp: new Date().toISOString(),
+        },
+        coordinates,
+        platform: 'web',
+        isPublic: true,
+      },
+    })
+
+    // Notify location creator (if not the same user and creator exists)
+    const creatorId = typeof location.createdBy === 'string' 
+      ? location.createdBy 
+      : location.createdBy?.id
+
+    if (creatorId && creatorId !== user.id) {
+      // Create notification based on interaction type
+      const notificationData = {
+        recipient: creatorId,
+        actionBy: user.id,
+        relatedTo: {
+          relationTo: 'locations',
+          value: locationId,
+        },
+        metadata: {
+          locationName: location.name,
+          interactionType,
+          ...metadata,
+        },
+        read: false,
+        priority: 'normal',
+      }
+
+      switch (interactionType) {
+        case 'like':
+          Object.assign(notificationData, {
+            type: 'location_liked',
+            title: `Someone liked your location!`,
+            message: `${user.name} liked your location "${location.name}".`,
+          })
+          break
+        case 'share':
+          Object.assign(notificationData, {
+            type: 'location_shared',
+            title: `Someone shared your location!`,
+            message: `${user.name} shared your location "${location.name}".`,
+          })
+          break
+        case 'check_in':
+          Object.assign(notificationData, {
+            type: 'location_visited',
+            title: `Someone checked in at your location!`,
+            message: `${user.name} checked in at "${location.name}".`,
+          })
+          
+          // Notify friends about check-in
+          try {
+            const userWithFollowers = await payload.findByID({
+              collection: 'users',
+              id: user.id,
+              depth: 0,
+            })
+            
+            if (userWithFollowers.followers && userWithFollowers.followers.length > 0) {
+              await notifyFriendCheckIn(locationId, user.id, userWithFollowers.followers.slice(0, 10)) // Limit to 10 friends
+            }
+          } catch (friendNotificationError) {
+            console.error('Error notifying friends about check-in:', friendNotificationError)
+          }
+          break
+        case 'visit':
+          Object.assign(notificationData, {
+            type: 'location_visited',
+            title: `Someone visited your location!`,
+            message: `${user.name} visited "${location.name}".`,
+          })
+          break
+        case 'save':
+          Object.assign(notificationData, {
+            type: 'location_saved',
+            title: `Someone saved your location!`,
+            message: `${user.name} saved your location "${location.name}".`,
+          })
+          break
+        default:
+          // For other interaction types, create a generic notification
+          Object.assign(notificationData, {
+            type: 'location_interaction',
+            title: `New activity at your location!`,
+            message: `${user.name} interacted with your location "${location.name}".`,
+          })
+      }
+
+      try {
+        console.log('Creating notification for location creator:', {
+          creatorId,
+          interactionType,
+          locationName: location.name,
+          actionBy: user.name
+        })
+        
+        const notification = await payload.create({
+          collection: 'notifications',
+          data: notificationData,
+        })
+        
+        console.log('Notification created successfully:', notification.id)
+      } catch (notificationError) {
+        console.error('Error creating notification for location creator:', {
+          error: notificationError,
+          notificationData,
+          creatorId,
+          locationId
+        })
+        // Don't fail the main operation if notification fails
+      }
+    }
+
+    // Check and notify milestones after interaction
+    try {
+      await checkAndNotifyMilestones(locationId, interactionType)
+    } catch (milestoneError) {
+      console.error('Error checking milestones:', milestoneError)
+      // Don't fail the main operation
+    }
+
+    return { 
+      success: true, 
+      message: `Successfully recorded ${interactionType} interaction` 
+    }
+  } catch (error) {
+    console.error('Error recording location interaction:', error)
+    return { success: false, message: 'Failed to record interaction' }
+  }
+}
+
+export async function removeLocationInteraction(
+  locationId: string, 
+  interactionType: string
+): Promise<{ success: boolean; message: string }> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return { success: false, message: 'Authentication required' }
+    }
+
+    const payload = await getPayload({ config })
+
+    const existing = await payload.find({
+      collection: 'locationInteractions',
+      where: {
+        user: { equals: user.id },
+        location: { equals: locationId },
+        type: { equals: interactionType },
+      },
+      limit: 1,
+    })
+
+    if (existing.docs.length === 0) {
+      return { success: false, message: 'Interaction not found' }
+    }
+
+    await payload.delete({
+      collection: 'locationInteractions',
+      id: existing.docs[0].id,
+    })
+
+    // For unlike, create an unlike interaction
+    if (interactionType === 'like') {
+      await payload.create({
+        collection: 'locationInteractions',
+        data: {
+          user: user.id,
+          location: locationId,
+          type: 'unlike',
+          metadata: {
+            originalLikeId: existing.docs[0].id,
+            timestamp: new Date().toISOString(),
+          },
+          platform: 'web',
+          isPublic: false,
+        },
+      })
+    }
+
+    return { 
+      success: true, 
+      message: `Successfully removed ${interactionType} interaction` 
+    }
+  } catch (error) {
+    console.error('Error removing location interaction:', error)
+    return { success: false, message: 'Failed to remove interaction' }
+  }
+}
+
+// Event Request functions
+export async function createEventRequest(requestData: {
+  eventTitle: string
+  eventDescription: string
+  eventType: string
+  locationId: string
+  requestedDate: string
+  requestedTime: string
+  expectedAttendees: number
+  expectedGuests?: number
+  specialRequests?: string
+  budget?: any
+}): Promise<{ success: boolean; message: string; eventRequest?: any }> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return { success: false, message: 'Authentication required' }
+    }
+
+    const payload = await getPayload({ config })
+
+    // Validate location exists and is eligible for events
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: requestData.locationId,
+    })
+
+    if (!location) {
+      return { success: false, message: 'Location not found' }
+    }
+
+    // Check if location allows event requests
+    const eligibleCategories = ['Restaurant', 'Bar', 'Cafe', 'Event Venue']
+    const locationCategories = location.categories?.map((cat: any) => 
+      typeof cat === 'string' ? cat : cat.name
+    ) || []
+    
+    const isEligible = eligibleCategories.some(category => 
+      locationCategories.includes(category)
+    )
+
+    if (!isEligible) {
+      return { 
+        success: false, 
+        message: 'This location type does not accept event requests' 
+      }
+    }
+
+    // Create the event request
+    const eventRequest = await payload.create({
+      collection: 'eventRequests',
+      data: {
+        ...requestData,
+        location: requestData.locationId,
+        requestedBy: user.id,
+        status: 'pending',
+      },
+    })
+
+    // Notify location creator about the event request
+    const creatorId = typeof location.createdBy === 'string' 
+      ? location.createdBy 
+      : location.createdBy?.id
+
+    if (creatorId && creatorId !== user.id) {
+      try {
+        console.log('Creating event request notification for location creator:', {
+          creatorId,
+          locationName: location.name,
+          eventTitle: requestData.eventTitle,
+          requestedBy: user.name
+        })
+        
+        const notification = await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: creatorId,
+            type: 'event_request_received',
+            title: `New event request for ${location.name}`,
+            message: `${user.name} wants to host "${requestData.eventTitle}" at your location.`,
+            actionBy: user.id,
+            actionRequired: true,
+            priority: 'high',
+            relatedTo: {
+              relationTo: 'eventRequests',
+              value: eventRequest.id,
+            },
+            metadata: {
+              locationName: location.name,
+              eventTitle: requestData.eventTitle,
+              eventType: requestData.eventType,
+              requestedDate: requestData.requestedDate,
+              expectedAttendees: requestData.expectedAttendees,
+            },
+            read: false,
+          },
+        })
+        
+        console.log('Event request notification created successfully:', notification.id)
+      } catch (notificationError) {
+        console.error('Error creating event request notification:', {
+          error: notificationError,
+          creatorId,
+          locationId: requestData.locationId,
+          eventTitle: requestData.eventTitle
+        })
+        // Don't fail the main operation if notification fails
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Event request submitted successfully. The location owner will be notified.',
+      eventRequest,
+    }
+  } catch (error) {
+    console.error('Error creating event request:', error)
+    return { success: false, message: 'Failed to create event request' }
+  }
+}
+
+export async function updateEventRequestStatus(
+  requestId: string,
+  status: 'approved' | 'denied' | 'cancelled',
+  denialReason?: string,
+  approvalNotes?: string
+): Promise<{ success: boolean; message: string }> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return { success: false, message: 'Authentication required' }
+    }
+
+    const payload = await getPayload({ config })
+
+    // Get the event request to check permissions
+    const eventRequest = await payload.findByID({
+      collection: 'eventRequests',
+      id: requestId,
+      populate: {
+        location: {
+          select: {
+            createdBy: true,
+          },
+        },
+        requestedBy: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    })
+
+    if (!eventRequest) {
+      return { success: false, message: 'Event request not found' }
+    }
+
+    // Extract user IDs properly to handle both string and populated object cases
+    const requestedById = typeof eventRequest.requestedBy === 'string' 
+      ? eventRequest.requestedBy 
+      : eventRequest.requestedBy?.id || eventRequest.requestedBy
+
+    const locationOwnerId = typeof eventRequest.location.createdBy === 'string'
+      ? eventRequest.location.createdBy
+      : eventRequest.location.createdBy?.id || eventRequest.location.createdBy
+
+    // Check permissions
+    const canUpdate = 
+      user.id === requestedById || 
+      user.id === locationOwnerId
+
+    if (!canUpdate) {
+      return { 
+        success: false, 
+        message: 'You do not have permission to update this request' 
+      }
+    }
+
+    const updateData: any = {
+      status,
+      reviewedBy: user.id,
+      reviewedAt: new Date().toISOString(),
+    }
+
+    if (status === 'denied' && denialReason) {
+      updateData.denialReason = denialReason
+    }
+
+    if (status === 'approved' && approvalNotes) {
+      updateData.approvalNotes = approvalNotes
+    }
+
+    await payload.update({
+      collection: 'eventRequests',
+      id: requestId,
+      data: updateData,
+    })
+
+    return {
+      success: true,
+      message: `Event request ${status} successfully`,
+    }
+  } catch (error) {
+    console.error('Error updating event request:', error)
+    return { success: false, message: 'Failed to update event request' }
+  }
+}
+
+export async function getLocationInteractions(
+  locationId?: string,
+  interactionType?: string,
+  limit = 20
+): Promise<any[]> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return []
+    }
+
+    const payload = await getPayload({ config })
+
+    const where: any = {}
+    
+    if (locationId) {
+      where.location = { equals: locationId }
+    }
+    
+    if (interactionType) {
+      where.type = { equals: interactionType }
+    }
+
+    // Only show public interactions or user's own interactions
+    where.or = [
+      { isPublic: { equals: true } },
+      { user: { equals: user.id } }
+    ]
+
+    const interactions = await payload.find({
+      collection: 'locationInteractions',
+      where,
+      limit,
+      sort: '-createdAt',
+      populate: {
+        user: {
+          select: {
+            name: true,
+            profileImage: true,
+          },
+        },
+        location: {
+          select: {
+            name: true,
+            featuredImage: true,
+          },
+        },
+      },
+    })
+
+    return interactions.docs
+  } catch (error) {
+    console.error('Error fetching location interactions:', error)
+    return []
+  }
+}
+
+export async function getUserEventRequests(status?: string): Promise<any[]> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      return []
+    }
+
+    const payload = await getPayload({ config })
+
+    const where: any = {
+      or: [
+        { requestedBy: { equals: user.id } },
+      ],
+    }
+
+    // If user owns locations, add those to the query
+    const userLocations = await payload.find({
+      collection: 'locations',
+      where: {
+        createdBy: { equals: user.id },
+      },
+      select: {
+        id: true,
+      },
+    })
+
+    if (userLocations.docs.length > 0) {
+      const locationIds = userLocations.docs.map(loc => loc.id)
+      where.or.push({
+        location: { in: locationIds },
+      })
+    }
+
+    if (status) {
+      where.status = { equals: status }
+    }
+
+    const eventRequests = await payload.find({
+      collection: 'eventRequests',
+      where,
+      sort: '-createdAt',
+      populate: {
+        requestedBy: {
+          select: {
+            name: true,
+            email: true,
+            profileImage: true,
+          },
+        },
+        location: {
+          select: {
+            name: true,
+            address: true,
+            featuredImage: true,
+          },
+        },
+      },
+    })
+
+    return eventRequests.docs
+  } catch (error) {
+    console.error('Error fetching event requests:', error)
+    return []
+  }
+}
+
+// ===== ADDITIONAL NOTIFICATION TRIGGERS =====
+
+/**
+ * Notify subscribers when a location is updated
+ */
+export async function notifyLocationUpdate(
+  locationId: string,
+  updateType: 'business_hours' | 'special_offer' | 'general_update',
+  updateMessage: string,
+  metadata?: any
+): Promise<{ success: boolean; message: string; notificationsSent: number }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get location details
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) {
+      return { success: false, message: 'Location not found', notificationsSent: 0 }
+    }
+
+    // Get all subscribers to this location
+    const { docs: subscriptions } = await payload.find({
+      collection: 'locationSubscriptions',
+      where: {
+        location: { equals: locationId },
+        isActive: { equals: true },
+      },
+    })
+
+    console.log(`Found ${subscriptions.length} subscribers for location update notification`)
+
+    let notificationsSent = 0
+
+    // Create notifications for all subscribers
+    for (const subscription of subscriptions) {
+      try {
+        const subscriberId = typeof subscription.user === 'string' 
+          ? subscription.user 
+          : subscription.user?.id
+
+        if (!subscriberId) continue
+
+        let notificationType = 'reminder'
+        let title = `Update for ${location.name}`
+        let priority: 'low' | 'normal' | 'high' = 'normal'
+
+        switch (updateType) {
+          case 'business_hours':
+            notificationType = 'business_hours_update'
+            title = `Business hours updated at ${location.name}`
+            priority = 'normal'
+            break
+          case 'special_offer':
+            notificationType = 'special_offer'
+            title = `Special offer at ${location.name}!`
+            priority = 'high'
+            break
+          case 'general_update':
+            notificationType = 'reminder'
+            title = `New update from ${location.name}`
+            priority = 'normal'
+            break
+        }
+
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: subscriberId,
+            type: notificationType,
+            title,
+            message: updateMessage,
+            relatedTo: {
+              relationTo: 'locations',
+              value: locationId,
+            },
+            metadata: {
+              locationName: location.name,
+              updateType,
+              ...metadata,
+            },
+            priority,
+            read: false,
+          },
+        })
+
+        notificationsSent++
+      } catch (error) {
+        console.error('Error creating subscriber notification:', error)
+      }
+    }
+
+    return {
+      success: true,
+      message: `Sent ${notificationsSent} notifications to subscribers`,
+      notificationsSent
+    }
+  } catch (error) {
+    console.error('Error notifying location subscribers:', error)
+    return { success: false, message: 'Failed to send notifications', notificationsSent: 0 }
+  }
+}
+
+/**
+ * Notify location creator when their location gets verified
+ */
+export async function notifyLocationVerified(locationId: string): Promise<boolean> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) return false
+
+    const creatorId = typeof location.createdBy === 'string' 
+      ? location.createdBy 
+      : location.createdBy?.id
+
+    if (!creatorId) return false
+
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: creatorId,
+        type: 'location_verified',
+        title: 'Your location has been verified!',
+        message: `Congratulations! Your location "${location.name}" has been verified and is now featured with a verification badge.`,
+        relatedTo: {
+          relationTo: 'locations',
+          value: locationId,
+        },
+        metadata: {
+          locationName: location.name,
+        },
+        priority: 'high',
+        read: false,
+      },
+    })
+
+    return true
+  } catch (error) {
+    console.error('Error creating location verification notification:', error)
+    return false
+  }
+}
+
+/**
+ * Notify location creator when their location gets featured
+ */
+export async function notifyLocationFeatured(locationId: string): Promise<boolean> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) return false
+
+    const creatorId = typeof location.createdBy === 'string' 
+      ? location.createdBy 
+      : location.createdBy?.id
+
+    if (!creatorId) return false
+
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: creatorId,
+        type: 'location_featured',
+        title: 'Your location is now featured!',
+        message: `Great news! Your location "${location.name}" has been selected as a featured location and will receive increased visibility.`,
+        relatedTo: {
+          relationTo: 'locations',
+          value: locationId,
+        },
+        metadata: {
+          locationName: location.name,
+        },
+        priority: 'high',
+        read: false,
+      },
+    })
+
+    return true
+  } catch (error) {
+    console.error('Error creating location featured notification:', error)
+    return false
+  }
+}
+
+/**
+ * Notify location creator when their location reaches milestones
+ */
+export async function notifyLocationMilestone(
+  locationId: string,
+  milestoneType: 'likes' | 'visits' | 'reviews' | 'saves',
+  milestoneCount: number
+): Promise<boolean> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) return false
+
+    const creatorId = typeof location.createdBy === 'string' 
+      ? location.createdBy 
+      : location.createdBy?.id
+
+    if (!creatorId) return false
+
+    const milestoneMessages = {
+      likes: `Your location "${location.name}" has reached ${milestoneCount} likes!`,
+      visits: `Your location "${location.name}" has reached ${milestoneCount} visits!`,
+      reviews: `Your location "${location.name}" has received ${milestoneCount} reviews!`,
+      saves: `Your location "${location.name}" has been saved ${milestoneCount} times!`
+    }
+
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: creatorId,
+        type: 'location_milestone',
+        title: `🎉 Milestone reached!`,
+        message: milestoneMessages[milestoneType],
+        relatedTo: {
+          relationTo: 'locations',
+          value: locationId,
+        },
+        metadata: {
+          locationName: location.name,
+          milestoneType,
+          milestoneCount,
+        },
+        priority: 'normal',
+        read: false,
+      },
+    })
+
+    return true
+  } catch (error) {
+    console.error('Error creating location milestone notification:', error)
+    return false
+  }
+}
+
+/**
+ * Notify users about trending locations in their area
+ */
+export async function notifyTrendingLocation(
+  locationId: string,
+  userIds: string[]
+): Promise<{ success: boolean; notificationsSent: number }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) return { success: false, notificationsSent: 0 }
+
+    let notificationsSent = 0
+
+    for (const userId of userIds) {
+      try {
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: userId,
+            type: 'location_trending',
+            title: '🔥 Trending location near you!',
+            message: `"${location.name}" is trending in your area. Check it out before everyone else!`,
+            relatedTo: {
+              relationTo: 'locations',
+              value: locationId,
+            },
+            metadata: {
+              locationName: location.name,
+            },
+            priority: 'normal',
+            read: false,
+          },
+        })
+        notificationsSent++
+      } catch (error) {
+        console.error('Error creating trending location notification for user:', userId, error)
+      }
+    }
+
+    return { success: true, notificationsSent }
+  } catch (error) {
+    console.error('Error notifying about trending location:', error)
+    return { success: false, notificationsSent: 0 }
+  }
+}
+
+/**
+ * Notify users about nearby locations based on proximity
+ */
+export async function notifyProximityAlert(
+  userId: string,
+  locationId: string,
+  distance: number
+): Promise<boolean> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    if (!location) return false
+
+    // Check if user has proximity notifications enabled and hasn't been notified recently
+    const recentNotification = await payload.find({
+      collection: 'notifications',
+      where: {
+        recipient: { equals: userId },
+        type: { equals: 'proximity_alert' },
+        'relatedTo.value': { equals: locationId },
+        createdAt: { greater_than: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() },
+      },
+      limit: 1,
+    })
+
+    if (recentNotification.docs.length > 0) {
+      return false // Don't spam with proximity alerts
+    }
+
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: userId,
+        type: 'proximity_alert',
+        title: '📍 You\'re near a great location!',
+        message: `You're only ${Math.round(distance)}m away from "${location.name}". Perfect time to check it out!`,
+        relatedTo: {
+          relationTo: 'locations',
+          value: locationId,
+        },
+        metadata: {
+          locationName: location.name,
+          distance,
+        },
+        priority: 'low',
+        read: false,
+        expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000), // Expires in 4 hours
+      },
+    })
+
+    return true
+  } catch (error) {
+    console.error('Error creating proximity alert notification:', error)
+    return false
+  }
+}
+
+/**
+ * Notify when friends check in at locations
+ */
+export async function notifyFriendCheckIn(
+  locationId: string,
+  checkInUserId: string,
+  friendIds: string[]
+): Promise<{ success: boolean; notificationsSent: number }> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+    })
+
+    const checkInUser = await payload.findByID({
+      collection: 'users',
+      id: checkInUserId,
+    })
+
+    if (!location || !checkInUser) return { success: false, notificationsSent: 0 }
+
+    let notificationsSent = 0
+
+    for (const friendId of friendIds) {
+      try {
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: friendId,
+            type: 'friend_checkin',
+            title: '👋 Friend activity!',
+            message: `${checkInUser.name} just checked in at "${location.name}". Want to join them?`,
+            actionBy: checkInUserId,
+            relatedTo: {
+              relationTo: 'locations',
+              value: locationId,
+            },
+            metadata: {
+              locationName: location.name,
+              friendName: checkInUser.name,
+            },
+            priority: 'normal',
+            read: false,
+          },
+        })
+        notificationsSent++
+      } catch (error) {
+        console.error('Error creating friend check-in notification for user:', friendId, error)
+      }
+    }
+
+    return { success: true, notificationsSent }
+  } catch (error) {
+    console.error('Error notifying about friend check-in:', error)
+    return { success: false, notificationsSent: 0 }
+  }
+}
+
+/**
+ * Check and notify milestones for location interactions
+ */
+export async function checkAndNotifyMilestones(
+  locationId: string,
+  interactionType: string
+): Promise<void> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get current interaction counts for this location
+    const interactionCounts = await payload.find({
+      collection: 'locationInteractions',
+      where: {
+        location: { equals: locationId },
+      },
+    })
+
+    // Count different interaction types
+    const likesCount = interactionCounts.docs.filter(doc => doc.type === 'like').length
+    const visitsCount = interactionCounts.docs.filter(doc => ['visit', 'check_in'].includes(doc.type)).length
+    const savesCount = interactionCounts.docs.filter(doc => doc.type === 'save').length
+
+    // Get reviews count
+    const reviewsCount = await payload.find({
+      collection: 'reviews',
+      where: {
+        location: { equals: locationId },
+        reviewType: { equals: 'location' },
+      },
+    })
+
+    // Check for milestone achievements
+    const milestones = [10, 25, 50, 100, 250, 500, 1000]
+    
+    for (const milestone of milestones) {
+      // Check likes milestone
+      if (interactionType === 'like' && likesCount === milestone) {
+        await notifyLocationMilestone(locationId, 'likes', milestone)
+      }
+      
+      // Check visits milestone
+      if (['visit', 'check_in'].includes(interactionType) && visitsCount === milestone) {
+        await notifyLocationMilestone(locationId, 'visits', milestone)
+      }
+      
+      // Check saves milestone
+      if (interactionType === 'save' && savesCount === milestone) {
+        await notifyLocationMilestone(locationId, 'saves', milestone)
+      }
+      
+      // Check reviews milestone (if this was triggered by a review)
+      if (interactionType === 'review' && reviewsCount.totalDocs === milestone) {
+        await notifyLocationMilestone(locationId, 'reviews', milestone)
+      }
+    }
+  } catch (error) {
+    console.error('Error checking milestones:', error)
+  }
+}
+
+/**
+ * Enhanced function to create location and trigger initial notifications
+ */
+export async function createLocationWithNotifications(data: LocationFormData): Promise<any> {
+  'use server'
+  
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user?.id) {
+      throw new Error('Authentication required')
+    }
+
+    // Set the creator
+    data.createdBy = user.id
+
+    const payload = await getPayload({ config })
+
+    // Create the location
+    const location = await payload.create({
+      collection: 'locations',
+      data,
+    })
+
+    // If location is published and verified, notify relevant users
+    if (data.status === 'published' && data.isVerified) {
+      await notifyLocationVerified(String(location.id))
+    }
+
+    return location
+  } catch (error) {
+    console.error('Error creating location with notifications:', error)
+    throw error
+  }
+}
+
+export async function getLocationSpecials(locationId: string): Promise<any[]> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config })
+
+    const specials = await payload.find({
+      collection: 'specials',
+      where: {
+        location: {
+          equals: locationId,
+        },
+        status: {
+          equals: 'published',
+        },
+        // Only show current and future specials
+        or: [
+          {
+            isOngoing: {
+              equals: true,
+            },
+          },
+          {
+            endDate: {
+              greater_than_equal: new Date().toISOString(),
+            },
+          },
+        ],
+      },
+      sort: '-createdAt',
+      limit: 10,
+      depth: 2,
+    })
+
+    return specials.docs || []
+  } catch (error) {
+    console.error('Error fetching location specials:', error)
+    return []
   }
 }

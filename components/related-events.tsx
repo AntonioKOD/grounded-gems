@@ -42,7 +42,7 @@ const RELATED_EVENTS = [
     title: "Electronic Music Festival",
     date: "Sep 15-16, 2023",
     location: "Riverside Park",
-    image: "/placeholder.svg?height=400&width=600&query=electronic music festival with dj and crowd",
+    image: "/placeholder.svg",
     price: "$75",
     category: "Music",
   },

@@ -17,41 +17,187 @@ export const Locations: CollectionConfig = {
       async ({ req, doc, previousDoc, operation }) => {
         if (!req.payload) return doc;
 
-        // Only handle when a location is marked verified
-        if (
-          operation === 'update' &&
-          previousDoc?.isVerified === false &&
-          doc.isVerified === true
-        ) {
-          try {
-            // Determine the creator ID (string or object)
-            let creatorId: string | undefined;
-            if (typeof doc.createdBy === 'string') {
-              creatorId = doc.createdBy;
-            } else if (typeof doc.createdBy === 'object' && doc.createdBy?.id) {
-              creatorId = doc.createdBy.id as string;
-            }
+        // Determine the creator ID (string or object)
+        let creatorId: string | undefined;
+        if (typeof doc.createdBy === 'string') {
+          creatorId = doc.createdBy;
+        } else if (typeof doc.createdBy === 'object' && doc.createdBy?.id) {
+          creatorId = doc.createdBy.id as string;
+        }
 
-            // Notify the creator that their location was verified
-            if (creatorId) {
+        try {
+          // Notify when a location is marked verified
+          if (
+            operation === 'update' &&
+            previousDoc?.isVerified === false &&
+            doc.isVerified === true &&
+            creatorId
+          ) {
+            console.log('Creating location verified notification:', {
+              creatorId,
+              locationName: doc.name,
+              locationId: doc.id
+            });
+            
+            const notification = await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: creatorId,
+                type: 'location_verified',
+                title: `Your location "${doc.name}" has been verified!`,
+                message: 'Your location listing is now verified and will be featured more prominently.',
+                priority: 'high',
+                relatedTo: {
+                  relationTo: 'locations',
+                  value: doc.id,
+                },
+                metadata: {
+                  locationName: doc.name,
+                },
+                read: false,
+              },
+            });
+            
+            console.log('Location verified notification created successfully:', notification.id);
+          }
+
+          // Notify when a location is marked as featured
+          if (
+            operation === 'update' &&
+            previousDoc?.isFeatured === false &&
+            doc.isFeatured === true &&
+            creatorId
+          ) {
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: creatorId,
+                type: 'location_featured',
+                title: `Your location "${doc.name}" is now featured!`,
+                message: 'Your location has been selected as a featured location and will get extra visibility.',
+                priority: 'high',
+                relatedTo: {
+                  relationTo: 'locations',
+                  value: doc.id,
+                },
+                metadata: {
+                  locationName: doc.name,
+                },
+                read: false,
+              },
+            });
+          }
+
+          // Notify when location status changes to published
+          if (
+            operation === 'update' &&
+            previousDoc?.status !== 'published' &&
+            doc.status === 'published' &&
+            creatorId
+          ) {
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: creatorId,
+                type: 'location_published',
+                title: `Your location "${doc.name}" is now live!`,
+                message: 'Your location has been published and is now visible to all users.',
+                priority: 'normal',
+                relatedTo: {
+                  relationTo: 'locations',
+                  value: doc.id,
+                },
+                metadata: {
+                  locationName: doc.name,
+                },
+                read: false,
+              },
+            });
+          }
+
+          // Notify when average rating reaches milestones
+          if (
+            operation === 'update' &&
+            doc.averageRating &&
+            previousDoc?.averageRating !== doc.averageRating &&
+            creatorId
+          ) {
+            const milestones = [4.0, 4.5, 4.8, 5.0];
+            const newRating = doc.averageRating;
+            const oldRating = previousDoc?.averageRating || 0;
+            
+            const achievedMilestone = milestones.find(
+              milestone => newRating >= milestone && oldRating < milestone
+            );
+
+            if (achievedMilestone) {
               await req.payload.create({
                 collection: 'notifications',
                 data: {
                   recipient: creatorId,
-                  type: 'location_verified',
-                  title: `Your location "${doc.name}" has been verified!`,
-                  message: 'Your location listing is now verified and will be featured more prominently.',
+                  type: 'location_milestone',
+                  title: `Amazing! Your location reached ${achievedMilestone} stars!`,
+                  message: `"${doc.name}" now has an average rating of ${newRating.toFixed(1)} stars based on ${doc.reviewCount || 0} reviews.`,
+                  priority: 'high',
                   relatedTo: {
                     relationTo: 'locations',
                     value: doc.id,
+                  },
+                  metadata: {
+                    locationName: doc.name,
+                    milestone: achievedMilestone,
+                    averageRating: newRating,
+                    reviewCount: doc.reviewCount,
                   },
                   read: false,
                 },
               });
             }
-          } catch (error) {
-            console.error('Error creating location verification notification:', error);
           }
+
+          // Notify when review count reaches milestones
+          if (
+            operation === 'update' &&
+            doc.reviewCount &&
+            previousDoc?.reviewCount !== doc.reviewCount &&
+            creatorId
+          ) {
+            const reviewMilestones = [10, 25, 50, 100, 250, 500];
+            const newCount = doc.reviewCount;
+            const oldCount = previousDoc?.reviewCount || 0;
+            
+            const achievedMilestone = reviewMilestones.find(
+              milestone => newCount >= milestone && oldCount < milestone
+            );
+
+            if (achievedMilestone) {
+              await req.payload.create({
+                collection: 'notifications',
+                data: {
+                  recipient: creatorId,
+                  type: 'location_milestone',
+                  title: `Congratulations! ${achievedMilestone} reviews milestone reached!`,
+                  message: `"${doc.name}" now has ${newCount} reviews. Thank you for providing a great experience!`,
+                  priority: 'normal',
+                  relatedTo: {
+                    relationTo: 'locations',
+                    value: doc.id,
+                  },
+                  metadata: {
+                    locationName: doc.name,
+                    milestone: achievedMilestone,
+                    milestoneType: 'reviews',
+                    reviewCount: newCount,
+                  },
+                  read: false,
+                },
+              });
+            }
+          }
+
+        } catch (error) {
+          console.error('Error creating location notification:', error);
+          // Don't fail the main operation if notification fails
         }
 
         return doc;

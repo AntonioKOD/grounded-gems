@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react"
 import { cn } from "@/lib/utils"
 import { addedLocations, searchLocations, type Location } from "./map-data"
 import { locationMatchesCategories, getCategoryColor } from "./category-utils"
@@ -48,6 +48,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import FilterBar from "@/components/filter-bar"
+import { optimizedFetch, debounce, throttle } from "@/lib/api-cache"
 
 export default function MapExplorer() {
   // Browser detection states
@@ -59,6 +61,7 @@ export default function MapExplorer() {
   const [allLocations, setAllLocations] = useState<Location[]>([])
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string } | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [categories, setCategories] = useState<any[]>([])
@@ -103,6 +106,10 @@ export default function MapExplorer() {
   const mobileListRef = useRef<HTMLDivElement>(null)
   const listScrollRef = useRef<HTMLDivElement>(null)
   const showListButtonRef = useRef<HTMLButtonElement>(null)
+  const lastClickTimeRef = useRef<number>(0)
+
+  // Add refreshKey state at the top of the component
+  const [refreshKey, setRefreshKey] = useState(0)
 
   // Helper function to extract coordinates from a location
   const getLocationCoordinates = useCallback((location: Location): [number, number] | null => {
@@ -132,7 +139,7 @@ export default function MapExplorer() {
     } else if (location.imageUrl) {
       return location.imageUrl
     }
-    return "/placeholder.svg?key=19lq3"
+    return "/placeholder.svg"
   }, [])
 
   // Add this useEffect near the top of your component, after your state declarations
@@ -262,6 +269,150 @@ export default function MapExplorer() {
     }
   }, [])
 
+  // Add state for location request status
+  const [locationRequestStatus, setLocationRequestStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle')
+
+  // Function to request user location
+  const requestUserLocation = useCallback(() => {
+    console.log("🌍 Requesting user location...")
+    
+    // Check if geolocation is supported
+    if (!navigator.geolocation) {
+      console.error("❌ Geolocation is not supported by this browser")
+      toast.error("Geolocation is not supported by this browser")
+      setLocationRequestStatus('denied')
+      return
+    }
+
+    // Check if we're on HTTPS or localhost (required for geolocation on most browsers)
+    if (typeof window !== 'undefined' && window.location.protocol !== 'https:' && 
+        window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      console.warn("⚠️ Geolocation requires HTTPS or localhost in most browsers")
+      toast.error("Location access requires a secure connection (HTTPS) or localhost")
+      setLocationRequestStatus('denied')
+      return
+    }
+
+    console.log("✅ Geolocation is supported, requesting position...")
+    setLocationRequestStatus('requesting')
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userCoords: [number, number] = [position.coords.latitude, position.coords.longitude]
+        console.log("✅ Got user location:", userCoords)
+        console.log("📍 Accuracy:", position.coords.accuracy, "meters")
+        console.log("🎯 Setting map center to user location")
+        
+        setUserLocation(userCoords)
+        setLocationRequestStatus('granted')
+        
+        // Center map on user location
+        setMapCenter(userCoords)
+        setMapZoom(14) // Zoom in closer when centering on user
+        
+        toast.success(`Map centered on your location (±${Math.round(position.coords.accuracy)}m accuracy)`)
+      },
+      (err) => {
+        console.error("❌ Error getting user location:", err)
+        setLocationRequestStatus('denied')
+        
+        // Handle different types of geolocation errors
+        let errorMessage = "Could not get your location"
+        let toastMessage = ""
+        
+        switch(err.code) {
+          case err.PERMISSION_DENIED:
+            errorMessage = "Location access denied by user"
+            toastMessage = "Location access denied. You can use the location button to try again."
+            console.log("❌ User denied location permission")
+            break
+          case err.POSITION_UNAVAILABLE:
+            errorMessage = "Location information unavailable"
+            toastMessage = "Location service unavailable. Using default map view."
+            console.log("❌ Position unavailable")
+            break
+          case err.TIMEOUT:
+            errorMessage = "Location request timed out"
+            toastMessage = "Location request took too long. Click the location button to try again."
+            console.log("❌ Location request timeout")
+            break
+          default:
+            errorMessage = "Unknown geolocation error"
+            toastMessage = "Unable to get location. You can browse locations manually."
+            console.log("❌ Unknown geolocation error:", err)
+        }
+        
+        console.log("Error details:", { code: err.code, message: err.message })
+        
+        // Only show error toast if user manually clicked the button (not auto-request)
+        if (locationRequestStatus === 'requesting') {
+          toast.error(toastMessage)
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000, // Reduced timeout to 10 seconds for better UX
+        maximumAge: 60000 // Accept cached position if less than 1 minute old
+      }
+    )
+  }, [locationRequestStatus])
+
+  // Auto-click the location button on page load
+  useEffect(() => {
+    const autoClickLocationButton = () => {
+      console.log("🎯 Auto-clicking location button on page load...")
+      
+      // Add a delay to ensure the button is rendered and the component is fully mounted
+      const timer = setTimeout(() => {
+        console.log("🔍 Searching for location button to auto-click...")
+        
+        // Try multiple methods to find and click the location button
+        let buttonClicked = false
+        
+        // Method 1: Try by ID first (most reliable)
+        const buttonById = document.getElementById('find-my-location-btn') as HTMLButtonElement
+        if (buttonById && !buttonById.disabled) {
+          console.log("✅ Found location button by ID, auto-clicking...")
+          buttonById.click()
+          buttonClicked = true
+        }
+        
+        // Method 2: Try by aria-label (if ID method failed)
+        if (!buttonClicked) {
+          const buttonByAriaLabel = document.querySelector('[aria-label="Find my location"]') as HTMLButtonElement
+          if (buttonByAriaLabel && !buttonByAriaLabel.disabled) {
+            console.log("✅ Found location button by aria-label, auto-clicking...")
+            buttonByAriaLabel.click()
+            buttonClicked = true
+          }
+        }
+        
+        // Method 3: Try dispatching a custom click event (if both methods above failed)
+        if (!buttonClicked && buttonById) {
+          console.log("🔄 Trying custom click event...")
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+          })
+          buttonById.dispatchEvent(clickEvent)
+          buttonClicked = true
+        }
+        
+        // Method 4: Direct function call as ultimate fallback
+        if (!buttonClicked) {
+          console.log("🔄 All button click methods failed, calling requestUserLocation directly...")
+          requestUserLocation()
+        }
+      }, 1500) // Wait 1.5 seconds for the UI to fully load
+      
+      return timer
+    }
+
+    const timer = autoClickLocationButton()
+    return () => clearTimeout(timer)
+  }, [requestUserLocation])
+
   // Load locations
   useEffect(() => {
     async function loadLocations() {
@@ -295,15 +446,18 @@ export default function MapExplorer() {
         console.log("Extracted categories:", categoryArray)
         setCategories(categoryArray)
 
-        // Set initial map center based on first location with valid coordinates
-        for (const loc of locations) {
-          const coordinates = getLocationCoordinates(loc)
-          if (coordinates) {
-            console.log(
-              `Setting initial map center to [${coordinates[0]}, ${coordinates[1]}] from location "${loc.name}"`,
-            )
-            setMapCenter(coordinates)
-            break
+        // Only set map center based on locations if user location is not available
+        if (!userLocation) {
+          // Set initial map center based on first location with valid coordinates
+          for (const loc of locations) {
+            const coordinates = getLocationCoordinates(loc)
+            if (coordinates) {
+              console.log(
+                `Setting initial map center to [${coordinates[0]}, ${coordinates[1]}] from location "${loc.name}" (no user location available)`,
+              )
+              setMapCenter(coordinates)
+              break
+            }
           }
         }
 
@@ -316,21 +470,7 @@ export default function MapExplorer() {
     }
 
     loadLocations()
-
-    // Try to get user location
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const userCoords: [number, number] = [position.coords.latitude, position.coords.longitude]
-          console.log("Got user location:", userCoords)
-          setUserLocation(userCoords)
-        },
-        (err) => {
-          console.warn("Error getting user location:", err)
-        },
-      )
-    }
-  }, [getLocationCoordinates])
+  }, [getLocationCoordinates, userLocation])
 
   // Filter locations when search or categories change
   useEffect(() => {
@@ -444,11 +584,18 @@ export default function MapExplorer() {
     }
   }, [previewLocation])
 
-  // Handle map click
+  // Handle map click - throttled to prevent excessive state updates
   const handleMapClick = useCallback(
     (coords: { lat: number; lng: number }) => {
       // Ignore if touch just started (to prevent double-firing on Safari)
       if (touchStarted) return
+
+      // Throttle rapid clicks
+      const now = Date.now()
+      if (now - lastClickTimeRef.current < 200) {
+        return
+      }
+      lastClickTimeRef.current = now
 
       // No need to close detail view when clicking on map - dialog handles this
 
@@ -469,15 +616,30 @@ export default function MapExplorer() {
         setPreviewPosition(null)
       }
 
-      console.log("Map clicked at:", coords)
+      // Map clicked (logging removed for performance)
     },
     [isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted],
   )
 
-  // Handle map move
+  // Handle map move - stabilized with ref to prevent re-renders
   const handleMapMove = useCallback((center: [number, number], zoom: number) => {
-    setMapCenter(center)
-    setMapZoom(zoom)
+    // Only update state if there's a significant change to prevent excessive re-renders
+    setMapCenter(prevCenter => {
+      const threshold = 0.01 // ~1km tolerance
+      if (Math.abs(prevCenter[0] - center[0]) > threshold || 
+          Math.abs(prevCenter[1] - center[1]) > threshold) {
+        return center
+      }
+      return prevCenter
+    })
+    
+    setMapZoom(prevZoom => {
+      const threshold = 0.5
+      if (Math.abs(prevZoom - zoom) > threshold) {
+        return zoom
+      }
+      return prevZoom
+    })
   }, [])
 
   // Toggle category selection
@@ -860,10 +1022,24 @@ export default function MapExplorer() {
       }
     }
 
+    const handleOpenLocationDetail = (e: CustomEvent) => {
+      const { location } = e.detail
+      if (location) {
+        setSelectedLocation(location)
+        setIsDetailOpen(true) // Open the dialog
+
+        // Close any open popups or previews
+        setShowMobilePreview(false)
+        setPreviewLocation(null)
+      }
+    }
+
     document.addEventListener("viewLocationDetails", handleViewLocationDetails as EventListener)
+    document.addEventListener("openLocationDetail", handleOpenLocationDetail as EventListener)
 
     return () => {
       document.removeEventListener("viewLocationDetails", handleViewLocationDetails as EventListener)
+      document.removeEventListener("openLocationDetail", handleOpenLocationDetail as EventListener)
     }
   }, [allLocations])
 
@@ -930,7 +1106,7 @@ export default function MapExplorer() {
           <div className="grid gap-4 py-4">
             <div className="flex items-center gap-4">
               <Image
-                src={getImageUrl(shareData.location) || "/placeholder.svg?height=60&width=60&query=location"}
+                src={getImageUrl(shareData.location) || "/placeholder.svg"}
                 alt={shareData.location.name}
                 width={60}
                 height={60}
@@ -1028,6 +1204,46 @@ export default function MapExplorer() {
       </Dialog>
     )
   }
+
+  // Add event listeners for location save/subscribe events and refresh locations
+  useEffect(() => {
+    const handleLocationSaved = () => {
+      // Force refresh to update UI
+      setRefreshKey(prev => prev + 1)
+    }
+    
+    const handleLocationSubscribed = () => {
+      // Force refresh to update UI
+      setRefreshKey(prev => prev + 1)
+    }
+    
+    // Listen for custom events
+    document.addEventListener('locationSaved', handleLocationSaved)
+    document.addEventListener('locationSubscribed', handleLocationSubscribed)
+    
+    return () => {
+      // Clean up event listeners
+      document.removeEventListener('locationSaved', handleLocationSaved)
+      document.removeEventListener('locationSubscribed', handleLocationSubscribed)
+    }
+  }, [])
+
+  // Load current user
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/users/me')
+        if (response.ok) {
+          const userData = await response.json()
+          setCurrentUser(userData.user)
+        }
+      } catch (error) {
+        console.error('Error fetching current user:', error)
+      }
+    }
+
+    loadCurrentUser()
+  }, [])
 
   if (error) {
     return (
@@ -1276,6 +1492,8 @@ export default function MapExplorer() {
         )}
       </div>
 
+
+
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop list view - always on the left on desktop */}
@@ -1291,6 +1509,7 @@ export default function MapExplorer() {
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
                 isLoading={isLoading}
+                currentUser={currentUser || undefined}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
                   setIsDetailOpen(true) // Open the dialog
@@ -1320,29 +1539,61 @@ export default function MapExplorer() {
 
           {/* Map controls */}
           <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-            {userLocation && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+            {/* Location controls */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {userLocation ? (
                     <Button
+                      id="go-to-my-location-btn"
                       variant="default"
                       size="icon"
                       onClick={() => {
+                        console.log("🎯 Centering map on user location:", userLocation)
                         setMapCenter(userLocation)
                         setMapZoom(15)
+                        toast.success("Centered on your location")
                       }}
                       className="bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10"
                       aria-label="Go to my location"
                     >
-                      <Navigation className="h-4 w-4" />
+                      <Navigation className="h-4 w-4 text-blue-600" />
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">
-                    <p>My Location</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
+                  ) : (
+                    <Button
+                      id="find-my-location-btn"
+                      variant="default"
+                      size="icon"
+                      onClick={() => {
+                        console.log("🔄 Manual location request triggered")
+                        requestUserLocation()
+                      }}
+                      disabled={locationRequestStatus === 'requesting'}
+                      className="bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10"
+                      aria-label="Find my location"
+                    >
+                      {locationRequestStatus === 'requesting' ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      ) : (
+                        <Navigation className="h-4 w-4 text-gray-600" />
+                      )}
+                    </Button>
+                  )}
+                </TooltipTrigger>
+                <TooltipContent side="left">
+                  <p>
+                    {userLocation 
+                      ? "Go to My Location" 
+                      : locationRequestStatus === 'requesting' 
+                        ? "Getting location..." 
+                        : locationRequestStatus === 'denied' 
+                          ? "Retry Location Access"
+                          : "Find My Location"
+                    }
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
 
             <TooltipProvider>
               <Tooltip>
@@ -1485,6 +1736,7 @@ export default function MapExplorer() {
                   onLocationSelect={handleLocationSelect}
                   selectedLocation={selectedLocation}
                   isLoading={isLoading}
+                  currentUser={currentUser || undefined}
                   onViewDetail={(location) => {
                     setSelectedLocation(location)
                     setIsDetailOpen(true) // Open the dialog
@@ -1513,6 +1765,7 @@ export default function MapExplorer() {
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
                 isLoading={isLoading}
+                currentUser={currentUser || undefined}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
                   setIsDetailOpen(true) // Open the dialog
@@ -1653,19 +1906,7 @@ export default function MapExplorer() {
         </div>
       )}
 
-      {/* Debug info for Safari issues - only visible in development */}
-      {process.env.NODE_ENV === "development" && (isSafari || isIOS) && (
-        <div className="fixed bottom-0 left-0 right-0 bg-black/80 text-white text-xs p-1 z-50">
-          <details>
-            <summary>Debug Info</summary>
-            <p>Browser: {browserInfo}</p>
-            <p>Safari: {isSafari ? "Yes" : "No"}</p>
-            <p>iOS: {isIOS ? "Yes" : "No"}</p>
-            <p>Viewport: {viewportHeight}px</p>
-            <p>Fixes Applied: {safariFixesApplied ? "Yes" : "No"}</p>
-          </details>
-        </div>
-      )}
+
 
       {/* Global styles for animations and Safari fixes */}
       <style jsx global>{`

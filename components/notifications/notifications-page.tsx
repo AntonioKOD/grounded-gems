@@ -8,6 +8,7 @@ import { Check } from "lucide-react"
 import NotificationItem from "./notification-item"
 import { getNotifications, markAllNotificationsAsRead } from "@/app/actions"
 import type { Notification } from "@/types/notification"
+import TestNotificationButton from "../test-notification-button"
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -98,6 +99,19 @@ export default function NotificationsPage() {
 
   return (
     <div>
+      {/* Debug Tools - Only show in development */}
+      {process.env.NODE_ENV === 'development' && user && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Tools (Development Only)</h3>
+          <div className="flex gap-2 flex-wrap">
+            <TestNotificationButton userId={user.id} />
+            <Button asChild variant="outline" size="sm">
+              <a href="/notifications/debug">Debug Page</a>
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full max-w-md">
           <TabsList>

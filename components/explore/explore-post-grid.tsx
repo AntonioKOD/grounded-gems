@@ -142,7 +142,7 @@ function ExplorePostCard({ post, highlighted = false }: ExplorePostCardProps) {
           {/* Image */}
           <div className="relative h-48 w-full overflow-hidden">
             <Image
-              src={getImageUrl(post.image) || "/placeholder.svg?height=400&width=600&query=location"}
+              src={getImageUrl(post.image) || "/placeholder.svg"}
               alt={post.title || "Post image"}
               fill
               className="object-cover"

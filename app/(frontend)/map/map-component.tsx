@@ -1,69 +1,63 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useRef, useState, useCallback, useMemo, memo } from "react"
-import Image from "next/image"
+import { useEffect, useRef, useState, useCallback, memo } from "react"
+import { Navigation, X } from "lucide-react"
+import { Map as MapIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Layers, Info, MapPin, Locate, X } from "lucide-react"
-import mapboxgl from "mapbox-gl"
-import "mapbox-gl/dist/mapbox-gl.css"
 import type { Location } from "./map-data"
-import { getCategoryColor } from "./category-utils"
+import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Badge } from "@/components/ui/badge"
 
-// Set the Mapbox access token from env
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ""
-
-// Validate latitude/longitude
-const isValidCoordinate = (lat?: number | string | null, lng?: number | string | null): boolean => {
-  const numLat = typeof lat === "string" ? Number.parseFloat(lat) : lat
-  const numLng = typeof lng === "string" ? Number.parseFloat(lng) : lng
-
-  return (
-    numLat != null &&
-    numLng != null &&
-    !isNaN(numLat) &&
-    !isNaN(numLng) &&
-    Math.abs(numLat) <= 90 &&
-    Math.abs(numLng) <= 180
-  )
+// Add Mapbox types
+declare global {
+  interface Window {
+    mapboxgl: any;
+    handleLocationDetailClick?: (locationId: string) => void;
+  }
 }
 
-// Extract coordinates from location
+// Check if coordinates are valid
+const isValidCoordinate = (lat?: number | string | null, lng?: number | string | null): boolean => {
+  if (lat === null || lat === undefined || lng === null || lng === undefined) return false
+  
+  const numLat = typeof lat === "string" ? parseFloat(lat) : lat
+  const numLng = typeof lng === "string" ? parseFloat(lng) : lng
+  
+  return !isNaN(numLat) && !isNaN(numLng) && 
+         numLat >= -90 && numLat <= 90 && 
+         numLng >= -180 && numLng <= 180
+}
+
+// Extract coordinates from a location object
 const getCoordinates = (location: Location): [number, number] | null => {
-  // Try direct latitude/longitude properties
-  if (isValidCoordinate(location.latitude, location.longitude)) {
-    return [Number(location.latitude), Number(location.longitude)]
+  let lat, lng
+
+  if (location.latitude != null && location.longitude != null) {
+    lat = Number(location.latitude)
+    lng = Number(location.longitude)
+  } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
+    lat = Number(location.coordinates.latitude)
+    lng = Number(location.coordinates.longitude)
   }
 
-  // Try coordinates object
-  if (location.coordinates) {
-    if (isValidCoordinate(location.coordinates.latitude, location.coordinates.longitude)) {
-      return [Number(location.coordinates.latitude), Number(location.coordinates.longitude)]
-    }
+  if (isValidCoordinate(lat, lng)) {
+    return [lat!, lng!]
   }
 
-  console.warn(`Invalid coordinates for location "${location.name}"`)
   return null
 }
 
-// Helper to get image URL from location
+// Get image URL from location object
 const getLocationImageUrl = (location: Location): string => {
   if (typeof location.featuredImage === "string") {
     return location.featuredImage
-  }
-
-  if (location.featuredImage?.url) {
+  } else if (location.featuredImage?.url) {
     return location.featuredImage.url
-  }
-
-  if (location.imageUrl) {
+  } else if (location.imageUrl) {
     return location.imageUrl
   }
-
-  return "/abstract-location.png"
+  return "/placeholder.svg"
 }
 
 interface MapComponentProps {
@@ -80,17 +74,12 @@ interface MapComponentProps {
   selectedLocation?: Location | null
 }
 
-// Create a stable map styles array outside the component to prevent recreation on each render
-const MAP_STYLES = [
-  { id: "streets-v12", name: "Streets", icon: "🏙️" },
-  { id: "light-v11", name: "Light", icon: "☀️" },
-  { id: "dark-v11", name: "Dark", icon: "🌙" },
-  { id: "satellite-v9", name: "Satellite", icon: "🛰️" },
-  { id: "satellite-streets-v12", name: "Satellite Streets", icon: "🛣️" },
-  { id: "outdoors-v12", name: "Outdoors", icon: "🏞️" },
-]
+interface MapboxMarker {
+  marker: any;
+  element: HTMLElement;
+  cleanup: () => void;
+}
 
-// Use React.memo to prevent unnecessary re-renders
 const MapComponent = memo(function MapComponent({
   locations,
   userLocation,
@@ -104,1150 +93,1025 @@ const MapComponent = memo(function MapComponent({
   className,
   selectedLocation,
 }: MapComponentProps) {
-  // Refs to store objects that shouldn't trigger re-renders
-  const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<mapboxgl.Map | null>(null)
-  const markersRef = useRef<{ marker: mapboxgl.Marker; location: Location; element: HTMLElement }[]>([])
-  const userMarkerRef = useRef<mapboxgl.Marker | null>(null)
-  const circleLayerId = useRef<string | null>(null)
-  const brandingRef = useRef<HTMLDivElement | null>(null)
-  const prevLocationsRef = useRef<Location[]>([])
-  const prevSelectedLocationRef = useRef<Location | null>(null)
-  const prevCenterRef = useRef<[number, number] | null>(null)
-  const prevZoomRef = useRef<number | null>(null)
-  const mapInitializedRef = useRef(false)
-  const markersInitializedRef = useRef(false)
-  const popupRef = useRef<mapboxgl.Popup | null>(null)
-  const activePopupRef = useRef<mapboxgl.Popup | null>(null)
-
-  // State that should trigger re-renders
+    // Removed excessive console logging to improve performance
+  
+  const mapRef = useRef<any>(null)
+  const mapboxRef = useRef<any>(null)
+  const markersRef = useRef<Map<string, MapboxMarker>>(new globalThis.Map())
+  const userMarkerRef = useRef<any>(null)
+  const radiusCircleRef = useRef<any>(null)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const mapInitializedRef = useRef<boolean>(false)
+  const lastLocationsRef = useRef<Location[]>([])
+  const lastSelectedLocationRef = useRef<Location | null>(null)
+  
   const [mapLoaded, setMapLoaded] = useState(false)
-  const [showStyles, setShowStyles] = useState(false)
+  const [mapError, setMapError] = useState<string | null>(null)
   const [currentStyle, setCurrentStyle] = useState(mapStyle)
-  const [webglSupported, setWebglSupported] = useState(true)
-  const [showLegend, setShowLegend] = useState(false)
-  const [showMiniPreview, setShowMiniPreview] = useState(false)
-  const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
-  const [isMobile, setIsMobile] = useState(false)
-  const [isSafari, setIsSafari] = useState(false)
-  const [clickedLocation, setClickedLocation] = useState<Location | null>(null)
+  const [activeTooltip, setActiveTooltip] = useState<{
+    location: Location
+    position: { x: number; y: number }
+  } | null>(null)
 
-  // Check if device is mobile and browser is Safari - only run once on mount and on resize
+    // Handle map resize
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
-    }
-
-    const checkSafari = () => {
-      const ua = navigator.userAgent.toLowerCase()
-      setIsSafari(/safari/.test(ua) && !/chrome/.test(ua) && !/firefox/.test(ua) && !/edge/.test(ua))
-    }
-
-    checkMobile()
-    checkSafari()
-    window.addEventListener("resize", checkMobile)
-
-    return () => {
-      window.removeEventListener("resize", checkMobile)
-    }
-  }, [])
-
-  // Detect WebGL support - only run once on mount
-  useEffect(() => {
-    setWebglSupported(mapboxgl.supported())
-  }, [])
-
-  // Memoize the locations array to detect actual changes
-  const locationIds = useMemo(() => locations.map((loc) => loc.id).join(","), [locations])
-
-  // Memoize the selected location ID for comparison
-  const selectedLocationId = useMemo(() => selectedLocation?.id, [selectedLocation?.id])
-
-  // Initialize map - only run once on mount
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current || !webglSupported || mapInitializedRef.current) return
-
-    mapInitializedRef.current = true
-    const defaultCenter: [number, number] = [40.7128, -74.006] // NYC
-
-    // Validate center coordinates
-    const mapCenter = isValidCoordinate(center[0], center[1])
-      ? ([center[1], center[0]] as [number, number])
-      : [defaultCenter[1], defaultCenter[0]]
-
-    console.log("Initializing map with center:", mapCenter)
-
-    try {
-      const map = new mapboxgl.Map({
-        container: containerRef.current,
-        style: `mapbox://styles/mapbox/${currentStyle}`,
-        center: mapCenter as [number, number],
-        zoom: isMobile ? zoom - 0.5 : zoom,
-        attributionControl: false, // We'll add custom attribution
-        preserveDrawingBuffer: true,
-        dragRotate: false, // Disable rotation for simpler mobile interaction
-        pitchWithRotate: false,
-        touchZoomRotate: true,
-        maxTileCacheSize: 50, // Optimize for mobile
-        renderWorldCopies: true,
-      })
-
-      map.on("load", () => {
-        console.log("Map loaded")
-        setMapLoaded(true)
-
-        // Add 3D buildings on high zoom levels
-        try {
-          if (map.getStyle().sources?.composite) {
-            map.addLayer({
-              id: "3d-buildings",
-              source: "composite",
-              "source-layer": "building",
-              filter: ["==", "extrude", "true"],
-              type: "fill-extrusion",
-              minzoom: 15,
-              paint: {
-                "fill-extrusion-color": "#aaa",
-                "fill-extrusion-height": ["get", "height"],
-                "fill-extrusion-base": ["get", "min_height"],
-                "fill-extrusion-opacity": 0.6,
-              },
-            })
-          }
-        } catch (error) {
-          console.warn("Could not add 3D buildings layer:", error)
-        }
-      })
-
-      // Add map controls - position them differently for mobile
-      const position = isMobile ? "bottom-right" : "top-right"
-      map.addControl(
-        new mapboxgl.NavigationControl({
-          showCompass: false,
-          visualizePitch: false,
-        }),
-        position,
-      )
-
-      // Only add fullscreen on non-mobile
-      if (!isMobile) {
-        map.addControl(new mapboxgl.FullscreenControl(), position)
+    const handleResize = () => {
+      // Resize map container if map is initialized
+      if (mapRef.current && mapInitializedRef.current) {
+        console.log("Resizing map")
+        mapRef.current.resize()
       }
-
-      // Add geolocate control
-      map.addControl(
-        new mapboxgl.GeolocateControl({
-          positionOptions: { enableHighAccuracy: true },
-          trackUserLocation: true,
-          showUserHeading: true,
-        }),
-        position,
-      )
-
-      // Create a popup but don't add it to the map yet
-      popupRef.current = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        maxWidth: "300px",
-        offset: [0, -15],
-        className: "marker-hover-popup",
-      })
-
-      // Map event handlers with useCallback to prevent recreation
-      map.on("click", (e) => {
-        // Close any open popups when clicking on the map
-        if (activePopupRef.current) {
-          activePopupRef.current.remove()
-          activePopupRef.current = null
-          setClickedLocation(null)
-        }
-
-        setShowMiniPreview(false)
-        setPreviewLocation(null)
-        onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-      })
-
-      map.on("moveend", () => {
-        const c = map.getCenter()
-        onMapMove([c.lat, c.lng], map.getZoom())
-      })
-
-      // Store map reference
-      mapRef.current = map
-
-      // Store initial center and zoom
-      prevCenterRef.current = center
-      prevZoomRef.current = zoom
-    } catch (error) {
-      console.error("Error initializing map:", error)
-      setWebglSupported(false)
     }
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
+  // Load Mapbox script dynamically
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const loadMapboxScript = () => {
+      if (document.querySelector('script[src*="mapbox-gl"]')) {
+        console.log("Mapbox script already loaded")
+        return Promise.resolve()
+      }
+      
+      console.log("Loading Mapbox script dynamically")
+      return new Promise<void>((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'
+        script.async = true
+        script.onload = () => {
+          console.log("Mapbox script loaded successfully via onload")
+          resolve()
+        }
+        script.onerror = () => {
+          console.error("Failed to load Mapbox script via onerror")
+          reject(new Error('Failed to load Mapbox script'))
+        }
+        document.head.appendChild(script)
+        
+        // Also add CSS
+        const link = document.createElement('link')
+        link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css'
+        link.rel = 'stylesheet'
+        document.head.appendChild(link)
+      })
+    }
+    
+    // Create a debounced version of onMapMove to avoid too many state updates
+    const debouncedMapMove = (callback: (center: [number, number], zoom: number) => void, delay: number) => {
+      let timeoutId: NodeJS.Timeout | null = null;
+      
+      return (center: [number, number], zoom: number) => {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        
+        timeoutId = setTimeout(() => {
+          callback(center, zoom);
+        }, delay);
+      };
+    };
+    
+    const debouncedOnMapMove = debouncedMapMove(onMapMove, 1500); // Increased delay to 1.5s to reduce rerenders
+    
+    const initializeMap = async () => {
+      if (mapInitializedRef.current) return
+      
+      try {
+        await loadMapboxScript()
+        
+        // Wait for mapbox to be available globally
+        if (!window.mapboxgl) {
+          console.error("Mapbox GL JS failed to load - window.mapboxgl is undefined")
+          throw new Error('Mapbox GL JS not loaded')
+        }
+        
+        // Mapbox script loaded successfully
+        
+        // Store mapbox reference
+        mapboxRef.current = window.mapboxgl
+        
+        // Add error handling for Mapbox
+        if (!mapboxRef.current.supported()) {
+          console.error("Mapbox GL JS is not supported by this browser")
+          setMapError("Mapbox GL JS is not supported by this browser. Please try a different browser.")
+          return
+        }
+        
+        // Set access token
+        const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiYW50b25pby1rb2RoZWxpIiwiYSI6ImNtYTQ3bTlibTAyYTUyanBzem5qZGV1ZzgifQ.cSUliejFuQnIHZ-DDinPRQ'
+        // Using Mapbox token (logging removed for performance)
+        mapboxRef.current.accessToken = token
+        
+        // Check if container exists and has dimensions
+        if (mapContainerRef.current) {
+          // Map container dimensions checked (logging removed for performance)
+        } else {
+          console.error("Map container ref is null")
+        }
+        
+        // Create map instance
+        if (mapContainerRef.current && !mapRef.current) {
+          // Creating map (logging removed for performance)
+          
+          // Ensure the map container is visible
+          if (mapContainerRef.current) {
+            mapContainerRef.current.style.height = '100%'
+            mapContainerRef.current.style.width = '100%'
+            mapContainerRef.current.style.minHeight = '400px'
+            mapContainerRef.current.style.display = 'block'
+          }
+          
+          mapRef.current = new mapboxRef.current.Map({
+            container: mapContainerRef.current,
+            style: `mapbox://styles/mapbox/${currentStyle}`,
+            center: [center[1], center[0]], // Mapbox uses [lng, lat] format
+            zoom,
+            pitchWithRotate: false,
+            renderWorldCopies: false,
+            maxZoom: 19,
+            trackResize: true,
+            attributionControl: false
+          })
+          
+          // Map events
+          mapRef.current.on('load', () => {
+            // Map loaded successfully
+            mapInitializedRef.current = true
+            setMapLoaded(true)
+            
+            // Add custom sources and layers for better performance
+            const markersGeoJSON = {
+              type: 'FeatureCollection',
+              features: locations.map(location => {
+                const coords = getCoordinates(location)
+                if (!coords) return null
+                
+                return {
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [coords[1], coords[0]] // GeoJSON uses [lng, lat]
+                  },
+                  properties: {
+                    id: location.id,
+                    name: location.name,
+                    category: typeof location.categories?.[0] === 'string' 
+                      ? location.categories[0] 
+                      : location.categories?.[0]?.id,
+                    isSelected: selectedLocation?.id === location.id
+                  }
+                }
+              }).filter(Boolean) as any
+            };
+            
+            // Add clustered source if there are many locations (for performance)
+            if (locations.length > 50) {
+              mapRef.current.addSource('locations-clusters', {
+                type: 'geojson',
+                data: markersGeoJSON,
+                cluster: true,
+                clusterMaxZoom: 14, // Max zoom to cluster points
+                clusterRadius: 50 // Radius of each cluster when clustering points
+              });
+              
+              // Add a layer for the clusters
+              mapRef.current.addLayer({
+                id: 'clusters',
+                type: 'circle',
+                source: 'locations-clusters',
+                filter: ['has', 'point_count'],
+                paint: {
+                  'circle-color': '#FF6B6B',
+                  'circle-radius': [
+                    'step',
+                    ['get', 'point_count'],
+                    20, // radius when point count is less than 100
+                    100, 30, // radius when point count is between 100 and 750
+                    750, 40 // radius when point count is greater than 750
+                  ],
+                  'circle-stroke-width': 2,
+                  'circle-stroke-color': '#fff'
+                }
+              });
+              
+              // Add a layer for the cluster counts
+              mapRef.current.addLayer({
+                id: 'cluster-count',
+                type: 'symbol',
+                source: 'locations-clusters',
+                filter: ['has', 'point_count'],
+                layout: {
+                  'text-field': '{point_count_abbreviated}',
+                  'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+                  'text-size': 12
+                },
+                paint: {
+                  'text-color': '#ffffff'
+                }
+              });
+              
+              // Handle click events on clusters
+              mapRef.current.on('click', 'clusters', (e: any) => {
+                const features = mapRef.current.queryRenderedFeatures(e.point, {
+                  layers: ['clusters']
+                });
+                
+                const clusterId = features[0].properties.cluster_id;
+                mapRef.current.getSource('locations-clusters').getClusterExpansionZoom(
+                  clusterId,
+                  (err: any, zoom: number) => {
+                    if (err) return;
+                    
+                    mapRef.current.flyTo({
+                      center: features[0].geometry.coordinates,
+                      zoom: zoom
+                    });
+                  }
+                );
+              });
+              
+              // Change cursor when hovering over a cluster
+              mapRef.current.on('mouseenter', 'clusters', () => {
+                if (mapRef.current) {
+                  mapRef.current.getCanvas().style.cursor = 'pointer';
+                }
+              });
+              
+              mapRef.current.on('mouseleave', 'clusters', () => {
+                if (mapRef.current) {
+                  mapRef.current.getCanvas().style.cursor = '';
+                }
+              });
+            }
+
+            // Add markers after map loads
+            addMarkers()
+            
+            // Add user location marker if available
+            if (userLocation) {
+              addUserLocationMarker(userLocation)
+            }
+            
+            // Add search radius if available
+            if (searchRadius && userLocation) {
+              addRadiusCircle(userLocation, searchRadius)
+            }
+          })
+          
+          mapRef.current.on('error', (e: any) => {
+            console.error("Mapbox error:", e)
+            setMapError(`Map error: ${e.error ? e.error.message : 'Unknown error'}`)
+          })
+          
+          mapRef.current.on('click', (e: any) => {
+            // Close tooltip when clicking on map
+            setActiveTooltip(null)
+            // Use setTimeout to avoid blocking the UI and throttle clicks
+            const clickHandler = setTimeout(() => {
+              clearTimeout(clickHandler)
+              onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+            }, 100)
+          })
+          
+          // Use the debounced handler for map move events - only on significant changes
+          let lastMoveTime = 0
+          const moveThrottleDelay = 1000 // 1 second throttle
+          
+          mapRef.current.on('moveend', () => {
+            const now = Date.now()
+            if (now - lastMoveTime < moveThrottleDelay) {
+              return // Skip if too soon after last move
+            }
+            lastMoveTime = now
+            
+            // Use requestAnimationFrame to optimize performance
+            requestAnimationFrame(() => {
+              if (!mapRef.current) return
+              const center = mapRef.current.getCenter().toArray().reverse() as [number, number]
+              const zoom = mapRef.current.getZoom()
+              
+              // Only trigger if there's a significant change
+              const currentCenter = mapRef.current.getCenter()
+              const centerChanged = Math.abs(currentCenter.lng - center[1]) > 0.01 || 
+                                    Math.abs(currentCenter.lat - center[0]) > 0.01
+              const zoomChanged = Math.abs(mapRef.current.getZoom() - zoom) > 0.5
+              
+              if (centerChanged || zoomChanged) {
+                debouncedOnMapMove(center, zoom)
+              }
+            })
+          })
+        } else {
+          console.warn("Map container not found or map already initialized")
+        }
+      } catch (error) {
+        console.error('Map initialization error:', error)
+        setMapError('Failed to load map. Please refresh the page.')
+      }
+    }
+    
+    initializeMap()
+    
     // Cleanup function
     return () => {
-      if (mapRef.current) {
+      if (mapRef.current && mapInitializedRef.current) {
         mapRef.current.remove()
         mapRef.current = null
+        mapInitializedRef.current = false
       }
-      if (brandingRef.current && brandingRef.current.parentNode) {
-        brandingRef.current.parentNode.removeChild(brandingRef.current)
-        brandingRef.current = null
-      }
-      mapInitializedRef.current = false
     }
-  }, [webglSupported]) // Empty dependency array to ensure map is only initialized once
+  }, []) // Remove dependencies to prevent constant re-initialization
 
-  // Handle style changes - only run when style actually changes
+  // Update map style
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded) return
-
-    try {
-      mapRef.current.setStyle(`mapbox://styles/mapbox/${currentStyle}`)
-    } catch (error) {
-      console.warn("Error changing map style:", error)
+    if (mapRef.current && mapInitializedRef.current && mapStyle !== currentStyle) {
+      mapRef.current.setStyle(`mapbox://styles/mapbox/${mapStyle}`)
+      setCurrentStyle(mapStyle)
     }
-  }, [currentStyle, mapLoaded])
+  }, [mapStyle, currentStyle])
 
-  // Handle center and zoom changes - only run when they actually change
+  // Update map center and zoom - optimize this to prevent unnecessary refreshes
+  // Use a ref to track the last external update to avoid updating on every interaction
+  const lastExternalUpdateRef = useRef({ center, zoom })
+  
   useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-    if (!isValidCoordinate(center[0], center[1])) return
-
-    // Check if center or zoom has actually changed
-    const centerChanged =
-      !prevCenterRef.current ||
-      Math.abs(prevCenterRef.current[0] - center[0]) > 0.0001 ||
-      Math.abs(prevCenterRef.current[1] - center[1]) > 0.0001
-
-    const zoomChanged = prevZoomRef.current === null || Math.abs(prevZoomRef.current - zoom) > 0.1
-
-    if (centerChanged || zoomChanged) {
-      try {
-        map.flyTo({
-          center: [center[1], center[0]],
+    if (mapRef.current && mapInitializedRef.current) {
+      // Only update if this is genuinely an external change, not from user interaction
+      const prevCenter = lastExternalUpdateRef.current.center
+      const prevZoom = lastExternalUpdateRef.current.zoom
+      
+      const centerChanged = 
+        Math.abs(prevCenter[0] - center[0]) > 0.01 || 
+        Math.abs(prevCenter[1] - center[1]) > 0.01;
+      
+      const zoomChanged = Math.abs(prevZoom - zoom) > 1;
+      
+      if (centerChanged || zoomChanged) {
+        // Make a copy of center to avoid mutation issues
+        const centerCopy: [number, number] = [...center]
+        
+        mapRef.current.flyTo({
+          center: [centerCopy[1], centerCopy[0]], // Mapbox uses [lng, lat] format
           zoom,
           essential: true,
-          duration: 1000,
+          animate: true,
+          duration: 1000
         })
-
-        // Update previous values
-        prevCenterRef.current = center
-        prevZoomRef.current = zoom
-      } catch (error) {
-        console.warn("Error flying to location:", error)
+        
+        // Update the ref to track this external change
+        lastExternalUpdateRef.current = { center, zoom }
       }
     }
-  }, [center[0], center[1], zoom, mapLoaded]) // Only depend on the actual values that matter
+  }, [center, zoom])
 
-  // Function to show location preview popup
-  const showLocationPreview = useCallback((location: Location, lngLat: [number, number]) => {
-    if (!mapRef.current) return
+    // Add and update markers for locations - stabilized with proper dependencies
+  const addMarkers = useCallback(() => {
+    if (!mapRef.current || !mapInitializedRef.current || !mapboxRef.current) return
 
-    // Close any existing popup
-    if (activePopupRef.current) {
-      activePopupRef.current.remove()
-    }
-
-    // Create popup content
-    const popupContent = document.createElement("div")
-    popupContent.className = "marker-preview-container"
-
-    // Create React-like structure for the popup
-    const previewHTML = `
-      <div class="marker-preview-card">
-        <div class="p-3">
-          <div class="flex items-start gap-3">
-            <div class="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
-              <img 
-                src="${getLocationImageUrl(location)}" 
-                alt="${location.name}"
-                class="h-full w-full object-cover"
-              />
-            </div>
-            <div class="flex-1 min-w-0">
-              <h4 class="font-medium text-sm line-clamp-1">${location.name}</h4>
-              ${
-                location.address
-                  ? `
-                <p class="text-xs text-gray-500 line-clamp-1 mt-1">
-                  ${
-                    typeof location.address === "string"
-                      ? location.address
-                      : Object.values(location.address).filter(Boolean).join(", ")
-                  }
-                </p>
-              `
-                  : ""
-              }
-              ${
-                location.categories && location.categories.length > 0
-                  ? `
-                <div class="flex flex-wrap gap-1 mt-1.5">
-                  ${location.categories
-                    .slice(0, 2)
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    .map((category, idx) => {
-                      const catColor = getCategoryColor(category)
-                      const name = typeof category === "string" ? category : category?.name || "Category"
-                      return `
-                      <span 
-                        class="px-1.5 py-0 text-[10px] font-medium rounded-full inline-block"
-                        style="background-color: ${catColor}10; color: ${catColor}; border: 1px solid ${catColor}30;"
-                      >
-                        ${name}
-                      </span>
-                    `
-                    })
-                    .join("")}
-                </div>
-              `
-                  : ""
-              }
-              <button 
-                class="mt-2 h-7 text-xs w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white rounded-md px-2 py-1"
-                onclick="document.dispatchEvent(new CustomEvent('viewLocationDetails', {detail: '${location.id}'}))"
-              >
-                View Details
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    `
-
-    popupContent.innerHTML = previewHTML
-
-    // Create and show popup
-    const popup = new mapboxgl.Popup({
-      closeButton: true,
-      closeOnClick: false,
-      maxWidth: "300px",
-      offset: [0, -15],
-      className: "marker-click-popup",
+    // Clear existing markers
+    markersRef.current.forEach((marker: MapboxMarker) => {
+      marker.marker.remove()
     })
-      .setLngLat(lngLat)
-      .setDOMContent(popupContent)
-      .addTo(mapRef.current)
+    markersRef.current.clear()
 
-    // Store reference to active popup
-    activePopupRef.current = popup
-
-    // Set clicked location
-    setClickedLocation(location)
-
-    // Add event listener for popup close
-    popup.on("close", () => {
-      activePopupRef.current = null
-      setClickedLocation(null)
-    })
-  }, [])
-
-  // Update markers when locations change - use memoized locationIds to detect actual changes
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-
-    // Skip if locations haven't actually changed
-    if (prevLocationsRef.current === locations && markersInitializedRef.current) return
-
-    // Remove existing markers
-    markersRef.current.forEach(({ marker }) => marker.remove())
-    markersRef.current = []
-
-    console.log(`Updating ${locations.length} location markers`)
-
-    // Add new markers for each location
+    // Add new markers
     locations.forEach((location) => {
-      try {
-        // Get coordinates
-        const coords = getCoordinates(location)
-        if (!coords) return // Skip if no valid coordinates
+      const coords = getCoordinates(location)
+      if (!coords) return
 
-        const [lat, lng] = coords
-
-        // Create marker element
-        const el = document.createElement("div")
-
-        // Get primary category and its color
-        const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
-        const color = getCategoryColor(primaryCategory) || "#888"
-
-        // Fixed marker size regardless of zoom level
-        const isSelected = selectedLocation && location.id === selectedLocation.id
-        const baseMarkerSize = isSelected ? 40 : 32 // Slightly larger for selected marker
-
-        // Create marker container with absolute positioning
-        el.className = "mapboxgl-marker-container"
-        Object.assign(el.style, {
-          position: "absolute",
-          transform: "translate(-50%, -50%)",
-          width: `${baseMarkerSize}px`,
-          height: `${baseMarkerSize}px`,
-          cursor: "pointer",
-          zIndex: isSelected ? "10" : "1",
-          touchAction: "none", // Prevent default touch actions for better mobile handling
-          WebkitTapHighlightColor: "transparent", // Remove tap highlight on iOS
-        })
-
-        // Create the actual marker element with improved design
-        const markerDot = document.createElement("div")
-        markerDot.className = "mapboxgl-marker-dot"
-        Object.assign(markerDot.style, {
-          width: "100%",
-          height: "100%",
-          backgroundColor: color,
-          borderRadius: "50%",
-          border: isSelected ? "3px solid #FF6B6B" : "3px solid white",
-          boxShadow: isSelected
-            ? "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 8px rgba(0,0,0,0.4)"
-            : "0 3px 6px rgba(0,0,0,0.3)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontSize: `${baseMarkerSize * 0.4}px`,
-          fontWeight: "bold",
-          transition: "transform 0.2s ease, box-shadow 0.2s ease",
-          transformOrigin: "center center",
-          position: "relative",
-        })
-
-        // Add location image to marker for visual enhancement
-        const markerImage = document.createElement("div")
-        markerImage.className = "mapboxgl-marker-image"
-        Object.assign(markerImage.style, {
-          width: "100%",
-          height: "100%",
-          borderRadius: "50%",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundImage: `url(${getLocationImageUrl(location)})`,
-          opacity: "0.8",
-          position: "absolute",
-          top: "0",
-          left: "0",
-        })
-
-        // Add category overlay
-        const categoryOverlay = document.createElement("div")
-        categoryOverlay.className = "mapboxgl-marker-category"
-        Object.assign(categoryOverlay.style, {
-          width: "100%",
-          height: "100%",
-          borderRadius: "50%",
-          backgroundColor: color,
-          opacity: "0.6",
-          position: "absolute",
-          top: "0",
-          left: "0",
-        })
-
-        // Add icon or initial
-        const markerIcon = document.createElement("div")
-        markerIcon.className = "mapboxgl-marker-icon"
-        Object.assign(markerIcon.style, {
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "white",
-          fontSize: `${baseMarkerSize * 0.4}px`,
-          fontWeight: "bold",
-          position: "relative",
-          zIndex: "1",
-          textShadow: "0 1px 2px rgba(0,0,0,0.3)",
-        })
-
-        // Get first letter of category name for marker label
-        let categoryLabel = "C"
-        if (primaryCategory) {
-          if (typeof primaryCategory === "string") {
-            categoryLabel = primaryCategory.charAt(0)
-          } else if (primaryCategory.name) {
-            categoryLabel = primaryCategory.name.charAt(0)
-          }
-        }
-
-        markerIcon.textContent = categoryLabel
-
-        // Add elements to marker in correct order
-        markerDot.appendChild(markerImage)
-        markerDot.appendChild(categoryOverlay)
-        markerDot.appendChild(markerIcon)
-        el.appendChild(markerDot)
-
-        // Add pulse effect
-        const pulse = document.createElement("div")
-        pulse.className = "mapboxgl-marker-pulse"
-        Object.assign(pulse.style, {
-          position: "absolute",
-          inset: "0",
-          borderRadius: "50%",
-          backgroundColor: `${color}20`,
-          animation: "pulse 2s infinite",
-          zIndex: "-1",
-        })
-        markerDot.appendChild(pulse)
-
-        // Add click handler with improved touch handling for Safari
-        const handleMarkerClick = (e: Event) => {
-          e.stopPropagation()
-          e.preventDefault()
-
-          // Show location preview popup
-          showLocationPreview(location, [lng, lat])
-
-          // Highlight the marker
-          markerDot.style.transform = "scale(1.15)"
-          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 12px rgba(0,0,0,0.5)"
-          el.style.zIndex = "10"
-
-          // Add a pulse animation to the marker
-          const pulseEffect = document.createElement("div")
-          pulseEffect.className = "marker-pulse-effect"
-          Object.assign(pulseEffect.style, {
-            position: "absolute",
-            inset: "0",
-            borderRadius: "50%",
-            backgroundColor: `${color}20`,
-            animation: "marker-pulse 1.5s infinite",
-            zIndex: "-1",
-          })
-
-          // Remove any existing pulse effects
-          const existingPulse = markerDot.querySelector(".marker-pulse-effect")
-          if (existingPulse) {
-            markerDot.removeChild(existingPulse)
-          }
-
-          markerDot.appendChild(pulseEffect)
-        }
-
-        // Add multiple event listeners for better cross-browser compatibility
-        el.addEventListener("click", handleMarkerClick, { passive: false })
-
-        // Add specific touch handlers for mobile Safari
-        if (isMobile || isSafari) {
-          el.addEventListener(
-            "touchstart",
-            (e) => {
-              e.stopPropagation()
-            },
-            { passive: false },
-          )
-
-          el.addEventListener("touchend", handleMarkerClick, { passive: false })
-        }
-
-        // Create marker
-        const marker = new mapboxgl.Marker({
-          element: el,
-          anchor: "center",
-        })
-          .setLngLat([lng, lat])
-          .addTo(map)
-
-        // Store marker reference with its element
-        markersRef.current.push({ marker, location, element: el })
-      } catch (error) {
-        console.warn(`Error adding marker for location "${location.name}":`, error)
+      // Create a simple circular marker
+      const el = document.createElement('div')
+      el.className = 'google-maps-marker'
+      el.setAttribute('data-location-id', location.id)
+      
+      // Check if this is the selected location
+      const isSelected = selectedLocation?.id === location.id
+      
+      // Apply styles based on selection
+      const locationImage = getLocationImageUrl(location)
+      
+      // Check if this marker should show tooltip
+      const showTooltip = activeTooltip?.location.id === location.id
+      
+      // Add tooltip class to marker if showing tooltip
+      if (showTooltip) {
+        el.classList.add('has-tooltip')
       }
-    })
-
-    console.log(`Added ${markersRef.current.length} markers to map`)
-
-    // Update refs to track changes
-    prevLocationsRef.current = locations
-    markersInitializedRef.current = true
-  }, [locationIds, mapLoaded, isMobile, selectedLocationId, isSafari, showLocationPreview]) // Only depend on the memoized values
-
-  // Update selected marker state - only run when selected location changes
-  useEffect(() => {
-    if (!mapLoaded || prevSelectedLocationRef.current?.id === selectedLocation?.id) return
-
-    markersRef.current.forEach(({ element, location }) => {
-      const isSelected = selectedLocation && location.id === selectedLocation.id
-      const markerDot = element.querySelector(".mapboxgl-marker-dot") as HTMLElement
-
-      if (markerDot) {
-        if (isSelected) {
-          markerDot.style.border = "3px solid #FF6B6B"
-          markerDot.style.boxShadow = "0 0 0 3px rgba(255, 107, 107, 0.7), 0 4px 12px rgba(0,0,0,0.5)"
-          element.style.zIndex = "10"
-
-          // Make category overlay more transparent for selected marker
-          const categoryOverlay = markerDot.querySelector(".mapboxgl-marker-category") as HTMLElement
-          if (categoryOverlay) {
-            categoryOverlay.style.opacity = "0.4"
-          }
-
-          // Make image more visible for selected marker
-          const markerImage = markerDot.querySelector(".mapboxgl-marker-image") as HTMLElement
-          if (markerImage) {
-            markerImage.style.opacity = "0.9"
-          }
-        } else {
-          markerDot.style.border = "3px solid white"
-          markerDot.style.boxShadow = "0 3px 6px rgba(0,0,0,0.3)"
-          element.style.zIndex = "1"
-
-          // Reset opacity for non-selected markers
-          const categoryOverlay = markerDot.querySelector(".mapboxgl-marker-category") as HTMLElement
-          if (categoryOverlay) {
-            categoryOverlay.style.opacity = "0.6"
-          }
-
-          const markerImage = markerDot.querySelector(".mapboxgl-marker-image") as HTMLElement
-          if (markerImage) {
-            markerImage.style.opacity = "0.8"
-          }
-        }
-      }
-    })
-
-    prevSelectedLocationRef.current = selectedLocation ?? null
-  }, [selectedLocationId, mapLoaded])
-
-  // Add user location marker - only run when user location changes
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded || !userLocation) return
-
-    const [lat, lng] = userLocation
-    if (!isValidCoordinate(lat, lng)) return
-
-    try {
-      // Remove existing user marker
-      userMarkerRef.current?.remove()
-
-      // Create user marker element
-      const el = document.createElement("div")
-      Object.assign(el.style, {
-        width: "24px",
-        height: "24px",
-        borderRadius: "50%",
-        backgroundColor: "#4285F4",
-        border: "3px solid white",
-        boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-        position: "absolute",
-        transform: "translate(-50%, -50%)",
-      })
-
-      // Add pulse effect
-      const pulse = document.createElement("div")
-      Object.assign(pulse.style, {
-        position: "absolute",
-        inset: "0",
-        borderRadius: "50%",
-        backgroundColor: "rgba(66,133,244,0.2)",
-        animation: "pulse 2s infinite",
-        zIndex: "-1",
-      })
-      el.appendChild(pulse)
-
-      // Create popup
-      const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(
-        `<div class="p-2"><p class="font-medium">Your Location</p></div>`,
-      )
-
-      // Add marker to map
-      userMarkerRef.current = new mapboxgl.Marker({
-        element: el,
-        anchor: "center",
-      })
-        .setLngLat([lng, lat])
-        .setPopup(popup)
-        .addTo(map)
-    } catch (error) {
-      console.warn("Error adding user location marker:", error)
-    }
-  }, [userLocation?.[0], userLocation?.[1], mapLoaded]) // Only depend on the actual coordinates
-
-  // Add search radius circle - only run when search radius or center changes
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-
-    try {
-      // Remove existing circle
-      if (circleLayerId.current) {
-        if (map.getLayer(circleLayerId.current)) {
-          map.removeLayer(circleLayerId.current)
-        }
-        if (map.getSource(circleLayerId.current)) {
-          map.removeSource(circleLayerId.current)
-        }
-        circleLayerId.current = null
-      }
-
-      // Add new circle if search radius is provided
-      if (searchRadius && isValidCoordinate(center[0], center[1])) {
-        const id = `radius-${Date.now()}`
-        circleLayerId.current = id
-
-        map.addSource(id, {
-          type: "geojson",
-          data: {
-            type: "Feature",
-            geometry: {
-              type: "Point",
-              coordinates: [center[1], center[0]],
-            },
-            properties: {},
-          },
-        })
-
-        map.addLayer({
-          id,
-          type: "circle",
-          source: id,
-          paint: {
-            "circle-radius": {
-              stops: [
-                [0, 0],
-                [20, (searchRadius * 1000) / 0.075],
-              ],
-              base: 2,
-            },
-            "circle-color": "#4ECDC4",
-            "circle-opacity": 0.1,
-            "circle-stroke-width": 2,
-            "circle-stroke-color": "#4ECDC4",
-            "circle-stroke-opacity": 0.7,
-          },
-        })
-      }
-    } catch (error) {
-      console.warn("Error updating search radius circle:", error)
-    }
-  }, [searchRadius, center[0], center[1], mapLoaded])
-
-  // Add branding overlay - only run once when map is loaded
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded || brandingRef.current) return
-
-    try {
-      // Create branding element
-      const box = document.createElement("div")
-      box.className =
-        "absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 flex items-center z-10"
-      box.innerHTML = `
-        <div class="w-6 h-6 rounded-full bg-[#FF6B6B] flex items-center justify-center mr-2">
-          <span class="text-white font-bold text-xs">GG</span>
+      
+      // Create a simple circular marker with just the image and white background
+      el.innerHTML = `
+        <div class="marker-container ${isSelected ? 'selected' : ''}">
+          <div class="marker-image-only">
+            <img 
+              src="${locationImage}" 
+              alt="${location.name}"
+              style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;"
+              onerror="this.style.display='none'; this.parentElement.classList.add('fallback-icon');"
+            />
+          </div>
+          ${isSelected ? '<div class="marker-pulse"></div>' : ''}
+          ${showTooltip ? `
+            <div class="marker-tooltip">
+              <div class="tooltip-content">
+                <div class="tooltip-image">
+                  <img src="${locationImage}" alt="${location.name}" />
+                </div>
+                <div class="tooltip-info">
+                  <h3>${location.name}</h3>
+                  ${location.address ? `
+                    <div class="tooltip-address">
+                      <span class="address-icon">📍</span>
+                      <span>${typeof location.address === 'string' ? location.address : location.address.city || 'Address not available'}</span>
+                    </div>
+                  ` : ''}
+                  ${location.averageRating ? `
+                    <div class="tooltip-rating">
+                      <span class="rating-star">⭐</span>
+                      <span>${location.averageRating.toFixed(1)}</span>
+                    </div>
+                  ` : ''}
+                  <button class="tooltip-button" onclick="window.handleLocationDetailClick && window.handleLocationDetailClick('${location.id}')">
+                    View Details
+                  </button>
+                </div>
+                <div class="tooltip-arrow"></div>
+              </div>
+            </div>
+          ` : ''}
         </div>
-        <span class="text-sm font-medium text-gray-800">Grounded Gems</span>
       `
 
-      // Add to map container
-      map.getContainer().appendChild(box)
-      brandingRef.current = box
-    } catch (error) {
-      console.warn("Error adding branding overlay:", error)
-    }
-  }, [mapLoaded])
+      // Set z-index for selected markers
+      if (isSelected) {
+        el.style.zIndex = '10'
+      } else {
+        el.style.zIndex = '1'
+      }
 
-  // Listen for custom event to handle "View Details" button click in popup
+      // Add event listener for marker click
+      const handleMarkerClick = (e: Event) => {
+        e.stopPropagation()
+        
+        // Show tooltip or toggle if already showing for this location
+        if (activeTooltip?.location.id === location.id) {
+          setActiveTooltip(null)
+        } else {
+          setActiveTooltip({
+            location,
+            position: { x: 0, y: 0 } // Position will be handled by CSS
+          })
+        }
+        
+        // Also trigger onMarkerClick immediately for responsiveness
+        onMarkerClick(location)
+      }
+      
+      el.addEventListener('click', handleMarkerClick)
+
+      // Create and store the marker
+      const marker = new mapboxRef.current.Marker(el)
+        .setLngLat([coords[1], coords[0]])
+        .addTo(mapRef.current)
+
+      markersRef.current.set(location.id, { 
+        marker, 
+        element: el,
+        cleanup: () => {
+          el.removeEventListener('click', handleMarkerClick)
+        }
+      })
+    })
+
+    // Set up global handler for view details button once
+    window.handleLocationDetailClick = (locationId: string) => {
+      const loc = locations.find(l => l.id === locationId)
+      if (loc) {
+        // Close tooltip
+        setActiveTooltip(null)
+        
+        // Trigger the same view details functionality as location list
+        onMarkerClick(loc)
+        
+        // Create a custom event to trigger opening the location detail modal
+        const event = new CustomEvent('openLocationDetail', {
+          detail: { location: loc }
+        })
+        document.dispatchEvent(event)
+      }
+    }
+  }, [locations, selectedLocation?.id, activeTooltip?.location.id, onMarkerClick])
+
+  // Update markers when locations or selected location changes
+  useEffect(() => {
+    // Prevent unnecessary updates by checking if data actually changed
+    const locationsLength = locations.length
+    const lastLocationsLength = lastLocationsRef.current.length
+    const selectedLocationId = selectedLocation?.id
+    const lastSelectedLocationId = lastSelectedLocationRef.current?.id
+    const activeTooltipLocationId = activeTooltip?.location.id
+    
+    // Only update if locations count changed, selected location changed, or tooltip changed
+    if (locationsLength === lastLocationsLength && 
+        selectedLocationId === lastSelectedLocationId && 
+        !activeTooltipLocationId) {
+      return
+    }
+    
+    // Update refs
+    lastLocationsRef.current = locations
+    lastSelectedLocationRef.current = selectedLocation || null
+    
+    if (mapRef.current && mapInitializedRef.current) {
+      addMarkers()
+    }
+    
+    // Cleanup event listeners when component unmounts
+    return () => {
+      markersRef.current.forEach(({ cleanup }: { cleanup: () => void }) => cleanup())
+    }
+  }, [locations.length, selectedLocation?.id, activeTooltip?.location.id, addMarkers])
+
+  // Add user location marker
+  const addUserLocationMarker = useCallback((coords: [number, number]) => {
+    if (!mapRef.current || !mapInitializedRef.current || !mapboxRef.current) return
+    
+    // Remove existing user marker
+    if (userMarkerRef.current) {
+      userMarkerRef.current.remove()
+      userMarkerRef.current = null
+    }
+    
+    // Create user marker element
+    const el = document.createElement('div')
+    el.className = 'user-location-marker'
+    el.style.width = '16px'
+    el.style.height = '16px'
+    el.style.borderRadius = '50%'
+    el.style.backgroundColor = '#4338ca' 
+    el.style.border = '2px solid #ffffff'
+    el.style.boxShadow = '0 0 0 2px rgba(67, 56, 202, 0.5)'
+    el.style.position = 'absolute'
+    el.style.transform = 'translate(-50%, -50%)'
+    el.style.zIndex = '10'
+    
+    // Add pulse effect
+    const pulse = document.createElement('div')
+    pulse.className = 'user-location-pulse'
+    pulse.style.position = 'absolute'
+    pulse.style.width = '32px'
+    pulse.style.height = '32px'
+    pulse.style.borderRadius = '50%'
+    pulse.style.backgroundColor = 'rgba(67, 56, 202, 0.15)'
+    pulse.style.border = '1px solid rgba(67, 56, 202, 0.3)'
+    pulse.style.animation = 'pulse 2s infinite'
+    pulse.style.transform = 'translate(-25%, -25%)'
+    el.appendChild(pulse)
+    
+    // Create and store the marker
+    userMarkerRef.current = new mapboxRef.current.Marker(el)
+      .setLngLat([coords[1], coords[0]])
+      .addTo(mapRef.current)
+
+    // Add accuracy circle if supported
+    if (navigator.geolocation) {
+      try {
+        // Add a circle showing approximate location accuracy
+        if (mapRef.current.getSource('accuracy-circle')) {
+          mapRef.current.removeLayer('accuracy-circle');
+          mapRef.current.removeSource('accuracy-circle');
+        }
+        
+        // Add a subtle accuracy circle (100m radius)
+        const accuracyGeoJSON = {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'Point',
+              coordinates: [coords[1], coords[0]]
+            },
+            properties: {
+              radius: 100 // meters
+            }
+          }]
+        };
+        
+        if (mapRef.current.loaded()) {
+          mapRef.current.addSource('accuracy-circle', {
+            type: 'geojson',
+            data: accuracyGeoJSON
+          });
+          
+          mapRef.current.addLayer({
+            id: 'accuracy-circle',
+            source: 'accuracy-circle',
+            type: 'circle',
+            paint: {
+              'circle-radius': ['get', 'radius'],
+              'circle-color': 'rgba(67, 56, 202, 0.1)',
+              'circle-stroke-width': 1,
+              'circle-stroke-color': 'rgba(67, 56, 202, 0.3)',
+              'circle-pitch-alignment': 'map'
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Error adding accuracy circle:", error);
+      }
+    }
+  }, [])
+
+  // Update user location marker
+  useEffect(() => {
+    if (mapRef.current && mapInitializedRef.current && userLocation) {
+      addUserLocationMarker(userLocation)
+    }
+  }, [userLocation, addUserLocationMarker])
+
+  // Add radius circle
+  const addRadiusCircle = useCallback((center: [number, number], radiusKm: number) => {
+    if (!mapRef.current || !mapInitializedRef.current || !mapboxRef.current) return
+    
+    // Remove existing circle
+    if (radiusCircleRef.current) {
+      if (mapRef.current.getLayer('radius-circle')) {
+        mapRef.current.removeLayer('radius-circle')
+      }
+      if (mapRef.current.getSource('radius-circle')) {
+        mapRef.current.removeSource('radius-circle')
+      }
+      radiusCircleRef.current = null
+    }
+    
+    // Create a circle
+    const createGeoJSONCircle = (center: [number, number], radiusInKm: number) => {
+      const points = 64
+      const coords = {
+        latitude: center[0],
+        longitude: center[1]
+      }
+      
+      const km = radiusInKm
+      const ret = []
+      const distanceX = km / (111.32 * Math.cos((coords.latitude * Math.PI) / 180))
+      const distanceY = km / 110.574
+      
+      let theta, x, y
+      for (let i = 0; i < points; i++) {
+        theta = (i / points) * (2 * Math.PI)
+        x = distanceX * Math.cos(theta)
+        y = distanceY * Math.sin(theta)
+        
+        ret.push([coords.longitude + x, coords.latitude + y])
+      }
+      ret.push(ret[0])
+      
+      return {
+        type: 'FeatureCollection',
+        features: [{
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [ret]
+          }
+        }]
+      }
+    }
+    
+    // Wait for map to be loaded
+    if (mapRef.current.loaded()) {
+      const circleGeoJSON = createGeoJSONCircle([center[0], center[1]], radiusKm)
+      
+      // Add the circle to the map
+      if (!mapRef.current.getSource('radius-circle')) {
+        mapRef.current.addSource('radius-circle', {
+          type: 'geojson',
+          data: circleGeoJSON
+        })
+      } else {
+        mapRef.current.getSource('radius-circle').setData(circleGeoJSON)
+      }
+      
+      // Add circle layer if it doesn't exist
+      if (!mapRef.current.getLayer('radius-circle')) {
+        mapRef.current.addLayer({
+          id: 'radius-circle',
+          type: 'fill',
+          source: 'radius-circle',
+          layout: {},
+          paint: {
+            'fill-color': '#4338ca',
+            'fill-opacity': 0.1,
+            'fill-outline-color': '#4338ca'
+          }
+        })
+      }
+      
+      radiusCircleRef.current = true
+    } else {
+      // If map is not loaded yet, wait for it
+      mapRef.current.on('load', () => {
+        addRadiusCircle(center, radiusKm)
+      })
+    }
+  }, [])
+
+  // Update radius circle
+  useEffect(() => {
+    if (mapRef.current && mapInitializedRef.current && userLocation && searchRadius) {
+      addRadiusCircle(userLocation, searchRadius)
+    }
+  }, [userLocation, searchRadius, addRadiusCircle])
+
+  // Listen for view details events
   useEffect(() => {
     const handleViewDetails = (e: CustomEvent) => {
-      const locationId = e.detail
-      const location = locations.find((loc) => loc.id === locationId)
+      const { locationId } = e.detail
+      const location = locations.find(loc => loc.id === locationId)
       if (location) {
-        // Close popup
-        if (activePopupRef.current) {
-          activePopupRef.current.remove()
-          activePopupRef.current = null
-        }
-
-        // Call onMarkerClick to show details
         onMarkerClick(location)
       }
     }
-
-    document.addEventListener("viewLocationDetails", handleViewDetails as EventListener)
-
+    
+    document.addEventListener('viewLocationDetails', handleViewDetails as EventListener)
     return () => {
-      document.removeEventListener("viewLocationDetails", handleViewDetails as EventListener)
+      document.removeEventListener('viewLocationDetails', handleViewDetails as EventListener)
     }
   }, [locations, onMarkerClick])
 
-  // Memoize callback functions to prevent recreation on each render
-  const toggleStyles = useCallback(() => setShowStyles((s) => !s), [])
-
-  const selectMapStyle = useCallback(
-    (styleId: string) => {
-      const map = mapRef.current
-      if (!map || !mapLoaded) return
-
-      try {
-        setCurrentStyle(styleId)
-        map.setStyle(`mapbox://styles/mapbox/${styleId}`)
-        setShowStyles(false)
-      } catch (error) {
-        console.warn("Error changing map style:", error)
+  // Add map controls when map is initialized
+  useEffect(() => {
+    if (mapRef.current && mapInitializedRef.current && mapboxRef.current) {
+      // Add navigation controls (zoom in/out buttons)
+      if (!mapRef.current.hasControl('NavigationControl')) {
+        const navigationControl = new mapboxRef.current.NavigationControl({
+          showCompass: true,
+          showZoom: true,
+          visualizePitch: false
+        });
+        mapRef.current.addControl(navigationControl, 'top-right');
       }
-    },
-    [mapLoaded],
-  )
-
-  // Toggle legend
-  const toggleLegend = useCallback(() => setShowLegend((prev) => !prev), [])
-
-  // Handle mini preview actions
-  const handleViewDetails = useCallback(() => {
-    if (previewLocation) {
-      onMarkerClick(previewLocation)
-      setShowMiniPreview(false)
-      setPreviewLocation(null)
+      
+      // Add scale control
+      if (!mapRef.current.hasControl('ScaleControl')) {
+        const scaleControl = new mapboxRef.current.ScaleControl({
+          maxWidth: 100,
+          unit: 'metric'
+        });
+        mapRef.current.addControl(scaleControl, 'bottom-left');
+      }
+      
+      // Add fullscreen control
+      if (!mapRef.current.hasControl('FullscreenControl')) {
+        const fullscreenControl = new mapboxRef.current.FullscreenControl();
+        mapRef.current.addControl(fullscreenControl, 'top-right');
+      }
     }
-  }, [previewLocation, onMarkerClick])
+  }, [mapLoaded]);
 
-  const closeMiniPreview = useCallback(() => {
-    setShowMiniPreview(false)
-    setPreviewLocation(null)
-  }, [])
+  // Style for map container
+  const containerStyle = {
+    position: 'relative' as const,
+    width: '100%',
+    height: '100%',
+    borderRadius: '0.5rem',
+    overflow: 'hidden',
+    pointerEvents: 'auto' as const,
+    display: 'block', // Ensure the container is displayed
+    minHeight: '400px' // Ensure minimum height for visibility
+  }
 
-  // Fly to user location
-  const flyToUserLocation = useCallback(() => {
-    if (userLocation && mapRef.current) {
-      mapRef.current.flyTo({
-        center: [userLocation[1], userLocation[0]],
-        zoom: 15,
-        essential: true,
-      })
-    }
-  }, [userLocation])
-
-  // Memoize the categories derived from locations to prevent recalculation
-  const categories = useMemo(() => {
-    return locations.reduce(
-      (acc, location) => {
-        if (location.categories && Array.isArray(location.categories)) {
-          location.categories.forEach((category) => {
-            const id = typeof category === "string" ? category : category.id
-            const name = typeof category === "string" ? category : category.name || "Category"
-            const color = getCategoryColor(category)
-
-            if (id && !acc.some((c) => c.id === id)) {
-              acc.push({ id, name, color })
-            }
-          })
+  // Add keyboard navigation for accessibility
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!mapRef.current || !mapInitializedRef.current) return;
+      
+      // Only handle events when the map container is focused
+      if (document.activeElement !== mapContainerRef.current) return;
+      
+      const step = e.shiftKey ? 50 : 10; // Larger steps with shift key
+      const zoom = mapRef.current.getZoom();
+      
+      switch (e.key) {
+        case 'ArrowUp':
+          e.preventDefault();
+          mapRef.current.panBy([0, -step]);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          mapRef.current.panBy([0, step]);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          mapRef.current.panBy([-step, 0]);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          mapRef.current.panBy([step, 0]);
+          break;
+        case '+':
+        case '=':
+          e.preventDefault();
+          mapRef.current.setZoom(zoom + 0.5);
+          break;
+        case '-':
+        case '_':
+          e.preventDefault();
+          mapRef.current.setZoom(zoom - 0.5);
+          break;
+        case 'Home':
+          e.preventDefault();
+          if (userLocation) {
+            mapRef.current.flyTo({
+              center: [userLocation[1], userLocation[0]],
+              zoom: 14,
+              essential: true
+            });
+          }
+          break;
+      }
+    };
+    
+    // Make the map container focusable
+    mapContainerRef.current.tabIndex = 0;
+    
+    // Add focus indicator styles
+    mapContainerRef.current.addEventListener('focus', () => {
+      if (mapContainerRef.current) {
+        mapContainerRef.current.style.outline = '2px solid #4338ca';
+      }
+    });
+    
+    mapContainerRef.current.addEventListener('blur', () => {
+      if (mapContainerRef.current) {
+        mapContainerRef.current.style.outline = 'none';
+      }
+    });
+    
+    // Add keyboard event listener
+    mapContainerRef.current.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      if (mapContainerRef.current) {
+        mapContainerRef.current.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+  }, [userLocation]);
+  
+  // Add performance optimizations
+  useEffect(() => {
+    if (!mapRef.current || !mapInitializedRef.current) return;
+    
+    // Function to handle visibility changes
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Pause animations and non-essential operations when tab is not visible
+        console.log('Map: page is hidden, optimizing performance');
+      } else {
+        // Resume normal operation when tab becomes visible again
+        console.log('Map: page is visible, resuming normal operation');
+        
+        // Force a repaint to ensure map is displayed correctly
+        if (mapRef.current) {
+          mapRef.current.resize();
         }
-        return acc
-      },
-      [] as { id: string; name: string; color: string }[],
-    )
-  }, [locationIds])
+      }
+    };
+    
+    // Add visibility change listener
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [mapLoaded]);
 
-  // No WebGL support fallback
-  if (!webglSupported) {
+
+
+  if (mapError) {
     return (
-      <div className={cn("flex items-center justify-center bg-gray-100 h-full", className)}>
-        <div className="text-center p-6">
-          <div className="w-12 h-12 rounded-full bg-[#FF6B6B] mx-auto mb-4 flex items-center justify-center">
-            <Info className="h-6 w-6 text-white" />
+      <div className={cn("map-container relative", className)} style={containerStyle}>
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+          <div className="text-center p-4">
+            <X className="h-10 w-10 text-red-500 mx-auto mb-2" />
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Map Error</h3>
+            <p className="text-gray-600 dark:text-gray-400 mt-1">{mapError}</p>
+            <Button onClick={() => window.location.reload()} className="mt-4">
+              Reload Page
+            </Button>
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">WebGL Not Supported</h3>
-          <p className="text-gray-600 max-w-md">Your browser does not support WebGL, which is required for maps.</p>
-        </div>
+        </div>      
       </div>
     )
   }
 
+  // Note: getLocationImageUrl is defined earlier in the file and used in marker HTML templates
+
   return (
-    <div className={cn("relative h-full w-full", className)}>
-      <div ref={containerRef} className="h-full w-full map-container" />
-
-
-
-      {/* Mini location preview for mobile */}
-      {showMiniPreview && previewLocation && (
-        <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-xl shadow-lg z-30 p-4 animate-slide-up">
-          <div className="absolute top-2 right-2">
-            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-full" onClick={closeMiniPreview}>
-              <X className="h-4 w-4" />
-            </Button>
+    <div className={cn("map-container relative", className)} style={containerStyle}>
+      {!mapLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+          <div className="text-center">
+            <MapIcon className="h-10 w-10 text-gray-400 mx-auto mb-2 animate-pulse" />
+            <p className="text-gray-600 dark:text-gray-400">Loading map...</p>
           </div>
-
-          <div className="flex items-start mb-3">
-            <div className="w-16 h-16 rounded-lg bg-gray-100 relative flex-shrink-0 overflow-hidden">
-              {previewLocation.imageUrl || previewLocation.featuredImage ? (
-                <div className="w-full h-full relative">
-                  <Image
-                    src={getLocationImageUrl(previewLocation) || "/placeholder.svg"}
-                    alt={previewLocation.name}
-                    width={64}
-                    height={64}
-                    className="object-cover"
-                    priority
-                  />
-                </div>
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <MapPin className="h-6 w-6 text-gray-400" />
-                </div>
-              )}
-            </div>
-
-            <div className="ml-3 flex-1">
-              <h3 className="font-medium text-gray-900 text-lg">{previewLocation.name}</h3>
-
-              {/* Address */}
-              {previewLocation.address && (
-                <div className="flex items-center mt-1">
-                  <MapPin className="h-3.5 w-3.5 text-gray-500 mr-1 flex-shrink-0" />
-                  <p className="text-sm text-gray-500 truncate">
-                    {typeof previewLocation.address === "string"
-                      ? previewLocation.address
-                      : Object.values(previewLocation.address).filter(Boolean).join(", ")}
-                  </p>
-                </div>
-              )}
-
-              {/* Categories */}
-              {previewLocation.categories && previewLocation.categories.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {previewLocation.categories.slice(0, 2).map((category, idx) => {
-                    const color = getCategoryColor(category)
-                    const name = typeof category === "string" ? category : category?.name || "Category"
-
-                    return (
-                      <Badge
-                        key={idx}
-                        variant="outline"
-                        className="px-2 py-0.5 h-5 text-[10px] font-medium rounded-full"
-                        style={{
-                          backgroundColor: `${color}10`,
-                          color: color,
-                          borderColor: `${color}30`,
-                        }}
-                      >
-                        {name}
-                      </Badge>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <Button className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90" onClick={handleViewDetails}>
-            View Details
-          </Button>
         </div>
       )}
-
-      {/* No locations message */}
-      {locations.length === 0 && mapLoaded && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-4 z-10 text-center">
-          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-            <MapPin className="h-6 w-6 text-gray-400" />
-          </div>
-          <p className="text-gray-700 font-medium">No locations found</p>
-          <p className="text-gray-500 text-sm mt-1">Adjust your filters or search</p>
-        </div>
+      
+      <div ref={mapContainerRef} className="h-full w-full" />
+      
+      {userLocation && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                className="absolute bottom-4 right-4 z-10 bg-white text-gray-800 shadow-md hover:bg-gray-100"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (mapRef.current && userLocation) {
+                    mapRef.current.flyTo({
+                      center: [userLocation[1], userLocation[0]],
+                      zoom: 14,
+                      essential: true
+                    })
+                  }
+                }}
+              >
+                <Navigation className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Go to my location</p>
+            </TooltipContent>
+          </Tooltip>
+                </TooltipProvider>
       )}
+      
 
-      {/* Attribution */}
-      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-2 text-xs text-gray-600 z-10 md:bottom-4 md:right-4 bottom-24 right-2">
-        ©{" "}
-        <a
-          href="https://www.mapbox.com/about/maps/"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[#4ECDC4] hover:underline"
-        >
-          Mapbox
-        </a>{" "}
-        | ©{" "}
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[#4ECDC4] hover:underline"
-        >
-          OpenStreetMap
-        </a>
+
       </div>
-
-      {/* Global styles for animations */}
-      <style jsx global>{`
-        @keyframes pulse { 0% {transform:scale(0.95);opacity:1} 70% {transform:scale(1.3);opacity:0} 100% {transform:scale(0.95);opacity:0} }
-        @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out forwards;
-        }
-        
-        .mapboxgl-popup-content {
-          border-radius: 12px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-          padding: 0;
-          font-family: inherit;
-          overflow: hidden;
-        }
-        
-        .mapboxgl-popup-close-button {
-          font-size: 18px;
-          color: #666;
-          padding: 4px 8px;
-          background: transparent;
-          border: none;
-          z-index: 2;
-        }
-        
-        .mapboxgl-popup-close-button:hover {
-          background: rgba(0,0,0,0.05);
-          color: #333;
-        }
-        
-        .mapboxgl-ctrl-bottom-right {
-          bottom: 70px !important;
-          right: 12px;
-        }
-        
-        .mapboxgl-ctrl-group {
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-          border: none;
-        }
-        
-        .mapboxgl-ctrl-group button {
-          width: 32px;
-          height: 32px;
-        }
-        
-        .mapboxgl-ctrl-group button:focus {
-          box-shadow: none;
-        }
-        
-        @media (max-width: 768px) {
-          .mapboxgl-popup-content {
-            max-width: 90vw;
-          }
-        }
-
-        .mapboxgl-popup {
-          z-index: 10;
-        }
-
-        .marker-click-popup .mapboxgl-popup-content {
-          padding: 0;
-          overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-          border: 1px solid rgba(0,0,0,0.1);
-          min-width: 220px;
-          pointer-events: auto;
-        }
-
-        .marker-click-popup .mapboxgl-popup-close-button {
-          color: #666;
-          font-size: 16px;
-          padding: 5px 10px;
-          z-index: 5;
-        }
-
-        @media (max-width: 768px) {
-          .mapboxgl-popup-content {
-            max-width: 90vw;
-            width: 90vw;
-          }
-          
-          .mapboxgl-ctrl-group {
-            margin-bottom: 60px;
-          }
-          
-          .mapboxgl-ctrl-group button {
-            width: 36px;
-            height: 36px;
-          }
-        }
-
-        /* Fix for full height on mobile */
-        @media (max-width: 768px) {
-          .map-container {
-            position: absolute !important;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 100% !important;
-            width: 100% !important;
-          }
-        }
-
-        /* Marker clustering and overlapping styles */
-        .mapboxgl-marker {
-          will-change: transform;
-        }
-
-        /* Fix for marker hover effect */
-        .mapboxgl-marker-container {
-          transform-origin: center bottom !important;
-          backface-visibility: hidden;
-          -webkit-backface-visibility: hidden;
-        }
-
-        .mapboxgl-marker-dot {
-          transform-origin: center center !important;
-        }
-        
-        /* Safari-specific fixes */
-        @supports (-webkit-touch-callout: none) {
-          .mapboxgl-marker-container {
-            /* Increase touch target for Safari */
-            min-width: 44px;
-            min-height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-        }
-
-        /* Marker pulse animation */
-        @keyframes marker-pulse {
-          0% { transform: scale(1); opacity: 0.7; }
-          50% { transform: scale(1.5); opacity: 0.3; }
-          100% { transform: scale(1); opacity: 0; }
-        }
-
-        .marker-pulse-effect {
-          animation: marker-pulse 1.5s infinite;
-          position: absolute;
-          border-radius: 50%;
-          background-color: rgba(255, 107, 107, 0.2);
-          width: 100%;
-          height: 100%;
-          top: 0;
-          left: 0;
-          pointer-events: none;
-        }
-
-        /* Improve marker visibility */
-        .mapboxgl-marker-container {
-          z-index: 1;
-          transition: z-index 0.1s;
-        }
-
-        .mapboxgl-marker-container:hover,
-        .mapboxgl-marker-container:active,
-        .mapboxgl-marker-container.active {
-          z-index: 10 !important;
-        }
-        
-        /* Enhanced marker preview styling */
-        .marker-preview-card {
-          background: white;
-          border-radius: 8px;
-          overflow: hidden;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }
-      `}</style>
-    </div>
-  )
+    )
+  }, (prevProps, nextProps) => {
+  // Aggressive comparison function to prevent unnecessary rerenders
+  // Only re-render if there are significant changes
+  
+  // Check locations - only care about length and IDs, not deep equality
+  if (prevProps.locations.length !== nextProps.locations.length) {
+    return false
+  }
+  
+  // Check if location IDs have changed (lightweight check)
+  const prevLocationIds = prevProps.locations.map(l => l.id).sort()
+  const nextLocationIds = nextProps.locations.map(l => l.id).sort()
+  if (prevLocationIds.join(',') !== nextLocationIds.join(',')) {
+    return false
+  }
+  
+  // Check selected location
+  if (prevProps.selectedLocation?.id !== nextProps.selectedLocation?.id) {
+    return false
+  }
+  
+  // Check center with tolerance for small movements (prevent micro-movements from re-rendering)
+  const centerThreshold = 0.01 // ~1km tolerance
+  if (Math.abs(prevProps.center[0] - nextProps.center[0]) > centerThreshold ||
+      Math.abs(prevProps.center[1] - nextProps.center[1]) > centerThreshold) {
+    return false
+  }
+  
+  // Check zoom with tolerance
+  const zoomThreshold = 1
+  if (Math.abs(prevProps.zoom - nextProps.zoom) > zoomThreshold) {
+    return false
+  }
+  
+  // Check other props for exact equality
+  if (prevProps.mapStyle !== nextProps.mapStyle ||
+      prevProps.searchRadius !== nextProps.searchRadius ||
+      prevProps.className !== nextProps.className) {
+    return false
+  }
+  
+  // Check user location with tolerance
+  if (prevProps.userLocation !== nextProps.userLocation) {
+    if (prevProps.userLocation === null || nextProps.userLocation === null) {
+      return false
+    }
+    if (Math.abs(prevProps.userLocation[0] - nextProps.userLocation[0]) > centerThreshold ||
+        Math.abs(prevProps.userLocation[1] - nextProps.userLocation[1]) > centerThreshold) {
+      return false
+    }
+  }
+  
+  // If we get here, props are similar enough to skip re-render
+  return true
 })
 
 export default MapComponent

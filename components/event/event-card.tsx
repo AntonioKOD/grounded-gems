@@ -40,7 +40,7 @@ export function EventCard({ event, className, compact = false, userCoordinates }
     } else if (event.image) {
       return typeof event.image === "string" ? event.image : event.image.url
     }
-    return `/placeholder.svg?height=400&width=600&query=event+${event.category || ""}`
+    return `/placeholder.svg`
   }
 
   // Get location name

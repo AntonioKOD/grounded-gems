@@ -16,6 +16,290 @@ export const Events: CollectionConfig = {
     useAsTitle: 'name',
     defaultColumns: ['name', 'startDate', 'status'],
   },
+  hooks: {
+    beforeChange: [
+      async ({ req, data, operation }) => {
+        // Check for date/time conflicts when creating or updating events
+        if ((operation === 'create' || operation === 'update') && data.location && data.startDate) {
+          try {
+            const startDate = new Date(data.startDate)
+            const endDate = data.endDate ? new Date(data.endDate) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000) // Default 2 hours
+
+            // Query for existing events at the same location that overlap with this time
+            const overlappingEvents = await req.payload.find({
+              collection: 'events',
+              where: {
+                and: [
+                  {
+                    location: {
+                      equals: data.location,
+                    },
+                  },
+                  {
+                    status: {
+                      not_equals: 'cancelled',
+                    },
+                  },
+                  {
+                    or: [
+                      // Event starts during existing event
+                      {
+                        and: [
+                          {
+                            startDate: {
+                              less_than_equal: startDate.toISOString(),
+                            },
+                          },
+                          {
+                            or: [
+                              {
+                                endDate: {
+                                  greater_than: startDate.toISOString(),
+                                },
+                              },
+                              {
+                                // If no end date, assume it ends 2 hours after start
+                                and: [
+                                  {
+                                    endDate: {
+                                      exists: false,
+                                    },
+                                  },
+                                  {
+                                    startDate: {
+                                      greater_than: new Date(startDate.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+                                    },
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      // Event ends during existing event
+                      {
+                        and: [
+                          {
+                            startDate: {
+                              less_than: endDate.toISOString(),
+                            },
+                          },
+                          {
+                            or: [
+                              {
+                                endDate: {
+                                  greater_than_equal: endDate.toISOString(),
+                                },
+                              },
+                              {
+                                // If no end date, assume it ends 2 hours after start
+                                startDate: {
+                                  greater_than_equal: new Date(endDate.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+                                },
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      // Event completely contains existing event
+                      {
+                        and: [
+                          {
+                            startDate: {
+                              greater_than_equal: startDate.toISOString(),
+                            },
+                          },
+                          {
+                            or: [
+                              {
+                                endDate: {
+                                  less_than_equal: endDate.toISOString(),
+                                },
+                              },
+                              {
+                                startDate: {
+                                  less_than_equal: endDate.toISOString(),
+                                },
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            })
+
+            // Exclude current event from overlap check if updating
+            const conflictingEvents = overlappingEvents.docs.filter(event => 
+              operation === 'create' || event.id !== data.id
+            )
+
+            if (conflictingEvents.length > 0) {
+              const conflictEvent = conflictingEvents[0]
+              const conflictStart = new Date(conflictEvent.startDate).toLocaleString()
+              const conflictEnd = conflictEvent.endDate 
+                ? new Date(conflictEvent.endDate).toLocaleString()
+                : 'TBD'
+
+              throw new Error(
+                `Event time conflict detected. Another event "${conflictEvent.name}" is already scheduled at this location from ${conflictStart} to ${conflictEnd}. Please choose a different time slot.`
+              )
+            }
+          } catch (error: unknown) {
+            console.error('Error checking event conflicts:', error)
+            if (error instanceof Error && error.message.includes('Event time conflict')) {
+              throw error // Re-throw conflict errors
+            }
+            // Continue with creation/update if conflict check fails for other reasons
+          }
+        }
+
+        return data
+      },
+    ],
+    afterChange: [
+      async ({ req, doc, operation }) => {
+        if (!req.payload) return doc
+
+        try {
+          // Create notifications for event creation/updates
+          if (operation === 'create') {
+            // Notify location owner about new event
+            const location = await req.payload.findByID({
+              collection: 'locations',
+              id: doc.location,
+            })
+
+            if (location.createdBy && location.createdBy !== doc.organizer) {
+              await req.payload.create({
+                collection: 'notifications',
+                data: {
+                  recipient: location.createdBy,
+                  type: 'event_created',
+                  title: `New event at ${location.name}`,
+                  message: `"${doc.name}" has been scheduled at your location on ${new Date(doc.startDate).toLocaleDateString()}.`,
+                  relatedTo: {
+                    relationTo: 'events',
+                    value: doc.id,
+                  },
+                  actionBy: doc.organizer,
+                  metadata: {
+                    locationName: location.name,
+                    eventName: doc.name,
+                    eventDate: doc.startDate,
+                  },
+                  priority: 'normal',
+                  read: false,
+                },
+              })
+            }
+
+            // Notify subscribers of the location about new event
+            const subscribers = await req.payload.find({
+              collection: 'locationSubscriptions',
+              where: {
+                and: [
+                  {
+                    location: {
+                      equals: doc.location,
+                    },
+                  },
+                  {
+                    isActive: {
+                      equals: true,
+                    },
+                  },
+                  {
+                    or: [
+                      {
+                        notificationType: {
+                          equals: 'all',
+                        },
+                      },
+                      {
+                        notificationType: {
+                          equals: 'events',
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            })
+
+            // Create notifications for subscribers
+            for (const subscription of subscribers.docs) {
+              if (subscription.user !== doc.organizer) {
+                await req.payload.create({
+                  collection: 'notifications',
+                  data: {
+                    recipient: subscription.user,
+                    type: 'location_event',
+                    title: `New event at ${location.name}`,
+                    message: `"${doc.name}" is happening on ${new Date(doc.startDate).toLocaleDateString()}. Don't miss out!`,
+                    relatedTo: {
+                      relationTo: 'events',
+                      value: doc.id,
+                    },
+                    metadata: {
+                      locationName: location.name,
+                      eventName: doc.name,
+                      eventDate: doc.startDate,
+                      eventType: doc.eventType,
+                    },
+                    priority: 'normal',
+                    read: false,
+                  },
+                })
+              }
+            }
+          }
+
+          // Handle status changes
+          if (operation === 'update' && doc.status === 'cancelled') {
+            // Notify attendees about cancellation
+            const rsvps = await req.payload.find({
+              collection: 'eventRSVPs',
+              where: {
+                event: {
+                  equals: doc.id,
+                },
+              },
+            })
+
+            for (const rsvp of rsvps.docs) {
+              await req.payload.create({
+                collection: 'notifications',
+                data: {
+                  recipient: rsvp.user,
+                  type: 'event_cancelled',
+                  title: `Event cancelled: ${doc.name}`,
+                  message: `Unfortunately, "${doc.name}" scheduled for ${new Date(doc.startDate).toLocaleDateString()} has been cancelled.`,
+                  relatedTo: {
+                    relationTo: 'events',
+                    value: doc.id,
+                  },
+                  actionBy: doc.organizer,
+                  metadata: {
+                    eventName: doc.name,
+                    eventDate: doc.startDate,
+                  },
+                  priority: 'high',
+                  read: false,
+                },
+              })
+            }
+          }
+        } catch (error) {
+          console.error('Error creating event notifications:', error)
+        }
+
+        return doc
+      },
+    ],
+  },
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'slug', type: 'text', required: true, unique: true },
@@ -31,7 +315,22 @@ export const Events: CollectionConfig = {
     // Core details
     { name: 'description', type: 'text', required: true },
     { name: 'startDate', type: 'date', required: true },
-    { name: 'endDate', type: 'date' },
+    { 
+      name: 'endDate', 
+      type: 'date',
+      admin: {
+        description: 'If not specified, event duration defaults to 2 hours'
+      }
+    },
+
+    // Duration in minutes (alternative to end date)
+    {
+      name: 'durationMinutes',
+      type: 'number',
+      admin: {
+        description: 'Event duration in minutes (used if end date is not specified)',
+      },
+    },
 
     // Category selection
     {
@@ -96,11 +395,32 @@ export const Events: CollectionConfig = {
       required: true,
     },
 
+    // Event request reference (if created from a request)
+    {
+      name: 'eventRequest',
+      type: 'relationship',
+      relationTo: 'eventRequests',
+      hasMany: false,
+      admin: {
+        description: 'If this event was created from an event request',
+      },
+    },
+
     // Capacity & attendance
     {
       name: 'capacity',
       type: 'number',
       admin: { description: 'Max attendees' },
+    },
+
+    // Current attendance count (calculated)
+    {
+      name: 'attendeeCount',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description: 'Current number of confirmed attendees',
+      },
     },
 
     // Organizer
@@ -110,6 +430,74 @@ export const Events: CollectionConfig = {
       relationTo: 'users',
       hasMany: false,
       required: true,
+    },
+
+    // Co-organizers
+    {
+      name: 'coOrganizers',
+      type: 'relationship',
+      relationTo: 'users',
+      hasMany: true,
+      admin: {
+        description: 'Additional organizers who can manage this event',
+      },
+    },
+
+    // Pricing
+    {
+      name: 'pricing',
+      type: 'group',
+      fields: [
+        {
+          name: 'isFree',
+          type: 'checkbox',
+          defaultValue: true,
+        },
+        {
+          name: 'price',
+          type: 'number',
+          admin: {
+            condition: (data) => !data.pricing?.isFree,
+            description: 'Price in USD',
+          },
+        },
+        {
+          name: 'currency',
+          type: 'text',
+          defaultValue: 'USD',
+          admin: {
+            condition: (data) => !data.pricing?.isFree,
+          },
+        },
+      ],
+    },
+
+    // Registration settings
+    {
+      name: 'registration',
+      type: 'group',
+      fields: [
+        {
+          name: 'requiresRegistration',
+          type: 'checkbox',
+          defaultValue: false,
+        },
+        {
+          name: 'registrationDeadline',
+          type: 'date',
+          admin: {
+            condition: (data) => data.registration?.requiresRegistration,
+          },
+        },
+        {
+          name: 'allowWaitlist',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: {
+            condition: (data) => data.registration?.requiresRegistration,
+          },
+        },
+      ],
     },
 
     // Status & visibility
@@ -124,6 +512,38 @@ export const Events: CollectionConfig = {
       ],
       defaultValue: 'draft',
       required: true,
+    },
+
+    // Event tags for better discovery
+    {
+      name: 'tags',
+      type: 'array',
+      fields: [
+        {
+          name: 'tag',
+          type: 'text',
+        },
+      ],
+    },
+
+    // Special requirements or notes
+    {
+      name: 'requirements',
+      type: 'textarea',
+      admin: {
+        description: 'Any special requirements, equipment needed, age restrictions, etc.',
+      },
+    },
+
+    // Contact information for the event
+    {
+      name: 'contactInfo',
+      type: 'group',
+      fields: [
+        { name: 'email', type: 'email' },
+        { name: 'phone', type: 'text' },
+        { name: 'website', type: 'text' },
+      ],
     },
 
     // SEO metadata

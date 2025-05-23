@@ -59,3 +59,21 @@ export interface LocationAddress {
     updatedAt: string
   }
   
+
+
+  export interface AppLocation {
+    id: string
+    name: string
+    description: string
+    location: {
+      coordinates: { latitude: number; longitude: number }
+      address?: string
+      city?: string
+      state?: string
+      country?: string
+    }
+    category?: string
+    rating?: number
+    image?: string
+    distance?: number
+  }

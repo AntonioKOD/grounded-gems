@@ -1,5 +1,6 @@
-import MapExplorer from "./map-explorer"
+import MapExplorer from './map-explorer'
 
+// Prevent static generation
 export const dynamic = 'force-dynamic' 
 
 export const metadata = {

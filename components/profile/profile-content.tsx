@@ -424,6 +424,17 @@ export default function ProfileContent({
               variant="outline"
               size="sm"
               className="bg-white/90 hover:bg-white border-0 shadow-sm"
+              asChild
+            >
+              <Link href={`/profile/${profile.id}/location-dashboard`}>
+                <MapPin className="h-4 w-4 mr-1" />
+                Locations
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white/90 hover:bg-white border-0 shadow-sm"
               onClick={() => router.push(`/profile/${profile.id}/edit`)}
             >
               <Edit3 className="h-4 w-4 mr-1" />

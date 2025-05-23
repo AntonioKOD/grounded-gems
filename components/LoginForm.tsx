@@ -2,7 +2,7 @@
 // components/login/login-form.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, memo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
@@ -12,27 +12,32 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth } from "@/hooks/use-auth"
+import { Checkbox } from "@/components/ui/checkbox"
 
 // Login API call
-async function loginUser({ email, password }: { email: string; password: string }) {
+async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
   const res = await fetch("/api/users/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe }),
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.message || "Authentication failed")
   return data
 }
 
-export default function LoginForm() {
+const LoginForm = memo(function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/feed"
   const { isAuthenticated } = useAuth()
 
-  const [formData, setFormData] = useState({ email: "", password: "" })
+  const [formData, setFormData] = useState({ 
+    email: "", 
+    password: "",
+    rememberMe: false
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
@@ -48,6 +53,10 @@ export default function LoginForm() {
     if (error) setError("")
   }
 
+  const handleCheckboxChange = (checked: boolean) => {
+    setFormData(prev => ({ ...prev, rememberMe: checked }))
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -57,13 +66,31 @@ export default function LoginForm() {
       await loginUser(formData)
       // fire any login-success listeners
       window.dispatchEvent(new Event("login-success"))
+      
+      // Save email for future logins if remember me is checked
+      if (formData.rememberMe && typeof window !== 'undefined') {
+        localStorage.setItem('savedEmail', formData.email)
+      } else if (typeof window !== 'undefined') {
+        localStorage.removeItem('savedEmail')
+      }
+      
       router.replace(redirectPath)
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || "Login failed. Please check your credentials and try again.")
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Load saved email if available
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('savedEmail')
+      if (savedEmail) {
+        setFormData(prev => ({ ...prev, email: savedEmail, rememberMe: true }))
+      }
+    }
+  }, [])
 
   return (
     <div className="flex justify-center items-center min-h-[70vh] px-4">
@@ -124,6 +151,19 @@ export default function LoginForm() {
                 </button>
               </div>
             </div>
+            <div className="flex items-center space-x-2">
+              <Checkbox 
+                id="rememberMe" 
+                checked={formData.rememberMe} 
+                onCheckedChange={handleCheckboxChange} 
+              />
+              <label
+                htmlFor="rememberMe"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                Remember me
+              </label>
+            </div>
             <Button type="submit" className="w-full mt-6 bg-[#FF6B6B]" disabled={isLoading}>
               {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Log in"}
             </Button>
@@ -131,7 +171,7 @@ export default function LoginForm() {
         </CardContent>
         <CardFooter className="p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            Don’t have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/signup" className="text-[#FF6B6B] font-medium">
               Sign up
             </Link>
@@ -140,4 +180,6 @@ export default function LoginForm() {
       </Card>
     </div>
   )
-}
+})
+
+export default LoginForm

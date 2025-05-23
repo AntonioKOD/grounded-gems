@@ -1,0 +1,174 @@
+'use client'
+
+import { useState, useEffect, Suspense, memo } from 'react'
+import dynamic from 'next/dynamic'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { ArrowLeft, Calendar, Clock, Users, MapPin, Phone, Mail, MessageSquare } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
+import { PageHeader } from '@/components/page-header'
+
+// Prevent static generation
+export const dynamic = 'force-dynamic'
+
+// Dynamically import EventRequestManager to ensure it's only loaded client-side
+const EventRequestManager = dynamic(
+  () => import('@/components/location/event-request-manager'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <span className="ml-2">Loading event requests...</span>
+      </div>
+    )
+  }
+)
+
+interface User {
+  id: string
+  name?: string
+  email?: string
+}
+
+// Loading component
+const LoadingEventRequests = memo(() => (
+  <div className="container mx-auto py-8">
+    <div className="animate-pulse">
+      <div className="h-8 bg-gray-200 rounded w-64 mb-4"></div>
+      <div className="h-4 bg-gray-200 rounded w-96 mb-8"></div>
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-32 bg-gray-200 rounded"></div>
+        ))}
+      </div>
+    </div>
+  </div>
+))
+LoadingEventRequests.displayName = 'LoadingEventRequests'
+
+// Login required component
+const LoginRequired = memo(() => {
+  const router = useRouter()
+  
+  return (
+    <div className="container mx-auto py-8">
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-800 mb-4">Authentication Required</h1>
+          <p className="text-gray-600 mb-6">Please log in to view event requests.</p>
+          <Button onClick={() => router.push('/login')}>
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+})
+LoginRequired.displayName = 'LoginRequired'
+
+// Main content component - only renders client-side
+const EventRequestsContent = memo(() => {
+  const router = useRouter()
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [mounted, setMounted] = useState(false)
+
+  // Ensure component only renders on client
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/users/me', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          setCurrentUser(data.user)
+        } else {
+          console.log('User not logged in')
+          // Don't redirect immediately, just set user to null
+        }
+      } catch (error) {
+        console.error('Error loading user:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadCurrentUser()
+  }, [mounted])
+
+  // Don't render anything until mounted (prevents SSR issues)
+  if (!mounted) {
+    return null
+  }
+
+  if (isLoading) {
+    return <LoadingEventRequests />
+  }
+
+  if (!currentUser) {
+    return <LoginRequired />
+  }
+
+  return (
+    <div className="container mx-auto py-8 space-y-8">
+      <PageHeader 
+        heading="Event Requests"
+        subheading="Manage event requests for your locations and view your submitted requests"
+      />
+
+      <EventRequestManager 
+        currentUserId={currentUser.id} 
+        isLocationOwner={true}
+      />
+    </div>
+  )
+})
+EventRequestsContent.displayName = 'EventRequestsContent'
+
+// Fallback component
+const EventRequestsFallback = () => (
+  <div className="container mx-auto py-8">
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <p className="text-gray-500">Loading event requests...</p>
+      </div>
+    </div>
+  </div>
+)
+
+// Main page component
+export default function EventRequestsPage() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Prevent any SSR rendering
+  if (!mounted) {
+    return <EventRequestsFallback />
+  }
+
+  return (
+    <Suspense fallback={<EventRequestsFallback />}>
+      <EventRequestsContent />
+    </Suspense>
+  )
+} 

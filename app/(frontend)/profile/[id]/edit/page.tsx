@@ -4,11 +4,15 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ChevronLeft } from "lucide-react"
+import { Suspense } from 'react'
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ProfileEditForm } from "@/components/profile/profile-edit-form"
 import { Skeleton } from "@/components/ui/skeleton"
+
+// Prevent static generation
+export const dynamic = 'force-dynamic'
 
 export default function ProfileEditPage() {
   const router = useRouter()

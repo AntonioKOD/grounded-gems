@@ -475,6 +475,9 @@ const NavBar = () => {
                       <DropdownMenuItem onClick={() => router.push(`/profile/${user.id}`)}>
                         <UserCircle className="mr-2 h-4 w-4" /> View Profile
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => router.push("/notifications/settings")}>
+                        <Bell className="mr-2 h-4 w-4" /> Notification Settings
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => router.push("/settings")}>
                         <Settings className="mr-2 h-4 w-4" /> Settings
                       </DropdownMenuItem>
@@ -695,6 +698,15 @@ const NavBar = () => {
                         {unreadCount > 99 ? "99+" : unreadCount}
                       </span>
                     )}
+                  </Link>
+
+                  <Link
+                    href="/notifications/settings"
+                    className="flex items-center rounded-md px-3 py-2 font-medium text-gray-700 hover:bg-[#FF6B6B]/5 hover:text-[#FF6B6B]"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Bell className="mr-2 h-5 w-5" />
+                    Notification Settings
                   </Link>
 
                   <Link

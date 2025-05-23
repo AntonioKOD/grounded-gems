@@ -15,6 +15,11 @@ import { Notifications } from './collections/Notifications'
 import { EventRSVPs } from './collections/EventRSVPs'
 import { resendAdapter } from '@payloadcms/email-resend'
 import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
+import { SavedLocations } from './collections/SavedLocations'
+import { LocationSubscriptions } from './collections/LocationSubscriptions'
+import { EventRequests } from './collections/EventRequests'
+import { LocationInteractions } from './collections/LocationInteractions'
+import { MatchmakingSessions } from './collections/MatchmakingSessions'
 
 export default buildConfig({
   
@@ -76,5 +81,10 @@ export default buildConfig({
     Posts,
     Notifications,
     EventRSVPs,
+    LocationSubscriptions,
+    SavedLocations,
+    EventRequests,
+    LocationInteractions,
+    MatchmakingSessions,
   ],
 })

@@ -81,7 +81,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
       console.error("Error parsing profile image:", error)
     }
 
-    return `/placeholder.svg?height=40&width=40&query=user`
+    return `/placeholder.svg`
   }
 
   // Fetch current user and refresh event data
@@ -411,7 +411,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
           ) : (
             <Image
             unoptimized
-              src={`/placeholder.svg?height=800&width=1200&query=event`}
+              src={`/placeholder.svg`}
               alt={event?.name}
               fill
               className="object-cover"
