@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, memo } from "react"
 import { 
   Star, 
   MapPin, 
@@ -36,7 +36,7 @@ import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { toggleSaveLocationAction, toggleSubscribeLocationAction, getSavedLocationsAction, getUserLocationDataAction } from "@/app/actions"
-import LocationInteractions from "@/components/location/location-interactions"
+
 
 interface LocationListProps {
   locations: Location[]
@@ -80,7 +80,6 @@ export default function LocationList({
 }: LocationListProps) {
   const [savedLocations, setSavedLocations] = useState<Set<string>>(new Set())
   const [subscribedLocations, setSubscribedLocations] = useState<Set<string>>(new Set())
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [savedLocationsList, setSavedLocationsList] = useState<SavedLocationItem[]>([])
   const [showSavedLocations, setShowSavedLocations] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
@@ -99,7 +98,6 @@ export default function LocationList({
         setSavedLocationsList(savedWithData)
         console.log('Loaded saved locations IDs:', userData.savedLocations)
         console.log('Loading status changed, forcing refresh with refreshTrigger')
-        setRefreshTrigger(prev => prev + 1) // Force initial render
       } catch (error) {
         console.error('Error loading user location data:', error)
       }
@@ -109,30 +107,27 @@ export default function LocationList({
   }, [])
 
   // Listen for location save events to refresh UI
-  useEffect(() => {
-    const handleLocationSaved = () => {
-      setRefreshTrigger(prev => prev + 1) // Force re-render of location cards
-    }
-
-    const handleLocationInteractionUpdated = (event: CustomEvent) => {
-      const { locationId, type, isActive } = event.detail
-      
-      // Update local state based on interaction changes from location detail
-      if (type === 'save') {
-        setSavedLocations(prev => {
-          const newSet = new Set(prev)
-          if (isActive) {
-            newSet.add(locationId)
-          } else {
-            newSet.delete(locationId)
-          }
-          return newSet
-        })
+      useEffect(() => {
+      const handleLocationSaved = () => {
+        // State updates will automatically trigger rerenders
       }
-      
-      // Force re-render to update UI
-      setRefreshTrigger(prev => prev + 1)
-    }
+
+      const handleLocationInteractionUpdated = (event: CustomEvent) => {
+        const { locationId, type, isActive } = event.detail
+        
+        // Update local state based on interaction changes from location detail
+        if (type === 'save') {
+          setSavedLocations(prev => {
+            const newSet = new Set(prev)
+            if (isActive) {
+              newSet.add(locationId)
+            } else {
+              newSet.delete(locationId)
+            }
+            return newSet
+          })
+        }
+      }
 
     document.addEventListener('locationSaved', handleLocationSaved)
     document.addEventListener('locationInteractionUpdated', handleLocationInteractionUpdated as EventListener)
@@ -204,31 +199,15 @@ export default function LocationList({
     setSortBy("relevance")
   }, [])
 
-  // View location details
-  const viewLocationDetails = useCallback(
-    (e: React.MouseEvent, location: Location) => {
-      e.stopPropagation()
-    
-      if (onViewDetail) {
-        onViewDetail(location)
-      }
-    },
-    [onViewDetail],
-  )
+  // This function is no longer needed as we use onViewDetail directly
 
   // Using a function to check if location is saved/subscribed to avoid re-renders
   const isLocationSaved = useCallback((locationId: string) => {
-    const isSaved = savedLocations.has(locationId)
-    // Debug logging for the first few locations
-    if (Math.random() < 0.1) { // Only log occasionally to avoid spam
-      console.log(`Location ${locationId} saved status:`, isSaved, 'All saved IDs:', Array.from(savedLocations))
-    }
-    return isSaved
+    return savedLocations.has(locationId)
   }, [savedLocations])
   
   const isLocationSubscribed = useCallback((locationId: string) => {
-    const isSubscribed = subscribedLocations.has(locationId)
-    return isSubscribed
+    return subscribedLocations.has(locationId)
   }, [subscribedLocations])
   
   // Handle saving/liking locations
@@ -297,7 +276,7 @@ export default function LocationList({
           }
         })
         
-        // Force re-render
+        // Notify other components
         document.dispatchEvent(new CustomEvent('locationSaved', { detail: { locationId: location.id } }))
         
         // Emit event to notify location detail about interaction changes
@@ -372,286 +351,277 @@ export default function LocationList({
   }, [])
 
   // LocationCard component for consistent rendering with memo
-  const LocationCard = useCallback(
-    ({ location }: { location: Location }) => {
-      const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
-      const primaryColor = getCategoryColor(primaryCategory)
-      const isSaved = isLocationSaved(location.id)
-      const isSubscribed = isLocationSubscribed(location.id)
+  const LocationCard = memo(function LocationCard({ location }: { location: Location }) {
+    const primaryCategory = location.categories && location.categories.length > 0 ? location.categories[0] : null
+    const primaryColor = getCategoryColor(primaryCategory)
+    const isSaved = isLocationSaved(location.id)
+    const isSubscribed = isLocationSubscribed(location.id)
 
-      return (
-                <Card
-          className={cn(
-            "transition-all duration-300 hover:shadow-xl relative group overflow-hidden",
-            "bg-white hover:bg-gray-50/50",
-            "border border-gray-200 hover:border-[#4ECDC4]/30",
-            selectedLocation?.id === location.id
-              ? "shadow-xl ring-2 ring-[#FF6B6B] bg-white border-[#FF6B6B]/50"
-              : "shadow-md hover:shadow-xl"
-          )}
-        >
-          <CardContent className="p-0">
-            {/* Action buttons in top-right corner */}
-            <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-all duration-300">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
-                        "backdrop-blur-sm hover:scale-110 active:scale-95",
-                        isSaved 
-                          ? "bg-[#FF6B6B] border-[#FF6B6B] text-white shadow-lg hover:bg-[#FF6B6B]/90" 
-                          : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#FF6B6B] hover:text-[#FF6B6B]"
-                      )}
-                      onClick={(e) => handleSaveLocation(e, location)}
-                    >
-                      <Bookmark 
-                        className={cn(
-                          "h-4 w-4 transition-all duration-200",
-                          isSaved ? "fill-white" : "hover:scale-110"
-                        )} 
-                      />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
-                    {isSaved ? "Remove from saved" : "Save location"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className={cn(
-                        "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
-                        "backdrop-blur-sm hover:scale-110 active:scale-95",
-                        isSubscribed 
-                          ? "bg-[#4ECDC4] border-[#4ECDC4] text-white shadow-lg hover:bg-[#4ECDC4]/90" 
-                          : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#4ECDC4] hover:text-[#4ECDC4]"
-                      )}
-                      onClick={(e) => handleSubscribeLocation(e, location)}
-                    >
-                      <Bell 
-                        className={cn(
-                          "h-4 w-4 transition-all duration-200",
-                          isSubscribed ? "fill-white" : "hover:scale-110"
-                        )} 
-                      />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
-                    {isSubscribed ? "Turn off notifications" : "Get notifications"}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            
-            {/* Location Image */}
-            <div className="relative h-40 w-full overflow-hidden cursor-pointer" onClick={() => onLocationSelect(location)}>
-              <div className="absolute inset-0">
-                <Image
-                  src={getLocationImageUrl(location)}
-                  alt={location.name}
-                  fill
-                  className="object-cover"
-                  onError={(e) => {
-                    // Prevent infinite loop by checking if we're already showing placeholder
-                    const target = e.currentTarget as HTMLImageElement;
-                    if (!target.src.includes('placeholder.svg')) {
-                      target.src = "/placeholder.svg"
-                      // Remove the onError handler to prevent further errors
-                      target.onerror = null;
-                    }
-                  }}
-                />
-              </div>
-              
-              {/* Light gradient overlay for better text visibility */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-            </div>
-            
-            {/* Content section */}
-            <div className="p-4 bg-white">
-              {/* Location name and category */}
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <h3 className="font-bold text-lg text-[#333333] leading-tight flex-1">
-                  {location.name}
-                </h3>
-                
-                {primaryCategory && (
-                  <Badge 
-                    className="text-xs font-medium border-0 shadow-sm flex-shrink-0"
-                    style={{
-                      backgroundColor: `${primaryColor}20`,
-                      color: primaryColor,
-                      borderColor: primaryColor
-                    }}
+    return (
+              <Card
+        className={cn(
+          "transition-all duration-300 hover:shadow-xl relative group overflow-hidden",
+          "bg-white hover:bg-gray-50/50",
+          "border border-gray-200 hover:border-[#4ECDC4]/30",
+          selectedLocation?.id === location.id
+            ? "shadow-xl ring-2 ring-[#FF6B6B] bg-white border-[#FF6B6B]/50"
+            : "shadow-md hover:shadow-xl"
+        )}
+      >
+        <CardContent className="p-0">
+          {/* Action buttons in top-right corner */}
+          <div className="absolute top-3 right-3 flex items-center gap-2 z-10 opacity-90 group-hover:opacity-100 transition-all duration-300">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
+                      "backdrop-blur-sm hover:scale-110 active:scale-95",
+                      isSaved 
+                        ? "bg-[#FF6B6B] border-[#FF6B6B] text-white shadow-lg hover:bg-[#FF6B6B]/90" 
+                        : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#FF6B6B] hover:text-[#FF6B6B]"
+                    )}
+                    onClick={(e) => handleSaveLocation(e, location)}
                   >
-                    {typeof primaryCategory === 'string' ? primaryCategory : primaryCategory.name}
-                  </Badge>
-                )}
-              </div>
-              
-              {/* Rating and address */}
-              <div className="space-y-2 mb-4">
-                {location.averageRating && (
-                  <div className="flex items-center">
-                    <div className="flex items-center bg-[#FFE66D] text-[#333333] px-2 py-1 rounded-full text-xs font-medium">
-                      <Star className="h-3 w-3 text-[#333333] fill-[#333333] mr-1" />
-                      <span>{location.averageRating.toFixed(1)}</span>
-                      {location.reviewCount && (
-                        <span className="ml-1 opacity-80">({location.reviewCount})</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                
-                {location.address && (
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 flex-shrink-0 text-[#4ECDC4]" />
-                    <span className="text-sm text-[#666666] truncate">
-                      {typeof location.address === 'string' 
-                        ? location.address 
-                        : location.address?.city || 'Address not available'}
-                    </span>
-                  </div>
-                )}
-              </div>
-              
-              {/* Action button */}
-              <Button
-                variant="default"
-                size="sm"
-                className={cn(
-                  "w-full h-10 text-sm font-medium transition-all duration-200",
-                  "bg-[#FF6B6B] text-white border-[#FF6B6B] hover:bg-[#FF6B6B]/90",
-                  "hover:shadow-lg hover:scale-[1.02] active:scale-95 shadow-sm"
-                )}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (onViewDetail) {
-                    onViewDetail(location)
+                    <Bookmark 
+                      className={cn(
+                        "h-4 w-4 transition-all duration-200",
+                        isSaved ? "fill-white" : "hover:scale-110"
+                      )} 
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
+                  {isSaved ? "Remove from saved" : "Save location"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8 rounded-full shadow-lg border transition-all duration-200",
+                      "backdrop-blur-sm hover:scale-110 active:scale-95",
+                      isSubscribed 
+                        ? "bg-[#4ECDC4] border-[#4ECDC4] text-white shadow-lg hover:bg-[#4ECDC4]/90" 
+                        : "bg-white border-gray-200 text-[#666666] hover:bg-white hover:border-[#4ECDC4] hover:text-[#4ECDC4]"
+                    )}
+                    onClick={(e) => handleSubscribeLocation(e, location)}
+                  >
+                    <Bell 
+                      className={cn(
+                        "h-4 w-4 transition-all duration-200",
+                        isSubscribed ? "fill-white" : "hover:scale-110"
+                      )} 
+                    />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="bg-[#333333] text-white border-[#333333]">
+                  {isSubscribed ? "Turn off notifications" : "Get notifications"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          
+          {/* Location Image */}
+          <div className="relative h-40 w-full overflow-hidden cursor-pointer" onClick={() => onLocationSelect(location)}>
+            <div className="absolute inset-0">
+              <Image
+                src={getLocationImageUrl(location)}
+                alt={location.name}
+                fill
+                className="object-cover"
+                onError={(e) => {
+                  // Prevent infinite loop by checking if we're already showing placeholder
+                  const target = e.currentTarget as HTMLImageElement;
+                  if (!target.src.includes('placeholder.svg')) {
+                    target.src = "/placeholder.svg"
+                    // Remove the onError handler to prevent further errors
+                    target.onerror = null;
                   }
                 }}
-              >
-                View Details
-              </Button>
+              />
+            </div>
+            
+            {/* Light gradient overlay for better text visibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+          </div>
+          
+          {/* Content section */}
+          <div className="p-4 bg-white">
+            {/* Location name and category */}
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <h3 className="font-bold text-lg text-[#333333] leading-tight flex-1">
+                {location.name}
+              </h3>
+              
+              {primaryCategory && (
+                <Badge 
+                  className="text-xs font-medium border-0 shadow-sm flex-shrink-0"
+                  style={{
+                    backgroundColor: `${primaryColor}20`,
+                    color: primaryColor,
+                    borderColor: primaryColor
+                  }}
+                >
+                  {typeof primaryCategory === 'string' ? primaryCategory : primaryCategory.name}
+                </Badge>
+              )}
+            </div>
+            
+            {/* Rating and address */}
+            <div className="space-y-2 mb-4">
+              {location.averageRating && (
+                <div className="flex items-center">
+                  <div className="flex items-center bg-[#FFE66D] text-[#333333] px-2 py-1 rounded-full text-xs font-medium">
+                    <Star className="h-3 w-3 text-[#333333] fill-[#333333] mr-1" />
+                    <span>{location.averageRating.toFixed(1)}</span>
+                    {location.reviewCount && (
+                      <span className="ml-1 opacity-80">({location.reviewCount})</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {location.address && (
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 flex-shrink-0 text-[#4ECDC4]" />
+                  <span className="text-sm text-[#666666] truncate">
+                    {typeof location.address === 'string' 
+                      ? location.address 
+                      : location.address?.city || 'Address not available'}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Action button */}
+            <Button
+              variant="default"
+              size="sm"
+              className={cn(
+                "w-full h-10 text-sm font-medium transition-all duration-200",
+                "bg-[#FF6B6B] text-white border-[#FF6B6B] hover:bg-[#FF6B6B]/90",
+                "hover:shadow-lg hover:scale-[1.02] active:scale-95 shadow-sm"
+              )}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (onViewDetail) {
+                  onViewDetail(location)
+                }
+              }}
+            >
+              View Details
+            </Button>
 
-              <div className="flex items-center gap-2 mt-3">
-                <LocationInteractions 
-                  location={location}
-                  currentUserId={currentUser?.id}
-                  className="flex-1"
-                  compact={true}
-                />
-                
-                {/* Event Request Button */}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="border-orange-500 text-orange-600 hover:bg-orange-50 flex-shrink-0"
-                  onClick={async (e) => {
-                    e.stopPropagation()
+            <div className="flex items-center gap-2 mt-3">
+              
+              {/* Event Request Button */}
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50 flex-shrink-0"
+                onClick={async (e) => {
+                  e.stopPropagation()
+                  
+                  if (!currentUser) {
+                    toast.error('Please log in to request an event')
+                    return
+                  }
+                  
+                  // Create a simple event request modal
+                  const modal = document.createElement('div')
+                  modal.className = 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'
+                  modal.innerHTML = `
+                    <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
+                      <div class="flex items-center justify-between p-4 border-b">
+                        <h3 class="text-lg font-semibold">Request Event</h3>
+                        <button id="close-modal" class="p-1 hover:bg-gray-100 rounded">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                          </svg>
+                        </button>
+                      </div>
+                      <div class="p-4 space-y-3">
+                        <p class="text-sm text-gray-600">Request to host an event at <strong>${location.name}</strong></p>
+                        <input type="text" id="quick-event-title" placeholder="Event title" class="w-full px-3 py-2 border rounded-md" />
+                        <textarea id="quick-event-description" placeholder="Brief description" rows="2" class="w-full px-3 py-2 border rounded-md"></textarea>
+                        <div class="grid grid-cols-2 gap-2">
+                          <input type="date" id="quick-event-date" class="px-3 py-2 border rounded-md" />
+                          <input type="time" id="quick-event-time" class="px-3 py-2 border rounded-md" />
+                        </div>
+                        <div class="flex gap-2 pt-2">
+                          <button id="cancel-request" class="flex-1 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
+                          <button id="submit-request" class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">Submit</button>
+                        </div>
+                      </div>
+                    </div>
+                  `
+                  
+                  document.body.appendChild(modal)
+                  
+                  const closeModal = () => document.body.removeChild(modal)
+                  
+                  modal.querySelector('#close-modal')?.addEventListener('click', closeModal)
+                  modal.querySelector('#cancel-request')?.addEventListener('click', closeModal)
+                  modal.addEventListener('click', (e) => {
+                    if (e.target === modal) closeModal()
+                  })
+                  
+                  modal.querySelector('#submit-request')?.addEventListener('click', async () => {
+                    const title = (modal.querySelector('#quick-event-title') as HTMLInputElement)?.value
+                    const description = (modal.querySelector('#quick-event-description') as HTMLTextAreaElement)?.value
+                    const date = (modal.querySelector('#quick-event-date') as HTMLInputElement)?.value
+                    const time = (modal.querySelector('#quick-event-time') as HTMLInputElement)?.value
                     
-                    if (!currentUser) {
-                      toast.error('Please log in to request an event')
+                    if (!title || !description || !date || !time) {
+                      toast.error('Please fill in all fields')
                       return
                     }
                     
-                    // Create a simple event request modal
-                    const modal = document.createElement('div')
-                    modal.className = 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'
-                    modal.innerHTML = `
-                      <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
-                        <div class="flex items-center justify-between p-4 border-b">
-                          <h3 class="text-lg font-semibold">Request Event</h3>
-                          <button id="close-modal" class="p-1 hover:bg-gray-100 rounded">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                          </button>
-                        </div>
-                        <div class="p-4 space-y-3">
-                          <p class="text-sm text-gray-600">Request to host an event at <strong>${location.name}</strong></p>
-                          <input type="text" id="quick-event-title" placeholder="Event title" class="w-full px-3 py-2 border rounded-md" />
-                          <textarea id="quick-event-description" placeholder="Brief description" rows="2" class="w-full px-3 py-2 border rounded-md"></textarea>
-                          <div class="grid grid-cols-2 gap-2">
-                            <input type="date" id="quick-event-date" class="px-3 py-2 border rounded-md" />
-                            <input type="time" id="quick-event-time" class="px-3 py-2 border rounded-md" />
-                          </div>
-                          <div class="flex gap-2 pt-2">
-                            <button id="cancel-request" class="flex-1 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-md">Cancel</button>
-                            <button id="submit-request" class="flex-1 px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700">Submit</button>
-                          </div>
-                        </div>
-                      </div>
-                    `
-                    
-                    document.body.appendChild(modal)
-                    
-                    const closeModal = () => document.body.removeChild(modal)
-                    
-                    modal.querySelector('#close-modal')?.addEventListener('click', closeModal)
-                    modal.querySelector('#cancel-request')?.addEventListener('click', closeModal)
-                    modal.addEventListener('click', (e) => {
-                      if (e.target === modal) closeModal()
-                    })
-                    
-                    modal.querySelector('#submit-request')?.addEventListener('click', async () => {
-                      const title = (modal.querySelector('#quick-event-title') as HTMLInputElement)?.value
-                      const description = (modal.querySelector('#quick-event-description') as HTMLTextAreaElement)?.value
-                      const date = (modal.querySelector('#quick-event-date') as HTMLInputElement)?.value
-                      const time = (modal.querySelector('#quick-event-time') as HTMLInputElement)?.value
+                    try {
+                      const response = await fetch('/api/locations/event-requests', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          eventTitle: title,
+                          eventDescription: description,
+                          eventType: 'other',
+                          locationId: location.id,
+                          requestedDate: date,
+                          requestedTime: time,
+                          expectedAttendees: 10, // Default value
+                        }),
+                      })
                       
-                      if (!title || !description || !date || !time) {
-                        toast.error('Please fill in all fields')
-                        return
-                      }
-                      
-                      try {
-                        const response = await fetch('/api/locations/event-requests', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            eventTitle: title,
-                            eventDescription: description,
-                            eventType: 'other',
-                            locationId: location.id,
-                            requestedDate: date,
-                            requestedTime: time,
-                            expectedAttendees: 10, // Default value
-                          }),
-                        })
-                        
-                        if (response.ok) {
-                          toast.success('Event request submitted!')
-                          closeModal()
-                        } else {
-                          toast.error('Failed to submit request')
-                        }
-                      } catch {
+                      if (response.ok) {
+                        toast.success('Event request submitted!')
+                        closeModal()
+                      } else {
                         toast.error('Failed to submit request')
                       }
-                    })
-                  }}
-                >
-                  <Calendar className="h-4 w-4 mr-1" />
-                  Event
-                </Button>
-              </div>
+                    } catch {
+                      toast.error('Failed to submit request')
+                    }
+                  })
+                }}
+              >
+                <Calendar className="h-4 w-4 mr-1" />
+                Event
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-      )
-    },
-    [selectedLocation, onLocationSelect, viewLocationDetails, isLocationSaved, isLocationSubscribed, handleSaveLocation, handleSubscribeLocation, refreshTrigger, currentUser],
-  )
+          </div>
+        </CardContent>
+      </Card>
+    )
+  })
 
   return (
     <div className="flex flex-col h-full">
@@ -697,9 +667,11 @@ export default function LocationList({
                           <div key={savedItem.id} className="border rounded-lg p-3 hover:bg-gray-50 transition-colors">
                             <div className="flex gap-3">
                               <div className="w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                <img
+                                <Image
                                   src={getLocationImageUrl(location) || "/placeholder.svg"}
                                   alt={location.name}
+                                  width={64}
+                                  height={64}
                                   className="w-full h-full object-cover"
                                 />
                               </div>

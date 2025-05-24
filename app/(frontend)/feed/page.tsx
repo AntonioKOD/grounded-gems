@@ -1,52 +1,44 @@
 import { Suspense } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Skeleton } from "@/components/ui/skeleton"
-import FeedContainer from "@/components/feed/feed-container"
+import { Metadata } from "next"
+import { getFeedPosts } from "@/app/actions"
+import FeedSkeleton from "@/components/feed/feed-skeleton"
+import ResponsiveFeed from "@/components/feed/responsive-feed"
+import type { Post } from "@/types/feed"
 
-export const dynamic = 'force-dynamic'
-export const metadata = {
-  title: "Local Buzz| Grounded Gems",
-  description: "Dive into the buzz at Grounded Gems! Uncover fresh finds, genuine reviews, and hidden gems recommended by fellow explorers. Join the conversation and discover what everyone’s loving right now!",
+export const metadata: Metadata = {
+  title: "Feed | Grounded Gems",
+  description: "Discover locations and events shared by the community",
 }
+
+// Force dynamic rendering to avoid static generation issues
+export const dynamic = 'force-dynamic'
 
 export default async function FeedPage() {
+  // Pre-fetch initial feed data for SSR
+  let initialPosts: Post[] = []
+  
+  try {
+    initialPosts = await getFeedPosts("all", "recent", 1)
+    console.log(`Feed page loaded with ${initialPosts.length} posts`)
+  } catch (err) {
+    console.error("Error pre-loading feed posts:", err)
+    // Will continue with empty array
+  }
+
   return (
-    <main className="container py-6 md:py-10">
-      <div className="mb-8 max-w-2xl mx-auto">
-        <h1 className="text-3xl font-bold tracking-tight">Local Buzz</h1>
-        <p className="text-muted-foreground mt-2">
-          Discover the latest posts, reviews, and recommendations from the community.
-        </p>
+    <main className="py-6">
+      <div className="container px-4 sm:px-6">
+        <h1 className="text-2xl md:text-3xl font-bold mb-6">Feed</h1>
+
+        <Suspense fallback={<FeedSkeleton />}>
+          <ResponsiveFeed
+            initialPosts={initialPosts}
+            feedType="all"
+            sortBy="recent"
+            showPostForm={true}
+          />
+        </Suspense>
       </div>
-
-      <Tabs defaultValue="for-you" className="max-w-2xl mx-auto">
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="for-you">For You</TabsTrigger>
-          <TabsTrigger value="all">Everyone&apos;s Talking</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="for-you">
-          <Suspense fallback={<FeedSkeleton />}>
-            <FeedContainer feedType="personalized" showPostForm={true} />
-          </Suspense>
-        </TabsContent>
-        
-        <TabsContent value="all">
-          <Suspense fallback={<FeedSkeleton />}>
-            <FeedContainer feedType="all" sortBy="recent" showPostForm={true} />
-          </Suspense>
-        </TabsContent>
-      </Tabs>
     </main>
-  )
-}
-
-function FeedSkeleton() {
-  return (
-    <div className="space-y-6">
-      {Array.from({ length: 3 }).map((_, i) => (
-        <Skeleton key={i} className="w-full h-[300px] rounded-lg" />
-      ))}
-    </div>
   )
 }

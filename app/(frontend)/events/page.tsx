@@ -2,7 +2,7 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 import EventsContainer from "@/components/event/events-container"
 import EventsSkeleton from "@/components/event/events-skeleton"
-import { getServerSideUser } from "@/lib/auth"
+import { getServerSideUser } from "@/lib/auth-server"
 
 export const dynamic = 'force-dynamic'
 

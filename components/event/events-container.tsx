@@ -160,8 +160,19 @@ export default function EventsContainer({
     async (options: EventFilterOptions) => {
       setIsLoading(true)
       try {
+        // Map EventFilterOptions to GetNearbyEventsParams
+        const nearbyParams = {
+          userId: options.userId,
+          radiusKm: options.radiusKm,
+          category: options.category,
+          eventType: options.eventType,
+          isMatchmaking: options.isMatchmaking,
+          limit: options.limit,
+          offset: options.offset,
+        }
+        
         // Invoke the server action (cookies auto-read server-side)
-        const nearby = await getNearbyEventsAction(options)
+        const nearby = await getNearbyEventsAction(nearbyParams)
   
         if (Array.isArray(nearby)) {
           // Map to Event[] and update state

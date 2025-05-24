@@ -17,17 +17,17 @@ export function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
-// Only run on your protected routes:
+// Only protect routes that require authentication (user actions):
 export const config = {
   matcher: [
     '/add-location/:path*',
-    '/events/:path*',
+    '/events/create/:path*',
+    '/events/requests/:path*',
     '/feed/:path*',
     '/profile/:path*',
-    '/explore/:path*',
     '/matchmaking/:path*',
     '/notifications/:path*',
     '/post/:path*',
-    '/map/:path*',
+    '/verify/:path*',
   ],
 }

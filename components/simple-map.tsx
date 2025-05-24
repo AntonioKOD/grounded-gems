@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, memo } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ interface SimpleMapProps {
   locations?: Array<{ id: string; name: string; latitude: number; longitude: number; category: string }>;
 }
 
-export default function SimpleMap({
+function SimpleMap({
   className,
   height = "100%",
   // Use [lng, lat] by default (Boston)
@@ -39,6 +39,12 @@ export default function SimpleMap({
   const [styleId, setStyleId] = useState("standard");
   const [showStyles, setShowStyles] = useState(false);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure component only renders on client side to prevent hydration mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Valid Mapbox style options
   const styles = [
@@ -66,11 +72,14 @@ export default function SimpleMap({
 
   // Initialize map once
   useEffect(() => {
-    if (mapRef.current || !mapContainer.current) return;
+    if (!isClient || mapRef.current || !mapContainer.current) return;
+    
+    console.log('Initializing map with center:', center, 'zoom:', zoom);
+    
     const map = new mapboxgl.Map({
       container: mapContainer.current,
-      style: `mapbox://styles/mapbox/${styleId}`,                 // Valid style URL  [oai_citation:5‡Mapbox](https://docs.mapbox.com/api/maps/styles/?utm_source=chatgpt.com)
-      center,                                                     // [lng, lat] order  [oai_citation:6‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/guides/?utm_source=chatgpt.com)
+      style: `mapbox://styles/mapbox/${styleId}`,
+      center,
       zoom,
       interactive,
       attributionControl: !isBackground,
@@ -79,43 +88,38 @@ export default function SimpleMap({
 
     // On initial load or after setStyle, re-enable layers & controls
     const onLoad = () => {
+      console.log('Map loaded successfully!');
       setMapLoaded(true);
 
-      // 3D buildings layer
-      if (!isBackground && map.getStyle().sources.composite) {
-        map.addLayer({
-          id: "3d-buildings",
-          source: "composite",
-          "source-layer": "building",
-          filter: ["==", "extrude", "true"],
-          type: "fill-extrusion",
-          minzoom: 10,
-          paint: {
-            "fill-extrusion-color": "#aaa",
-            "fill-extrusion-height": ["interpolate", ["linear"], ["zoom"], 10, 0, 15, ["get", "height"]],
-            "fill-extrusion-base": ["interpolate", ["linear"], ["zoom"], 10, 0, 15, ["get", "min_height"]],
-            "fill-extrusion-opacity": 0.6,
-          },
-        });
-      }
+      // Skip 3D buildings layer for now to simplify debugging
 
-      // Controls: zoom only, no compass  [oai_citation:7‡Stack Overflow](https://stackoverflow.com/questions/42837381/how-to-display-only-and-in-the-mapbox-navigation-control?utm_source=chatgpt.com)
+      // Controls: zoom only, no compass
       if (interactive && showControls) {
-        map.addControl(new mapboxgl.NavigationControl({ showCompass: false, showZoom: true }), "top-right");  //  [oai_citation:8‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/example/navigation/?utm_source=chatgpt.com)
-        map.addControl(new mapboxgl.FullscreenControl(), "top-right");
-        map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");  //  [oai_citation:9‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/api/markers/?utm_source=chatgpt.com)
+        try {
+          map.addControl(new mapboxgl.NavigationControl({ showCompass: false, showZoom: true }), "top-right");
+          map.addControl(new mapboxgl.FullscreenControl(), "top-right");
+          map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "top-right");
+        } catch (error) {
+          console.warn('Could not add map controls:', error);
+        }
       }
+    };
+    
+    const onError = (error: any) => {
+      console.error('Map error:', error);
     };
 
     map.on("load", onLoad);
+    map.on("error", onError);
     mapRef.current = map;
 
     return () => {
       map.off("load", onLoad);
+      map.off("error", onError);
       map.remove();
       mapRef.current = null;
     };
-  }, [interactive, showControls, styleId, isBackground, zoom, center]);
+  }, [isClient, interactive, showControls, styleId, isBackground, zoom, center]);
 
   // Re-apply style (and reload layers/controls) on styleId change
   useEffect(() => {
@@ -143,38 +147,108 @@ export default function SimpleMap({
       const color = getCategoryColor(m.category);
       el.className = "custom-marker";
       Object.assign(el.style, {
-        width: "30px", height: "30px", borderRadius: "50%",
-        backgroundColor: color, border: "2px solid white",
-        boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
+        width: "32px", height: "32px", borderRadius: "50%",
+        backgroundColor: color, border: "3px solid white",
+        boxShadow: "0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        color: "white", fontWeight: "bold", fontSize: "12px", cursor: "pointer",
+        color: "white", fontWeight: "bold", fontSize: "14px", cursor: "pointer",
+        transition: "all 0.2s ease-in-out", position: "relative", zIndex: "1"
       });
       el.innerHTML = m.category.charAt(0);
+
+      // Hover effects
+      el.addEventListener('mouseenter', () => {
+        Object.assign(el.style, {
+          transform: "scale(1.1)",
+          zIndex: "2",
+          boxShadow: "0 6px 20px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.15)"
+        });
+      });
+
+      el.addEventListener('mouseleave', () => {
+        Object.assign(el.style, {
+          transform: "scale(1)",
+          zIndex: "1",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1)"
+        });
+      });
 
       // Pulse effect (requires CSS keyframes)
       const pulse = document.createElement("div");
       Object.assign(pulse.style, {
-        position: "absolute", inset: "0", borderRadius: "50%",
-        backgroundColor: `${color}20`, animation: "pulse 2s infinite",
+        position: "absolute", inset: "-4px", borderRadius: "50%",
+        backgroundColor: `${color}25`, animation: "pulse 3s infinite ease-in-out",
+        zIndex: "-1"
       });
       el.appendChild(pulse);
 
-      // Popup
-      const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-        <div class="p-2">
-          <h3 class="font-bold text-sm">${m.title}</h3>
-          <p class="text-xs text-gray-600">${m.category}</p>
+      // Enhanced popup with more information
+      const popup = new mapboxgl.Popup({ 
+        offset: 30,
+        closeButton: true,
+        closeOnClick: true,
+        className: 'custom-popup'
+      }).setHTML(`
+        <div class="p-3 min-w-[200px]">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style="background-color: ${color}">
+              ${m.category.charAt(0)}
+            </div>
+            <h3 class="font-bold text-sm text-gray-900">${m.title}</h3>
+          </div>
+          <p class="text-xs text-gray-600 mb-3">${m.category}</p>
+          <div class="flex gap-2">
+            <button 
+              onclick="window.open('/locations/${m.id}', '_blank')" 
+              class="px-3 py-1 bg-blue-500 text-white text-xs rounded-md hover:bg-blue-600 transition-colors"
+            >
+              View Details
+            </button>
+            <button 
+              onclick="navigator.geolocation && navigator.geolocation.getCurrentPosition(pos => {
+                const directions = \`https://maps.google.com/maps?saddr=\${pos.coords.latitude},\${pos.coords.longitude}&daddr=\${m.latitude},\${m.longitude}\`;
+                window.open(directions, '_blank');
+              })" 
+              class="px-3 py-1 bg-green-500 text-white text-xs rounded-md hover:bg-green-600 transition-colors"
+            >
+              Directions
+            </button>
+          </div>
         </div>
       `);
 
-      // Add to map  [oai_citation:11‡Mapbox](https://docs.mapbox.com/mapbox-gl-js/example/add-a-marker/?utm_source=chatgpt.com)
-      new mapboxgl.Marker(el).setLngLat([m.longitude, m.latitude]).setPopup(popup).addTo(mapRef.current!);
+      // Add to map with enhanced interactivity
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([m.longitude, m.latitude])
+        .setPopup(popup)
+        .addTo(mapRef.current!);
+
+      // Add click animation
+      el.addEventListener('click', () => {
+        el.style.animation = 'marker-click 0.3s ease-in-out';
+        setTimeout(() => {
+          el.style.animation = '';
+        }, 300);
+      });
     });
   }, [markers, locations, mapLoaded, getCategoryColor]);
 
   // Style selector handlers
 
   const selectStyle = useCallback((id: string) => { setStyleId(id); setShowStyles(false); }, []);
+
+  // Show placeholder during SSR and client-side hydration
+  if (!isClient) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-lg" style={{ height }}>
+        <Info className="h-12 w-12 text-[#FF6B6B]" />
+        <p className="ml-4 text-gray-600">Loading map...</p>
+      </div>
+    );
+  }
+  
+  // Debug information
+  console.log('SimpleMap rendering on client:', { isClient, mapLoaded, height, center, zoom });
 
   // Fallback for no WebGL
   if (!mapboxgl.supported()) {
@@ -188,7 +262,7 @@ export default function SimpleMap({
 
   return (
     <div className={cn("relative rounded-lg overflow-hidden", className)} style={{ height }}>
-      <div ref={mapContainer} className="h-full w-full" />
+      <div ref={mapContainer} className="h-full w-full" style={{ backgroundColor: '#f0f0f0', minHeight: '300px' }} />
 
       {/* Style toggle */}
       {showStyles && (
@@ -222,13 +296,66 @@ export default function SimpleMap({
         </div>
       )}
 
-      {/* Global CSS for pulse animation */}
+      {/* Global CSS for animations and styling */}
       <style jsx global>{`
         @keyframes pulse {
-          0%   { transform: scale(0.5); opacity: 1; }
-          100% { transform: scale(1.5); opacity: 0; }
+          0% { transform: scale(0.8); opacity: 0.8; }
+          50% { transform: scale(1.2); opacity: 0.4; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+        
+        @keyframes marker-click {
+          0% { transform: scale(1); }
+          50% { transform: scale(0.9); }
+          100% { transform: scale(1); }
+        }
+        
+        .custom-popup .mapboxgl-popup-content {
+          border-radius: 12px !important;
+          box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12) !important;
+          padding: 0 !important;
+          font-family: inherit !important;
+          border: 1px solid rgba(0, 0, 0, 0.05) !important;
+        }
+        
+        .custom-popup .mapboxgl-popup-close-button {
+          font-size: 18px !important;
+          color: #666 !important;
+          padding: 8px !important;
+          right: 8px !important;
+          top: 8px !important;
+          background: rgba(255, 255, 255, 0.9) !important;
+          border-radius: 50% !important;
+          width: 24px !important;
+          height: 24px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        
+        .custom-popup .mapboxgl-popup-tip {
+          border-top-color: white !important;
+        }
+        
+        .mapboxgl-ctrl-group {
+          border-radius: 8px !important;
+          overflow: hidden !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        }
+        
+        .mapboxgl-ctrl-group button {
+          background: rgba(255, 255, 255, 0.95) !important;
+          border: none !important;
+          color: #333 !important;
+        }
+        
+        .mapboxgl-ctrl-group button:hover {
+          background: white !important;
         }
       `}</style>
     </div>
   );
 }
+
+export default memo(SimpleMap);

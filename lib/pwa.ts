@@ -1,5 +1,5 @@
 /**
- * PWA (Progressive Web App) utilities for Sacavia
+ * PWA (Progressive Web App) utilities for Grounded Gems
  * Handles app installation, offline detection, and service worker management
  */
 

@@ -6,7 +6,7 @@ import { useEffect, useState, useRef, useCallback, useMemo, memo } from "react"
 import { cn } from "@/lib/utils"
 import { addedLocations, searchLocations, type Location } from "./map-data"
 import { locationMatchesCategories, getCategoryColor } from "./category-utils"
-import MapComponent from "./map-component"
+import InteractiveMap from "./interactive-map"
 import LocationList from "./location-list"
 import LocationDetail from "./location-detail"
 import { Button } from "@/components/ui/button"
@@ -65,10 +65,11 @@ export default function MapExplorer() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [categories, setCategories] = useState<any[]>([])
-  const [mapCenter, setMapCenter] = useState<[number, number]>([40.7128, -74.006]) // Default to NYC
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-71.0589, 42.3601]) // Default to Boston
   const [mapZoom, setMapZoom] = useState(12)
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // Start with false so map loads immediately
+  const [locationsLoading, setLocationsLoading] = useState(true) // Separate loading state for locations
   const [error, setError] = useState<string | null>(null)
 
   // UI states
@@ -272,7 +273,7 @@ export default function MapExplorer() {
   // Add state for location request status
   const [locationRequestStatus, setLocationRequestStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle')
 
-  // Function to request user location
+  // Function to request user location - removed dependency on locationRequestStatus to prevent infinite loop
   const requestUserLocation = useCallback(() => {
     console.log("🌍 Requesting user location...")
     
@@ -344,10 +345,8 @@ export default function MapExplorer() {
         
         console.log("Error details:", { code: err.code, message: err.message })
         
-        // Only show error toast if user manually clicked the button (not auto-request)
-        if (locationRequestStatus === 'requesting') {
-          toast.error(toastMessage)
-        }
+        // Only show error toast for manual requests, not auto-requests
+        toast.error(toastMessage)
       },
       {
         enableHighAccuracy: true,
@@ -355,75 +354,42 @@ export default function MapExplorer() {
         maximumAge: 60000 // Accept cached position if less than 1 minute old
       }
     )
-  }, [locationRequestStatus])
+  }, []) // Remove dependency to prevent infinite loop
 
-  // Auto-click the location button on page load
+  // Auto-request user location on page load - only run once
   useEffect(() => {
-    const autoClickLocationButton = () => {
-      console.log("🎯 Auto-clicking location button on page load...")
-      
-      // Add a delay to ensure the button is rendered and the component is fully mounted
-      const timer = setTimeout(() => {
-        console.log("🔍 Searching for location button to auto-click...")
-        
-        // Try multiple methods to find and click the location button
-        let buttonClicked = false
-        
-        // Method 1: Try by ID first (most reliable)
-        const buttonById = document.getElementById('find-my-location-btn') as HTMLButtonElement
-        if (buttonById && !buttonById.disabled) {
-          console.log("✅ Found location button by ID, auto-clicking...")
-          buttonById.click()
-          buttonClicked = true
-        }
-        
-        // Method 2: Try by aria-label (if ID method failed)
-        if (!buttonClicked) {
-          const buttonByAriaLabel = document.querySelector('[aria-label="Find my location"]') as HTMLButtonElement
-          if (buttonByAriaLabel && !buttonByAriaLabel.disabled) {
-            console.log("✅ Found location button by aria-label, auto-clicking...")
-            buttonByAriaLabel.click()
-            buttonClicked = true
-          }
-        }
-        
-        // Method 3: Try dispatching a custom click event (if both methods above failed)
-        if (!buttonClicked && buttonById) {
-          console.log("🔄 Trying custom click event...")
-          const clickEvent = new MouseEvent('click', {
-            view: window,
-            bubbles: true,
-            cancelable: true
-          })
-          buttonById.dispatchEvent(clickEvent)
-          buttonClicked = true
-        }
-        
-        // Method 4: Direct function call as ultimate fallback
-        if (!buttonClicked) {
-          console.log("🔄 All button click methods failed, calling requestUserLocation directly...")
-          requestUserLocation()
-        }
-      }, 1500) // Wait 1.5 seconds for the UI to fully load
-      
-      return timer
-    }
-
-    const timer = autoClickLocationButton()
+    // Only run if we don't already have user location and haven't tried before
+    if (userLocation || locationRequestStatus !== 'idle') return
+    
+    console.log("🎯 Auto-requesting user location on page load...")
+    
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(() => {
+      requestUserLocation()
+    }, 1000) // 1 second delay
+    
     return () => clearTimeout(timer)
-  }, [requestUserLocation])
+  }, []) // Empty dependency array - only run once on mount
+
+  // Remove the auto-click fallback method as it's redundant and causes issues
 
   // Load locations
   useEffect(() => {
+    let isMounted = true
+    
     async function loadLocations() {
       try {
-        setIsLoading(true)
+        console.log("🔄 [MAP-EXPLORER] Starting loadLocations function...")
+        setLocationsLoading(true)
         setError(null)
 
-        console.log("Fetching locations...")
+        console.log("🔄 [MAP-EXPLORER] Calling addedLocations()...")
         const locations = await addedLocations()
 
-        console.log(`Fetched ${locations.length} locations:`, locations)
+        // Only update state if component is still mounted
+        if (!isMounted) return
+
+        console.log(`✅ [MAP-EXPLORER] Fetched ${locations.length} locations:`, locations)
 
         setAllLocations(locations)
         setFilteredLocations(locations)
@@ -444,33 +410,37 @@ export default function MapExplorer() {
 
         const categoryArray = Array.from(uniqueCategories.values())
         console.log("Extracted categories:", categoryArray)
-        setCategories(categoryArray)
-
-        // Only set map center based on locations if user location is not available
-        if (!userLocation) {
-          // Set initial map center based on first location with valid coordinates
-          for (const loc of locations) {
-            const coordinates = getLocationCoordinates(loc)
-            if (coordinates) {
-              console.log(
-                `Setting initial map center to [${coordinates[0]}, ${coordinates[1]}] from location "${loc.name}" (no user location available)`,
-              )
-              setMapCenter(coordinates)
-              break
-            }
-          }
+        
+        if (isMounted) {
+          setCategories(categoryArray)
+          setLocationsLoading(false)
         }
-
-        setIsLoading(false)
       } catch (err) {
         console.error("Error loading locations:", err)
-        setError("Failed to load locations. Please try again.")
-        setIsLoading(false)
+        if (isMounted) {
+          setError("Failed to load locations. Please try again.")
+          setLocationsLoading(false)
+        }
       }
     }
 
+    // Only load once
     loadLocations()
-  }, [getLocationCoordinates, userLocation])
+    
+    return () => {
+      isMounted = false
+    }
+  }, []) // Empty dependency array - only run once
+
+  // Set default location on component mount
+  useEffect(() => {
+    console.log("🚀 Component mounted, setting default location...")
+    
+    // Set a default location immediately (Boston) so the map shows something
+    console.log("🌍 Setting default location to Boston...")
+    setMapCenter([-71.0589, 42.3601])
+    setMapZoom(12)
+  }, []) // Empty dependency array - only run once on mount
 
   // Filter locations when search or categories change
   useEffect(() => {
@@ -501,7 +471,7 @@ export default function MapExplorer() {
     }
   }, [searchQuery, selectedCategories, allLocations, selectedLocation])
 
-  // Handle location selection with Safari-specific fixes
+  // Handle location selection with Safari-specific fixes - optimized dependencies
   const handleLocationSelect = useCallback(
     (location: Location) => {
       console.log("Selected location:", location)
@@ -566,7 +536,7 @@ export default function MapExplorer() {
         setIsSelecting(false)
       }, 500) // Longer timeout for Safari
     },
-    [isMobile, showMobileList, activeView, getLocationCoordinates, isSelecting, isSafari, isIOS],
+    [getLocationCoordinates], // Minimize dependencies to reduce rerenders
   )
 
   // Handle view details from preview
@@ -597,8 +567,6 @@ export default function MapExplorer() {
       }
       lastClickTimeRef.current = now
 
-      // No need to close detail view when clicking on map - dialog handles this
-
       // Close search on mobile when clicking map
       if (isMobile && isSearchExpanded) {
         setIsSearchExpanded(false)
@@ -615,31 +583,37 @@ export default function MapExplorer() {
         setPreviewLocation(null)
         setPreviewPosition(null)
       }
-
-      // Map clicked (logging removed for performance)
     },
-    [isMobile, isSearchExpanded, showMobileList, showMobilePreview, touchStarted],
+    [], // Remove most dependencies to reduce rerenders
   )
 
   // Handle map move - stabilized with ref to prevent re-renders
   const handleMapMove = useCallback((center: [number, number], zoom: number) => {
-    // Only update state if there's a significant change to prevent excessive re-renders
+    // Use a more aggressive threshold to reduce state updates
+    const positionThreshold = 0.001 // ~100m tolerance
+    const zoomThreshold = 0.1
+    
+    // Batch state updates to prevent multiple rerenders
+    let shouldUpdateCenter = false
+    let shouldUpdateZoom = false
+    
     setMapCenter(prevCenter => {
-      const threshold = 0.01 // ~1km tolerance
-      if (Math.abs(prevCenter[0] - center[0]) > threshold || 
-          Math.abs(prevCenter[1] - center[1]) > threshold) {
+      if (Math.abs(prevCenter[0] - center[0]) > positionThreshold || 
+          Math.abs(prevCenter[1] - center[1]) > positionThreshold) {
+        shouldUpdateCenter = true
         return center
       }
       return prevCenter
     })
     
-    setMapZoom(prevZoom => {
-      const threshold = 0.5
-      if (Math.abs(prevZoom - zoom) > threshold) {
-        return zoom
-      }
-      return prevZoom
-    })
+    if (shouldUpdateCenter) {
+      setMapZoom(prevZoom => {
+        if (Math.abs(prevZoom - zoom) > zoomThreshold) {
+          return zoom
+        }
+        return prevZoom
+      })
+    }
   }, [])
 
   // Toggle category selection
@@ -1508,7 +1482,7 @@ export default function MapExplorer() {
                 locations={filteredLocations}
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
-                isLoading={isLoading}
+                isLoading={locationsLoading}
                 currentUser={currentUser || undefined}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
@@ -1525,11 +1499,12 @@ export default function MapExplorer() {
           className={cn("flex-1 relative", isMobile && activeView === "list" ? "hidden" : "block")}
           style={{ height: "calc(100% - 0px)" }}
         >
-          <MapComponent
+          <InteractiveMap
             locations={filteredLocations}
             userLocation={userLocation}
             center={mapCenter}
             zoom={mapZoom}
+            mapStyle="streets-v12"
             onMarkerClick={handleLocationSelect}
             onMapClick={handleMapClick}
             onMapMove={handleMapMove}
@@ -1735,7 +1710,7 @@ export default function MapExplorer() {
                   locations={filteredLocations}
                   onLocationSelect={handleLocationSelect}
                   selectedLocation={selectedLocation}
-                  isLoading={isLoading}
+                  isLoading={locationsLoading}
                   currentUser={currentUser || undefined}
                   onViewDetail={(location) => {
                     setSelectedLocation(location)
@@ -1764,7 +1739,7 @@ export default function MapExplorer() {
                 locations={filteredLocations}
                 onLocationSelect={handleLocationSelect}
                 selectedLocation={selectedLocation}
-                isLoading={isLoading}
+                isLoading={locationsLoading}
                 currentUser={currentUser || undefined}
                 onViewDetail={(location) => {
                   setSelectedLocation(location)
@@ -1897,7 +1872,7 @@ export default function MapExplorer() {
       )}
 
       {/* Loading overlay */}
-      {isLoading && (
+      {locationsLoading && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="flex flex-col items-center bg-white p-6 rounded-lg shadow-lg">
             <Loader2 className="h-10 w-10 text-[#FF6B6B] animate-spin mb-4" />

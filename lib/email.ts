@@ -177,7 +177,7 @@ export const eventRequestEmailTemplate = {
         
         <p>You can approve or deny this request from your location dashboard.</p>
         
-        <p>Best regards,<br>The Sacavia Team</p>
+        <p>Best regards,<br>The Grounded Gems Team</p>
       </div>
     `,
   }),
@@ -213,7 +213,7 @@ export const eventRequestEmailTemplate = {
         
         <p>You can now create your event and start inviting guests! You can also contact the location owner directly at ${data.ownerEmail} if you need to coordinate any details.</p>
         
-        <p>Best regards,<br>The Sacavia Team</p>
+        <p>Best regards,<br>The Grounded Gems Team</p>
       </div>
     `,
   }),
@@ -241,9 +241,9 @@ export const eventRequestEmailTemplate = {
         
         <p>If you have questions or would like to discuss alternative arrangements, feel free to contact the location owner directly at ${data.ownerEmail}.</p>
         
-        <p>Don't give up! There are many other great venues on Sacavia that might be perfect for your event.</p>
+        <p>Don't give up! There are many other great venues on Grounded Gems that might be perfect for your event.</p>
         
-        <p>Best regards,<br>The Sacavia Team</p>
+        <p>Best regards,<br>The Grounded Gems Team</p>
       </div>
     `,
   }),

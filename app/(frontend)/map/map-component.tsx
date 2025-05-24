@@ -130,11 +130,34 @@ const MapComponent = memo(function MapComponent({
   // Load Mapbox script dynamically
   useEffect(() => {
     if (typeof window === 'undefined') return
+    if (mapInitializedRef.current) return // Prevent re-initialization
     
     const loadMapboxScript = () => {
-      if (document.querySelector('script[src*="mapbox-gl"]')) {
-        console.log("Mapbox script already loaded")
+      // Check if Mapbox is already available
+      if (window.mapboxgl) {
+        console.log("Mapbox already available globally")
         return Promise.resolve()
+      }
+      
+      if (document.querySelector('script[src*="mapbox-gl"]')) {
+        console.log("Mapbox script already in DOM, waiting for load...")
+        // Wait for it to be available
+        return new Promise<void>((resolve, reject) => {
+          const checkInterval = setInterval(() => {
+            if (window.mapboxgl) {
+              clearInterval(checkInterval)
+              resolve()
+            }
+          }, 100)
+          
+          // Timeout after 10 seconds
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            if (!window.mapboxgl) {
+              reject(new Error('Mapbox script timeout'))
+            }
+          }, 10000)
+        })
       }
       
       console.log("Loading Mapbox script dynamically")
@@ -143,42 +166,36 @@ const MapComponent = memo(function MapComponent({
         script.src = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'
         script.async = true
         script.onload = () => {
-          console.log("Mapbox script loaded successfully via onload")
-          resolve()
+          console.log("Mapbox script loaded successfully")
+          // Wait a bit for the global to be available
+          setTimeout(() => {
+            if (window.mapboxgl) {
+              resolve()
+            } else {
+              reject(new Error('Mapbox global not available after load'))
+            }
+          }, 100)
         }
         script.onerror = () => {
-          console.error("Failed to load Mapbox script via onerror")
+          console.error("Failed to load Mapbox script")
           reject(new Error('Failed to load Mapbox script'))
         }
         document.head.appendChild(script)
         
-        // Also add CSS
-        const link = document.createElement('link')
-        link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css'
-        link.rel = 'stylesheet'
-        document.head.appendChild(link)
+        // Also add CSS if not present
+        if (!document.querySelector('link[href*="mapbox-gl.css"]')) {
+          const link = document.createElement('link')
+          link.href = 'https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css'
+          link.rel = 'stylesheet'
+          document.head.appendChild(link)
+        }
       })
     }
-    
-    // Create a debounced version of onMapMove to avoid too many state updates
-    const debouncedMapMove = (callback: (center: [number, number], zoom: number) => void, delay: number) => {
-      let timeoutId: NodeJS.Timeout | null = null;
-      
-      return (center: [number, number], zoom: number) => {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        
-        timeoutId = setTimeout(() => {
-          callback(center, zoom);
-        }, delay);
-      };
-    };
-    
-    const debouncedOnMapMove = debouncedMapMove(onMapMove, 1500); // Increased delay to 1.5s to reduce rerenders
-    
+
     const initializeMap = async () => {
-      if (mapInitializedRef.current) return
+      if (mapInitializedRef.current || !mapContainerRef.current) return
+      
+      console.log("Initializing map...")
       
       try {
         await loadMapboxScript()
@@ -186,10 +203,11 @@ const MapComponent = memo(function MapComponent({
         // Wait for mapbox to be available globally
         if (!window.mapboxgl) {
           console.error("Mapbox GL JS failed to load - window.mapboxgl is undefined")
-          throw new Error('Mapbox GL JS not loaded')
+          setMapError("Failed to load map. Please refresh the page.")
+          return
         }
-        
-        // Mapbox script loaded successfully
+
+        console.log("Mapbox available, creating map...")
         
         // Store mapbox reference
         mapboxRef.current = window.mapboxgl
@@ -203,31 +221,28 @@ const MapComponent = memo(function MapComponent({
         
         // Set access token
         const token = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoiYW50b25pby1rb2RoZWxpIiwiYSI6ImNtYTQ3bTlibTAyYTUyanBzem5qZGV1ZzgifQ.cSUliejFuQnIHZ-DDinPRQ'
-        // Using Mapbox token (logging removed for performance)
         mapboxRef.current.accessToken = token
         
         // Check if container exists and has dimensions
-        if (mapContainerRef.current) {
-          // Map container dimensions checked (logging removed for performance)
-        } else {
+        if (!mapContainerRef.current) {
           console.error("Map container ref is null")
+          setMapError("Map container not available.")
+          return
         }
         
-        // Create map instance
-        if (mapContainerRef.current && !mapRef.current) {
-          // Creating map (logging removed for performance)
-          
-          // Ensure the map container is visible
-          if (mapContainerRef.current) {
-            mapContainerRef.current.style.height = '100%'
-            mapContainerRef.current.style.width = '100%'
-            mapContainerRef.current.style.minHeight = '400px'
-            mapContainerRef.current.style.display = 'block'
-          }
+        // Ensure the map container is visible
+        mapContainerRef.current.style.height = '100%'
+        mapContainerRef.current.style.width = '100%'
+        mapContainerRef.current.style.minHeight = '400px'
+        mapContainerRef.current.style.display = 'block'
+        
+        // Create map instance only once
+        if (!mapRef.current) {
+          console.log("Creating new map instance...")
           
           mapRef.current = new mapboxRef.current.Map({
             container: mapContainerRef.current,
-            style: `mapbox://styles/mapbox/${currentStyle}`,
+            style: `mapbox://styles/mapbox/streets-v12`, // Use fixed style for now
             center: [center[1], center[0]], // Mapbox uses [lng, lat] format
             zoom,
             pitchWithRotate: false,
@@ -237,119 +252,36 @@ const MapComponent = memo(function MapComponent({
             attributionControl: false
           })
           
-          // Map events
+          // Set initialization flag immediately to prevent double creation
+          mapInitializedRef.current = true
+          
+          // Map events - with debounced move handler
+          let moveTimeout: NodeJS.Timeout
+          mapRef.current.on('moveend', () => {
+            clearTimeout(moveTimeout)
+            moveTimeout = setTimeout(() => {
+              if (mapRef.current) {
+                const center = mapRef.current.getCenter()
+                const zoom = mapRef.current.getZoom()
+                onMapMove([center.lat, center.lng], zoom)
+              }
+            }, 300) // Debounce to prevent excessive calls
+          })
+          
+          mapRef.current.on('click', (e: any) => {
+            onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
+          })
+          
           mapRef.current.on('load', () => {
-            // Map loaded successfully
-            mapInitializedRef.current = true
+            console.log("Map loaded successfully")
             setMapLoaded(true)
+            setMapError(null)
             
-            // Add custom sources and layers for better performance
-            const markersGeoJSON = {
-              type: 'FeatureCollection',
-              features: locations.map(location => {
-                const coords = getCoordinates(location)
-                if (!coords) return null
-                
-                return {
-                  type: 'Feature',
-                  geometry: {
-                    type: 'Point',
-                    coordinates: [coords[1], coords[0]] // GeoJSON uses [lng, lat]
-                  },
-                  properties: {
-                    id: location.id,
-                    name: location.name,
-                    category: typeof location.categories?.[0] === 'string' 
-                      ? location.categories[0] 
-                      : location.categories?.[0]?.id,
-                    isSelected: selectedLocation?.id === location.id
-                  }
-                }
-              }).filter(Boolean) as any
-            };
-            
-            // Add clustered source if there are many locations (for performance)
-            if (locations.length > 50) {
-              mapRef.current.addSource('locations-clusters', {
-                type: 'geojson',
-                data: markersGeoJSON,
-                cluster: true,
-                clusterMaxZoom: 14, // Max zoom to cluster points
-                clusterRadius: 50 // Radius of each cluster when clustering points
-              });
-              
-              // Add a layer for the clusters
-              mapRef.current.addLayer({
-                id: 'clusters',
-                type: 'circle',
-                source: 'locations-clusters',
-                filter: ['has', 'point_count'],
-                paint: {
-                  'circle-color': '#FF6B6B',
-                  'circle-radius': [
-                    'step',
-                    ['get', 'point_count'],
-                    20, // radius when point count is less than 100
-                    100, 30, // radius when point count is between 100 and 750
-                    750, 40 // radius when point count is greater than 750
-                  ],
-                  'circle-stroke-width': 2,
-                  'circle-stroke-color': '#fff'
-                }
-              });
-              
-              // Add a layer for the cluster counts
-              mapRef.current.addLayer({
-                id: 'cluster-count',
-                type: 'symbol',
-                source: 'locations-clusters',
-                filter: ['has', 'point_count'],
-                layout: {
-                  'text-field': '{point_count_abbreviated}',
-                  'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
-                  'text-size': 12
-                },
-                paint: {
-                  'text-color': '#ffffff'
-                }
-              });
-              
-              // Handle click events on clusters
-              mapRef.current.on('click', 'clusters', (e: any) => {
-                const features = mapRef.current.queryRenderedFeatures(e.point, {
-                  layers: ['clusters']
-                });
-                
-                const clusterId = features[0].properties.cluster_id;
-                mapRef.current.getSource('locations-clusters').getClusterExpansionZoom(
-                  clusterId,
-                  (err: any, zoom: number) => {
-                    if (err) return;
-                    
-                    mapRef.current.flyTo({
-                      center: features[0].geometry.coordinates,
-                      zoom: zoom
-                    });
-                  }
-                );
-              });
-              
-              // Change cursor when hovering over a cluster
-              mapRef.current.on('mouseenter', 'clusters', () => {
-                if (mapRef.current) {
-                  mapRef.current.getCanvas().style.cursor = 'pointer';
-                }
-              });
-              
-              mapRef.current.on('mouseleave', 'clusters', () => {
-                if (mapRef.current) {
-                  mapRef.current.getCanvas().style.cursor = '';
-                }
-              });
+            // Add markers immediately when map loads (if locations are available)
+            if (locations.length > 0) {
+              console.log(`Adding ${locations.length} markers to map`)
+              addMarkers()
             }
-
-            // Add markers after map loads
-            addMarkers()
             
             // Add user location marker if available
             if (userLocation) {
@@ -363,68 +295,21 @@ const MapComponent = memo(function MapComponent({
           })
           
           mapRef.current.on('error', (e: any) => {
-            console.error("Mapbox error:", e)
-            setMapError(`Map error: ${e.error ? e.error.message : 'Unknown error'}`)
+            console.error("Map error:", e)
+            setMapError("Map error occurred. Please refresh the page.")
           })
-          
-          mapRef.current.on('click', (e: any) => {
-            // Close tooltip when clicking on map
-            setActiveTooltip(null)
-            // Use setTimeout to avoid blocking the UI and throttle clicks
-            const clickHandler = setTimeout(() => {
-              clearTimeout(clickHandler)
-              onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
-            }, 100)
-          })
-          
-          // Use the debounced handler for map move events - only on significant changes
-          let lastMoveTime = 0
-          const moveThrottleDelay = 1000 // 1 second throttle
-          
-          mapRef.current.on('moveend', () => {
-            const now = Date.now()
-            if (now - lastMoveTime < moveThrottleDelay) {
-              return // Skip if too soon after last move
-            }
-            lastMoveTime = now
-            
-            // Use requestAnimationFrame to optimize performance
-            requestAnimationFrame(() => {
-              if (!mapRef.current) return
-              const center = mapRef.current.getCenter().toArray().reverse() as [number, number]
-              const zoom = mapRef.current.getZoom()
-              
-              // Only trigger if there's a significant change
-              const currentCenter = mapRef.current.getCenter()
-              const centerChanged = Math.abs(currentCenter.lng - center[1]) > 0.01 || 
-                                    Math.abs(currentCenter.lat - center[0]) > 0.01
-              const zoomChanged = Math.abs(mapRef.current.getZoom() - zoom) > 0.5
-              
-              if (centerChanged || zoomChanged) {
-                debouncedOnMapMove(center, zoom)
-              }
-            })
-          })
-        } else {
-          console.warn("Map container not found or map already initialized")
         }
+        
       } catch (error) {
-        console.error('Map initialization error:', error)
-        setMapError('Failed to load map. Please refresh the page.')
+        console.error("Error initializing map:", error)
+        setMapError("Failed to initialize map. Please refresh the page.")
       }
     }
-    
-    initializeMap()
-    
-    // Cleanup function
-    return () => {
-      if (mapRef.current && mapInitializedRef.current) {
-        mapRef.current.remove()
-        mapRef.current = null
-        mapInitializedRef.current = false
-      }
-    }
-  }, []) // Remove dependencies to prevent constant re-initialization
+
+    // Only initialize once
+    const timer = setTimeout(initializeMap, 100)
+    return () => clearTimeout(timer)
+  }, []) // Empty dependency array to prevent re-initialization
 
   // Update map style
   useEffect(() => {
@@ -470,7 +355,16 @@ const MapComponent = memo(function MapComponent({
 
     // Add and update markers for locations - stabilized with proper dependencies
   const addMarkers = useCallback(() => {
-    if (!mapRef.current || !mapInitializedRef.current || !mapboxRef.current) return
+    if (!mapRef.current || !mapInitializedRef.current || !mapboxRef.current) {
+      console.log('Cannot add markers - map not ready:', { 
+        mapRef: !!mapRef.current, 
+        initialized: mapInitializedRef.current, 
+        mapbox: !!mapboxRef.current 
+      })
+      return
+    }
+
+    console.log(`🗺️ Adding ${locations.length} markers to map`)
 
     // Clear existing markers
     markersRef.current.forEach((marker: MapboxMarker) => {
@@ -625,7 +519,9 @@ const MapComponent = memo(function MapComponent({
     lastLocationsRef.current = locations
     lastSelectedLocationRef.current = selectedLocation || null
     
-    if (mapRef.current && mapInitializedRef.current) {
+    // Add markers if map is loaded and we have locations
+    if (mapRef.current && mapInitializedRef.current && mapLoaded) {
+      console.log(`Updating markers: ${locationsLength} locations, map loaded: ${mapLoaded}`)
       addMarkers()
     }
     
@@ -633,7 +529,7 @@ const MapComponent = memo(function MapComponent({
     return () => {
       markersRef.current.forEach(({ cleanup }: { cleanup: () => void }) => cleanup())
     }
-  }, [locations.length, selectedLocation?.id, activeTooltip?.location.id, addMarkers])
+  }, [locations.length, selectedLocation?.id, activeTooltip?.location.id, addMarkers, mapLoaded])
 
   // Add user location marker
   const addUserLocationMarker = useCallback((coords: [number, number]) => {

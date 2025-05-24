@@ -1,5 +1,5 @@
 /**
- * Browser notification service for Sacavia
+ * Browser notification service for Grounded Gems
  * Implements the Web Notifications API for real-time user notifications
  */
 
@@ -85,8 +85,8 @@ export const showNotification = async (options: NotificationOptions): Promise<vo
     
     const notificationOptions = {
       body: options.message,
-      icon: options.icon || '/icon1.png',
-      badge: options.badge || '/icon1.png',
+      icon: options.icon || '/icon-192.png',
+      badge: options.badge || '/icon-192.png',
       tag: options.tag,
       data: options.data,
       requireInteraction: options.requireInteraction || false,
@@ -216,7 +216,7 @@ export const initializeNotifications = async (): Promise<boolean> => {
     if (permission === 'granted') {
       // Show welcome notification
       await showNotification({
-        title: '🎉 Welcome to Sacavia!',
+        title: '🎉 Welcome to Grounded Gems!',
         message: 'You\'ll now receive notifications about location activities.',
         tag: 'welcome',
         requireInteraction: false,
@@ -332,7 +332,7 @@ export const showTestNotification = async (): Promise<void> => {
   console.log('Showing test notification')
   await showNotification({
     title: '🧪 Test Notification',
-    message: 'This is a test notification from Sacavia!',
+    message: 'This is a test notification from Grounded Gems!',
     tag: 'test',
     requireInteraction: false,
   })

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
+import { logoutUser } from "@/lib/auth"
 
 export interface UserData {
   id: string
@@ -27,6 +28,7 @@ interface UserContextType {
   isAuthenticated: boolean
   refetchUser: () => Promise<void>
   logout: () => Promise<void>
+  preloadUser: (userData: UserData) => void
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -63,15 +65,22 @@ export function UserProvider({
       setIsLoading(true)
       try {
         console.log("Fetching user data...")
+        
+        // Use AbortController for timeout
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+        
         const response = await fetch("/api/users/me", {
           method: "GET",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
+            "Cache-Control": "max-age=30", // Allow 30 second caching
           },
+          signal: controller.signal,
         })
+
+        clearTimeout(timeoutId)
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -88,7 +97,11 @@ export function UserProvider({
         setUser(data.user)
         setIsInitialized(true)
       } catch (error) {
-        console.error("Error fetching user:", error)
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log("User fetch timed out, using cached/initial data")
+        } else {
+          console.error("Error fetching user:", error)
+        }
         // Only set user to null on explicit 401 responses to prevent logout on network errors
       } finally {
         setIsLoading(false)
@@ -104,18 +117,22 @@ export function UserProvider({
     }
   }, [fetchUser, isInitialized])
 
+  // Preload user function for instant updates after login
+  const preloadUser = useCallback((userData: UserData) => {
+    setUser(userData)
+    setIsLoading(false)
+    setIsInitialized(true)
+  }, [])
+
   // Logout function
   const logout = useCallback(async () => {
     try {
       setIsLoading(true)
-      const response = await fetch("/api/users/logout", {
-        method: "POST",
-        credentials: "include",
-      })
+      const success = await logoutUser()
 
-      if (response.ok) {
+      if (success) {
         setUser(null)
-        window.dispatchEvent(new Event("logout-success"))
+        // The logoutUser function already dispatches the event
         router.replace("/login")
       }
     } catch (error) {
@@ -150,6 +167,7 @@ export function UserProvider({
         isAuthenticated: !!user,
         refetchUser: () => fetchUser({ force: true }),
         logout,
+        preloadUser,
       }}
     >
       {children}

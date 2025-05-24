@@ -32,14 +32,16 @@ export default function FeedContainer({
   sortBy = "recent",
 }: FeedContainerProps) {
   const [posts, setPosts] = useState<Post[]>(initialPosts)
-  const [loading, setLoading] = useState<boolean>(true)
+  const [loading, setLoading] = useState<boolean>(initialPosts.length === 0)
   const [loadingMore, setLoadingMore] = useState<boolean>(false)
   const [refreshing, setRefreshing] = useState<boolean>(false)
-  const [hasMore, setHasMore] = useState<boolean>(true)
+  const [hasMore, setHasMore] = useState<boolean>(initialPosts.length >= 10)
   const [page, setPage] = useState<number>(1)
   const [usedMockData, setUsedMockData] = useState<boolean>(false)
-  const isMounted = useRef(true)
-  const initialLoadComplete = useRef(false)
+  const isMounted = useRef<boolean>(true)
+  const initialLoadComplete = useRef<boolean>(initialPosts.length > 0)
+  const lastFetchTimestamp = useRef<number>(0)
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Get user data from auth context
   const { user, isLoading: isUserLoading, isAuthenticated } = useAuth()
@@ -48,11 +50,39 @@ export default function FeedContainer({
   useEffect(() => {
     return () => {
       isMounted.current = false
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+        fetchTimeoutRef.current = null
+      }
     }
   }, [])
 
-  // Fetch posts based on feed type
+  // Fetch posts based on feed type with debounce
   const fetchPosts = useCallback(async () => {
+    // Clear any pending fetch timeout
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current)
+      fetchTimeoutRef.current = null
+    }
+
+    // Debounce check - only allow fetches every 5 seconds
+    const now = Date.now()
+    const timeSinceLastFetch = now - lastFetchTimestamp.current
+    if (timeSinceLastFetch < 5000) {
+      // Schedule next fetch attempt
+      fetchTimeoutRef.current = setTimeout(() => {
+        if (isMounted.current) {
+          void fetchPosts()
+        }
+      }, 5000 - timeSinceLastFetch)
+      return
+    }
+
+    // Update last fetch timestamp before the fetch
+    lastFetchTimestamp.current = now
+
+    if (!isMounted.current) return
+
     setLoading(true)
     setPage(1)
     setUsedMockData(false)
@@ -72,32 +102,41 @@ export default function FeedContainer({
         fetchedPosts = await getFeedPosts(feedType, sortBy, 1)
       }
   
-      setPosts(fetchedPosts)
-      setHasMore(fetchedPosts.length >= 10)
+      if (isMounted.current) {
+        setPosts(fetchedPosts)
+        setHasMore(fetchedPosts?.length >= 10)
+      }
     } catch (err) {
       console.error("Error fetching posts:", err)
-      toast.error("Error loading posts")
-      setPosts([])
-      setHasMore(false)
+      if (isMounted.current) {
+        toast.error("Error loading posts")
+        setPosts([])
+        setHasMore(false)
+      }
     } finally {
-      setLoading(false)
+      if (isMounted.current) {
+        setLoading(false)
+      }
     }
   }, [feedType, sortBy, isAuthenticated, user, userId])
-  // Initial data loading
+
+  // Initial data loading - only fetch if we don't have initial posts
   useEffect(() => {
-    // Skip if component is not mounted
-    if (!isMounted.current) return
+    // Skip if component is not mounted or we're still loading user data
+    if (!isMounted.current || isUserLoading) return
 
-    // If we're still loading user data, wait
-    if (isUserLoading) return
+    // If we already have initial posts, don't fetch again
+    if (initialPosts.length > 0) {
+      initialLoadComplete.current = true
+      return
+    }
 
-    // If this is the first load, fetch posts
+    // If this is the first load and we have no initial posts, fetch posts
     if (!initialLoadComplete.current) {
-      console.log("Initial data loading for feed type:", feedType)
-      fetchPosts()
+      void fetchPosts()
       initialLoadComplete.current = true
     }
-  }, [isUserLoading, fetchPosts, feedType])
+  }, [isUserLoading, fetchPosts, initialPosts.length])
 
   // Refresh posts
   const refreshPosts = async () => {

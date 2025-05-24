@@ -79,6 +79,15 @@
   }
   html {
     scroll-behavior: smooth;
+    /* Fix for iOS viewport height issues */
+    height: 100%;
+  }
+  
+  /* Enhanced mobile viewport handling */
+  @supports (-webkit-touch-callout: none) {
+    html {
+      height: -webkit-fill-available;
+    }
   }
 }
 
@@ -97,44 +106,175 @@
   pointer-events: none;
 }
 
-/* Responsive container */
+/* Mobile-first responsive container */
 @media (min-width: 768px) {
   .container {
     max-width: 1200px;
   }
 }
 
-.animate-scroll {
-  animation: scroll var(--animation-duration, 40s) var(--animation-direction, forwards) linear infinite;
+/* Enhanced mobile styles */
+@media (max-width: 767px) {
+  /* Prevent zoom on form inputs */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Better touch targets */
+  button, .button, a[role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Improved tap highlighting */
+  button, .button, a {
+    -webkit-tap-highlight-color: rgba(255, 107, 107, 0.1);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  /* Prevent text selection during touch interactions */
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+  
+  /* Better scrolling on mobile */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Fix for mobile keyboard pushing content */
+  .mobile-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Improved sheet and modal handling */
+  .mobile-sheet {
+    height: 90vh;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0;
+  }
 }
 
-/* Retro photo frame styles */
+/* Tablet specific styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .container {
+    padding: 0 24px;
+  }
+  
+  /* Better touch targets for tablet */
+  button, .button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* Desktop specific styles */
+@media (min-width: 1024px) {
+  /* Hover effects only on desktop */
+  .hover-only:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Safe area handling for notched devices */
+@supports (padding: max(0px)) {
+  .safe-area-top {
+    padding-top: max(env(safe-area-inset-top), 12px);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+  
+  .safe-area-left {
+    padding-left: max(env(safe-area-inset-left), 12px);
+  }
+  
+  .safe-area-right {
+    padding-right: max(env(safe-area-inset-right), 12px);
+  }
+}
+
+/* Landscape orientation specific styles */
+@media (max-width: 767px) and (orientation: landscape) {
+  .landscape-adjust {
+    height: 70vh;
+    max-height: 70vh;
+  }
+  
+  /* Reduce padding in landscape to maximize space */
+  .landscape-compact {
+    padding: 8px 16px;
+  }
+}
+
+/* PWA specific styles */
+@media (display-mode: standalone) {
+  .pwa-mode {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .button, button {
+    border: 2px solid currentColor;
+  }
+}
+
+/* Scroll animation classes */
+.animate-scroll {
+  animation: scroll 20s linear infinite;
+}
+
 .retro-photo-frame {
   position: relative;
-  border-radius: var(--radius);
-  overflow: hidden;
-  transform-style: preserve-3d;
-  perspective: 1000px;
+  transform: rotate(-2deg);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
 }
 
 .retro-photo-frame::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: linear-gradient(45deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 100%);
-  z-index: 10;
-  pointer-events: none;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .retro-photo-frame::after {
   content: "";
   position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.05) 50%, transparent 100%);
-  background-size: 100% 4px;
-  z-index: 10;
-  pointer-events: none;
-  opacity: 0.5;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
 }
 
 @keyframes scroll {
@@ -142,259 +282,161 @@
     transform: translateX(0);
   }
   100% {
-    transform: translateX(calc(-50% - 0.75rem));
+    transform: translateX(-100%);
   }
 }
 
-/* Leaflet Map Styles */
+/* Enhanced Mapbox mobile styles */
 .mapboxgl-map {
-  font-family: inherit;
+  /* Better touch handling on mobile */
+  touch-action: pan-x pan-y;
 }
 
 .mapboxgl-popup-content {
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  padding: 12px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 16px;
 }
 
 .mapboxgl-popup-close-button {
-  font-size: 16px;
-  color: #666;
-  padding: 4px 8px;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  right: 8px;
+  top: 8px;
 }
 
 .mapboxgl-ctrl-bottom-right {
-  bottom: 12px;
-  right: 12px;
+  bottom: env(safe-area-inset-bottom, 20px);
+  right: env(safe-area-inset-right, 10px);
 }
 
 .mapboxgl-ctrl-group {
   border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  border: none;
 }
 
 .mapboxgl-ctrl-group button {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  background-color: white;
+  border: none;
 }
 
-/* Map container */
 .map-container {
-  height: 100%;
-  width: 100%;
-  position: absolute;
-  top: 0;
-  left: 0;
-}
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .safe-area-bottom {
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-  }
-}
-
-/* Animation */
-@keyframes pulse {
-  0% {
-    transform: translate(-50%, -50%) scale(0.5);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(1.5);
-    opacity: 0;
-  }
-}
-
-:root {
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
-
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
-
-@layer base {
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
-/* Simplified circular marker styles */
-.google-maps-marker {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  cursor: pointer;
-  z-index: 1;
-  pointer-events: auto;
-}
-
-.google-maps-marker.has-tooltip {
-  z-index: 100;
-}
-
-.google-maps-marker.active {
-  z-index: 10;
-}
-
-.marker-container {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Enhanced mobile marker styles */
+@media (max-width: 768px) {
+  .marker-image-only {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+  }
+  
+  .marker-pulse {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .marker-container.selected .marker-image-only {
+    transform: scale(1.2);
+    border-color: #FF6B6B;
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4);
+  }
+  
+  .tooltip-content {
+    max-width: 280px;
+    min-width: 200px;
+    padding: 16px;
+    border-radius: 12px;
+  }
+  
+  .tooltip-image {
+    height: 80px;
+    margin-bottom: 12px;
+    border-radius: 8px;
+  }
+}
+
+/* Enhanced marker interactions */
+.marker-container {
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .marker-image-only {
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+  background-color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  border: 3px solid white;
-  background-color: white;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  position: relative;
-  overflow: hidden;
 }
 
 .marker-image-only.fallback-icon {
   background-color: #FF6B6B;
-  border-color: white;
+  color: white;
 }
 
 .marker-image-only.fallback-icon::after {
   content: "📍";
   font-size: 16px;
-  color: white;
 }
 
 .marker-container.selected .marker-image-only {
+  transform: scale(1.15);
   border-color: #FF6B6B;
-  border-width: 4px;
-  transform: scale(1.2);
-  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.5);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 
+/* Marker pulse animation */
 .marker-pulse {
   position: absolute;
-  top: 0;
-  left: 0;
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  z-index: -1;
-  background-color: rgba(255, 107, 107, 0.4);
-  animation: pulse-marker 1.5s infinite;
+  background-color: rgba(255, 107, 107, 0.3);
+  animation: pulse-marker 2s infinite;
+  pointer-events: none;
 }
 
-/* Google Maps style info window/popup */
-.marker-preview-popup .mapboxgl-popup-content {
-  padding: 12px;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: white;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.marker-preview-popup .mapboxgl-popup-tip {
-  border-bottom-color: white;
-}
-
-.marker-preview {
-  background: white;
-  min-width: 200px;
-  max-width: 250px;
-}
-
-.marker-preview-name {
-  padding: 0;
-  font-weight: 600;
-  font-size: 14px;
-  color: #1f2937;
-  line-height: 1.2;
-  margin-bottom: 4px;
-}
-
-/* Marker bounce animation */
-@keyframes marker-bounce {
-  0%, 20%, 50%, 80%, 100% {
-    transform: translate(-50%, -50%);
-  }
-  40% {
-    transform: translate(-50%, -70%);
-  }
-  60% {
-    transform: translate(-50%, -60%);
-  }
-}
-
-.marker-bounce {
-  animation: marker-bounce 0.75s ease;
-}
-
-/* Pulse animation for selected marker */
-@keyframes pulse-marker {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.6);
-  }
-}
-
-/* Marker tooltip styles */
-.marker-tooltip {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1000;
-  pointer-events: auto;
-}
-
+/* Enhanced tooltip styles */
 .tooltip-content {
   background: white;
-  border-radius: 12px;
+  border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  max-width: 250px;
+  min-width: 180px;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 16px;
-  max-width: 280px;
-  min-width: 200px;
-  position: relative;
 }
 
 .tooltip-image {
   width: 100%;
-  height: 80px;
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 12px;
+  height: 70px;
+  border-radius: 6px;
+  object-fit: cover;
+  margin-bottom: 8px;
 }
 
 .tooltip-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 6px;
 }
 
 .tooltip-info h3 {
@@ -438,49 +480,183 @@
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
+  min-height: 44px; /* Better touch target */
 }
 
 .tooltip-button:hover {
   background-color: #e55555;
 }
 
-.tooltip-arrow {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-top: 8px solid white;
+/* Animation keyframes */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
 }
 
-/* For mobile touch improvements */
-@media (max-width: 768px) {
-  .marker-image-only {
-    width: 36px;
-    height: 36px;
+@keyframes marker-bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-10px);
+  }
+  60% {
+    transform: translateY(-5px);
+  }
+}
+
+.marker-bounce {
+  animation: marker-bounce 1s;
+}
+
+@keyframes pulse-marker {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* CSS Custom Properties for dynamic theming */
+:root {
+  --primary: 9 100% 70%; /* #FF6B6B – Coral */
+  --secondary: 25 95% 53%; /* #FF8E53 – Orange */
+  --accent: 48 100% 67%; /* #FFD93D – Yellow */
+  --background: 0 0% 100%; /* #FFFFFF – White */
+  --foreground: 0 0% 9%; /* #171717 – Near Black */
+  --muted: 39 39% 94%; /* #F5F1E8 – Cream */
+  --muted-foreground: 0 0% 40%; /* #666666 – Medium Gray */
+  --popover: 0 0% 100%; /* #FFFFFF – White */
+  --popover-foreground: 0 0% 9%; /* #171717 – Near Black */
+  --card: 0 0% 100%; /* #FFFFFF – White */
+  --card-foreground: 0 0% 9%; /* #171717 – Near Black */
+  --border: 0 0% 90%; /* #E5E5E5 – Light Gray */
+  --input: 0 0% 90%; /* #E5E5E5 – Light Gray */
+  --ring: 210 15% 20%; /* #333333 – Dark Charcoal */
+  --radius: 0.5rem;
+
+  /* Other required variables */
+  --primary-foreground: 0 0% 100%; /* #FFFFFF – On Primary */
+  --secondary-foreground: 0 0% 100%; /* #FFFFFF – On Secondary */
+  --destructive: 0 84% 60%; /* #E53935 – Destructive */
+  --destructive-foreground: 0 0% 100%; /* #FFFFFF – On Destructive */
+  --cta-foreground: 0 0% 100%; /* #FFFFFF – On CTA */
+
+  /* Font settings */
+  --font-sans: "Inter", Arial, Helvetica, sans-serif;
+  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  
+  /* Mobile-specific custom properties */
+  --mobile-header-height: 60px;
+  --mobile-nav-height: 70px;
+  --mobile-safe-area-top: env(safe-area-inset-top, 0px);
+  --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.dark {
+  --primary: 9 100% 70%;
+  --secondary: 25 95% 53%;
+  --accent: 48 100% 67%;
+  --background: 0 0% 9%;
+  --foreground: 0 0% 95%;
+  --muted: 0 0% 15%;
+  --muted-foreground: 0 0% 60%;
+  --popover: 0 0% 9%;
+  --popover-foreground: 0 0% 95%;
+  --card: 0 0% 9%;
+  --card-foreground: 0 0% 95%;
+  --border: 0 0% 15%;
+  --input: 0 0% 15%;
+  --ring: 0 0% 80%;
+}
+
+/* Additional mobile utility classes */
+.mobile-only {
+  display: block;
+}
+
+.desktop-only {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .mobile-only {
+    display: none;
   }
   
-  .marker-pulse {
-    width: 36px;
-    height: 36px;
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* Better form styling for mobile */
+@media (max-width: 767px) {
+  .mobile-form input,
+  .mobile-form textarea,
+  .mobile-form select {
+    padding: 16px;
+    border-radius: 12px;
+    border: 2px solid #E5E5E5;
+    font-size: 16px;
+    line-height: 1.5;
   }
   
-  .marker-container.selected .marker-image-only {
-    transform: scale(1.15);
+  .mobile-form input:focus,
+  .mobile-form textarea:focus,
+  .mobile-form select:focus {
+    border-color: #FF6B6B;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
   }
-  
-  .tooltip-content {
-    max-width: 250px;
-    min-width: 180px;
-    padding: 12px;
-  }
-  
-  .tooltip-image {
-    height: 60px;
-    margin-bottom: 8px;
-  }
+}
+
+/* Prevent layout shift during navigation hydration */
+.navigation-skeleton {
+  position: fixed;
+  z-index: 50;
+}
+
+.navigation-skeleton.desktop {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4rem;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.navigation-skeleton.mobile {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4rem;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Enhanced safe area handling for mobile navigation */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 

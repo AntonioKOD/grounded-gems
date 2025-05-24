@@ -1,6 +1,7 @@
 "use client"
 import type { Location } from "./map-data"
 import dynamic from "next/dynamic"
+import { memo } from "react"
 
 // Import mapboxgl CSS
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -27,8 +28,11 @@ interface InteractiveMapProps {
   onMapMove: (center: [number, number], zoom: number) => void
   searchRadius?: number
   className?: string
+  selectedLocation?: Location | null
 }
 
-export default function InteractiveMap(props: InteractiveMapProps) {
+const InteractiveMap = memo(function InteractiveMap(props: InteractiveMapProps) {
   return <MapComponent {...props} />
-}
+})
+
+export default InteractiveMap

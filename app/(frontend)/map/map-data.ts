@@ -135,37 +135,61 @@ function extractImageUrl(raw: any): string | undefined {
 
 // --- Fetch & Process Locations -----------------------------------------------
 
+// Global cache to prevent duplicate requests
+let locationsCache: Location[] | null = null
+let locationsCacheTime = 0
+let activeRequest: Promise<Location[]> | null = null
+
 export const addedLocations = async (): Promise<Location[]> => {
   try {
-    // getLocations() already returns only published docs
-    const locs: Array<Location & { name?: string }> = (await getLocations()).map((loc: any) => ({
-      ...loc,
-      name: loc.name ?? "Unnamed Location", // Ensure name is included
-    }))
- 
-    // filter any without valid latitude/longitude
-    return locs
-      .filter(
-        (l: any): l is Location =>
-          typeof l.latitude === "number" &&
-          typeof l.longitude === "number" &&
-          !isNaN(l.latitude) &&
-          !isNaN(l.longitude) &&
-          typeof l.id === "string" &&
-          (!l.address || typeof l.address === "string") &&
-          (!l.imageUrl || typeof l.imageUrl === "string")
-      )
-      .map((l) => ({
-        ...l,
-        name: l.name ?? "Unnamed Location", // Ensure name is included
-        address: formatAddress(l.address) || undefined,
-        imageUrl: l.imageUrl || extractImageUrl(l.featuredImage) || undefined,
-        // ensure categories is always array
-        categories: Array.isArray(l.categories) ? l.categories : [],
-      }))
-  } catch (err) {
-    console.error("Error in addedLocations:", err)
-    return []
+    console.log("📍 [MAP-DATA] Starting addedLocations function...")
+    
+    // Check cache first (cache for 30 seconds)
+    const now = Date.now()
+    if (locationsCache && (now - locationsCacheTime) < 30000) {
+      console.log("📍 [MAP-DATA] Returning cached locations")
+      return locationsCache
+    }
+    
+    // If there's already an active request, wait for it
+    if (activeRequest) {
+      console.log("📍 [MAP-DATA] Waiting for existing request...")
+      return await activeRequest
+    }
+    
+    console.log("📍 [MAP-DATA] Making new API request...")
+    
+    // Create new request
+    activeRequest = fetch('/api/locations/all')
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const data = await response.json()
+        return data.locations || []
+      })
+      .then((locations: Location[]) => {
+        console.log(`✅ [MAP-DATA] Retrieved ${locations.length} locations from API`)
+        
+        // Cache the results
+        locationsCache = locations
+        locationsCacheTime = now
+        activeRequest = null // Clear active request
+        
+        return locations
+      })
+      .catch((error) => {
+        console.error("❌ [MAP-DATA] Error fetching locations:", error)
+        activeRequest = null // Clear active request on error
+        return locationsCache || [] // Return cached data if available, otherwise empty array
+      })
+    
+    return await activeRequest
+    
+  } catch (error) {
+    console.error("❌ [MAP-DATA] Unexpected error:", error)
+    activeRequest = null
+    return locationsCache || []
   }
 }
 

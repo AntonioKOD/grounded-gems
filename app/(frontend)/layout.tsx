@@ -1,17 +1,16 @@
 import type React from "react"
 import "./globals.css"
-import NavBar from "@/components/NavBar"
 import Footer from "@/components/footer"
-import MobileNavigation from "@/components/mobile-navigation"
 import PWAInstallBanner from "@/components/pwa-install-banner"
 import { Toaster } from "sonner"
 import { UserProvider } from "@/context/user-context"
-import { getServerSideUser } from "@/lib/auth"
+import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
+import NavigationWrapper from "@/components/navigation-wrapper"
 
 export const metadata = {
-  description: "Discover and explore amazing locations, connect with friends, and find local events in your area",
-  title: "Sacavia - Discover Amazing Places",
+  description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
+  title: "Grounded Gems - Discover Hidden Treasures",
 }
 
 export default async function RootLayout(props: { children: React.ReactNode }) {
@@ -25,47 +24,46 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="icon" href="/favicon.ico" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         
         {/* PWA Meta Tags */}
         <meta name="theme-color" content="#FF6B6B" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Sacavia" />
+        <meta name="apple-mobile-web-app-title" content="Grounded Gems" />
         <meta name="mobile-web-app-capable" content="yes" />
         
         {/* SEO Meta Tags */}
         <meta name="description" content={metadata.description} />
         <meta name="keywords" content="travel, locations, events, social, discovery, community, local, recommendations, hidden gems" />
-        <meta name="author" content="Sacavia Team" />
+        <meta name="author" content="Grounded Gems Team" />
         
         {/* Open Graph Meta Tags */}
         <meta property="og:title" content={metadata.title} />
         <meta property="og:description" content={metadata.description} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="/icon1.png" />
-        <meta property="og:site_name" content="Sacavia" />
+        <meta property="og:image" content="/icon-512.png" />
+        <meta property="og:site_name" content="Grounded Gems" />
         
         {/* Twitter Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={metadata.title} />
         <meta name="twitter:description" content={metadata.description} />
-        <meta name="twitter:image" content="/icon1.png" />
+        <meta name="twitter:image" content="/icon-512.png" />
         
         {/* Apple Touch Icons */}
-        <link rel="apple-touch-icon" href="/icon1.png" />
-        <link rel="apple-touch-icon" sizes="152x152" href="/icon1.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icon1.png" />
-        <link rel="apple-touch-icon" sizes="167x167" href="/icon1.png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="152x152" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="167x167" href="/icon-192.png" />
+        
+        {/* Performance optimization - removed unused external script preloads */}
       </head>
       <body>
         <UserProvider initialUser={initialUser}>
-          <NavBar />
+          <NavigationWrapper initialUser={initialUser} />
           {children}
           <Footer />
-          <div className="md:hidden">
-            <MobileNavigation />
-          </div>
           <PWAInstallBanner />
           <Toaster />
         </UserProvider>

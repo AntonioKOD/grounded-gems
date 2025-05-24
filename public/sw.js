@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sacavia-v1';
+const CACHE_NAME = 'grounded-gems-v1';
 const OFFLINE_PAGE = '/offline.html';
 
 const urlsToCache = [
@@ -7,9 +7,9 @@ const urlsToCache = [
   '/events',
   '/feed',
   '/notifications',
-  '/manifest.json',
-  '/icon1.png',
-  '/icon0.svg',
+  '/manifest.webmanifest',
+  '/icon-192.png',
+  '/icon-512.png',
   OFFLINE_PAGE,
 ];
 
@@ -56,6 +56,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Skip chrome-extension and other unsupported schemes
+  if (event.request.url.startsWith('chrome-extension://') || 
+      event.request.url.startsWith('moz-extension://') ||
+      event.request.url.startsWith('safari-extension://') ||
+      event.request.url.startsWith('edge-extension://')) {
+    return;
+  }
+
   // Skip API requests for specific handling
   if (event.request.url.includes('/api/')) {
     event.respondWith(
@@ -98,10 +106,18 @@ self.addEventListener('fetch', (event) => {
             // Clone the response
             const responseToCache = response.clone();
 
-            // Cache the new response
+            // Cache the new response - but handle errors gracefully
             caches.open(CACHE_NAME)
               .then((cache) => {
-                cache.put(event.request, responseToCache);
+                // Only cache if the request and response are valid
+                try {
+                  cache.put(event.request, responseToCache);
+                } catch (error) {
+                  console.log('Failed to cache request:', event.request.url, error);
+                }
+              })
+              .catch((error) => {
+                console.log('Failed to open cache:', error);
               });
 
             return response;
@@ -128,9 +144,9 @@ self.addEventListener('message', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-  let title = 'Sacavia';
-  let body = 'New notification from Sacavia!';
-  let icon = '/icon1.png';
+  let title = 'Grounded Gems';
+  let body = 'New notification from Grounded Gems!';
+  let icon = '/icon-192.png';
   let data = {};
 
   if (event.data) {
@@ -148,7 +164,7 @@ self.addEventListener('push', (event) => {
   const options = {
     body,
     icon,
-    badge: '/icon1.png',
+    badge: '/icon-192.png',
     vibrate: [200, 100, 200],
     data: {
       dateOfArrival: Date.now(),
@@ -159,12 +175,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'explore',
         title: 'View',
-        icon: '/icon1.png'
+        icon: '/icon-192.png'
       },
       {
         action: 'close',
         title: 'Close',
-        icon: '/icon1.png'
+        icon: '/icon-192.png'
       }
     ]
   };

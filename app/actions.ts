@@ -13,7 +13,7 @@ import { Post } from "@/types/feed";
 import { Notification } from "@/types/notification";
 import {Where} from "payload";
 import { PayloadRequest } from "payload";
-import { getServerSideUser } from "@/lib/auth";
+import { getServerSideUser } from "@/lib/auth-server";
 
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
@@ -573,23 +573,49 @@ export async function getUserbyId(id: string) {
       return null
     }
     
-    const payload = await getPayload({ config: config })
-    const result = await payload.findByID({
-      collection: "users",
-      id,
-      depth: 2,
-      overrideAccess: true,
-    })
+    // Add retry logic for MongoDB session errors
+    let retries = 3
+    let lastError: any = null
     
-    console.log(`Found user:`, result ? `${result.name || 'Unknown'} (ID: ${result.id})` : 'No user found')
-    return result
+    while (retries > 0) {
+      try {
+        const payload = await getPayload({ config: config })
+        const result = await payload.findByID({
+          collection: "users",
+          id,
+          depth: 2,
+          overrideAccess: true,
+        })
+        
+        console.log(`Found user:`, result ? `${result.name || 'Unknown'} (ID: ${result.id})` : 'No user found')
+        return result
+      } catch (error: any) {
+        lastError = error
+        
+        // If it's a MongoDB session error, retry
+        if (error.name === 'MongoExpiredSessionError' || error.message?.includes('session')) {
+          console.log(`Retrying getUserbyId due to session error, ${retries - 1} retries left`)
+          retries--
+          if (retries > 0) {
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 100))
+            continue
+          }
+        } else {
+          // For other errors, don't retry
+          throw error
+        }
+      }
+    }
+    
+    throw lastError
   } catch (error) {
     console.error("Error in getUserbyId:", error)
     return null
   }
 }
 
-export async function getFeedPostsByUser(id: string) {
+export async function getFeedPostsByUser(id: string, category?: string) {
   const payload = await getPayload({ config })
   const cookieStore = await cookies()
   const cookieHeader = cookieStore
@@ -597,18 +623,70 @@ export async function getFeedPostsByUser(id: string) {
     .map((c) => `${c.name}=${c.value}`)
     .join("; ") 
 
+  // Build query based on user ID and optional category
+  const query: any = {
+    author: {
+      equals: id,
+    },
+    status: {
+      equals: "published"
+    }
+  }
+  
+  // Add category filter if provided
+  if (category && category !== 'all') {
+    // If using a categories array field
+    query.categories = {
+      contains: category
+    }
+    
+    // If category is a tag field instead, uncomment this:
+    // query.tags = {
+    //   some: {
+    //     tag: {
+    //       equals: category
+    //     }
+    //   }
+    // }
+  }
+
   const { docs } = await payload.find({
     collection: 'posts',
     depth: 2,
-    where: {
-      author: {
-        equals: id,
-      },
-    },
+    where: query,
     sort: '-createdAt', // optional: most recent first
   })
 
-  return docs
+  // Format posts for the frontend to match the getFeedPosts return format
+  const formattedPosts = docs.map((post) => ({
+    id: String(post.id),
+    author: {
+      id: typeof post.author === "object" ? post.author.id : post.author,
+      name: typeof post.author === "object" ? post.author.name : "Unknown User",
+      avatar: typeof post.author === "object" && post.author.profileImage ? post.author.profileImage.url : undefined,
+    },
+    title: post.title || "",
+    content: post.content || "",
+    createdAt: post.createdAt || new Date().toISOString(),
+    image: post.image?.url || post.featuredImage?.url || undefined,
+    likeCount: post.likes?.length || 0,
+    commentCount: post.comments?.length || 0,
+    shareCount: post.shares || 0,
+    isLiked: false, // This will be updated client-side
+    type: post.type || "post",
+    rating: post.rating,
+    location: post.location
+      ? {
+          id: typeof post.location === "object" ? post.location.id : post.location,
+          name: typeof post.location === "object" ? post.location.name : "Unknown Location",
+          address: typeof post.location === "object" ? post.location.address : undefined,
+        }
+      : undefined,
+    categories: post.categories || [],
+    tags: post.tags || []
+  }))
+
+  return formattedPosts
 }
 
 
@@ -915,8 +993,8 @@ export async function sharePost(postId: string, currentUserId: string): Promise<
 
 
 
-export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, offset = 0) {
-  console.log(`Getting personalized feed for user ${currentUserId}, pageSize: ${pageSize}, offset: ${offset}`)
+export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, offset = 0, category?: string) {
+  console.log(`Getting personalized feed for user ${currentUserId}, pageSize: ${pageSize}, offset: ${offset}${category ? ', category=' + category : ''}`)
   const cookieStore = await cookies()
   const cookieHeader = cookieStore
     .getAll()
@@ -1038,92 +1116,131 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
 
 // Haversine formula to calculate distance between two points on Earth
 
-export async function getFeedPosts(feedType: string, sortBy: string, page: number): Promise<Post[]> {
-  console.log(`Getting feed posts: type=${feedType}, sort=${sortBy}, page=${page}`)
-  const cookieStore = await cookies()
-  const cookieHeader = cookieStore
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ") 
-
+export async function getFeedPosts(feedType: string, sortBy: string, page: number, category?: string): Promise<Post[]> {
+  console.log(`Getting feed posts type=${feedType}, sortBy=${sortBy}, page=${page}${category ? ', category=' + category : ''}`)
+  
   try {
-
-    
-
     const payload = await getPayload({ config })
+    
+    // Define pageSize for pagination
     const pageSize = 10
-    const skip = (page - 1) * pageSize
-
-    // Build query based on feed type and sort options
+    
+    // Build query object for filtering
     const query: any = {
-      status: { equals: "published" },
+      status: {
+        equals: "published"
+      }
+    }
+    
+    // Add category filter if specified
+    if (category && category !== 'all') {
+      // If using a categories array field
+      query.categories = {
+        contains: category
+      }
+    }
+    
+    // Add feed type filters
+    if (feedType === 'recommendations') {
+      query.type = { equals: 'recommendation' }
+    } else if (feedType === 'reviews') {
+      query.type = { equals: 'review' }
+    }
+    
+    // Determine sort order
+    let sort = '-createdAt' // Default to newest first
+    
+    if (sortBy === 'popular') {
+      sort = '-likeCount'
+    } else if (sortBy === 'trending') {
+      sort = '-trendingScore'
     }
 
-    // If we're in a specific feed type (e.g., "locations", "reviews")
-    if (feedType !== "all" && feedType !== "user") {
-      query.type = { equals: feedType }
+    // Fetch posts from Payload CMS with error handling
+    let posts: any[] = []
+    let totalDocs = 0
+    
+    try {
+      const result = await payload.find({
+        collection: "posts",
+        where: query,
+        sort,
+        limit: pageSize,
+        page: page,
+        depth: 1, // Load author and other relations
+      })
+      
+      posts = result.docs || []
+      totalDocs = result.totalDocs || 0
+    } catch (dbError) {
+      console.error("Database error fetching posts:", dbError)
+      // Return empty array on database error
+      return []
     }
-
-    // Determine sort options
-    let sort: string
-    switch (sortBy) {
-      case "popular":
-        sort = "-likeCount" // Sort by most likes
-        break
-      case "trending":
-        // For trending, we want recent posts with high engagement
-        // This is a simplified approach - in production you might use a more complex algorithm
-        sort = "-_updatedAt" // Sort by recently updated
-        break
-      case "recent":
-      default:
-        sort = "-createdAt" // Sort by newest first
-        break
-    }
-
-    // Fetch posts from Payload CMS
-    const { docs: posts, totalDocs } = await payload.find({
-      collection: "posts",
-      where: query,
-      sort,
-      limit: pageSize,
-      page: page,
-      depth: 1, // Load author and other relations
-    })
 
     console.log(`Found ${posts.length} posts out of ${totalDocs} total`)
 
-    // Format posts for the frontend
-    const formattedPosts = posts.map((post) => ({
-      id: String(post.id),
-      author: {
-        id: typeof post.author === "object" ? post.author.id : post.author,
-        name: typeof post.author === "object" ? post.author.name : "Unknown User",
-        avatar: typeof post.author === "object" && post.author.profileImage ? post.author.profileImage.url : undefined,
-      },
-      title: post.title || "",
-      content: post.content || "",
-      createdAt: post.createdAt || new Date().toISOString(),
-      image: post.image?.url || post.featuredImage?.url || undefined,
-      likeCount: post.likes?.length || 0,
-      commentCount: post.comments?.length || 0,
-      shareCount: post.shares || 0,
-      isLiked: false, // This will be updated client-side
-      type: post.type || "post",
-      rating: post.rating,
-      location: post.location
-        ? {
-            id: typeof post.location === "object" ? post.location.id : post.location,
-            name: typeof post.location === "object" ? post.location.name : "Unknown Location",
-            address: typeof post.location === "object" ? post.location.address : undefined,
-          }
-        : undefined,
-    }))
+    // Format posts for the frontend with safe property access
+    const formattedPosts: Post[] = posts.map((post: any) => {
+      try {
+        return {
+          id: String(post.id),
+          author: {
+            id: typeof post.author === "object" && post.author ? post.author.id : post.author || "unknown",
+            name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
+            avatar: typeof post.author === "object" && post.author && post.author.profileImage ? post.author.profileImage.url : undefined,
+          },
+          title: post.title || "",
+          content: post.content || "",
+          createdAt: post.createdAt || new Date().toISOString(),
+          image: post.image?.url || post.featuredImage?.url || undefined,
+          likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
+          commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
+          shareCount: post.shares || 0,
+          isLiked: false, // This will be updated client-side
+          type: post.type || "post",
+          rating: post.rating,
+          location: post.location
+            ? {
+                id: typeof post.location === "object" && post.location ? post.location.id : post.location,
+                name: typeof post.location === "object" && post.location ? post.location.name : "Unknown Location",
+                address: typeof post.location === "object" && post.location ? post.location.address : undefined,
+              }
+            : undefined,
+          categories: Array.isArray(post.categories) ? post.categories : [],
+          tags: Array.isArray(post.tags) ? post.tags : []
+        }
+      } catch (formatError) {
+        console.error("Error formatting post:", formatError, post)
+        // Return a safe default post object
+        return {
+          id: String(post.id || Math.random()),
+          author: {
+            id: "unknown",
+            name: "Unknown User",
+            avatar: undefined,
+          },
+          title: "",
+          content: "Post content unavailable",
+          createdAt: new Date().toISOString(),
+          image: undefined,
+          likeCount: 0,
+          commentCount: 0,
+          shareCount: 0,
+          isLiked: false,
+          type: "post",
+          rating: undefined,
+          location: undefined,
+          categories: [],
+          tags: []
+        }
+      }
+    }).filter(Boolean) // Remove any null/undefined posts
 
     return formattedPosts
   } catch (error) {
     console.error("Error fetching feed posts:", error)
-    return []; // Return an empty array in case of an error
+    return [] // Return an empty array in case of any error
   }
 }
 
@@ -2016,7 +2133,7 @@ export async function createMultipleTestNotifications(userId: string): Promise<{
       },
       {
         type: 'reminder',
-        title: 'Welcome to Sacavia!',
+        title: 'Welcome to Grounded Gems!',
         message: 'Thanks for joining our community. Start exploring amazing locations!',
         priority: 'low' as const
       }

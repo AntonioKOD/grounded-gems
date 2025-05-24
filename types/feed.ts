@@ -17,28 +17,39 @@ export interface User {
   }
   
   export interface Post {
-    status?: string
     id: string
-    author: User
     title?: string
     content: string
+    author: {
+      id: string
+      name: string
+      avatar?: string
+    }
     createdAt: string
+    type: 'post' | 'review' | 'recommendation'
     image?: string
     likeCount?: number
     commentCount?: number
+    shareCount?: number
     isLiked?: boolean
-    type: "post" | "review" | "recommendation"
+    location?: {
+      id: string
+      name: string
+      address?: string
+    }
     rating?: number
-    location?: Location
-    likes?: number
-    comments?: Comment[]
-   
+    categories?: string[]
+    status?: 'draft' | 'published' | 'archived'
   }
   
   export interface Comment {
     id: string
-    author: User
     content: string
+    author: {
+      id: string
+      name: string
+      avatar?: string
+    }
     createdAt: string
     likeCount?: number
     isLiked?: boolean

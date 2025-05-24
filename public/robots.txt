@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://groundedgems.com/sitemap.xml
+
+# Disallow admin and API routes
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /private/
+
+# Allow important pages
+Allow: /
+Allow: /feed
+Allow: /map
+Allow: /events
+Allow: /search
+Allow: /login
+Allow: /signup
+
+# Crawl delay
+Crawl-delay: 1 

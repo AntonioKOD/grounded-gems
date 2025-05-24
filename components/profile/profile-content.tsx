@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useCallback, useTransition, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal } from "react"
+import { useEffect, useState, useCallback, useTransition, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, Suspense } from "react"
 import { useRouter } from "next/navigation"
 import {
   Mail,
@@ -36,9 +36,10 @@ import { PostCard } from "@/components/post/post-card"
 import type { Post } from "@/types/feed"
 import { useAuth } from "@/hooks/use-auth"
 import ProfileSkeleton from "./profile-skeleton"
-import PostsSkeleton from "./posts-skeleton"
+import PostsSkeleton from "@/components/feed/posts-skeleton"
 import type { UserProfile } from "@/types/user"
 import Link from "next/link"
+import ResponsiveFeed from "@/components/feed/responsive-feed"
 
 export default function ProfileContent({
   initialUserData,
@@ -625,44 +626,15 @@ export default function ProfileContent({
                 </TabsList>
               </div>
 
-              <TabsContent value="posts" className="p-6 pt-4">
-                {isLoadingPosts ? (
-                  <PostsSkeleton />
-                ) : userPosts.length > 0 ? (
-                  <div className="space-y-6">
-                    {userPosts.map(
-                      (post) =>
-                        currentUser && (
-                          <PostCard
-                            user={{
-                              id: currentUser.id,
-                              name: currentUser.name || "Unknown User",
-                              avatar: currentUser.profileImage?.url,
-                            }}
-                            key={post.id}
-                            post={post}
-                          />
-                        ),
-                    )}
-                  </div>
-                ) : (
-                  <Card className="bg-gray-50 border border-dashed">
-                    <CardContent className="py-12 flex flex-col items-center justify-center text-center">
-                      <div className="bg-white p-3 rounded-full shadow-sm mb-4">
-                        <Camera className="h-6 w-6 text-gray-400" />
-                      </div>
-                      <h3 className="text-lg font-medium mb-2">No posts yet</h3>
-                      <p className="text-gray-500 max-w-md mx-auto">
-                        {isCurrentUser
-                          ? "You haven't shared any posts yet. Start sharing your experiences!"
-                          : "This user hasn't shared any posts yet. Check back later!"}
-                      </p>
-                      {isCurrentUser && (
-                        <Button className="mt-6 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">Create Your First Post</Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+              <TabsContent value="posts">
+                <Suspense fallback={<PostsSkeleton />}>
+                  <ResponsiveFeed
+                    initialPosts={userPosts}
+                    feedType="user"
+                    userId={userId}
+                    showPostForm={isCurrentUser}
+                  />
+                </Suspense>
               </TabsContent>
 
               <TabsContent value="about" className="p-6 pt-4">

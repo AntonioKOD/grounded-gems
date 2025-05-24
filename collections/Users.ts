@@ -188,6 +188,24 @@ export const Users: CollectionConfig = {
   },
   fields: [
     { name: 'name', type: 'text', required: true },
+    { 
+      name: 'username', 
+      type: 'text', 
+      required: true,
+      unique: true,
+      admin: {
+        description: 'Unique username for the user (no spaces, lowercase)'
+      },
+      validate: (value: string) => {
+        if (!value) return 'Username is required'
+        if (!/^[a-z0-9_-]+$/.test(value)) {
+          return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'
+        }
+        if (value.length < 3) return 'Username must be at least 3 characters long'
+        if (value.length > 30) return 'Username must be less than 30 characters'
+        return true
+      }
+    },
     { name: 'profileImage', type: 'upload', relationTo: 'media' },
     { name: 'bio', type: 'textarea' },
     {
