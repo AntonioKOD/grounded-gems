@@ -198,26 +198,24 @@ export default function FeedContainer({
 
 
   return (
-    <div className={`max-w-2xl mx-auto ${className}`}>
-    
-
+    <div className={`max-w-4xl mx-auto ${className}`}>
       {/* Feed Header with Refresh Button */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-semibold">
+      <div className="flex justify-between items-center mb-8 sticky top-0 z-10 bg-white/95 backdrop-blur-sm py-4 px-6 -mx-6 border-b">
+        <h2 className="text-2xl font-semibold text-gray-900">
           {feedType === "personalized" ? "For You" : feedType === "user" ? "User Posts" : "All Posts"}
         </h2>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <Button
             variant="outline"
             size="sm"
             onClick={refreshPosts}
             disabled={refreshing || loading}
-            className="flex items-center gap-1"
+            className="flex items-center gap-2 hover:bg-gray-100"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="flex items-center gap-2 hover:bg-gray-100">
             <Filter className="h-4 w-4" />
             Filter
           </Button>
@@ -233,24 +231,27 @@ export default function FeedContainer({
               name: user.name,
               avatar: user.profileImage?.url || user.avatar,
             }}
-            className="mb-6"
+            className="mb-8"
           />
-          <Separator className="my-6" />
+          <Separator className="my-8" />
         </>
       )}
 
       {/* Mock Data Notice */}
       {usedMockData && (
-        <div className="mb-4 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700">
+        <div className="mb-6 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
           <p>Showing example posts. Connect your API to see real posts.</p>
         </div>
       )}
 
       {/* Posts */}
-      <div className="space-y-6">
+      <div className="space-y-8">
         {loading ? (
-          <Card className="p-8 flex justify-center items-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+          <Card className="p-12 flex justify-center items-center bg-white/50 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-[#FF6B6B]" />
+              <p className="text-sm text-gray-500">Loading posts...</p>
+            </div>
           </Card>
         ) : posts.length > 0 ? (
           <>
@@ -259,7 +260,7 @@ export default function FeedContainer({
                 key={post.id}
                 post={{
                   ...post,
-                  commentCount: post.commentCount || 0, // Ensure commentCount is always defined
+                  commentCount: post.commentCount || 0,
                 }}
                 user={{
                   id: user?.id || "",
@@ -268,42 +269,60 @@ export default function FeedContainer({
                 }}
                 onComment={handleComment}
                 onPostUpdated={handlePostUpdate}
-                className="transition-all duration-300 hover:shadow-md"
+                className="feed-post hover:shadow-lg transition-all duration-300"
               />
             ))}
 
             {/* Load more button */}
             {hasMore && (
-              <div className="flex justify-center pt-2 pb-8">
+              <div className="flex justify-center pt-4 pb-12">
                 <Button
                   variant="outline"
                   onClick={loadMorePosts}
                   disabled={loadingMore}
-                  className="min-w-[150px] border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
+                  className="min-w-[180px] border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5 font-medium"
                 >
                   {loadingMore ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading...
-                    </>
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading...</span>
+                    </div>
                   ) : (
-                    "Load More"
+                    "Load More Posts"
                   )}
+                </Button>
+              </div>
+            )}
+
+            {/* End of feed indicator */}
+            {!hasMore && posts.length > 0 && (
+              <div className="py-12 text-center">
+                <Separator className="mb-8" />
+                <p className="text-gray-500 mb-4">You've reached the end of your feed</p>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                  className="bg-white hover:bg-gray-50"
+                >
+                  Back to top
                 </Button>
               </div>
             )}
           </>
         ) : (
-          <Card>
-            <CardContent className="p-12 text-center">
-              <p className="mb-4 text-lg font-medium">No posts found</p>
-              {userId ? (
-                <p className="text-muted-foreground">This user hasn&apos;t posted anything yet.</p>
-              ) : feedType === "personalized" ? (
-                <p className="text-muted-foreground">Follow some users to see personalized posts!</p>
-              ) : (
-                <p className="text-muted-foreground">Be the first to share a post!</p>
-              )}
+          <Card className="overflow-hidden">
+            <CardContent className="p-16 text-center bg-gray-50/50">
+              <div className="max-w-md mx-auto">
+                <p className="text-xl font-medium text-gray-900 mb-3">No posts found</p>
+                {userId ? (
+                  <p className="text-gray-500">This user hasn&apos;t posted anything yet.</p>
+                ) : feedType === "personalized" ? (
+                  <p className="text-gray-500">Follow some users to see personalized posts!</p>
+                ) : (
+                  <p className="text-gray-500">Be the first to share a post!</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}

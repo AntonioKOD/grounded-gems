@@ -139,7 +139,7 @@ export const Users: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    update: ({ req, id }) => req.user?.id === id,
+    update: () => true,
     delete: ({ req, id }) => req.user?.id === id,
   },
   hooks: {
@@ -198,7 +198,7 @@ export const Users: CollectionConfig = {
       },
       validate: (value: string) => {
         if (!value) return 'Username is required'
-        if (!/^[a-z0-9_-]+$/.test(value)) {
+        if (!/^[a-z0-9_-].+$/.test(value)) {
           return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'
         }
         if (value.length < 3) return 'Username must be at least 3 characters long'

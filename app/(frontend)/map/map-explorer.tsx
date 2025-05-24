@@ -50,6 +50,8 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import FilterBar from "@/components/filter-bar"
 import { optimizedFetch, debounce, throttle } from "@/lib/api-cache"
+import { mapPersistenceService } from "@/lib/map-persistence-service"
+import type { PersistentMapState } from "@/lib/map-state-persistence"
 
 export default function MapExplorer() {
   // Browser detection states
@@ -57,24 +59,9 @@ export default function MapExplorer() {
   const [isIOS, setIsIOS] = useState(false)
   const [browserInfo, setBrowserInfo] = useState<string>("")
 
-  // Core states
-  const [allLocations, setAllLocations] = useState<Location[]>([])
-  const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
-  const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string } | null>(null)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [categories, setCategories] = useState<any[]>([])
-  const [mapCenter, setMapCenter] = useState<[number, number]>([-71.0589, 42.3601]) // Default to Boston
-  const [mapZoom, setMapZoom] = useState(12)
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
-  const [isLoading, setIsLoading] = useState(false) // Start with false so map loads immediately
-  const [locationsLoading, setLocationsLoading] = useState(true) // Separate loading state for locations
-  const [error, setError] = useState<string | null>(null)
-
-  // UI states
+  // UI states - moved up before map persistence initialization
   const [activeView, setActiveView] = useState<"map" | "list">("map")
-  const [isDetailOpen, setIsDetailOpen] = useState(false) // Changed from showDetail to isDetailOpen
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileList, setShowMobileList] = useState(false)
@@ -101,6 +88,22 @@ export default function MapExplorer() {
     location: null,
   })
 
+  // Core states
+  const [allLocations, setAllLocations] = useState<Location[]>([])
+  const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name?: string; email?: string } | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<any[]>([])
+  const [mapCenter, setMapCenter] = useState<[number, number]>([-71.0589, 42.3601]) // Default to Boston
+  const [mapZoom, setMapZoom] = useState(12)
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [locationsLoading, setLocationsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
   // Refs for container elements
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const listContainerRef = useRef<HTMLDivElement>(null)
@@ -109,8 +112,50 @@ export default function MapExplorer() {
   const showListButtonRef = useRef<HTMLButtonElement>(null)
   const lastClickTimeRef = useRef<number>(0)
 
-  // Add refreshKey state at the top of the component
-  const [refreshKey, setRefreshKey] = useState(0)
+  // Initialize map persistence service
+  useEffect(() => {
+    // Load saved state
+    const savedState = mapPersistenceService.initialize()
+    
+    // Apply saved state
+    if (savedState) {
+      setMapCenter(savedState.center)
+      setMapZoom(savedState.zoom)
+      setSearchQuery(savedState.searchQuery)
+      setSelectedCategories(savedState.selectedCategories)
+      setActiveView(savedState.activeView)
+    }
+  }, [])
+
+  // Save map state when relevant states change
+  useEffect(() => {
+    mapPersistenceService.updateState({
+      center: mapCenter,
+      zoom: mapZoom,
+      selectedLocationId: selectedLocation?.id || null,
+      searchQuery,
+      selectedCategories,
+      activeView,
+      filteredLocationIds: filteredLocations.map(loc => loc.id),
+      markers: filteredLocations.map(loc => ({
+        id: loc.id,
+        latitude: Number(loc.latitude),
+        longitude: Number(loc.longitude),
+        category: loc.categories?.[0]?.name || loc.categories?.[0] || '',
+        isSelected: loc.id === selectedLocation?.id
+      })),
+      lastUpdated: Date.now(),
+      lastInteraction: 'update'
+    })
+  }, [
+    mapCenter,
+    mapZoom,
+    selectedLocation?.id,
+    searchQuery,
+    selectedCategories,
+    activeView,
+    filteredLocations
+  ])
 
   // Helper function to extract coordinates from a location
   const getLocationCoordinates = useCallback((location: Location): [number, number] | null => {
@@ -1510,6 +1555,10 @@ export default function MapExplorer() {
             onMapMove={handleMapMove}
             className="h-full w-full"
             selectedLocation={selectedLocation}
+            onViewDetail={(location) => {
+              setSelectedLocation(location)
+              setIsDetailOpen(true) // Open the dialog
+            }}
           />
 
           {/* Map controls */}

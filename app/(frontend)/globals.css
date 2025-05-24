@@ -370,6 +370,7 @@
 .marker-container {
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .marker-image-only {
@@ -386,19 +387,27 @@
   justify-content: center;
 }
 
-.marker-image-only.fallback-icon {
-  background-color: #FF6B6B;
-  color: white;
+/* Marker tooltip styles */
+.marker-tooltip {
+  pointer-events: none;
+  z-index: 1000;
+  white-space: normal;
+  max-width: 250px;
+  min-width: 200px;
 }
 
-.marker-image-only.fallback-icon::after {
-  content: "📍";
-  font-size: 16px;
+.marker-tooltip img {
+  border-radius: 4px;
+}
+
+.marker-container:hover .marker-image-only {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .marker-container.selected .marker-image-only {
-  transform: scale(1.15);
   border-color: #FF6B6B;
+  transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 

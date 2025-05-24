@@ -6,8 +6,8 @@ import ResponsiveFeed from "@/components/feed/responsive-feed"
 import type { Post } from "@/types/feed"
 
 export const metadata: Metadata = {
-  title: "Feed | Grounded Gems",
-  description: "Discover locations and events shared by the community",
+  title: "Discover | Sacavia",
+  description: "Discover amazing places and experiences shared by the community",
 }
 
 // Force dynamic rendering to avoid static generation issues
@@ -26,19 +26,15 @@ export default async function FeedPage() {
   }
 
   return (
-    <main className="py-6">
-      <div className="container px-4 sm:px-6">
-        <h1 className="text-2xl md:text-3xl font-bold mb-6">Feed</h1>
-
-        <Suspense fallback={<FeedSkeleton />}>
-          <ResponsiveFeed
-            initialPosts={initialPosts}
-            feedType="all"
-            sortBy="recent"
-            showPostForm={true}
-          />
-        </Suspense>
-      </div>
+    <main className="min-h-screen w-full bg-black overflow-hidden">
+      <Suspense fallback={<FeedSkeleton />}>
+        <ResponsiveFeed
+          initialPosts={initialPosts}
+          feedType="all"
+          sortBy="recent"
+          showPostForm={true}
+        />
+      </Suspense>
     </main>
   )
 }

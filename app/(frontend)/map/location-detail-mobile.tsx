@@ -25,7 +25,7 @@ import Image from "next/image"
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import type { Location } from "./map-data"
@@ -419,6 +419,9 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
         side="bottom" 
         className="h-[90vh] max-h-[90vh] p-0 rounded-t-2xl"
       >
+        <SheetHeader className="sr-only">
+          <SheetTitle>{location?.name || 'Location Details'}</SheetTitle>
+        </SheetHeader>
         <div className="flex flex-col h-full">
           {/* Header with image */}
           <div className="relative">

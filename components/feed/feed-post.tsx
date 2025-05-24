@@ -17,13 +17,14 @@ import {
   Heart,
   Bookmark,
   ImageIcon,
+  Flag,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +51,7 @@ export const FeedPost = memo(function FeedPost({ post, user, className = "", sho
   const [shareCount, setShareCount] = useState(post.shareCount || 0)
   const [isSaved, setIsSaved] = useState(false)
   const [isLoadingImage, setIsLoadingImage] = useState(true)
+  const [imageError, setImageError] = useState(false)
 
   // Determine if content should be truncated
   const isLongContent = post.content.length > 280
@@ -129,177 +131,160 @@ export const FeedPost = memo(function FeedPost({ post, user, className = "", sho
   }
 
   return (
-    <Card className={`overflow-hidden shadow-sm hover:shadow-md transition-shadow ${className}`}>
-      <CardContent className="p-4 pt-5">
-        <div className="flex justify-between items-start mb-4">
-          <div className="flex items-center">
-            <Link href={`/profile/${post.author.id}`} className="mr-3">
-              <Avatar className="h-10 w-10 border">
-                <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} />
-                <AvatarFallback>{getInitials(post.author.name)}</AvatarFallback>
-              </Avatar>
-            </Link>
+    <Card className={`overflow-hidden bg-white hover:shadow-lg transition-all duration-300 ${className}`}>
+      {/* Post Header */}
+      <CardHeader className="p-4 pb-0 flex flex-row items-center justify-between space-y-0">
+        <div className="flex items-center gap-3">
+          <Link 
+            href={`/profile/${post.author.id}`}
+            className="group flex items-center gap-3 hover:opacity-90 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Avatar className="h-10 w-10 ring-2 ring-white/20 group-hover:ring-white/40 transition-all">
+              <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} />
+              <AvatarFallback>{getInitials(post.author.name)}</AvatarFallback>
+            </Avatar>
             <div>
-              <div className="flex items-center">
-                <Link href={`/profile/${post.author.id}`} className="font-medium hover:underline">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors">
                   {post.author.name}
-                </Link>
+                </span>
                 {post.type !== "post" && (
-                  <Badge variant="outline" className="ml-2 text-xs">
-                    {post.type === "review" ? "Review" : "Recommendation"}
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-gray-700 border-gray-200 bg-gray-50">
+                    {post.type === "review" ? "Review" : "Tip"}
                   </Badge>
                 )}
               </div>
-              <div className="text-sm text-muted-foreground flex items-center">
-                <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
-                {post.status === "draft" && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    Draft
-                  </Badge>
-                )}
-              </div>
+              <p className="text-sm text-gray-500">{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
             </div>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleSave}>{isSaved ? "Unsave Post" : "Save Post"}</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleShare}>Copy Link</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">Report</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          </Link>
         </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-gray-100 rounded-full">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={handleShare}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleReport}>
+              <Flag className="mr-2 h-4 w-4" />
+              Report
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardHeader>
 
-        {/* Post title (if available) */}
-        {post.title && <h3 className="text-lg font-semibold mb-2">{post.title}</h3>}
-
-        {/* Location info (for reviews and recommendations) */}
+      {/* Post Content */}
+      <CardContent className="p-4">
+        {/* Location Tag */}
         {post.location && (
-          <div className="flex items-center mb-2 text-sm">
-            <MapPin className="h-4 w-4 mr-1 text-[#FF6B6B]" />
-            <Link href={`/locations/${post.location.id}`} className="hover:underline">
-              {post.location.name}
-            </Link>
+          <Link 
+            href={`/locations/${typeof post.location === 'string' ? post.location : post.location.id}`}
+            className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-[#FF6B6B] mb-3 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            {typeof post.location === 'string' ? post.location : post.location.name}
+          </Link>
+        )}
 
-            {/* Rating (for reviews) */}
-            {post.type === "review" && post.rating && (
-              <div className="ml-2 flex items-center">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`h-3.5 w-3.5 ${i < post.rating! ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
-                  />
-                ))}
+        {/* Post Text */}
+        <p className="text-gray-900 whitespace-pre-wrap mb-4">{post.content}</p>
+
+        {/* Post Media */}
+        {post.image && !imageError && (
+          <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 mb-4">
+            <Image
+              src={post.image}
+              alt={post.title || "Post image"}
+              fill
+              className="object-cover transition-opacity duration-500"
+              loading="lazy"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              onLoadingComplete={() => setIsLoadingImage(false)}
+              onError={() => {
+                setIsLoadingImage(false)
+                setImageError(true)
+              }}
+            />
+            {isLoadingImage && (
+              <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
+                <div className="relative w-8 h-8">
+                  <div className="absolute inset-0 border-2 border-gray-200 rounded-full animate-ping" />
+                  <div className="absolute inset-0 border-2 border-gray-300 rounded-full animate-pulse" />
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Post content */}
-        <div className="mb-3 whitespace-pre-line">
-          <p className="text-sm sm:text-base">{displayContent}</p>
-          {isLongContent && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 h-auto p-0 text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded(!expanded)}
+        {/* Post Actions */}
+        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+          <div className="flex items-center gap-6">
+            {/* Like Button */}
+            <button
+              className="group flex items-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleLike(e)
+              }}
             >
-              {expanded ? (
-                <span className="flex items-center">
-                  Show less <ChevronUp className="ml-1 h-4 w-4" />
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  Read more <ChevronDown className="ml-1 h-4 w-4" />
-                </span>
-              )}
-            </Button>
-          )}
-        </div>
+              <div className={`p-2 rounded-full group-hover:bg-[#FF6B6B]/10 transition-all transform group-active:scale-90 ${
+                isLiked ? 'text-[#FF6B6B]' : 'text-gray-600'
+              }`}>
+                <Heart className={`h-5 w-5 ${isLiked ? 'fill-current animate-like' : ''}`} />
+              </div>
+              <span className="text-sm font-medium text-gray-600">{likeCount}</span>
+            </button>
 
-        {/* Post image (if available) */}
-        {post.image && post.image !== "" ? (
-          <div className="mt-3 mb-2 rounded-md overflow-hidden relative">
-            <div className="aspect-video relative">
-              {isLoadingImage && (
-                <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
-                  <ImageIcon className="h-8 w-8 text-gray-400" />
-                </div>
-              )}
-              <Image
-                unoptimized={true}
-                src={post.image || "/placeholder.svg"}
-                alt={post.title || "Post image"}
-                fill
-                className={`object-cover transition-opacity duration-300 ${isLoadingImage ? "opacity-0" : "opacity-100"}`}
-                loading="lazy"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                onLoadingComplete={() => setIsLoadingImage(false)}
-                onError={() => setIsLoadingImage(false)}
-              />
+            {/* Comment Button */}
+            <button
+              className="group flex items-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleComment(e)
+              }}
+            >
+              <div className="p-2 rounded-full group-hover:bg-gray-100 transition-all transform group-active:scale-90">
+                <MessageCircle className="h-5 w-5 text-gray-600" />
+              </div>
+              <span className="text-sm font-medium text-gray-600">{post.commentCount || 0}</span>
+            </button>
+
+            {/* Share Button */}
+            <button
+              className="group flex items-center gap-2"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleShare(e)
+              }}
+            >
+              <div className="p-2 rounded-full group-hover:bg-gray-100 transition-all transform group-active:scale-90">
+                <Share2 className="h-5 w-5 text-gray-600" />
+              </div>
+            </button>
+          </div>
+
+          {/* Save Button */}
+          <button
+            className="group"
+            onClick={(e) => {
+              e.stopPropagation()
+              handleSave(e)
+            }}
+          >
+            <div className={`p-2 rounded-full group-hover:bg-gray-100 transition-all transform group-active:scale-90 ${
+              isSaved ? 'text-yellow-400' : 'text-gray-600'
+            }`}>
+              <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-current animate-save' : ''}`} />
             </div>
-          </div>
-        ) : null}
+          </button>
+        </div>
       </CardContent>
-
-      {showInteractions && (
-        <CardFooter className="px-4 py-3 border-t flex items-center justify-between bg-muted/10">
-          <div className="flex items-center gap-5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`flex items-center gap-1 ${isLiked ? "text-red-500" : ""}`}
-              onClick={handleLike}
-            >
-              <Heart className={`h-4 w-4 ${isLiked ? "fill-red-500" : ""}`} />
-              <span>{likeCount || 0}</span>
-            </Button>
-
-            <Button variant="ghost" size="sm" className="flex items-center gap-1" onClick={handleComment}>
-              <MessageCircle className="h-4 w-4" />
-              <span>{post.commentCount || 0}</span>
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`p-2 ${isSaved ? "text-yellow-500" : ""}`}
-                    onClick={handleSave}
-                  >
-                    <Bookmark className={`h-4 w-4 ${isSaved ? "fill-yellow-500" : ""}`} />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isSaved ? "Saved" : "Save for later"}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex items-center gap-1"
-              onClick={handleShare}
-              disabled={isSharing}
-            >
-              <Share2 className="h-4 w-4" />
-              <span className="sr-only sm:not-sr-only sm:inline">Share</span>
-            </Button>
-          </div>
-        </CardFooter>
-      )}
     </Card>
   )
 })

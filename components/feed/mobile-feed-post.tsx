@@ -201,205 +201,148 @@ const MobileFeedPost = memo(function MobileFeedPost({
 
   return (
     <Card 
-      className={`overflow-hidden shadow-sm border-gray-100 active:scale-[0.995] active:shadow-none transition-all duration-200 ${className}`}
+      className={`relative overflow-hidden border-none shadow-none bg-black/95 h-full ${className}`}
       onClick={handlePostClick}
     >
-      <CardContent className="p-4">
-        {/* Author info */}
-        <div className="flex justify-between items-start mb-3">
+      {/* Media Container */}
+      {post.image && post.image !== "" && !imageError ? (
+        <div className="absolute inset-0 bg-black">
+          <Image
+            src={post.image}
+            alt={post.title || "Post image"}
+            fill
+            className="object-cover object-center transition-opacity duration-500"
+            loading="lazy"
+            sizes="100vw"
+            onLoadingComplete={() => setIsLoadingImage(false)}
+            onError={() => {
+              setIsLoadingImage(false)
+              setImageError(true)
+            }}
+          />
+          {isLoadingImage && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+              <div className="relative w-8 h-8">
+                <div className="absolute inset-0 border-2 border-white/20 rounded-full animate-ping" />
+                <div className="absolute inset-0 border-2 border-white/40 rounded-full animate-pulse" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
+      )}
+
+      {/* Content Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/90">
+        {/* Location Tag - Top Right */}
+        {post.location && (
+          <div className="absolute top-4 right-4">
+            <Badge 
+              variant="outline" 
+              className="bg-black/40 backdrop-blur-sm text-white/90 border-white/20 flex items-center gap-1.5 px-3 py-1.5 text-sm"
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              {typeof post.location === 'string' ? post.location : post.location.name}
+            </Badge>
+          </div>
+        )}
+
+        {/* Bottom Content Container */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/95 via-black/80 to-transparent pt-24">
+          {/* Author Info */}
           <Link 
             href={`/profile/${post.author.id}`} 
-            className="flex items-center group"
+            className="flex items-start gap-3 mb-4 group"
             onClick={(e) => e.stopPropagation()}
           >
-            <Avatar className="h-9 w-9 border group-active:scale-95 transition-transform">
-              <AvatarImage 
-                src={post.author.avatar || "/placeholder.svg"} 
-                alt={post.author.name} 
-              />
+            <Avatar className="h-10 w-10 ring-2 ring-white/20 group-hover:ring-white/40 transition-all">
+              <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} />
               <AvatarFallback>{getInitials(post.author.name)}</AvatarFallback>
             </Avatar>
             
-            <div className="ml-2">
-              <div className="flex items-center">
-                <span className="font-medium text-sm group-hover:text-[#FF6B6B] transition-colors">
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white group-hover:text-[#FF6B6B] transition-colors">
                   {post.author.name}
                 </span>
                 {post.type !== "post" && (
-                  <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-white/90 border-white/20 bg-white/10 backdrop-blur-sm">
                     {post.type === "review" ? "Review" : "Tip"}
                   </Badge>
                 )}
               </div>
-              <div className="text-xs text-gray-500">
-                {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
-              </div>
+              <p className="text-sm text-white/90 line-clamp-3 mt-2 leading-relaxed">
+                {displayContent}
+              </p>
             </div>
           </Link>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onClick={handleSave}>
-                <Bookmark className="mr-2 h-4 w-4" />
-                {isSaved ? "Remove from saved" : "Save for later"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                View full post
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+          {/* Action Buttons - Bottom Bar */}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+            <div className="flex items-center gap-6">
+              {/* Like Button */}
+              <button
+                className="group flex items-center gap-2"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleLike(e)
+                }}
+              >
+                <div className={`p-2 rounded-full bg-white/5 backdrop-blur-sm group-hover:bg-[#FF6B6B]/20 transition-all transform group-active:scale-90 ${
+                  isLiked ? 'text-[#FF6B6B]' : 'text-white'
+                }`}>
+                  <Heart className={`h-5 w-5 ${isLiked ? 'fill-current animate-like' : ''}`} />
+                </div>
+                <span className="text-sm font-medium text-white/90">{likeCount}</span>
+              </button>
 
-        {/* Post title (if available) */}
-        {post.title && <h3 className="text-base font-semibold mb-2">{post.title}</h3>}
+              {/* Comment Button */}
+              <button
+                className="group flex items-center gap-2"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleComment(e)
+                }}
+              >
+                <div className="p-2 rounded-full bg-white/5 backdrop-blur-sm group-hover:bg-white/10 transition-all transform group-active:scale-90">
+                  <MessageCircle className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-sm font-medium text-white/90">{post.commentCount || 0}</span>
+              </button>
 
-        {/* Location info (for reviews and recommendations) */}
-        {post.location && (
-          <Link 
-            href={`/locations/${post.location.id}`}
-            className="flex items-center mb-2 text-sm bg-gray-50 px-2 py-1 rounded-md w-fit active:bg-gray-100 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <MapPin className="h-3.5 w-3.5 mr-1 text-[#FF6B6B]" />
-            <span className="text-gray-700 font-medium">{post.location.name}</span>
+              {/* Share Button */}
+              <button
+                className="group flex items-center gap-2"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleShare(e)
+                }}
+              >
+                <div className="p-2 rounded-full bg-white/5 backdrop-blur-sm group-hover:bg-white/10 transition-all transform group-active:scale-90">
+                  <Share2 className="h-5 w-5 text-white" />
+                </div>
+                <span className="text-sm font-medium text-white/90">{shareCount}</span>
+              </button>
+            </div>
 
-            {/* Rating (for reviews) */}
-            {post.type === "review" && post.rating && (
-              <div className="ml-2 flex items-center">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star
-                    key={i}
-                    className={`h-3 w-3 ${i < post.rating! ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`}
-                  />
-                ))}
-              </div>
-            )}
-          </Link>
-        )}
-
-        {/* Post content */}
-        <div className="mb-3 whitespace-pre-line">
-          <p className="text-sm text-gray-700 leading-relaxed">{displayContent}</p>
-          {isLongContent && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 h-auto p-0 text-muted-foreground hover:text-[#FF6B6B]"
+            {/* Save Button */}
+            <button
+              className="group"
               onClick={(e) => {
                 e.stopPropagation()
-                setExpanded(!expanded)
-                safeVibrate(30)
+                handleSave(e)
               }}
             >
-              {expanded ? (
-                <span className="flex items-center text-xs">
-                  Show less <ChevronUp className="ml-1 h-3.5 w-3.5" />
-                </span>
-              ) : (
-                <span className="flex items-center text-xs">
-                  Read more <ChevronDown className="ml-1 h-3.5 w-3.5" />
-                </span>
-              )}
-            </Button>
-          )}
-        </div>
-
-        {/* Post image (if available) */}
-        {post.image && post.image !== "" && !imageError ? (
-          <div 
-            className="mt-3 mb-2 rounded-lg overflow-hidden relative bg-gray-100"
-            onClick={(e) => {
-              // Prevent navigation if clicking on image
-              e.stopPropagation()
-              
-              // Open image in fullscreen or modal
-              toast.info("Full image view coming soon")
-            }}
-          >
-            <div className="aspect-video relative">
-              {isLoadingImage && (
-                <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
-                  <ImageIcon className="h-8 w-8 text-gray-300" />
-                </div>
-              )}
-              <Image
-                src={post.image}
-                alt={post.title || "Post image"}
-                fill
-                className={`object-cover transition-opacity duration-300 ${isLoadingImage ? "opacity-0" : "opacity-100"}`}
-                loading="lazy"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                onLoadingComplete={() => setIsLoadingImage(false)}
-                onError={() => {
-                  setIsLoadingImage(false)
-                  setImageError(true)
-                }}
-              />
-            </div>
+              <div className={`p-2 rounded-full bg-white/5 backdrop-blur-sm group-hover:bg-white/10 transition-all transform group-active:scale-90 ${
+                isSaved ? 'text-yellow-400' : 'text-white'
+              }`}>
+                <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-current animate-save' : ''}`} />
+              </div>
+            </button>
           </div>
-        ) : null}
-      </CardContent>
-
-      <CardFooter className="px-4 py-2 border-t flex items-center justify-between bg-gray-50/50">
-        <div className="flex items-center gap-6">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`flex items-center gap-1 h-9 px-2 rounded-full ${isLiked ? "text-red-500" : "text-gray-700"}`}
-            onClick={handleLike}
-            disabled={isLiking}
-          >
-            <Heart 
-              className={`h-4 w-4 transition-all duration-200 ${
-                isLiked ? "fill-red-500 scale-110" : ""
-              } ${isLiking ? "animate-pulse" : ""}`} 
-            />
-            <span className="text-xs font-medium">{likeCount || 0}</span>
-          </Button>
-
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="flex items-center gap-1 h-9 px-2 rounded-full text-gray-700"
-            onClick={handleComment}
-          >
-            <MessageCircle className="h-4 w-4" />
-            <span className="text-xs font-medium">{post.commentCount || 0}</span>
-          </Button>
         </div>
-
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`p-2 rounded-full ${isSaved ? "text-yellow-500" : "text-gray-700"}`}
-            onClick={handleSave}
-          >
-            <Bookmark className={`h-4 w-4 transition-all duration-200 ${isSaved ? "fill-yellow-500" : ""}`} />
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className="p-2 rounded-full text-gray-700"
-            onClick={handleShare}
-            disabled={isSharing}
-          >
-            <Share2 className={`h-4 w-4 ${isSharing ? "animate-pulse" : ""}`} />
-          </Button>
-        </div>
-      </CardFooter>
+      </div>
     </Card>
   )
 })

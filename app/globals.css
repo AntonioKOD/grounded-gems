@@ -1,0 +1,368 @@
+/* Marker Styles */
+.marker-container {
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  position: relative;
+  transform-origin: bottom center;
+  transition: all 0.2s ease;
+}
+
+.marker-container:hover {
+  transform: scale(1.1) translateY(-2px);
+}
+
+.marker-image-only {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--primary));
+}
+
+.marker-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.marker-icon svg {
+  width: 32px;
+  height: 32px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.marker-container.selected .marker-icon {
+  color: hsl(var(--destructive));
+  transform: scale(1.1);
+}
+
+/* Tooltip Styles */
+.marker-tooltip {
+  min-width: 200px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 1000;
+  margin-bottom: 8px;
+}
+
+.marker-container:hover .marker-tooltip {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tooltip-button {
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  background-color: hsl(var(--primary));
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.tooltip-button:hover {
+  background-color: hsl(var(--primary) / 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tooltip-button:active {
+  transform: translateY(0);
+}
+
+/* User Location Marker */
+.user-location-marker {
+  width: 16px;
+  height: 16px;
+  background-color: hsl(var(--primary));
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(var(--primary), 0.2);
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.user-location-pulse {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  background-color: hsl(var(--primary) / 0.15);
+  border: 1px solid hsl(var(--primary) / 0.3);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+  transform: translate(-25%, -25%);
+}
+
+/* Feed animations */
+@keyframes like {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+@keyframes save {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15) rotate(-10deg); }
+}
+
+.animate-like {
+  animation: like 0.3s ease-in-out;
+}
+
+.animate-save {
+  animation: save 0.3s ease-in-out;
+}
+
+/* Feed post styles */
+.feed-post {
+  touch-action: pan-y pinch-zoom;
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.feed-post-actions {
+  transform: translateZ(0);
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Feed-specific mobile styles */
+.feed-container {
+  height: 100dvh;
+  height: -webkit-fill-available;
+  overscroll-behavior-y: contain;
+  width: 100vw;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Enhanced mobile styles */
+@media (max-width: 767px) {
+  /* Prevent zoom on form inputs */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Better touch targets */
+  button, .button, a[role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 12px 16px;
+  }
+  
+  /* Improved tap highlighting */
+  button, .button, a {
+    -webkit-tap-highlight-color: rgba(255, 107, 107, 0.1);
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  
+  /* Prevent text selection during touch interactions */
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+  
+  /* Feed header styles */
+  .sticky-header {
+    background: linear-gradient(180deg,
+      rgba(0, 0, 0, 1) 0%,
+      rgba(0, 0, 0, 0.8) 50%,
+      rgba(0, 0, 0, 0) 100%
+    );
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  /* Button hover effects */
+  .feed-button {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .feed-button:active {
+    transform: scale(0.95);
+  }
+
+  /* Improved scrollbar for category scroll */
+  .category-scroll::-webkit-scrollbar {
+    height: 1px;
+  }
+
+  .category-scroll::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .category-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
+  }
+
+  /* Better scrolling */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
+    scroll-snap-type: y mandatory;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Fix for mobile keyboard pushing content */
+  .mobile-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Post transitions */
+  .feed-post {
+    width: 100vw;
+    height: 100dvh;
+    max-height: -webkit-fill-available;
+    touch-action: pan-y pinch-zoom;
+    will-change: transform;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .feed-post-enter {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+
+  .feed-post-enter-active {
+    opacity: 1;
+    transform: scale(1);
+    transition: opacity 300ms, transform 300ms;
+  }
+
+  /* Enhanced gradients */
+  .feed-post-gradient {
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(0, 0, 0, 0.4) 50%,
+      rgba(0, 0, 0, 0.95) 100%
+    );
+  }
+
+  /* Button animations */
+  @keyframes button-press {
+    0% { transform: scale(1); }
+    50% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+  }
+
+  .button-press {
+    animation: button-press 0.2s ease-in-out;
+  }
+}
+
+/* Tablet specific styles */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .container {
+    padding: 0 24px;
+  }
+  
+  /* Better touch targets for tablet */
+  button, .button {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  /* Feed-specific tablet styles */
+  .feed-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+}
+
+/* Desktop specific styles */
+@media (min-width: 1024px) {
+  /* Hover effects only on desktop */
+  .hover-only:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  /* Feed-specific desktop styles */
+  .feed-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+
+  .feed-post:hover .feed-post-overlay {
+    opacity: 1;
+  }
+}
+
+/* Safe area handling for notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Feed post transitions */
+.feed-post-enter {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.feed-post-enter-active {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.feed-post-exit {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.feed-post-exit-active {
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 300ms, transform 300ms;
+} 

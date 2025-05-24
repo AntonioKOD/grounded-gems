@@ -29,6 +29,7 @@ interface InteractiveMapProps {
   searchRadius?: number
   className?: string
   selectedLocation?: Location | null
+  onViewDetail?: (location: Location) => void
 }
 
 const InteractiveMap = memo(function InteractiveMap(props: InteractiveMapProps) {

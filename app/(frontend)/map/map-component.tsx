@@ -5,9 +5,9 @@ import { useEffect, useRef, useState, useCallback, memo } from "react"
 import { Navigation, X } from "lucide-react"
 import { Map as MapIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { Location } from "./map-data"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { mapPersistenceService } from "@/lib/map-persistence-service"
 
 // Add Mapbox types
 declare global {
@@ -15,6 +15,32 @@ declare global {
     mapboxgl: any;
     handleLocationDetailClick?: (locationId: string) => void;
   }
+}
+
+// Update Location interface
+interface Location {
+  id: string
+  name: string
+  latitude: number
+  longitude: number
+  address?: string | { city?: string }
+  averageRating?: number
+  reviewCount?: number
+  categories?: Array<string | { name: string }>
+  image?: string
+  featuredImage?: string | { url: string }
+  imageUrl?: string
+  coordinates?: {
+    latitude: number
+    longitude: number
+  }
+}
+
+interface MapboxMarker {
+  marker: any;
+  element: HTMLElement;
+  cleanup: () => void;
+  location?: Location;
 }
 
 // Check if coordinates are valid
@@ -27,25 +53,6 @@ const isValidCoordinate = (lat?: number | string | null, lng?: number | string |
   return !isNaN(numLat) && !isNaN(numLng) && 
          numLat >= -90 && numLat <= 90 && 
          numLng >= -180 && numLng <= 180
-}
-
-// Extract coordinates from a location object
-const getCoordinates = (location: Location): [number, number] | null => {
-  let lat, lng
-
-  if (location.latitude != null && location.longitude != null) {
-    lat = Number(location.latitude)
-    lng = Number(location.longitude)
-  } else if (location.coordinates?.latitude != null && location.coordinates?.longitude != null) {
-    lat = Number(location.coordinates.latitude)
-    lng = Number(location.coordinates.longitude)
-  }
-
-  if (isValidCoordinate(lat, lng)) {
-    return [lat!, lng!]
-  }
-
-  return null
 }
 
 // Get image URL from location object
@@ -72,12 +79,7 @@ interface MapComponentProps {
   searchRadius?: number
   className?: string
   selectedLocation?: Location | null
-}
-
-interface MapboxMarker {
-  marker: any;
-  element: HTMLElement;
-  cleanup: () => void;
+  onViewDetail?: (location: Location) => void
 }
 
 const MapComponent = memo(function MapComponent({
@@ -92,6 +94,7 @@ const MapComponent = memo(function MapComponent({
   searchRadius,
   className,
   selectedLocation,
+  onViewDetail,
 }: MapComponentProps) {
     // Removed excessive console logging to improve performance
   
@@ -102,16 +105,10 @@ const MapComponent = memo(function MapComponent({
   const radiusCircleRef = useRef<any>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapInitializedRef = useRef<boolean>(false)
-  const lastLocationsRef = useRef<Location[]>([])
-  const lastSelectedLocationRef = useRef<Location | null>(null)
   
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
   const [currentStyle, setCurrentStyle] = useState(mapStyle)
-  const [activeTooltip, setActiveTooltip] = useState<{
-    location: Location
-    position: { x: number; y: number }
-  } | null>(null)
 
     // Handle map resize
   useEffect(() => {
@@ -242,7 +239,7 @@ const MapComponent = memo(function MapComponent({
           
           mapRef.current = new mapboxRef.current.Map({
             container: mapContainerRef.current,
-            style: `mapbox://styles/mapbox/streets-v12`, // Use fixed style for now
+            style: `mapbox://styles/mapbox/${mapStyle}`,
             center: [center[1], center[0]], // Mapbox uses [lng, lat] format
             zoom,
             pitchWithRotate: false,
@@ -374,162 +371,245 @@ const MapComponent = memo(function MapComponent({
 
     // Add new markers
     locations.forEach((location) => {
-      const coords = getCoordinates(location)
-      if (!coords) return
-
-      // Create a simple circular marker
-      const el = document.createElement('div')
-      el.className = 'google-maps-marker'
-      el.setAttribute('data-location-id', location.id)
-      
-      // Check if this is the selected location
-      const isSelected = selectedLocation?.id === location.id
-      
-      // Apply styles based on selection
-      const locationImage = getLocationImageUrl(location)
-      
-      // Check if this marker should show tooltip
-      const showTooltip = activeTooltip?.location.id === location.id
-      
-      // Add tooltip class to marker if showing tooltip
-      if (showTooltip) {
-        el.classList.add('has-tooltip')
+      if (!isValidCoordinate(location.latitude, location.longitude)) {
+        console.warn(`Invalid coordinates for location ${location.id}:`, { lat: location.latitude, lng: location.longitude })
+        return
       }
-      
-      // Create a simple circular marker with just the image and white background
-      el.innerHTML = `
-        <div class="marker-container ${isSelected ? 'selected' : ''}">
-          <div class="marker-image-only">
+
+      try {
+        // Create marker element
+        const el = document.createElement('div')
+        el.className = 'marker-container'
+        el.setAttribute('role', 'button')
+        el.setAttribute('aria-label', `Location: ${location.name}`)
+        
+        // Create image container
+        const imageContainer = document.createElement('div')
+        imageContainer.className = 'marker-image-only'
+        
+        // Add marker icon
+        const markerIcon = document.createElement('div')
+        markerIcon.className = 'marker-icon'
+        markerIcon.innerHTML = `
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 0C7.802 0 4 3.403 4 7.602C4 11.8 7.469 16.812 12 24C16.531 16.812 20 11.8 20 7.602C20 3.403 16.199 0 12 0ZM12 11C10.343 11 9 9.657 9 8C9 6.343 10.343 5 12 5C13.657 5 15 6.343 15 8C15 9.657 13.657 11 12 11Z"/>
+          </svg>
+        `
+        imageContainer.appendChild(markerIcon)
+        el.appendChild(imageContainer)
+
+        // Create tooltip element
+        const tooltip = document.createElement('div')
+        tooltip.className = 'marker-tooltip'
+        tooltip.style.cssText = `
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+          padding: 8px;
+          width: 200px;
+          opacity: 0;
+          transition: all 0.2s ease;
+          z-index: 1000;
+          margin-bottom: 8px;
+          pointer-events: none;
+        `
+
+        // Create tooltip content
+        const tooltipContent = document.createElement('div')
+        tooltipContent.className = 'tooltip-content'
+        tooltipContent.innerHTML = `
+          <div style="position: relative; width: 100%; height: 100px; margin-bottom: 8px; border-radius: 4px; overflow: hidden;">
             <img 
-              src="${locationImage}" 
+              src="${getLocationImageUrl(location)}" 
               alt="${location.name}"
-              style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;"
-              onerror="this.style.display='none'; this.parentElement.classList.add('fallback-icon');"
+              style="width: 100%; height: 100%; object-fit: cover;"
             />
           </div>
-          ${isSelected ? '<div class="marker-pulse"></div>' : ''}
-          ${showTooltip ? `
-            <div class="marker-tooltip">
-              <div class="tooltip-content">
-                <div class="tooltip-image">
-                  <img src="${locationImage}" alt="${location.name}" />
-                </div>
-                <div class="tooltip-info">
-                  <h3>${location.name}</h3>
-                  ${location.address ? `
-                    <div class="tooltip-address">
-                      <span class="address-icon">📍</span>
-                      <span>${typeof location.address === 'string' ? location.address : location.address.city || 'Address not available'}</span>
-                    </div>
-                  ` : ''}
-                  ${location.averageRating ? `
-                    <div class="tooltip-rating">
-                      <span class="rating-star">⭐</span>
-                      <span>${location.averageRating.toFixed(1)}</span>
-                    </div>
-                  ` : ''}
-                  <button class="tooltip-button" onclick="window.handleLocationDetailClick && window.handleLocationDetailClick('${location.id}')">
-                    View Details
-                  </button>
-                </div>
-                <div class="tooltip-arrow"></div>
+          <div style="font-weight: 600; margin-bottom: 4px; color: #333;">${location.name}</div>
+          ${location.address ? `
+            <div style="font-size: 12px; color: #666; display: flex; align-items: center;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+              <span style="margin-left: 4px;">${typeof location.address === 'string' ? location.address : location.address?.city || ''}</span>
+            </div>
+          ` : ''}
+          ${location.averageRating ? `
+            <div style="font-size: 12px; color: #666; margin-top: 4px; display: flex; align-items: center;">
+              <div style="background: #FFE66D; padding: 2px 6px; border-radius: 12px; display: flex; align-items: center;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                <span style="margin-left: 4px;">${location.averageRating.toFixed(1)}</span>
+                ${location.reviewCount ? `<span style="opacity: 0.8; margin-left: 2px;">(${location.reviewCount})</span>` : ''}
               </div>
             </div>
           ` : ''}
-        </div>
-      `
+          <button class="tooltip-button">
+            View Details
+          </button>
+        `
 
-      // Set z-index for selected markers
-      if (isSelected) {
-        el.style.zIndex = '10'
-      } else {
-        el.style.zIndex = '1'
-      }
+        tooltip.appendChild(tooltipContent)
+        el.appendChild(tooltip)
 
-      // Add event listener for marker click
-      const handleMarkerClick = (e: Event) => {
-        e.stopPropagation()
+        // Add hover events for tooltip with interactive behavior
+        let tooltipTimeout: NodeJS.Timeout
         
-        // Show tooltip or toggle if already showing for this location
-        if (activeTooltip?.location.id === location.id) {
-          setActiveTooltip(null)
-        } else {
-          setActiveTooltip({
-            location,
-            position: { x: 0, y: 0 } // Position will be handled by CSS
+        const showTooltip = () => {
+          clearTimeout(tooltipTimeout)
+          tooltip.style.opacity = '1'
+          tooltip.style.pointerEvents = 'auto' // Enable interaction
+        }
+
+        const hideTooltip = () => {
+          tooltipTimeout = setTimeout(() => {
+            tooltip.style.opacity = '0'
+            tooltip.style.pointerEvents = 'none' // Disable interaction
+          }, 100) // Small delay to allow moving to tooltip
+        }
+
+        el.addEventListener('mouseenter', showTooltip)
+        el.addEventListener('mouseleave', hideTooltip)
+        tooltip.addEventListener('mouseenter', showTooltip)
+        tooltip.addEventListener('mouseleave', hideTooltip)
+
+        // Add click handler for the View Details button
+        const viewDetailsButton = tooltipContent.querySelector('.tooltip-button')
+        if (viewDetailsButton) {
+          viewDetailsButton.addEventListener('click', (e) => {
+            e.stopPropagation() // Prevent marker click
+            if (onViewDetail) {
+              onViewDetail(location)
+            }
           })
         }
         
-        // Also trigger onMarkerClick immediately for responsiveness
-        onMarkerClick(location)
-      }
-      
-      el.addEventListener('click', handleMarkerClick)
-
-      // Create and store the marker
-      const marker = new mapboxRef.current.Marker(el)
-        .setLngLat([coords[1], coords[0]])
-        .addTo(mapRef.current)
-
-      markersRef.current.set(location.id, { 
-        marker, 
-        element: el,
-        cleanup: () => {
-          el.removeEventListener('click', handleMarkerClick)
-        }
-      })
-    })
-
-    // Set up global handler for view details button once
-    window.handleLocationDetailClick = (locationId: string) => {
-      const loc = locations.find(l => l.id === locationId)
-      if (loc) {
-        // Close tooltip
-        setActiveTooltip(null)
-        
-        // Trigger the same view details functionality as location list
-        onMarkerClick(loc)
-        
-        // Create a custom event to trigger opening the location detail modal
-        const event = new CustomEvent('openLocationDetail', {
-          detail: { location: loc }
+        // Create and store the marker
+        const marker = new mapboxRef.current.Marker({
+          element: el,
+          anchor: 'bottom',
+          offset: [0, -15] // Adjust marker position
         })
-        document.dispatchEvent(event)
+          .setLngLat([location.longitude, location.latitude])
+          .addTo(mapRef.current)
+        
+        // Add click handler
+        el.addEventListener('click', () => {
+          if (onViewDetail) {
+            onViewDetail(location)
+          }
+        })
+        
+        // Store marker reference with cleanup function
+        markersRef.current.set(location.id, {
+          marker,
+          element: el,
+          location,
+          cleanup: () => {
+            marker.remove()
+            // Remove event listeners by cloning and replacing the element
+            const newEl = el.cloneNode(true)
+            if (el.parentNode) {
+              el.parentNode.replaceChild(newEl, el)
+            }
+          }
+        })
+        
+        // Update marker if it's the selected location
+        if (selectedLocation && selectedLocation.id === location.id) {
+          el.classList.add('selected')
+        }
+        
+      } catch (error) {
+        console.error(`Error creating marker for location ${location.id}:`, error)
       }
-    }
-  }, [locations, selectedLocation?.id, activeTooltip?.location.id, onMarkerClick])
+    })
+  }, [locations, selectedLocation, onMarkerClick, isValidCoordinate, onViewDetail])
 
   // Update markers when locations or selected location changes
   useEffect(() => {
-    // Prevent unnecessary updates by checking if data actually changed
-    const locationsLength = locations.length
-    const lastLocationsLength = lastLocationsRef.current.length
-    const selectedLocationId = selectedLocation?.id
-    const lastSelectedLocationId = lastSelectedLocationRef.current?.id
-    const activeTooltipLocationId = activeTooltip?.location.id
-    
-    // Only update if locations count changed, selected location changed, or tooltip changed
-    if (locationsLength === lastLocationsLength && 
-        selectedLocationId === lastSelectedLocationId && 
-        !activeTooltipLocationId) {
-      return
-    }
-    
-    // Update refs
-    lastLocationsRef.current = locations
-    lastSelectedLocationRef.current = selectedLocation || null
-    
-    // Add markers if map is loaded and we have locations
+    // Only add markers if map is loaded and initialized
     if (mapRef.current && mapInitializedRef.current && mapLoaded) {
-      console.log(`Updating markers: ${locationsLength} locations, map loaded: ${mapLoaded}`)
+      // Clear existing markers first
+      markersRef.current.forEach((markerInfo) => {
+        if (markerInfo.marker) {
+          markerInfo.marker.remove()
+        }
+      })
+      markersRef.current.clear()
+
+      // Add new markers
+      console.log(`Adding ${locations.length} markers to map`)
       addMarkers()
     }
-    
-    // Cleanup event listeners when component unmounts
+
+    // Cleanup function - only remove markers if component is unmounting
     return () => {
-      markersRef.current.forEach(({ cleanup }: { cleanup: () => void }) => cleanup())
+      if (mapRef.current && !mapRef.current.loaded()) {
+        markersRef.current.forEach((markerInfo) => {
+          if (markerInfo.marker) {
+            markerInfo.marker.remove()
+          }
+          if (markerInfo.element) {
+            // Remove any event listeners
+            const el = markerInfo.element
+            const newEl = el.cloneNode(true)
+            if (el.parentNode) {
+              el.parentNode.replaceChild(newEl, el)
+            }
+          }
+        })
+        markersRef.current.clear()
+      }
     }
-  }, [locations.length, selectedLocation?.id, activeTooltip?.location.id, addMarkers, mapLoaded])
+  }, [locations, selectedLocation?.id, addMarkers, mapLoaded])
+
+  // Add map load event listener
+  useEffect(() => {
+    if (mapRef.current && mapInitializedRef.current) {
+      mapRef.current.on('load', () => {
+        // Force re-render of markers when map loads
+        if (locations.length > 0) {
+          console.log('Map loaded, re-adding markers')
+          addMarkers()
+        }
+      })
+
+      // Also add a style.load event listener
+      mapRef.current.on('style.load', () => {
+        // Re-add markers when style loads
+        if (locations.length > 0) {
+          console.log('Style loaded, re-adding markers')
+          addMarkers()
+        }
+      })
+    }
+  }, [locations, addMarkers])
+
+  // Add visibility change handler
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && mapRef.current && mapInitializedRef.current) {
+        // Re-add markers when tab becomes visible again
+        console.log('Page visible, checking markers')
+        if (locations.length > 0 && markersRef.current.size === 0) {
+          console.log('Re-adding markers after visibility change')
+          addMarkers()
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [locations, addMarkers])
 
   // Add user location marker
   const addUserLocationMarker = useCallback((coords: [number, number]) => {
@@ -888,7 +968,52 @@ const MapComponent = memo(function MapComponent({
     };
   }, [mapLoaded]);
 
+  // Initialize map with persisted state
+  useEffect(() => {
+    if (!mapRef.current || !mapboxRef.current || !mapInitializedRef.current) return
 
+    // Get persisted state
+    const persistedState = mapPersistenceService.getState()
+    if (persistedState) {
+      // Apply persisted center and zoom if they exist
+      if (persistedState.center && persistedState.zoom) {
+        mapRef.current.setCenter([persistedState.center[1], persistedState.center[0]])
+        mapRef.current.setZoom(persistedState.zoom)
+      }
+    }
+  }, [mapLoaded])
+
+  // Update map persistence service when map moves
+  const handleMapMoveEnd = useCallback(() => {
+    if (!mapRef.current || !mapInitializedRef.current) return
+
+    const center = mapRef.current.getCenter()
+    const zoom = mapRef.current.getZoom()
+    
+    // Update persistence service
+    mapPersistenceService.updateState({
+      center: [center.lat, center.lng],
+      zoom,
+      lastUpdated: Date.now(),
+      lastInteraction: 'move'
+    })
+
+    // Call the original onMapMove handler
+    onMapMove([center.lat, center.lng], zoom)
+  }, [onMapMove])
+
+  // Add map move handler
+  useEffect(() => {
+    if (!mapRef.current || !mapInitializedRef.current) return
+
+    mapRef.current.on('moveend', handleMapMoveEnd)
+    
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.off('moveend', handleMapMoveEnd)
+      }
+    }
+  }, [handleMapMoveEnd])
 
   if (mapError) {
     return (
@@ -947,14 +1072,11 @@ const MapComponent = memo(function MapComponent({
               <p>Go to my location</p>
             </TooltipContent>
           </Tooltip>
-                </TooltipProvider>
+        </TooltipProvider>
       )}
-      
-
-
-      </div>
-    )
-  }, (prevProps, nextProps) => {
+    </div>
+  )
+}, (prevProps, nextProps) => {
   // Aggressive comparison function to prevent unnecessary rerenders
   // Only re-render if there are significant changes
   

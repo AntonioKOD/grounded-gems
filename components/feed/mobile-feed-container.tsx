@@ -60,10 +60,10 @@ export default function MobileFeedContainer({
 
   // Categories for feed filtering
   const categories = [
-    { id: "all", name: "All", icon: LayoutList },
-    { id: "recommendations", name: "For You", icon: Sparkles },
-    { id: "trending", name: "Trending", icon: Flame },
-    { id: "recent", name: "Recent", icon: Clock },
+    { id: "discover", name: "Discover", icon: Sparkles },
+    { id: "trending", name: "Popular", icon: Flame },
+    { id: "recent", name: "Latest", icon: Clock },
+    { id: "bookmarks", name: "Saved", icon: BookmarkIcon },
   ]
 
   // Set mounted state to prevent hydration errors
@@ -361,148 +361,133 @@ export default function MobileFeedContainer({
 
   return (
     <div className={`max-w-2xl mx-auto relative ${className}`}>
-      {/* Categories horizontal scroll */}
-      <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm pb-3 border-b">
-        <ScrollArea className="w-full pb-2">
-          <div className="flex space-x-2 py-3 px-1">
-            {categories.map((category) => {
-              const Icon = category.icon
-              return (
-                <Button
-                  key={category.id}
-                  variant={activeCategory === category.id ? "default" : "outline"}
-                  size="sm"
-                  className={`flex items-center gap-1.5 px-3 rounded-full flex-shrink-0
-                    ${activeCategory === category.id ? 
-                      "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white" : 
-                      "hover:bg-gray-100 text-gray-700"}`}
-                  onClick={() => handleCategoryChange(category.id)}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{category.name}</span>
-                </Button>
-              )
-            })}
-          </div>
-          <ScrollBar orientation="horizontal" className="h-1.5" />
-        </ScrollArea>
-      </div>
-      
-      {/* Pull to refresh indicator */}
-      <AnimatePresence>
-        {pullToRefreshDelta > 0 && (
-          <motion.div 
-            className="absolute top-0 left-0 right-0 flex justify-center items-center z-20 pt-2"
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-          >
-            <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2 text-sm">
-              <RefreshCw 
-                className={`h-4 w-4 ${pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-400"} ${
-                  refreshing ? "animate-spin" : "transition-transform"
-                }`} 
-                style={{ 
-                  transform: !refreshing ? `rotate(${(pullToRefreshDelta / 150) * 360}deg)` : 'none'
-                }}
-              />
-              <span className={pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-500"}>
-                {pullToRefreshDelta > 80 ? "Release to refresh" : "Pull to refresh"}
-              </span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Feed content */}
-      <div 
-        ref={feedRef}
-        className="h-[calc(100vh-11rem)] overflow-y-auto overflow-x-hidden px-2 relative pb-24"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Mobile-specific loading state */}
-        {loading ? (
-          <MobileFeedSkeleton />
-        ) : (
-          <>
-            {posts.length === 0 ? (
-              <FeedErrorState
-                message={error || "No posts found. Try a different category or check back later."}
-                onRetry={() => fetchPosts()}
-              />
-            ) : (
-              <div className="space-y-4 pt-4">
-                {posts.map((post, index) => (
-                  <div
-                    key={post.id}
-                    ref={index === posts.length - 1 ? lastPostElementRef : null}
-                    className="p-4"
+      <div className="w-full relative">
+        {/* Categories horizontal scroll */}
+        <div className="sticky top-0 z-10 bg-gradient-to-b from-black via-black/80 to-transparent">
+          <ScrollArea className="w-full">
+            <div className="flex justify-center space-x-2 py-3">
+              {categories.map((category) => {
+                const Icon = category.icon
+                return (
+                  <Button
+                    key={category.id}
+                    variant={activeCategory === category.id ? "default" : "ghost"}
+                    size="sm"
+                    className={`flex items-center gap-1.5 px-3 rounded-full flex-shrink-0 transition-all duration-300
+                      ${activeCategory === category.id ? 
+                        "bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm" : 
+                        "text-white/60 hover:text-white hover:bg-white/5"}`}
+                    onClick={() => handleCategoryChange(category.id)}
                   >
-                    <MobileFeedPost
-                      post={post}
-                      user={user}
-                      onPostUpdated={handlePostUpdate}
-                    />
-                  </div>
-                ))}
-                
-                {/* Load more indicator */}
-                {loadingMore && (
-                  <div className="py-4 flex justify-center">
-                    <div className="flex items-center gap-2">
-                      <div className="h-5 w-5 rounded-full border-2 border-gray-300 border-t-[#FF6B6B] animate-spin"></div>
-                      <span className="text-sm text-gray-500">Loading more posts...</span>
-                    </div>
-                  </div>
-                )}
-                
-                {/* End of feed indicator */}
-                {!hasMore && posts.length > 0 && (
-                  <div className="py-8 text-center">
-                    <Separator className="mb-6" />
-                    <p className="text-sm text-gray-500">You've reached the end of your feed</p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-3"
-                      onClick={scrollToTop}
-                    >
-                      Back to top
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      
-      {/* Floating Create Post Button */}
-      {showPostForm && user && isMounted && (
-        <MobileCreatePostButton user={user} onPostCreated={(newPost) => setPosts([newPost, ...posts])} />
-      )}
-      
-      {/* Scroll to top button */}
-      <AnimatePresence>
-        {showScrollTop && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className="fixed bottom-24 right-4 z-50"
-          >
-            <Button
-              size="icon"
-              className="h-10 w-10 rounded-full bg-white shadow-lg border"
-              onClick={scrollToTop}
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className="text-sm font-medium">{category.name}</span>
+                  </Button>
+                )
+              })}
+            </div>
+          </ScrollArea>
+        </div>
+        
+        {/* Pull to refresh indicator */}
+        <AnimatePresence>
+          {pullToRefreshDelta > 0 && (
+            <motion.div 
+              className="absolute top-0 left-0 right-0 flex justify-center items-center z-20 pt-2"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
             >
-              <ArrowUp className="h-5 w-5 text-gray-700" />
-            </Button>
-          </motion.div>
+              <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2 text-sm">
+                <RefreshCw 
+                  className={`h-4 w-4 ${pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-400"} ${
+                    refreshing ? "animate-spin" : "transition-transform"
+                  }`} 
+                  style={{ 
+                    transform: !refreshing ? `rotate(${(pullToRefreshDelta / 150) * 360}deg)` : 'none'
+                  }}
+                />
+                <span className={pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-500"}>
+                  {pullToRefreshDelta > 80 ? "Release to refresh" : "Pull to refresh"}
+                </span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Feed content */}
+        <div 
+          ref={feedRef}
+          className="h-[100dvh] snap-y snap-mandatory overflow-y-auto overflow-x-hidden relative pb-20 mobile-scroll"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {loading ? (
+            <MobileFeedSkeleton />
+          ) : (
+            <>
+              {posts.length === 0 ? (
+                <FeedErrorState
+                  message={error || "No posts found. Try a different category or check back later."}
+                  onRetry={() => fetchPosts()}
+                />
+              ) : (
+                <div className="space-y-0">
+                  {posts.map((post, index) => (
+                    <div
+                      key={post.id}
+                      ref={index === posts.length - 1 ? lastPostElementRef : null}
+                      className="snap-start h-[100dvh] w-full flex items-center justify-center relative"
+                    >
+                      <MobileFeedPost
+                        post={post}
+                        user={user}
+                        onPostUpdated={handlePostUpdate}
+                        className="w-full h-full"
+                      />
+                    </div>
+                  ))}
+                  
+                  {/* Load more indicator */}
+                  {loadingMore && (
+                    <div className="absolute bottom-0 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
+                        <span className="text-sm text-white/80">Loading more posts...</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* Floating Create Post Button */}
+        {showPostForm && user && isMounted && (
+          <MobileCreatePostButton user={user} onPostCreated={(newPost) => setPosts([newPost, ...posts])} />
         )}
-      </AnimatePresence>
+        
+        {/* Scroll to top button */}
+        <AnimatePresence>
+          {showScrollTop && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="fixed bottom-24 right-4 z-50"
+            >
+              <Button
+                size="icon"
+                className="h-10 w-10 rounded-full bg-white shadow-lg border"
+                onClick={scrollToTop}
+              >
+                <ArrowUp className="h-5 w-5 text-gray-700" />
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 } 
