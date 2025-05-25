@@ -138,7 +138,7 @@ export const Posts: CollectionConfig = {
     ],
   },
   fields: [
-    { name: 'title', type: 'text', required: true },
+    { name: 'title', type: 'text'},
     { name: 'content', type: 'textarea', required: true },
     { name: 'createdAt', type: 'date', defaultValue: () => new Date().toISOString() },
     { name: 'type', type: 'select', required: true, options: [
@@ -174,5 +174,7 @@ export const Posts: CollectionConfig = {
     { name: 'isPinned', type: 'checkbox', defaultValue: false },
     { name: 'isSponsored', type: 'checkbox', defaultValue: false },
     { name: 'likes', type: 'relationship', relationTo: 'users', hasMany: true },
+    { name: 'savedBy', type: 'relationship', relationTo: 'users', hasMany: true },
+    { name: 'saveCount', type: 'number', defaultValue: 0 },
   ],
 };

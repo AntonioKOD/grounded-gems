@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { useUser } from "@/context/user-context"
+import { useAuth } from "@/hooks/use-auth"
 import Image from 'next/image'
 
 interface NavBarProps {
@@ -26,7 +26,7 @@ interface NavBarProps {
 }
 
 export default function NavBar({ initialUser }: NavBarProps) {
-  const { user, isAuthenticated, logout } = useUser()
+  const { user, isAuthenticated, logout, isLoading } = useAuth()
   const [notificationCount] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -39,6 +39,23 @@ export default function NavBar({ initialUser }: NavBarProps) {
   useEffect(() => {
     setImageError(false);
   }, [user?.profileImage?.url]);
+
+  // Listen for user updates to refresh navbar immediately
+  useEffect(() => {
+    const handleUserUpdate = (event: CustomEvent) => {
+      console.log("NavBar: User update detected", event.detail);
+      // The useUser hook will automatically update, but we can force a re-render
+      setImageError(false); // Reset image error state
+    };
+
+    window.addEventListener("user-updated", handleUserUpdate as EventListener);
+    window.addEventListener("user-login", handleUserUpdate as EventListener);
+
+    return () => {
+      window.removeEventListener("user-updated", handleUserUpdate as EventListener);
+      window.removeEventListener("user-login", handleUserUpdate as EventListener);
+    };
+  }, []);
 
   const getInitials = (userData: any) => {
     if (!userData?.name) return 'U';
@@ -53,6 +70,67 @@ export default function NavBar({ initialUser }: NavBarProps) {
   const handleLogout = async () => {
     await logout()
   };
+
+  // Show loading state during authentication check
+  if (!isHydrated) {
+    return (
+      <nav className={cn(
+        "fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm transition-all duration-300 border-b border-gray-100 shadow-sm"
+      )}>
+        <div className="container mx-auto px-4 lg:px-6">
+          <div className="flex items-center justify-between h-16 lg:h-18">
+            {/* Logo */}
+            <Link href="/" className="flex items-center space-x-3 group">
+              <div className="w-10 h-10 lg:w-11 lg:h-11 flex items-center justify-center transition-transform group-hover:scale-105">
+                <Image 
+                  src="/logo.svg" 
+                  alt="Grounded Gems" 
+                  className="w-full h-full object-contain"
+                  width={44}
+                  height={44}
+                />
+              </div>
+              <div className="hidden sm:block">
+                <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent">
+                  Grounded Gems
+                </span>
+              </div>
+            </Link>
+
+            {/* Navigation Links */}
+            <div className="hidden lg:flex items-center space-x-8">
+              <Link 
+                href="/feed"
+                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
+              >
+                Feed
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+              <Link 
+                href="/events"
+                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
+              >
+                Events
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+              <Link 
+                href="/map"
+                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
+              >
+                Explore
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+            </div>
+
+            {/* Right Section - Loading skeleton */}
+            <div className="flex items-center space-x-3">
+              <div className="h-9 w-9 lg:h-10 lg:w-10 rounded-full bg-gray-200 animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    )
+  }
 
   return (
     <nav className={cn(
@@ -104,28 +182,21 @@ export default function NavBar({ initialUser }: NavBarProps) {
           </div>
 
           {/* Right Section */}
-          <div className="flex items-center space-x-3 lg:space-x-4">
-            {/* Search */}
-            <Link href="/search">
-              <Button variant="ghost" size="icon" className="text-gray-600 hover:text-[#FF6B6B] hover:bg-gray-50 transition-all">
-                <Search className="h-5 w-5" />
-              </Button>
-            </Link>
-
-          {!isAuthenticated || !isHydrated ? (
-            // Unauthenticated: render login/signup buttons
-            <>
+          <div className="flex items-center space-x-3">
+          {!isAuthenticated ? (
+            // Not authenticated: show login/signup buttons
+            <div className="flex items-center space-x-3">
               <Link href="/login">
                 <Button variant="ghost" className="text-gray-700 hover:text-[#FF6B6B] hover:bg-gray-50 transition-all font-medium">
                   Log in
                 </Button>
               </Link>
               <Link href="/signup">
-                <Button className="bg-gradient-to-r from-[#FF6B6B] to-[#FF6B6B]/90 hover:from-[#FF6B6B]/90 hover:to-[#FF6B6B] text-white shadow-lg hover:shadow-xl transition-all font-medium px-6">
+                <Button className="bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 text-white font-medium px-6 shadow-md hover:shadow-lg transition-all">
                   Sign up
                 </Button>
               </Link>
-            </>
+            </div>
           ) : (
             // Client-side authenticated: render authenticated user UI
             <>

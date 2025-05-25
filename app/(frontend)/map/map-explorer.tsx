@@ -1667,40 +1667,6 @@ export default function MapExplorer() {
             </div>
           )}
 
-          {/* Mobile list toggle button with repositioned layout */}
-          {isMobile && activeView === "map" && (
-            <Button
-              ref={showListButtonRef}
-              variant="default"
-              size="sm"
-              onClick={toggleMobileList}
-              onTouchEnd={(e) => {
-                e.preventDefault()
-                toggleMobileList()
-              }}
-              className={cn(
-                "absolute z-30 bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200",
-                isSafari || isIOS ? "safari-button" : "top-4 left-4",
-              )}
-              style={
-                isSafari || isIOS
-                  ? {
-                      top: "1rem",
-                      left: "1rem",
-                      position: "absolute",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      zIndex: 30,
-                    }
-                  : {}
-              }
-            >
-              <List className="h-4 w-4 mr-2" />
-              {showMobileList ? "Hide List" : "Show List"}
-            </Button>
-          )}
-
           {/* Mobile list drawer with Safari-specific fixes */}
           {isMobile && showMobileList && (
             <div

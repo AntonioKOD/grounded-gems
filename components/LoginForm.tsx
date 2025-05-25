@@ -14,7 +14,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
 
-// Login API call
+// Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
   const res = await fetch("/api/users/login", {
     method: "POST",
@@ -32,6 +32,7 @@ const LoginForm = memo(function LoginForm() {
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/feed"
   const { isAuthenticated } = useAuth()
+  const { preloadUser } = useAuth()
 
   const [formData, setFormData] = useState({ 
     email: "", 
@@ -63,9 +64,21 @@ const LoginForm = memo(function LoginForm() {
     setError("")
 
     try {
-      await loginUser(formData)
-      // fire any login-success listeners
-      window.dispatchEvent(new Event("login-success"))
+      const loginResponse = await loginUser(formData)
+      
+      // If the login response includes user data, preload it immediately
+      if (loginResponse.user) {
+        console.log("Login successful, preloading user data:", loginResponse.user)
+        preloadUser(loginResponse.user)
+        
+        // Dispatch multiple events for immediate UI updates
+        window.dispatchEvent(new CustomEvent("user-login", { detail: loginResponse.user }))
+        window.dispatchEvent(new CustomEvent("user-updated", { detail: loginResponse.user }))
+        window.dispatchEvent(new Event("login-success"))
+      } else {
+        // Fallback: dispatch generic login success event
+        window.dispatchEvent(new Event("login-success"))
+      }
       
       // Save email for future logins if remember me is checked
       if (formData.rememberMe && typeof window !== 'undefined') {
@@ -74,7 +87,11 @@ const LoginForm = memo(function LoginForm() {
         localStorage.removeItem('savedEmail')
       }
       
-      router.replace(redirectPath)
+      // Longer delay to ensure all state updates are processed
+      setTimeout(() => {
+        router.replace(redirectPath)
+      }, 300)
+      
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials and try again.")
     } finally {

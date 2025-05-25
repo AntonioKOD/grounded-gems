@@ -1,17 +1,18 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { ArrowUp, RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList } from 'lucide-react'
+import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList } from 'lucide-react'
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 
 import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
-import { getFeedPosts, getPersonalizedFeed, getFeedPostsByUser } from "@/app/actions"
 import type { Post } from "@/types/feed"
-import { useAuth } from "@/hooks/use-auth"
+import { useAppSelector, useAppDispatch } from "@/lib/hooks"
+import { fetchFeedPosts, loadMorePosts, setCategory, updatePost } from "@/lib/features/feed/feedSlice"
+import { fetchUser } from "@/lib/features/user/userSlice"
+import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
-import MobileCreatePostButton from "./mobile-create-post-button"
 import FeedErrorState from "./feed-error-state"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -22,8 +23,8 @@ interface MobileFeedContainerProps {
   initialPosts?: Post[]
   showPostForm?: boolean
   className?: string
-  feedType?: "personalized" | "all" | "user"
-  sortBy?: "recent" | "popular" | "trending"
+  feedType?: string
+  sortBy?: string
 }
 
 export default function MobileFeedContainer({
@@ -34,29 +35,100 @@ export default function MobileFeedContainer({
   feedType = "all",
   sortBy = "recent",
 }: MobileFeedContainerProps) {
-  const [posts, setPosts] = useState<Post[]>(initialPosts)
-  const [loading, setLoading] = useState<boolean>(initialPosts.length === 0)
-  const [loadingMore, setLoadingMore] = useState<boolean>(false)
-  const [refreshing, setRefreshing] = useState<boolean>(false)
-  const [hasMore, setHasMore] = useState<boolean>(true)
-  const [page, setPage] = useState<number>(1)
-  const [showScrollTop, setShowScrollTop] = useState<boolean>(false)
+  const dispatch = useAppDispatch()
+  
+  // Get state from Redux store
+  const { 
+    posts, 
+    isLoading: loading, 
+    isLoadingMore: loadingMore, 
+    isRefreshing: refreshing, 
+    hasMore, 
+    error,
+    category: currentCategory 
+  } = useAppSelector((state) => state.feed)
+  
+  const { user, isLoading: isUserLoading, isAuthenticated } = useAppSelector((state) => state.user)
+
   const [pullToRefreshDelta, setPullToRefreshDelta] = useState<number>(0)
   const [isPullingToRefresh, setIsPullingToRefresh] = useState<boolean>(false)
-  const [activeCategory, setActiveCategory] = useState<string>("all")
+  const [activeCategory, setActiveCategory] = useState<string>("discover")
   const [isMounted, setIsMounted] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const initialLoadComplete = useRef(false)
   const touchStartY = useRef<number>(0)
   const scrollPosition = useRef<number>(0)
   const observer = useRef<IntersectionObserver>()
-  const lastFetchTimestamp = useRef<number>(0)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout>()
   const scrollTimeoutRef = useRef<NodeJS.Timeout>()
 
-  // Get user data from auth context
-  const { user, isLoading: isUserLoading, isAuthenticated } = useAuth()
+  // Fetch user data on mount
+  useEffect(() => {
+    if (!user && !isUserLoading) {
+      dispatch(fetchUser())
+    }
+  }, [dispatch, user, isUserLoading])
+
+  // Initialize posts slice with user's liked and saved posts
+  useEffect(() => {
+    if (user?.id) {
+      // Initialize with user's actual liked and saved posts
+      const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
+      const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
+      // For now, initialize liked comments as empty array - will be populated from server
+      const likedCommentIds: string[] = []
+      
+      console.log('MobileFeedContainer: Initializing posts state with:', { 
+        likedPostIds: likedPostIds.length, 
+        savedPostIds: savedPostIds.length,
+        likedCommentIds: likedCommentIds.length,
+        likedPosts: likedPostIds,
+        savedPosts: savedPostIds,
+        likedComments: likedCommentIds
+      })
+      dispatch(initializeLikedPosts(likedPostIds))
+      dispatch(initializeSavedPosts(savedPostIds))
+      dispatch(initializeLikedComments(likedCommentIds))
+    }
+  }, [dispatch, user?.id, user?.savedPosts, user?.likedPosts])
+
+  // Listen for user updates to refresh posts with correct like/save states
+  useEffect(() => {
+    const handleUserUpdate = async (event: CustomEvent) => {
+      console.log("MobileFeedContainer: User update detected, refreshing posts immediately");
+      if (event.detail && isMounted) {
+        // Refresh posts with new user context
+        dispatch(fetchFeedPosts({ 
+          feedType: "all", 
+          sortBy: "recent", 
+          category: activeCategory,
+          currentUserId: event.detail.id,
+          force: true 
+        }))
+      }
+    };
+
+    const handleUserLogin = async (event: CustomEvent) => {
+      console.log("MobileFeedContainer: User login detected, refreshing posts immediately");
+      if (event.detail && isMounted) {
+        // Refresh posts with new user context
+        dispatch(fetchFeedPosts({ 
+          feedType: "all", 
+          sortBy: "recent", 
+          category: activeCategory,
+          currentUserId: event.detail.id,
+          force: true 
+        }))
+      }
+    };
+
+    window.addEventListener("user-updated", handleUserUpdate as EventListener);
+    window.addEventListener("user-login", handleUserLogin as EventListener);
+
+    return () => {
+      window.removeEventListener("user-updated", handleUserUpdate as EventListener);
+      window.removeEventListener("user-login", handleUserLogin as EventListener);
+    };
+  }, [dispatch, feedType, sortBy, activeCategory, isMounted]);
 
   // Categories for feed filtering
   const categories = [
@@ -71,9 +143,6 @@ export default function MobileFeedContainer({
     setIsMounted(true)
     return () => {
       setIsMounted(false)
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current)
-      }
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current)
       }
@@ -83,139 +152,60 @@ export default function MobileFeedContainer({
     }
   }, [])
 
-  // Fetch posts based on feed type with debounce
-  const fetchPosts = useCallback(async (category?: string) => {
-    // Clear any pending fetch timeout
-    if (fetchTimeoutRef.current) {
-      clearTimeout(fetchTimeoutRef.current)
-    }
-
-    // Debounce check - only allow fetches every 5 seconds
-    const now = Date.now()
-    if (now - lastFetchTimestamp.current < 5000) {
-      // Schedule next fetch attempt
-      fetchTimeoutRef.current = setTimeout(() => {
-        if (isMounted) {
-          fetchPosts(category)
-        }
-      }, 5000 - (now - lastFetchTimestamp.current))
-      return
-    }
-    lastFetchTimestamp.current = now
-
-    if (!isMounted) return
-
-    setLoading(true)
-    setError(null)
-    setPage(1)
-  
-    try {
-      let fetchedPosts: Post[] = []
-      const categoryFilter = category && category !== "all" ? category : undefined
-  
-      if (feedType === "personalized") {
-        if (isAuthenticated && user) {
-          fetchedPosts = (await getPersonalizedFeed(user.id, 10, 0, categoryFilter)) ?? []
-        } else {
-          fetchedPosts = await getFeedPosts("all", sortBy, 1, categoryFilter)
-        }
-      } else if (feedType === "user" && userId) {
-        fetchedPosts = (await getFeedPostsByUser(userId, categoryFilter)) as Post[]
-      } else {
-        fetchedPosts = await getFeedPosts(feedType, sortBy, 1, categoryFilter)
-      }
-  
-      setPosts(fetchedPosts)
-      setHasMore(fetchedPosts.length >= 10)
-      
-      if (fetchedPosts.length === 0) {
-        setError("No posts found matching your criteria")
-      }
-    } catch (err) {
-      console.error("Error fetching posts:", err)
-      toast.error("Error loading posts")
-      setPosts([])
-      setHasMore(false)
-      setError("Error loading posts. Please try again later.")
-    } finally {
-      setLoading(false)
-    }
-  }, [feedType, sortBy, isAuthenticated, user, userId, isMounted])
-
   // Initial data loading
   useEffect(() => {
-    // Skip if component is not mounted or we're still loading user data
-    if (!isMounted || isUserLoading) return
-
-    // If we already have initial posts, don't fetch again
-    if (initialPosts.length > 0) {
-      initialLoadComplete.current = true
-      return
-    }
-
-    // If this is the first load and we have no initial posts, fetch posts
-    if (!initialLoadComplete.current) {
-      fetchPosts()
+    if (isMounted && !isUserLoading && !initialLoadComplete.current) {
+      console.log("MobileFeedContainer: Initial load, fetching posts")
+      dispatch(fetchFeedPosts({ 
+        feedType: "all", 
+        sortBy: "recent", 
+        userId,
+        category: activeCategory,
+        currentUserId: user?.id,
+        force: true 
+      }))
       initialLoadComplete.current = true
     }
-  }, [isMounted, isUserLoading, fetchPosts, initialPosts.length])
+  }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id, isMounted, isUserLoading])
 
   // Refresh posts
   const refreshPosts = async () => {
-    setRefreshing(true)
-    
     // Only use vibration on client-side after hydration
     if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(50)
     }
     
     try {
-      await fetchPosts(activeCategory !== "all" ? activeCategory : undefined)
+      await dispatch(fetchFeedPosts({ 
+        feedType, 
+        sortBy, 
+        userId,
+        category: activeCategory !== "all" ? activeCategory : undefined,
+        currentUserId: user?.id,
+        force: true 
+      })).unwrap()
       toast.success("Feed refreshed")
     } catch (error) {
       console.error("Error refreshing posts:", error)
-    } finally {
-      setRefreshing(false)
+      toast.error("Error refreshing posts")
     }
   }
 
   // Load more posts
-  const loadMorePosts = async () => {
+  const handleLoadMore = async () => {
     if (loadingMore || !hasMore) return
     
-    setLoadingMore(true)
-    const nextPage = page + 1
-  
     try {
-      let morePosts: Post[] = []
-      const categoryFilter = activeCategory !== "all" ? activeCategory : undefined
-  
-      if (feedType === "personalized" && user) {
-        morePosts = (await getPersonalizedFeed(user.id, 10, nextPage * 10, categoryFilter)) ?? []
-      } else if (feedType === "user" && userId) {
-        morePosts = (await getFeedPostsByUser(userId, categoryFilter)) as Post[]
-      } else {
-        morePosts = await getFeedPosts(feedType, sortBy, nextPage, categoryFilter)
-      }
-  
-      if (morePosts.length) {
-        setPosts((prev) => [...prev, ...morePosts])
-        setPage(nextPage)
-        setHasMore(morePosts.length >= 10)
-      } else {
-        setHasMore(false)
-      }
-    } catch (err) {
-      console.error("Error loading more posts:", err)
+      await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
+    } catch (error) {
+      console.error("Error loading more posts:", error)
       toast.error("Error loading more posts")
-    } finally {
-      setLoadingMore(false)
     }
   }
 
   // Handle post update
   const handlePostUpdate = (updatedPost: Post) => {
-    setPosts(posts.map((post) => (post.id === updatedPost.id ? updatedPost : post)))
+    dispatch(updatePost(updatedPost))
   }
   
   // Handle scroll events with debounce
@@ -235,9 +225,6 @@ export default function MobileFeedContainer({
       // Set new timeout for scroll handling
       scrollTimeoutRef.current = setTimeout(() => {
         if (!isMounted) return
-
-        // Show/hide scroll to top button
-        setShowScrollTop(container.scrollTop > 500)
         
         // Record scroll position
         scrollPosition.current = container.scrollTop
@@ -245,7 +232,7 @@ export default function MobileFeedContainer({
         // Load more posts when reaching the bottom
         const { scrollTop, scrollHeight, clientHeight } = container
         if (scrollTop + clientHeight >= scrollHeight - 300 && !loadingMore && hasMore) {
-          loadMorePosts()
+          handleLoadMore()
         }
       }, 100) // 100ms debounce
     }
@@ -258,21 +245,6 @@ export default function MobileFeedContainer({
       }
     }
   }, [loadingMore, hasMore, isMounted])
-  
-  // Scroll to top function
-  const scrollToTop = () => {
-    if (!isMounted || !feedRef.current) return
-    
-    feedRef.current.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-    
-    // Only use vibration on client-side after hydration
-    if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(50)
-    }
-  }
   
   // Pull-to-refresh implementation
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -314,15 +286,22 @@ export default function MobileFeedContainer({
     if (!isMounted || category === activeCategory) return
     
     setActiveCategory(category)
-    setLoading(true)
     
     // Reset scroll position
     if (feedRef.current) {
       feedRef.current.scrollTop = 0
     }
     
-    // Fetch posts with the new category
-    fetchPosts(category !== "all" ? category : undefined)
+    // Update Redux state and fetch posts with the new category
+    dispatch(setCategory(category !== "all" ? category : undefined))
+    dispatch(fetchFeedPosts({ 
+      feedType, 
+      sortBy, 
+      userId,
+      category: category !== "all" ? category : undefined,
+      currentUserId: user?.id,
+      force: true 
+    }))
     
     if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(30)
@@ -335,23 +314,11 @@ export default function MobileFeedContainer({
     if (observer.current) observer.current.disconnect()
     observer.current = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && hasMore) {
-        loadMorePosts()
+        handleLoadMore()
       }
     })
     if (node) observer.current.observe(node)
   }, [loading, loadingMore, hasMore])
-
-  // Handle scroll position for scroll-to-top button
-  useEffect(() => {
-    if (!isMounted) return
-
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 400)
-    }
-
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [isMounted])
 
   // Don't render anything before hydration completes
   if (!isMounted) {
@@ -429,15 +396,15 @@ export default function MobileFeedContainer({
               {posts.length === 0 ? (
                 <FeedErrorState
                   message={error || "No posts found. Try a different category or check back later."}
-                  onRetry={() => fetchPosts()}
+                  onRetry={() => refreshPosts()}
                 />
               ) : (
-                <div className="space-y-0">
+                <div className="space-y-0 pb-16">
                   {posts.map((post, index) => (
                     <div
                       key={post.id}
                       ref={index === posts.length - 1 ? lastPostElementRef : null}
-                      className="snap-start h-[100dvh] w-full flex items-center justify-center relative"
+                      className="snap-start h-[85dvh] w-full flex items-center justify-center relative"
                     >
                       <MobileFeedPost
                         post={post}
@@ -450,7 +417,7 @@ export default function MobileFeedContainer({
                   
                   {/* Load more indicator */}
                   {loadingMore && (
-                    <div className="absolute bottom-0 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="absolute bottom-16 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                         <span className="text-sm text-white/80">Loading more posts...</span>
@@ -462,31 +429,6 @@ export default function MobileFeedContainer({
             </>
           )}
         </div>
-        
-        {/* Floating Create Post Button */}
-        {showPostForm && user && isMounted && (
-          <MobileCreatePostButton user={user} onPostCreated={(newPost) => setPosts([newPost, ...posts])} />
-        )}
-        
-        {/* Scroll to top button */}
-        <AnimatePresence>
-          {showScrollTop && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="fixed bottom-24 right-4 z-50"
-            >
-              <Button
-                size="icon"
-                className="h-10 w-10 rounded-full bg-white shadow-lg border"
-                onClick={scrollToTop}
-              >
-                <ArrowUp className="h-5 w-5 text-gray-700" />
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   )

@@ -20,26 +20,26 @@ export interface User {
     id: string
     title?: string
     content: string
+    image?: string
+    createdAt: string
+    updatedAt: string
     author: {
       id: string
       name: string
       avatar?: string
     }
-    createdAt: string
-    type: 'post' | 'review' | 'recommendation'
-    image?: string
-    likeCount?: number
-    commentCount?: number
-    shareCount?: number
-    isLiked?: boolean
+    type?: 'post' | 'review' | 'recommendation'
     location?: {
       id: string
       name: string
-      address?: string
     }
     rating?: number
-    categories?: string[]
-    status?: 'draft' | 'published' | 'archived'
+    likeCount?: number
+    commentCount?: number
+    shareCount?: number
+    saveCount?: number
+    isLiked?: boolean
+    isSaved?: boolean
   }
   
   export interface Comment {

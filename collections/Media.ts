@@ -5,11 +5,21 @@ export const Media: CollectionConfig = {
   access: {
     read: () => true,
     create: () => true,
-    
   },
   upload: {
     staticDir: 'media',
-    mimeTypes: ['image/*'],
+    mimeTypes: [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml',
+      'image/avif',
+      'image/jpg',
+      'image/jfif',
+      'image/pjpeg',
+      'image/pjp',
+    ],
     imageSizes: [
       {
         name: 'thumbnail',

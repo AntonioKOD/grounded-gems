@@ -1,11 +1,35 @@
 import { NextResponse } from "next/server"
 
+const ALLOWED_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'image/avif',
+  'image/jpg',
+  'image/jfif',
+  'image/pjpeg',
+  'image/pjp',
+]
+
 export async function POST(request: Request) {
   try {
     // Get the file from the request
     const formData = await request.formData()
     const file = formData.get("file") as File
     const alt = (formData.get("alt") as string) || "Location image"
+
+    // Validate file type
+    if (!file || !ALLOWED_MIME_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { 
+          error: `Invalid file type. Allowed types are: ${ALLOWED_MIME_TYPES.join(', ')}`,
+          providedType: file?.type 
+        }, 
+        { status: 400 }
+      )
+    }
 
     // Create a new FormData instance for the Payload request
     const payloadFormData = new FormData()
@@ -21,7 +45,8 @@ export async function POST(request: Request) {
     })
 
     if (!response.ok) {
-      throw new Error(`Upload failed: ${response.statusText}`)
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(`Upload failed: ${response.statusText}. ${JSON.stringify(errorData)}`)
     }
 
     // Return the media object from Payload
@@ -29,7 +54,13 @@ export async function POST(request: Request) {
     return NextResponse.json(media)
   } catch (error) {
     console.error("Upload error:", error)
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 })
+    return NextResponse.json(
+      { 
+        error: (error as Error).message,
+        details: "If this error persists, please try a different image format (JPG, PNG, or WebP)"
+      }, 
+      { status: 400 }
+    )
   }
 }
 

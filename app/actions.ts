@@ -816,78 +816,196 @@ export async function getFollowers(userId: string) {
   }
 }
 
-export async function likePost(postId: string, liked: boolean, currentUserId: string) {
-  const payload = await getPayload({ config })
-
+/**
+ * Like or unlike a post
+ */
+export async function likePost(postId: string, shouldLike: boolean, userId: string) {
   try {
-    // 1. Read user & post documents (raw ID arrays)
-    const userDoc = await payload.findByID({
-      collection: "users",
-      id: currentUserId,
-      depth: 0,
-    })
-    const postDoc = await payload.findByID({
-      collection: "posts",
+    const payload = await getPayload({ config })
+
+    // Get the current post and user
+    const post = await payload.findByID({
+      collection: 'posts',
       id: postId,
       depth: 0,
     })
 
-    if (!userDoc || !postDoc) {
-      throw new Error("User or Post not found")
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+      depth: 0,
+    })
+
+    if (!post || !user) {
+      throw new Error('Post or user not found')
     }
 
-    // 2. Handle liking or unliking
-    let updatedLikedPosts
-    let updatedLikes
+    // Get current likes arrays
+    const currentPostLikes = post.likes || []
+    const currentUserLikedPosts = user.likedPosts || []
 
-    if (liked) {
-      // Add IDs when liking
-      updatedLikedPosts = Array.from(new Set([...(userDoc.likedPosts || []), postId]))
-      updatedLikes = Array.from(new Set([...(postDoc.likes || []), currentUserId]))
+    let updatedPostLikes: string[]
+    let updatedUserLikedPosts: string[]
+
+    if (shouldLike) {
+      // Add like
+      updatedPostLikes = Array.from(new Set([...currentPostLikes, userId]))
+      updatedUserLikedPosts = Array.from(new Set([...currentUserLikedPosts, postId]))
     } else {
-      // Remove IDs when unliking
-      updatedLikedPosts = (userDoc.likedPosts || []).filter((id: string) => id !== postId)
-      updatedLikes = (postDoc.likes || []).filter((id: string) => id !== currentUserId)
+      // Remove like
+      updatedPostLikes = currentPostLikes.filter((id: string) => id !== userId)
+      updatedUserLikedPosts = currentUserLikedPosts.filter((id: string) => id !== postId)
     }
 
-    // 3. Update both sides of the relationship
-    const updatedUser = await payload.update({
-      collection: "users",
-      id: currentUserId,
-      depth: 1,
-      data: { likedPosts: updatedLikedPosts },
-    })
-    const updatedPost = await payload.update({
-      collection: "posts",
-      id: postId,
-      depth: 1,
-      data: { likes: updatedLikes },
-    })
+    // Update both post and user
+    await Promise.all([
+      payload.update({
+        collection: 'posts',
+        id: postId,
+        data: {
+          likes: updatedPostLikes,
+          likeCount: updatedPostLikes.length,
+        },
+      }),
+      payload.update({
+        collection: 'users',
+        id: userId,
+        data: {
+          likedPosts: updatedUserLikedPosts,
+        },
+      })
+    ])
 
-    return { updatedUser, updatedPost }
-  } catch (err) {
-    console.error("Error liking post:", err)
-    throw err
+    // Revalidate relevant paths
+    revalidatePath('/feed')
+    revalidatePath(`/post/${postId}`)
+    revalidatePath(`/profile/${userId}`)
+
+    return { 
+      success: true, 
+      isLiked: shouldLike,
+      likeCount: updatedPostLikes.length 
+    }
+  } catch (error) {
+    console.error('Error liking post:', error)
+    throw error
   }
 }
 
-export async function isLiked(postId: string, currentUserId: string): Promise<boolean> {
-  const payload = await getPayload({ config });
+/**
+ * Save or unsave a post
+ */
+export async function savePost(postId: string, userId: string, shouldSave: boolean) {
+  try {
+    const payload = await getPayload({ config })
 
-  // 2. Fetch the user document (depth: 0 returns raw ID arrays)  [oai_citation:0‡Payload](https://payloadcms.com/docs/queries/overview?utm_source=chatgpt.com)
-  const userDoc = await payload.findByID({
-    collection: 'users',
-    id: currentUserId,
-    depth: 0,
-  });
+    // Get the current post and user
+    const post = await payload.findByID({
+      collection: 'posts',
+      id: postId,
+      depth: 0,
+    })
 
-  if (!userDoc) {
-    throw new Error(`User ${currentUserId} not found`);
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+      depth: 0,
+    })
+
+    if (!post || !user) {
+      throw new Error('Post or user not found')
+    }
+
+    // Get current saved arrays
+    const currentPostSavedBy = post.savedBy || []
+    const currentUserSavedPosts = user.savedPosts || []
+
+    let updatedPostSavedBy: string[]
+    let updatedUserSavedPosts: string[]
+
+    if (shouldSave) {
+      // Add save
+      updatedPostSavedBy = currentPostSavedBy.includes(userId) 
+        ? currentPostSavedBy 
+        : [...currentPostSavedBy, userId]
+      
+      updatedUserSavedPosts = currentUserSavedPosts.includes(postId)
+        ? currentUserSavedPosts
+        : [...currentUserSavedPosts, postId]
+    } else {
+      // Remove save
+      updatedPostSavedBy = currentPostSavedBy.filter(id => id !== userId)
+      updatedUserSavedPosts = currentUserSavedPosts.filter(id => id !== postId)
+    }
+
+    // Update post
+    await payload.update({
+      collection: 'posts',
+      id: postId,
+      data: {
+        savedBy: updatedPostSavedBy,
+        saveCount: updatedPostSavedBy.length,
+      },
+    })
+
+    // Update user
+    await payload.update({
+      collection: 'users',
+      id: userId,
+      data: {
+        savedPosts: updatedUserSavedPosts,
+      },
+    })
+
+    console.log(`Post ${shouldSave ? 'saved' : 'unsaved'} successfully:`, {
+      postId,
+      userId,
+      newSaveCount: updatedPostSavedBy.length
+    })
+
+    return {
+      success: true,
+      isSaved: shouldSave,
+      saveCount: updatedPostSavedBy.length,
+    }
+  } catch (error) {
+    console.error('Error saving post:', error)
+    throw error
   }
+}
 
-  // 3. Check if `likedPosts` contains the target postId  [oai_citation:1‡Payload](https://payloadcms.com/docs/fields/relationship?utm_source=chatgpt.com)
-  return Array.isArray(userDoc.likedPosts) && userDoc.likedPosts.includes(postId);
+/**
+ * Check if a post is liked by a user
+ */
+export async function isPostLiked(postId: string, userId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/posts/${postId}/isLiked?userId=${userId}`)
+    if (!response.ok) {
+      throw new Error('Failed to check if post is liked')
+    }
+    const data = await response.json()
+    return data.isLiked
+  } catch (error) {
+    console.error('Error checking if post is liked:', error)
+    return false
+  }
+}
 
+/**
+ * Check if a post is saved by a user
+ */
+export async function isPostSaved(postId: string, userId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/posts/${postId}/isSaved?userId=${userId}`)
+    if (!response.ok) {
+      throw new Error('Failed to check if post is saved')
+    }
+    const data = await response.json()
+    return data.isSaved
+  } catch (error) {
+    console.error('Error checking if post is saved:', error)
+    return false
+  }
 }
 
 export async function unLikePost(postId: string, liked: boolean, currentUserId: string) {
@@ -940,53 +1058,46 @@ export async function unLikePost(postId: string, liked: boolean, currentUserId: 
 }
 
 
-export async function sharePost(postId: string, currentUserId: string): Promise<void> {
-  console.log(`Sharing post with ID: ${postId}`)
-
-  if (!postId) {
-    console.error("sharePost called with empty postId")
-    throw new Error("Post ID is required")
-  }
-
+export async function sharePost(postId: string, userId: string) {
   try {
-    // In a real implementation, you would use Payload CMS to:
-    // 1. Increment a share counter on the post
-    // 2. Possibly log the share activity
     const payload = await getPayload({ config })
 
-    // Update the post to increment share count
+    // Get the current post
+    const post = await payload.findByID({
+      collection: 'posts',
+      id: postId,
+      depth: 0,
+    })
+
+    if (!post) {
+      throw new Error('Post not found')
+    }
+
+    // Increment share count
+    const newShareCount = (post.shareCount || 0) + 1
+
+    // Update post
     await payload.update({
-      collection: "posts",
+      collection: 'posts',
       id: postId,
       data: {
-        // Use the Payload increment operator to add 1 to the shareCount
-        shareCount: {
-          increment: 1,
-        },
+        shareCount: newShareCount,
       },
     })
 
-    // Optionally log the share activity
-    await payload.create({
-      collection: "activities",
-      data: {
-        type: "share",
-        post: postId,
-        user: currentUserId, // Pass the current user ID explicitly
-        createdAt: new Date().toISOString(),
-      },
+    console.log(`Post shared successfully:`, {
+      postId,
+      userId,
+      newShareCount
     })
 
-    console.log(`Successfully shared post ${postId}`)
-
-    // Revalidate paths that might show share count
-    revalidatePath("/feed")
-    revalidatePath(`/post/${postId}`)
-    revalidatePath("/profile/[id]")
+    return {
+      success: true,
+      shareCount: newShareCount,
+    }
   } catch (error) {
-    console.error("Error recording post share:", error)
-    // We don't throw here to prevent blocking the user's share action
-    // The share might succeed even if our recording of it fails
+    console.error('Error sharing post:', error)
+    throw error
   }
 }
 
@@ -1116,7 +1227,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
 
 // Haversine formula to calculate distance between two points on Earth
 
-export async function getFeedPosts(feedType: string, sortBy: string, page: number, category?: string): Promise<Post[]> {
+export async function getFeedPosts(feedType: string, sortBy: string, page: number, category?: string, currentUserId?: string): Promise<Post[]> {
   console.log(`Getting feed posts type=${feedType}, sortBy=${sortBy}, page=${page}${category ? ', category=' + category : ''}`)
   
   try {
@@ -1180,6 +1291,28 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
 
     console.log(`Found ${posts.length} posts out of ${totalDocs} total`)
 
+    // Get current user's liked and saved posts if user is provided
+    let userLikedPosts: string[] = []
+    let userSavedPosts: string[] = []
+    
+    if (currentUserId) {
+      try {
+        const user = await payload.findByID({
+          collection: 'users',
+          id: currentUserId,
+          depth: 0,
+        })
+        
+        if (user) {
+          userLikedPosts = user.likedPosts || []
+          userSavedPosts = user.savedPosts || []
+          console.log(`User ${currentUserId} has ${userLikedPosts.length} liked posts and ${userSavedPosts.length} saved posts`)
+        }
+      } catch (userError) {
+        console.error("Error fetching user data:", userError)
+      }
+    }
+
     // Format posts for the frontend with safe property access
     const formattedPosts: Post[] = posts.map((post: any) => {
       try {
@@ -1197,7 +1330,9 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
           likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
           commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
           shareCount: post.shares || 0,
-          isLiked: false, // This will be updated client-side
+          saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
+          isLiked: currentUserId ? userLikedPosts.includes(String(post.id)) : false,
+          isSaved: currentUserId ? userSavedPosts.includes(String(post.id)) : false,
           type: post.type || "post",
           rating: post.rating,
           location: post.location
@@ -1228,6 +1363,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
           commentCount: 0,
           shareCount: 0,
           isLiked: false,
+          isSaved: false,
           type: "post",
           rating: undefined,
           location: undefined,
@@ -1282,7 +1418,9 @@ export async function getPostById(postId: string): Promise<Post | null> {
       likeCount: post.likes?.length || 0,
       commentCount: post.comments?.length || 0,
       shareCount: post.shares || 0,
+      saveCount: post.savedBy?.length || 0,
       isLiked: false, // This will be updated client-side
+      isSaved: false, // This will be updated client-side
       type: post.type || "post",
       rating: post.rating,
       location: post.location
@@ -1384,19 +1522,18 @@ export async function addComment(postId: string, content: string, userId: string
       id: postId,
       data: {
         comments: updatedComments,
+        commentCount: updatedComments.length,
       },
     })
+
+    // Revalidate relevant paths
+    revalidatePath('/feed')
+    revalidatePath(`/post/${postId}`)
 
     return newComment
   } catch (error) {
     console.error("Error adding comment:", error)
-
-    // For development/demo, return a mock comment
-    return {
-      id: `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      content,
-      createdAt: new Date().toISOString(),
-    }
+    throw error
   }
 }
 
@@ -3782,4 +3919,603 @@ export async function getLocationSpecials(locationId: string): Promise<any[]> {
     console.error('Error fetching location specials:', error)
     return []
   }
+}
+
+// Enhanced comment reply functionality
+export async function addCommentReply(postId: string, parentCommentId: string, content: string, userId: string) {
+  console.log(`Adding reply to comment ${parentCommentId} in post ${postId} by user ${userId}`)
+
+  try {
+    const payload = await getPayload({ config })
+
+    // Get the post
+    const post = await payload.findByID({
+      collection: "posts",
+      id: postId,
+    })
+
+    if (!post) {
+      throw new Error(`Post with ID ${postId} not found`)
+    }
+
+    // Find the parent comment
+    const comments = post.comments || []
+    const parentCommentIndex = comments.findIndex((c: any) => c.id === parentCommentId)
+
+    if (parentCommentIndex === -1) {
+      throw new Error(`Parent comment with ID ${parentCommentId} not found`)
+    }
+
+    // Create a new reply object
+    const newReply = {
+      id: `reply-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      content,
+      author: userId,
+      createdAt: new Date().toISOString(),
+      likeCount: 0,
+      isLiked: false,
+      parentCommentId,
+      isReply: true,
+    }
+
+    // Add the reply to the parent comment's replies array
+    const parentComment = comments[parentCommentIndex]
+    const updatedParentComment = {
+      ...parentComment,
+      replies: Array.isArray(parentComment.replies) ? [...parentComment.replies, newReply] : [newReply]
+    }
+
+    // Update the comments array
+    const updatedComments = [...comments]
+    updatedComments[parentCommentIndex] = updatedParentComment
+
+    // Update the post with the new reply
+    await payload.update({
+      collection: "posts",
+      id: postId,
+      data: {
+        comments: updatedComments,
+        commentCount: comments.length, // Don't count replies in main comment count
+      },
+    })
+
+    // Revalidate relevant paths
+    revalidatePath('/feed')
+    revalidatePath(`/post/${postId}`)
+
+    return newReply
+  } catch (error) {
+    console.error("Error adding comment reply:", error)
+    throw error
+  }
+}
+
+// Enhanced comment liking with reply support
+export async function likeCommentOrReply(postId: string, commentId: string, isLiking: boolean, userId: string, isReply: boolean = false) {
+  console.log(`${isLiking ? "Liking" : "Unliking"} ${isReply ? 'reply' : 'comment'} ${commentId} by user ${userId}`)
+
+  try {
+    const payload = await getPayload({ config })
+
+    // Get the post
+    const post = await payload.findByID({
+      collection: "posts",
+      id: postId,
+    })
+
+    if (!post) {
+      throw new Error(`Post with ID ${postId} not found`)
+    }
+
+    const comments = post.comments || []
+    let updatedComments = [...comments]
+    let found = false
+
+    if (isReply) {
+      // Handle reply liking
+      for (let i = 0; i < updatedComments.length; i++) {
+        const comment = updatedComments[i]
+        if (comment.replies && Array.isArray(comment.replies)) {
+          const replyIndex = comment.replies.findIndex((r: any) => r.id === commentId)
+          if (replyIndex !== -1) {
+            const reply = comment.replies[replyIndex]
+            const updatedReply = {
+              ...reply,
+              likeCount: isLiking ? (reply.likeCount || 0) + 1 : Math.max((reply.likeCount || 0) - 1, 0),
+              isLiked: isLiking,
+              likedBy: isLiking 
+                ? [...(reply.likedBy || []), userId]
+                : (reply.likedBy || []).filter((id: string) => id !== userId)
+            }
+
+            const updatedReplies = [...comment.replies]
+            updatedReplies[replyIndex] = updatedReply
+
+            updatedComments[i] = {
+              ...comment,
+              replies: updatedReplies
+            }
+            found = true
+            break
+          }
+        }
+      }
+    } else {
+      // Handle comment liking
+      const commentIndex = updatedComments.findIndex((c: any) => c.id === commentId)
+      if (commentIndex !== -1) {
+        const comment = updatedComments[commentIndex]
+        const updatedComment = {
+          ...comment,
+          likeCount: isLiking ? (comment.likeCount || 0) + 1 : Math.max((comment.likeCount || 0) - 1, 0),
+          isLiked: isLiking,
+          likedBy: isLiking 
+            ? [...(comment.likedBy || []), userId]
+            : (comment.likedBy || []).filter((id: string) => id !== userId)
+        }
+
+        updatedComments[commentIndex] = updatedComment
+        found = true
+      }
+    }
+
+    if (!found) {
+      throw new Error(`${isReply ? 'Reply' : 'Comment'} with ID ${commentId} not found`)
+    }
+
+    // Update the post with the modified comments array
+    await payload.update({
+      collection: "posts",
+      id: postId,
+      data: {
+        comments: updatedComments,
+      },
+    })
+
+    // Revalidate relevant paths
+    revalidatePath('/feed')
+    revalidatePath(`/post/${postId}`)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Error updating comment/reply like status:", error)
+    throw error
+  }
+}
+
+// Get comments with enhanced structure including replies and user interaction state
+export async function getCommentsWithReplies(postId: string, currentUserId?: string): Promise<Comment[]> {
+  console.log(`Getting comments with replies for post ID: ${postId}`)
+
+  try {
+    const payload = await getPayload({ config })
+
+    // Fetch the post with its comments
+    const post = await payload.findByID({
+      collection: "posts",
+      id: postId,
+      depth: 2, // Load comment authors
+    })
+
+    if (!post || !post.comments || !Array.isArray(post.comments)) {
+      return []
+    }
+
+    // Format comments for the frontend with replies and user interaction state
+    const formattedComments = post.comments.map((comment: any) => {
+      const isLikedByUser = currentUserId && comment.likedBy && comment.likedBy.includes(currentUserId)
+      
+      // Format replies if they exist
+      const formattedReplies = comment.replies && Array.isArray(comment.replies) 
+        ? comment.replies.map((reply: any) => ({
+            id: reply.id || `reply-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            author: {
+              id: typeof reply.author === "object" ? reply.author.id : reply.author,
+              name: typeof reply.author === "object" ? reply.author.name : "Unknown User",
+              avatar: typeof reply.author === "object" && reply.author.profileImage
+                ? reply.author.profileImage.url
+                : undefined,
+            },
+            content: reply.content || "",
+            createdAt: reply.createdAt || new Date().toISOString(),
+            likeCount: reply.likeCount || 0,
+            isLiked: currentUserId && reply.likedBy && reply.likedBy.includes(currentUserId),
+            parentCommentId: comment.id,
+            isReply: true,
+          }))
+        : []
+
+      return {
+        id: comment.id || `comment-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        author: {
+          id: typeof comment.author === "object" ? comment.author.id : comment.author,
+          name: typeof comment.author === "object" ? comment.author.name : "Unknown User",
+          avatar: typeof comment.author === "object" && comment.author.profileImage
+            ? comment.author.profileImage.url
+            : undefined,
+        },
+        content: comment.content || "",
+        createdAt: comment.createdAt || new Date().toISOString(),
+        likeCount: comment.likeCount || 0,
+        isLiked: isLikedByUser || false,
+        replies: formattedReplies,
+        replyCount: formattedReplies.length,
+      }
+    })
+
+    // Sort by newest first
+    return formattedComments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  } catch (error) {
+    console.error("Error fetching comments with replies:", error)
+    return []
+  }
+}
+
+// Enhanced Feed Algorithms for different tabs
+export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize = 10): Promise<Post[]> {
+  console.log(`Getting discover feed for user ${currentUserId}, page=${page}`)
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get user's preferences and activity if available
+    let userPreferences: any = {}
+    let userFollowing: string[] = []
+    let userLocation: { latitude?: number; longitude?: number } = {}
+    
+    if (currentUserId) {
+      try {
+        const user = await payload.findByID({
+          collection: 'users',
+          id: currentUserId,
+          depth: 1,
+        })
+        
+        if (user) {
+          userFollowing = user.following || []
+          userLocation = user.location || {}
+          // Get user's interaction history to understand preferences
+          userPreferences = {
+            categories: user.preferredCategories || [],
+            locations: user.visitedLocations || [],
+            interactionHistory: user.likedPosts || []
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching user data for discover feed:", error)
+      }
+    }
+
+    // Build complex query for discover algorithm
+    const query: any = {
+      status: { equals: "published" }
+    }
+
+    // Fetch posts with sophisticated sorting
+    const result = await payload.find({
+      collection: "posts",
+      where: query,
+      sort: '-createdAt', // We'll re-sort with our algorithm
+      limit: pageSize * 3, // Get more posts to apply our algorithm
+      page: 1, // Always get from first page for algorithm
+      depth: 2,
+    })
+
+    let posts = result.docs || []
+
+    // Apply Discover Algorithm
+    const scoredPosts = posts.map((post: any) => {
+      let score = 0
+      const now = new Date()
+      const postDate = new Date(post.createdAt)
+      const hoursOld = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60)
+      
+      // Base engagement score (40% of total)
+      const engagementScore = (
+        (post.likes?.length || 0) * 3 +
+        (post.comments?.length || 0) * 5 +
+        (post.shares || 0) * 7 +
+        (post.savedBy?.length || 0) * 4
+      )
+      score += engagementScore * 0.4
+
+      // Freshness score (25% of total) - favor recent but not too recent
+      if (hoursOld < 2) {
+        score += 20 * 0.25 // Very recent posts get lower score
+      } else if (hoursOld < 24) {
+        score += 100 * 0.25 // Sweet spot for discovery
+      } else if (hoursOld < 168) { // 1 week
+        score += (100 - (hoursOld - 24) * 0.5) * 0.25
+      } else {
+        score += 10 * 0.25 // Older posts get minimal freshness score
+      }
+
+      // Diversity score (20% of total) - favor posts from different authors/locations
+      if (post.author && typeof post.author === 'object') {
+        // Boost posts from authors user doesn't follow (for discovery)
+        if (!userFollowing.includes(post.author.id)) {
+          score += 50 * 0.2
+        }
+      }
+
+      // Quality indicators (15% of total)
+      if (post.image || post.featuredImage) score += 20 * 0.15
+      if (post.location) score += 15 * 0.15
+      if (post.type === 'review' && post.rating >= 4) score += 25 * 0.15
+      if (post.content && post.content.length > 100) score += 10 * 0.15
+
+      // Trending momentum - posts gaining traction quickly
+      const engagementRate = engagementScore / Math.max(hoursOld, 1)
+      if (engagementRate > 5) score += 30
+
+      // Location relevance if user has location
+      if (userLocation.latitude && userLocation.longitude && post.location) {
+        // This would need actual distance calculation
+        score += 10 // Placeholder for location relevance
+      }
+
+      return { ...post, discoveryScore: score }
+    })
+
+    // Sort by discovery score and apply pagination
+    const sortedPosts = scoredPosts
+      .sort((a, b) => b.discoveryScore - a.discoveryScore)
+      .slice((page - 1) * pageSize, page * pageSize)
+
+    return formatPostsForFrontend(sortedPosts, currentUserId)
+  } catch (error) {
+    console.error("Error fetching discover feed:", error)
+    return []
+  }
+}
+
+export async function getPopularFeed(currentUserId?: string, page = 1, pageSize = 10, timeframe = '7d'): Promise<Post[]> {
+  console.log(`Getting popular feed for user ${currentUserId}, page=${page}, timeframe=${timeframe}`)
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    // Calculate date threshold based on timeframe
+    const now = new Date()
+    let dateThreshold = new Date()
+    
+    switch (timeframe) {
+      case '24h':
+        dateThreshold.setHours(now.getHours() - 24)
+        break
+      case '7d':
+        dateThreshold.setDate(now.getDate() - 7)
+        break
+      case '30d':
+        dateThreshold.setDate(now.getDate() - 30)
+        break
+      default:
+        dateThreshold.setDate(now.getDate() - 7)
+    }
+
+    const query: any = {
+      status: { equals: "published" },
+      createdAt: {
+        greater_than: dateThreshold.toISOString()
+      }
+    }
+
+    const result = await payload.find({
+      collection: "posts",
+      where: query,
+      sort: '-createdAt',
+      limit: pageSize * 2, // Get more posts for better algorithm
+      page: 1,
+      depth: 2,
+    })
+
+    let posts = result.docs || []
+
+    // Apply Popular Algorithm - weighted engagement scoring
+    const scoredPosts = posts.map((post: any) => {
+      const likes = post.likes?.length || 0
+      const comments = post.comments?.length || 0
+      const shares = post.shares || 0
+      const saves = post.savedBy?.length || 0
+      
+      // Calculate time decay factor
+      const postDate = new Date(post.createdAt)
+      const hoursOld = (now.getTime() - postDate.getTime()) / (1000 * 60 * 60)
+      const timeDecay = Math.exp(-hoursOld / 48) // Exponential decay over 48 hours
+      
+      // Weighted popularity score
+      const popularityScore = (
+        likes * 1.0 +           // Base like weight
+        comments * 3.0 +        // Comments are more valuable
+        shares * 5.0 +          // Shares are highly valuable
+        saves * 2.5             // Saves indicate quality
+      ) * timeDecay             // Apply time decay
+      
+      // Bonus for high engagement rate
+      const engagementRate = (likes + comments + shares + saves) / Math.max(hoursOld, 1)
+      const viralBonus = engagementRate > 10 ? engagementRate * 2 : 0
+      
+      return { ...post, popularityScore: popularityScore + viralBonus }
+    })
+
+    // Sort by popularity score and apply pagination
+    const sortedPosts = scoredPosts
+      .sort((a, b) => b.popularityScore - a.popularityScore)
+      .slice((page - 1) * pageSize, page * pageSize)
+
+    return formatPostsForFrontend(sortedPosts, currentUserId)
+  } catch (error) {
+    console.error("Error fetching popular feed:", error)
+    return []
+  }
+}
+
+export async function getLatestFeed(currentUserId?: string, page = 1, pageSize = 10, category?: string): Promise<Post[]> {
+  console.log(`Getting latest feed for user ${currentUserId}, page=${page}, category=${category}`)
+  
+  try {
+    const payload = await getPayload({ config })
+    
+    const query: any = {
+      status: { equals: "published" }
+    }
+
+    // Add category filter if specified
+    if (category && category !== 'all') {
+      query.categories = {
+        contains: category
+      }
+    }
+
+    // Simple chronological sort with quality filtering
+    const result = await payload.find({
+      collection: "posts",
+      where: query,
+      sort: '-createdAt', // Newest first
+      limit: pageSize,
+      page: page,
+      depth: 2,
+    })
+
+    let posts = result.docs || []
+
+    // Optional: Apply minimal quality filtering for latest feed
+    const qualityFilteredPosts = posts.filter((post: any) => {
+      // Filter out very low quality posts
+      const hasContent = post.content && post.content.length > 10
+      const hasEngagement = (post.likes?.length || 0) + (post.comments?.length || 0) > 0 || 
+                           new Date(post.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000) // Or is less than 24h old
+      
+      return hasContent && hasEngagement
+    })
+
+    return formatPostsForFrontend(qualityFilteredPosts, currentUserId)
+  } catch (error) {
+    console.error("Error fetching latest feed:", error)
+    return []
+  }
+}
+
+export async function getSavedPostsFeed(currentUserId: string, page = 1, pageSize = 10): Promise<Post[]> {
+  console.log(`Getting saved posts feed for user ${currentUserId}, page=${page}`)
+  
+  if (!currentUserId) {
+    return []
+  }
+
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get user's saved posts
+    const user = await payload.findByID({
+      collection: 'users',
+      id: currentUserId,
+      depth: 0,
+    })
+
+    if (!user || !user.savedPosts || user.savedPosts.length === 0) {
+      return []
+    }
+
+    const savedPostIds = user.savedPosts
+
+    // Calculate pagination for saved posts
+    const startIndex = (page - 1) * pageSize
+    const endIndex = startIndex + pageSize
+    const paginatedSavedIds = savedPostIds.slice(startIndex, endIndex)
+
+    if (paginatedSavedIds.length === 0) {
+      return []
+    }
+
+    // Fetch the saved posts
+    const result = await payload.find({
+      collection: "posts",
+      where: {
+        id: {
+          in: paginatedSavedIds
+        },
+        status: { equals: "published" }
+      },
+      sort: '-updatedAt', // Sort by when they were last updated
+      limit: pageSize,
+      depth: 2,
+    })
+
+    let posts = result.docs || []
+
+    // Sort posts by the order they were saved (most recently saved first)
+    const sortedPosts = posts.sort((a, b) => {
+      const aIndex = savedPostIds.indexOf(a.id)
+      const bIndex = savedPostIds.indexOf(b.id)
+      return aIndex - bIndex // Earlier in savedPosts array = more recently saved
+    })
+
+    return formatPostsForFrontend(sortedPosts, currentUserId)
+  } catch (error) {
+    console.error("Error fetching saved posts feed:", error)
+    return []
+  }
+}
+
+// Helper function to format posts consistently
+function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
+  return posts.map((post: any) => {
+    try {
+      return {
+        id: String(post.id),
+        author: {
+          id: typeof post.author === "object" && post.author ? post.author.id : post.author || "unknown",
+          name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
+          avatar: typeof post.author === "object" && post.author && post.author.profileImage ? post.author.profileImage.url : undefined,
+        },
+        title: post.title || "",
+        content: post.content || "",
+        createdAt: post.createdAt || new Date().toISOString(),
+        image: post.image?.url || post.featuredImage?.url || undefined,
+        likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
+        commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
+        shareCount: post.shares || 0,
+        saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
+        isLiked: false, // Will be set by Redux
+        isSaved: false, // Will be set by Redux
+        type: post.type || "post",
+        rating: post.rating,
+        location: post.location
+          ? {
+              id: typeof post.location === "object" && post.location ? post.location.id : post.location,
+              name: typeof post.location === "object" && post.location ? post.location.name : "Unknown Location",
+              address: typeof post.location === "object" && post.location ? post.location.address : undefined,
+            }
+          : undefined,
+        categories: Array.isArray(post.categories) ? post.categories : [],
+        tags: Array.isArray(post.tags) ? post.tags : []
+      }
+    } catch (formatError) {
+      console.error("Error formatting post:", formatError, post)
+      return {
+        id: String(post.id || Math.random()),
+        author: {
+          id: "unknown",
+          name: "Unknown User",
+          avatar: undefined,
+        },
+        title: "",
+        content: "Post content unavailable",
+        createdAt: new Date().toISOString(),
+        image: undefined,
+        likeCount: 0,
+        commentCount: 0,
+        shareCount: 0,
+        saveCount: 0,
+        isLiked: false,
+        isSaved: false,
+        type: "post",
+        rating: undefined,
+        location: undefined,
+        categories: [],
+        tags: []
+      }
+    }
+  }).filter(Boolean)
 }

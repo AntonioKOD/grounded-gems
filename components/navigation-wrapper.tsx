@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { UserData } from "@/context/user-context";
+import type { UserData } from "@/lib/features/user/userSlice";
 
 // Static navigation skeleton that matches the final layout exactly
 function NavigationSkeleton({ hasUser }: { hasUser?: boolean }) {

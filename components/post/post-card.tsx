@@ -4,13 +4,13 @@
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { formatDistanceToNow } from "date-fns"
-import { MessageCircle, Share2, MoreHorizontal, MapPin, Star, ChevronDown, ChevronUp } from "lucide-react"
+import { MessageCircle, Share2, MoreHorizontal, MapPin, Star, ChevronDown, ChevronUp, Bookmark } from "lucide-react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { RelativeTime } from "@/components/ui/relative-time"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,14 +19,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { LikeButton } from "@/components/like-button"
-import { likePost, isLiked, sharePost } from "@/app/actions"
+import { CommentSystem } from "@/components/post/comment-system"
+import { likePost, sharePost } from "@/app/actions"
 import type { Post } from "@/types/feed"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useAppSelector, useAppDispatch } from "@/lib/hooks"
+import { savePostAsync, toggleSaveOptimistic } from "@/lib/features/posts/postsSlice"
 
 interface PostCardProps {
   post: Post
-  onComment?: (id: string) => void
   className?: string
   user: {
     id: string
@@ -36,20 +38,28 @@ interface PostCardProps {
   onPostUpdated?: (updatedPost: Post) => void
 }
 
-export function PostCard({ post, user, onComment, className = "", onPostUpdated }: PostCardProps) {
+export function PostCard({ post, user, className = "", onPostUpdated }: PostCardProps) {
+  const dispatch = useAppDispatch()
+  const { savedPosts, loadingSaves } = useAppSelector((state) => state.posts)
+  
   const [expanded, setExpanded] = useState(false)
   const [isSharing, setIsSharing] = useState(false)
   const [currentPost, setCurrentPost] = useState<Post>(post)
   const [isLikedState, setIsLikedState] = useState<boolean>(post.isLiked || false)
   const [likeCount, setLikeCount] = useState<number>(post.likeCount || 0)
+  const [saveCount, setSaveCount] = useState<number>(post.saveCount || 0)
+  
+  // Get saved state from Redux
+  const isSaved = savedPosts.includes(post.id)
+  const isSaving = loadingSaves.includes(post.id)
 
   // Check if post is liked on mount
   useEffect(() => {
     const checkIfLiked = async () => {
       if (user?.id && currentPost.id) {
         try {
-          const liked = await isLiked(currentPost.id, user.id)
-          setIsLikedState(liked)
+          // Instead of checking isLiked separately, we'll use the post's isLiked property
+          setIsLikedState(currentPost.isLiked || false)
         } catch (error) {
           console.error("Error checking if post is liked:", error)
         }
@@ -57,13 +67,14 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
     }
 
     checkIfLiked()
-  }, [currentPost.id, user?.id])
+  }, [currentPost.id, user?.id, currentPost.isLiked])
 
   // Update local state when post prop changes
   useEffect(() => {
     setCurrentPost(post)
     setIsLikedState(post.isLiked || false)
     setLikeCount(post.likeCount || 0)
+    setSaveCount(post.saveCount || 0)
   }, [post])
 
   // Determine if content should be truncated
@@ -143,6 +154,67 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
     }
   }
 
+  const handleSave = async () => {
+    if (!user?.id) {
+      toast.error("Please log in to save posts")
+      return
+    }
+
+    try {
+      const newIsSaved = !isSaved
+      
+      // Optimistic update in Redux
+      dispatch(toggleSaveOptimistic({ postId: currentPost.id, isSaved: newIsSaved }))
+
+      // Update local save count optimistically
+      setSaveCount(prev => newIsSaved ? prev + 1 : prev - 1)
+
+      // Update the post object
+      const updatedPost = {
+        ...currentPost,
+        isSaved: newIsSaved,
+        saveCount: newIsSaved ? saveCount + 1 : saveCount - 1,
+      }
+
+      setCurrentPost(updatedPost)
+
+      // Notify parent component if needed
+      if (onPostUpdated) {
+        onPostUpdated(updatedPost)
+      }
+
+      // Call Redux async action
+      const result = await dispatch(savePostAsync({
+        postId: currentPost.id,
+        shouldSave: newIsSaved,
+        userId: user.id
+      })).unwrap()
+
+      // Update save count with server response
+      if (result.saveCount !== undefined) {
+        setSaveCount(result.saveCount)
+        const finalPost = {
+          ...updatedPost,
+          saveCount: result.saveCount,
+        }
+        setCurrentPost(finalPost)
+        if (onPostUpdated) {
+          onPostUpdated(finalPost)
+        }
+      }
+
+      toast.success(newIsSaved ? "Post saved" : "Post removed from saved items")
+
+      // Add haptic feedback if available
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    } catch (error) {
+      console.error("Error saving post:", error)
+      toast.error("Failed to save post. Please try again.")
+    }
+  }
+
   // Get initials for avatar fallback
   const getInitials = (name: string) => {
     if (!name) return "U"
@@ -198,55 +270,60 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
   }
 
   const handleComment = () => {
-    if (onComment) {
-      onComment(currentPost.id)
-    }
+    // Just a placeholder - the CommentSystem below handles all comment functionality
+    // No navigation needed since comments are displayed inline
   }
 
   return (
-    <Card className={cn("overflow-hidden shadow-sm hover:shadow-md transition-shadow", className)}>
+    <Card className={cn(
+      "overflow-hidden bg-black/95 hover:bg-black/90 transition-all duration-300",
+      "border-none shadow-none",
+      className
+    )}>
       <CardContent className="p-4 pt-5">
         <div className="flex justify-between items-start mb-4">
           <div className="flex items-center">
-            <Link href={`/profile/${currentPost.author.id}`} className="mr-3">
-              <Avatar className="h-10 w-10 border">
+            <Link href={`/profile/${currentPost.author.id}`} className="mr-3 group">
+              <Avatar className="h-10 w-10 ring-2 ring-white/20 group-hover:ring-white/40 transition-all">
                 <AvatarImage src={currentPost.author.avatar || "/placeholder.svg"} alt={currentPost.author.name} />
-                <AvatarFallback>{getInitials(currentPost.author.name)}</AvatarFallback>
+                <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
+                  {getInitials(currentPost.author.name)}
+                </AvatarFallback>
               </Avatar>
             </Link>
             <div>
               <div className="flex items-center">
-                <Link href={`/profile/${currentPost.author.id}`} className="font-medium hover:underline">
+                <Link 
+                  href={`/profile/${currentPost.author.id}`} 
+                  className="font-medium text-white group-hover:text-[#FF6B6B] transition-colors"
+                >
                   {currentPost.author.name}
                 </Link>
                 {currentPost.type !== "post" && (
-                  <Badge variant="outline" className="ml-2 text-xs">
+                  <Badge variant="outline" className="ml-2 text-xs text-white/90 border-white/20 bg-white/10">
                     {currentPost.type === "review" ? "Review" : "Recommendation"}
                   </Badge>
                 )}
               </div>
-              <div className="text-sm text-muted-foreground flex items-center">
-                <span>{formatDistanceToNow(new Date(currentPost.createdAt), { addSuffix: true })}</span>
-                {currentPost.status === "draft" && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    Draft
-                  </Badge>
-                )}
+              <div className="text-sm text-white/60">
+                <RelativeTime date={currentPost.createdAt} />
               </div>
             </div>
           </div>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>Save Post</DropdownMenuItem>
-              <DropdownMenuItem onClick={copyLinkToClipboard}>Copy Link</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600">Report</DropdownMenuItem>
+            <DropdownMenuContent align="end" className="bg-black/95 border-white/20">
+              <DropdownMenuItem onClick={handleSave} className="text-white/90 hover:text-white focus:text-white">
+                {isSaved ? "Remove from Saved" : "Save Post"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={copyLinkToClipboard} className="text-white/90 hover:text-white focus:text-white">Copy Link</DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/20" />
+              <DropdownMenuItem className="text-red-400 hover:text-red-300 focus:text-red-300">Report</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -278,12 +355,12 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
 
         {/* Post content */}
         <div className="mb-3 whitespace-pre-line">
-          <p className="text-sm sm:text-base">{displayContent}</p>
+          <p className="text-sm sm:text-base text-white/90">{displayContent}</p>
           {isLongContent && (
             <Button
               variant="ghost"
               size="sm"
-              className="mt-1 h-auto p-0 text-muted-foreground hover:text-foreground"
+              className="mt-1 h-auto p-0 text-[#FF6B6B] hover:text-[#FF6B6B]/80"
               onClick={() => setExpanded(!expanded)}
             >
               {expanded ? (
@@ -299,7 +376,7 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
           )}
         </div>
 
-        {/* Post image (if available) */}
+        {/* Post image */}
         {currentPost.image && (
           <div className="mt-3 mb-2 rounded-md overflow-hidden relative">
             <div className="aspect-video relative">
@@ -315,35 +392,61 @@ export function PostCard({ post, user, onComment, className = "", onPostUpdated 
         )}
       </CardContent>
 
-      <CardFooter className="px-4 py-3 border-t flex items-center justify-between bg-muted/10">
+      <CardFooter className="px-4 py-3 border-t border-white/10 flex items-center justify-between bg-black/95">
         <div className="flex items-center gap-8">
           <LikeButton isLiked={isLikedState} likeCount={likeCount} onLike={handleLike} />
 
-          {/* Comment button with count */}
+          {/* Comment button - handled by CommentSystem */}
           <div className="flex flex-col items-center">
-            <Link href={`/post/${currentPost.id}`}>
-              <button
-                className="w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-blue-50 active:scale-90"
-                onClick={handleComment}
-                aria-label="View comments"
-              >
-                <MessageCircle size={24} className="text-gray-500" />
-              </button>
-            </Link>
+            <button
+              className="w-10 h-10 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-white/10 active:scale-90"
+              onClick={handleComment}
+              aria-label="View comments"
+            >
+              <MessageCircle size={24} className="text-white/80" />
+            </button>
             <div className="flex flex-col items-center mt-1">
-              <span className="text-xs font-medium">
+              <span className="text-xs font-medium text-white/90">
                 {currentPost.commentCount !== undefined ? currentPost.commentCount : 0}
               </span>
-              <span className="text-xs text-muted-foreground">Comments</span>
+              <span className="text-xs text-white/60">Comments</span>
             </div>
           </div>
         </div>
 
-        <Button variant="ghost" size="sm" className="flex items-center gap-1" onClick={handleShare}>
-          <Share2 className="h-4 w-4" />
-          <span className="sr-only sm:not-sr-only sm:inline">Share</span>
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="flex items-center gap-1 text-white/80 hover:text-white hover:bg-white/10" 
+            onClick={handleShare}
+          >
+            <Share2 className="h-4 w-4" />
+            <span className="sr-only sm:not-sr-only sm:inline">Share</span>
+          </Button>
+
+          {/* Save Button with Count */}
+          <button
+            className="group flex items-center gap-2"
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            <div className={`p-1.5 rounded-full bg-white/10 backdrop-blur-sm group-hover:bg-white/20 transition-all transform group-active:scale-90 ${
+              isSaved ? 'text-[#FFE66D]' : 'text-white/80'
+            }`}>
+              <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current animate-save' : ''}`} />
+            </div>
+            <span className="text-xs font-medium text-white/90">{saveCount}</span>
+          </button>
+        </div>
       </CardFooter>
+
+      {/* Comments System */}
+      <CommentSystem 
+        postId={currentPost.id}
+        user={user}
+        className="border-t border-white/10"
+      />
     </Card>
   )
 }

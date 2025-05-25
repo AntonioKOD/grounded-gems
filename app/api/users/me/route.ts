@@ -23,13 +23,38 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
+    // Fetch the full user data with relationships
+    const fullUser = await payload.findByID({
+      collection: 'users',
+      id: user.id,
+      depth: 0, // We only need the IDs for savedPosts and likedPosts
+    })
+
+    // Extract post IDs from the relationships
+    const savedPostIds = Array.isArray(fullUser.savedPosts) 
+      ? fullUser.savedPosts.map((post: any) => typeof post === 'string' ? post : post.id || post)
+      : []
+    
+    const likedPostIds = Array.isArray(fullUser.likedPosts) 
+      ? fullUser.likedPosts.map((post: any) => typeof post === 'string' ? post : post.id || post)
+      : []
+
+    console.log('API: User saved posts:', { 
+      rawSavedPosts: fullUser.savedPosts, 
+      extractedSavedPostIds: savedPostIds,
+      rawLikedPosts: fullUser.likedPosts,
+      extractedLikedPostIds: likedPostIds
+    })
+
     return NextResponse.json({ 
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        profileImage: user.profileImage,
-        location: user.location,
+        id: fullUser.id,
+        name: fullUser.name,
+        email: fullUser.email,
+        profileImage: fullUser.profileImage,
+        location: fullUser.location,
+        savedPosts: savedPostIds,
+        likedPosts: likedPostIds,
         // Add any other fields you need
       }
     })

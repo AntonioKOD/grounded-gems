@@ -29,6 +29,7 @@ interface UserContextType {
   refetchUser: () => Promise<void>
   logout: () => Promise<void>
   preloadUser: (userData: UserData) => void
+  updateUser: (userData: Partial<UserData>) => void
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -43,11 +44,12 @@ export function UserProvider({
   const [user, setUser] = useState<UserData | null>(initialUser)
   const [isLoading, setIsLoading] = useState(!initialUser)
   const [isInitialized, setIsInitialized] = useState(!!initialUser)
+  const [fetchAttempted, setFetchAttempted] = useState(false)
   const router = useRouter()
 
-  // Fetch user data from API
+  // Fetch user data from API with improved error handling and caching
   const fetchUser = useCallback(
-    async (options?: { force?: boolean }) => {
+    async (options?: { force?: boolean; silent?: boolean }) => {
       // If we already have user data and we're not forcing a refresh, don't fetch again
       if (user && !options?.force && isInitialized) {
         return
@@ -62,20 +64,25 @@ export function UserProvider({
         return
       }
 
-      setIsLoading(true)
+      // Don't show loading state for silent fetches
+      if (!options?.silent) {
+        setIsLoading(true)
+      }
+      
       try {
         console.log("Fetching user data...")
+        setFetchAttempted(true)
         
         // Use AbortController for timeout
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 8000) // Increased to 8 seconds
         
         const response = await fetch("/api/users/me", {
           method: "GET",
           credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            "Cache-Control": "max-age=30", // Allow 30 second caching
+            "Cache-Control": "no-cache", // Always get fresh data
           },
           signal: controller.signal,
         })
@@ -96,13 +103,22 @@ export function UserProvider({
         console.log("User data fetched successfully:", data.user ? "User found" : "No user")
         setUser(data.user)
         setIsInitialized(true)
+
+        // Dispatch custom event for other components to listen to
+        if (data.user) {
+          window.dispatchEvent(new CustomEvent("user-updated", { detail: data.user }))
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
-          console.log("User fetch timed out, using cached/initial data")
+          console.log("User fetch timed out")
         } else {
           console.error("Error fetching user:", error)
         }
         // Only set user to null on explicit 401 responses to prevent logout on network errors
+        if (!user && !initialUser) {
+          setUser(null)
+        }
+        setIsInitialized(true)
       } finally {
         setIsLoading(false)
       }
@@ -110,18 +126,68 @@ export function UserProvider({
     [initialUser, user, isInitialized],
   )
 
-  // Initial fetch - only if we don't have initialUser
+  // More aggressive initial fetch - fetch immediately on mount
   useEffect(() => {
-    if (!isInitialized) {
-      fetchUser()
+    // Always try to fetch user data on mount, even if we have initial user
+    if (!fetchAttempted) {
+      // Fetch immediately without delay
+      fetchUser({ force: true })
+    }
+  }, [fetchUser, fetchAttempted])
+
+  // Also try to fetch user data when the page becomes visible (user switches tabs)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && isInitialized) {
+        // Try to fetch user data when page becomes visible
+        fetchUser({ silent: true, force: true })
+      }
+    }
+
+    const handleFocus = () => {
+      if (isInitialized) {
+        fetchUser({ silent: true, force: true })
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
     }
   }, [fetchUser, isInitialized])
 
   // Preload user function for instant updates after login
   const preloadUser = useCallback((userData: UserData) => {
+    console.log("Preloading user data:", userData)
     setUser(userData)
     setIsLoading(false)
     setIsInitialized(true)
+    setFetchAttempted(true)
+    
+    // Dispatch custom event for other components
+    window.dispatchEvent(new CustomEvent("user-updated", { detail: userData }))
+    window.dispatchEvent(new CustomEvent("user-login", { detail: userData }))
+    
+    // Force a re-fetch after a short delay to ensure we have the latest data
+    setTimeout(() => {
+      fetchUser({ force: true, silent: true })
+    }, 500)
+  }, [fetchUser])
+
+  // Update user function for partial updates
+  const updateUser = useCallback((userData: Partial<UserData>) => {
+    setUser(prevUser => {
+      if (!prevUser) return null
+      const updatedUser = { ...prevUser, ...userData }
+      
+      // Dispatch custom event for other components
+      window.dispatchEvent(new CustomEvent("user-updated", { detail: updatedUser }))
+      
+      return updatedUser
+    })
   }, [])
 
   // Logout function
@@ -132,6 +198,8 @@ export function UserProvider({
 
       if (success) {
         setUser(null)
+        setIsInitialized(true)
+        setFetchAttempted(false)
         // The logoutUser function already dispatches the event
         router.replace("/login")
       }
@@ -142,22 +210,37 @@ export function UserProvider({
     }
   }, [router])
 
-  // Listen for auth events
+  // Listen for auth events with improved handling
   useEffect(() => {
-    const handleLoginSuccess = () => {
-      console.log("Login success event detected, fetching user data")
-      fetchUser({ force: true })
+    const handleLoginSuccess = (event?: CustomEvent) => {
+      console.log("Login success event detected, preloading user data")
+      
+      // If we have user data in the event, use it immediately
+      if (event?.detail) {
+        preloadUser(event.detail)
+      } else {
+        // Force fetch user data immediately
+        fetchUser({ force: true })
+      }
     }
-    const handleLogoutSuccess = () => setUser(null)
+    
+    const handleLogoutSuccess = () => {
+      setUser(null)
+      setIsInitialized(true)
+      setFetchAttempted(false)
+    }
 
-    window.addEventListener("login-success", handleLoginSuccess)
+    // Listen for both old and new event formats
+    window.addEventListener("login-success", handleLoginSuccess as EventListener)
     window.addEventListener("logout-success", handleLogoutSuccess)
+    window.addEventListener("user-login", handleLoginSuccess as EventListener)
 
     return () => {
-      window.removeEventListener("login-success", handleLoginSuccess)
+      window.removeEventListener("login-success", handleLoginSuccess as EventListener)
       window.removeEventListener("logout-success", handleLogoutSuccess)
+      window.removeEventListener("user-login", handleLoginSuccess as EventListener)
     }
-  }, [fetchUser])
+  }, [fetchUser, preloadUser])
 
   return (
     <UserContext.Provider
@@ -168,6 +251,7 @@ export function UserProvider({
         refetchUser: () => fetchUser({ force: true }),
         logout,
         preloadUser,
+        updateUser,
       }}
     >
       {children}

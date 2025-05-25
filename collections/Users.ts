@@ -256,6 +256,7 @@ export const Users: CollectionConfig = {
     { name: 'followers', type: 'relationship', relationTo: 'users', hasMany: true, admin: { description: 'Users who follow this user' } },
     { name: 'following', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'likedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
+    { name: 'savedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
     {
       name: 'sportsPreferences',
       type: 'group',

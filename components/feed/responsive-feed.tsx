@@ -3,9 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import FeedContainer from "./feed-container"
 import MobileFeedContainer from "./mobile-feed-container"
-import FeedSkeleton from "./feed-skeleton"
-import MobileFeedSkeleton from "./mobile-feed-skeleton"
-import FeedErrorState from "./feed-error-state"
 import ErrorBoundary from "@/components/error-boundary"
 
 interface ResponsiveFeedProps {

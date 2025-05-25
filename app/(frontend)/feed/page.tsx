@@ -6,7 +6,7 @@ import ResponsiveFeed from "@/components/feed/responsive-feed"
 import type { Post } from "@/types/feed"
 
 export const metadata: Metadata = {
-  title: "Discover | Sacavia",
+  title: "Discover | Grounded Gems",
   description: "Discover amazing places and experiences shared by the community",
 }
 

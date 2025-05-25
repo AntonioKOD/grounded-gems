@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { getPostById, likePost, sharePost, isLiked } from "@/app/actions"
+import { getPostById, likePost, sharePost } from "@/app/actions"
 import { toast } from "sonner"
 import type { Post } from "@/types/feed"
 import {
@@ -43,6 +43,8 @@ export default function PostDetail({ postId }: PostDetailProps) {
         if (fetchedPost) {
           setPost(fetchedPost)
           setLikeCount(fetchedPost.likes || fetchedPost.likeCount || 0)
+          // Set liked state from post data (will be updated when user is fetched)
+          setLiked(fetchedPost.isLiked || false)
         }
       } catch (error) {
         console.error("Error fetching post:", error)
@@ -65,9 +67,8 @@ export default function PostDetail({ postId }: PostDetailProps) {
         if (data?.user) {
           setUser(data.user)
           
-          // Check if the post is liked by the current user
-          const postIsLiked = await isLiked(postId, data.user.id)
-          setLiked(postIsLiked)
+          // The like state will be set when the post is fetched with user context
+          // No need to make a separate call since the post data includes isLiked
         }
       } catch (error) {
         console.error("Error fetching current user:", error)

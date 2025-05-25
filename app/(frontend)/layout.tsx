@@ -3,7 +3,7 @@ import "./globals.css"
 import Footer from "@/components/footer"
 import PWAInstallBanner from "@/components/pwa-install-banner"
 import { Toaster } from "sonner"
-import { UserProvider } from "@/context/user-context"
+import StoreProvider from "@/app/StoreProvider"
 import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
@@ -60,13 +60,13 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         {/* Performance optimization - removed unused external script preloads */}
       </head>
       <body>
-        <UserProvider initialUser={initialUser}>
+        <StoreProvider initialUser={initialUser}>
           <NavigationWrapper initialUser={initialUser} />
           {children}
           <Footer />
           <PWAInstallBanner />
           <Toaster />
-        </UserProvider>
+        </StoreProvider>
         
         {/* Service Worker Registration */}
         <Script id="sw-registration" strategy="afterInteractive">
