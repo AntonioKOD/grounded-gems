@@ -29,10 +29,11 @@ interface EnhancedPostFormProps {
     avatar?: string
   }
   onClose?: () => void
+  onPostCreated?: () => void
   className?: string
 }
 
-export default function EnhancedPostForm({ user, onClose, className }: EnhancedPostFormProps) {
+export default function EnhancedPostForm({ user, onClose, onPostCreated, className }: EnhancedPostFormProps) {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [postType, setPostType] = useState<"post" | "review" | "recommendation">("post")
@@ -103,7 +104,26 @@ export default function EnhancedPostForm({ user, onClose, className }: EnhancedP
 
       if (result.success) {
         toast.success("Post created successfully!")
-        router.refresh()
+        
+        // Reset form
+        setContent("")
+        setTitle("")
+        setLocation("")
+        setRating(0)
+        setSelectedImage(null)
+        setImagePreview(null)
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""
+        }
+        
+        // Call callbacks
+        if (onPostCreated) {
+          onPostCreated()
+        } else {
+          // Fallback to router refresh if no callback provided
+          router.refresh()
+        }
+        
         if (onClose) onClose()
       } else {
         toast.error(result.message || "Failed to create post")

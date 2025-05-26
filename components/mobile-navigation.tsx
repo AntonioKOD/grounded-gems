@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { LayoutList, Calendar, Plus, MapPin, Users } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
@@ -18,8 +19,7 @@ interface MobileNavigationProps {
 export default function MobileNavigation({ initialUser }: MobileNavigationProps) {
   const [isHydrated, setIsHydrated] = useState(false)
   const [open, setOpen] = useState(false)
-  const [postText, setPostText] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const router = useRouter()
 
   useEffect(() => {
     setIsHydrated(true)
@@ -35,56 +35,31 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
       .slice(0, 2);
   };
 
-  const handleCreatePost = async () => {
-    if (!postText.trim()) {
-      toast.error("Please enter some text for your post")
-      return
+  const handlePostCreated = () => {
+    setOpen(false)
+    // Trigger feed refresh via custom event
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('postCreated'))
     }
+  }
+
+  const handleProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault()
     
-    if (!initialUser?.id) {
-      toast.error("Please log in to create a post")
-      return
+    if (!isHydrated) return
+    
+    const user = initialUser
+    const isAuthenticated = isHydrated && !!user
+    
+    if (!isAuthenticated) {
+      router.push("/login")
+    } else {
+      router.push(`/profile/${user.id}`)
     }
     
     // Haptic feedback
     if (navigator.vibrate) {
-      navigator.vibrate([30, 50, 30])
-    }
-    
-    setIsSubmitting(true)
-    
-    try {
-      // Import and use the actual server action
-      const { createPost } = await import("@/app/actions")
-      
-      // Create FormData for the server action
-      const formData = new FormData()
-      formData.append("userId", initialUser.id)
-      formData.append("content", postText)
-      formData.append("type", "post")
-      
-      const result = await createPost(formData)
-      
-      if (result.success) {
-        setPostText("")
-        setOpen(false)
-        toast.success("Post created successfully!")
-        
-        // Trigger a soft refresh of the feed instead of full page reload
-        if (typeof window !== 'undefined') {
-          // Dispatch a custom event that the feed can listen to
-          window.dispatchEvent(new CustomEvent('postCreated', { 
-            detail: { postId: result.postId } 
-          }))
-        }
-      } else {
-        toast.error(result.message || "Failed to create post")
-      }
-    } catch (error) {
-      console.error("Error creating post:", error)
-      toast.error("Failed to create post. Please try again.")
-    } finally {
-      setIsSubmitting(false)
+      navigator.vibrate(30)
     }
   }
 
@@ -113,7 +88,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
         isCenter: true,
         onClick: () => {
           if (!isAuthenticated) {
-            window.location.href = "/login"
+            router.push("/login")
             return
           }
           setOpen(true)
@@ -133,6 +108,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
         icon: Users,
         label: "Profile",
         isCenter: false,
+        isProfile: true,
         hasProfileImage: isAuthenticated && (user?.profileImage?.url || user?.avatar),
         profileImageUrl: user?.profileImage?.url || user?.avatar,
         profileImageAlt: user?.profileImage?.alt || user?.name || 'User avatar',
@@ -177,11 +153,44 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                               avatar: initialUser?.profileImage?.url || initialUser?.avatar,
                             }}
                             onClose={() => setOpen(false)}
+                            onPostCreated={handlePostCreated}
                           />
                         </div>
                       </div>
                     </SheetContent>
                   </Sheet>
+                )
+              }
+              
+              // Handle profile navigation specially to prevent page reload
+              if ((item as any).isProfile) {
+                return (
+                  <button
+                    key={index}
+                    onClick={handleProfileClick}
+                    className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
+                  >
+                    {item.label === "Profile" && (item as any).hasProfileImage ? (
+                      <>
+                        <img 
+                          src={(item as any).profileImageUrl} 
+                          alt={(item as any).profileImageAlt}
+                          className="h-5 w-5 rounded-full object-cover border border-gray-300 mb-0.5"
+                          onError={(e) => {
+                            // Fallback to icon if image fails to load
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
+                        />
+                        <Icon className="h-5 w-5 mb-0.5 hidden" />
+                      </>
+                    ) : (
+                      <Icon className="h-5 w-5 mb-0.5" />
+                    )}
+                    <span className="text-xs font-medium">{item.label}</span>
+                  </button>
                 )
               }
               
@@ -191,25 +200,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                   href={item.href}
                   className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
                 >
-                  {item.label === "Profile" && (item as any).hasProfileImage ? (
-                    <>
-                      <img 
-                        src={(item as any).profileImageUrl} 
-                        alt={(item as any).profileImageAlt}
-                        className="h-5 w-5 rounded-full object-cover border border-gray-300 mb-0.5"
-                        onError={(e) => {
-                          // Fallback to icon if image fails to load
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const fallback = target.nextElementSibling as HTMLElement;
-                          if (fallback) fallback.style.display = 'flex';
-                        }}
-                      />
-                      <Icon className="h-5 w-5 mb-0.5 hidden" />
-                    </>
-                  ) : (
-                    <Icon className="h-5 w-5 mb-0.5" />
-                  )}
+                  <Icon className="h-5 w-5 mb-0.5" />
                   <span className="text-xs font-medium">{item.label}</span>
                 </Link>
               )
