@@ -41,6 +41,11 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
       return
     }
     
+    if (!initialUser?.id) {
+      toast.error("Please log in to create a post")
+      return
+    }
+    
     // Haptic feedback
     if (navigator.vibrate) {
       navigator.vibrate([30, 50, 30])
@@ -49,32 +54,35 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
     setIsSubmitting(true)
     
     try {
-      // Mock post creation for now
-      // In a real app, this would be a server action
-      setTimeout(() => {
-        const newPost: Post = {
-          id: `temp-${Date.now()}`,
-          author: {
-            id: initialUser?.id || "",
-            name: initialUser?.name || "",
-            avatar: initialUser?.profileImage?.url || initialUser?.avatar,
-          },
-          content: postText,
-          createdAt: new Date().toISOString(),
-          type: "post",
-          likeCount: 0,
-          commentCount: 0,
-          shareCount: 0,
-          isLiked: false,
-        }
-        
+      // Import and use the actual server action
+      const { createPost } = await import("@/app/actions")
+      
+      // Create FormData for the server action
+      const formData = new FormData()
+      formData.append("userId", initialUser.id)
+      formData.append("content", postText)
+      formData.append("type", "post")
+      
+      const result = await createPost(formData)
+      
+      if (result.success) {
         setPostText("")
         setOpen(false)
-        toast.success("Post created successfully")
-      }, 1000)
+        toast.success("Post created successfully!")
+        
+        // Trigger a soft refresh of the feed instead of full page reload
+        if (typeof window !== 'undefined') {
+          // Dispatch a custom event that the feed can listen to
+          window.dispatchEvent(new CustomEvent('postCreated', { 
+            detail: { postId: result.postId } 
+          }))
+        }
+      } else {
+        toast.error(result.message || "Failed to create post")
+      }
     } catch (error) {
       console.error("Error creating post:", error)
-      toast.error("Failed to create post")
+      toast.error("Failed to create post. Please try again.")
     } finally {
       setIsSubmitting(false)
     }

@@ -173,7 +173,7 @@ export default async function TestFeedAlgorithmsPage() {
               <ul className="text-sm text-gray-600 space-y-1 ml-4">
                 <li>• Weighted scoring: likes × 1.0 + comments × 3.0 + shares × 5.0 + saves × 2.5</li>
                 <li>• Exponential time decay over 48 hours</li>
-                <li>• Viral bonus for high engagement rate (>10 interactions/hour)</li>
+                <li>• Viral bonus for high engagement rate (&gt;10 interactions/hour)</li>
                 <li>• Configurable timeframe (24h, 7d, 30d)</li>
               </ul>
             </div>
@@ -182,7 +182,7 @@ export default async function TestFeedAlgorithmsPage() {
               <h3 className="font-semibold text-blue-600 mb-2">⏰ Latest Algorithm</h3>
               <ul className="text-sm text-gray-600 space-y-1 ml-4">
                 <li>• Simple chronological sort (newest first)</li>
-                <li>• Quality filter: content length > 10 characters</li>
+                <li>• Quality filter: content length &gt; 10 characters</li>
                 <li>• Engagement filter: has likes/comments OR is less than 24h old</li>
                 <li>• Optional category filtering</li>
               </ul>

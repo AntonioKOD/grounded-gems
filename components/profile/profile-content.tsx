@@ -185,6 +185,7 @@ export default function ProfileContent({
             title: post.title || "",
             content: post.content || "",
             createdAt: post.createdAt || new Date().toISOString(),
+            updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
             image: normalizedPost.image,
             likeCount: post.likes?.length || 0,
             commentCount: post.comments?.length || 0,

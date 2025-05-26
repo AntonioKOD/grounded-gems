@@ -19,10 +19,8 @@ export default async function FeedPage() {
   
   try {
     initialPosts = await getFeedPosts("all", "recent", 1)
-    console.log(`Feed page loaded with ${initialPosts.length} posts`)
-  } catch (err) {
-    console.error("Error pre-loading feed posts:", err)
-    // Will continue with empty array
+  } catch {
+    // Will continue with empty array - silently handle errors
   }
 
   return (

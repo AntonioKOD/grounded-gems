@@ -22,7 +22,7 @@ export default function ResponsiveFeed({
 }: ResponsiveFeedProps) {
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [isMounted, setIsMounted] = useState<boolean>(false)
-  const resizeTimeoutRef = useRef<NodeJS.Timeout>()
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Memoize the resize handler
   const handleResize = useCallback(() => {

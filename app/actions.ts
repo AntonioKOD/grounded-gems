@@ -668,6 +668,7 @@ export async function getFeedPostsByUser(id: string, category?: string) {
     title: post.title || "",
     content: post.content || "",
     createdAt: post.createdAt || new Date().toISOString(),
+    updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
     image: post.image?.url || post.featuredImage?.url || undefined,
     likeCount: post.likes?.length || 0,
     commentCount: post.comments?.length || 0,
@@ -679,7 +680,6 @@ export async function getFeedPostsByUser(id: string, category?: string) {
       ? {
           id: typeof post.location === "object" ? post.location.id : post.location,
           name: typeof post.location === "object" ? post.location.name : "Unknown Location",
-          address: typeof post.location === "object" ? post.location.address : undefined,
         }
       : undefined,
     categories: post.categories || [],
@@ -934,8 +934,8 @@ export async function savePost(postId: string, userId: string, shouldSave: boole
         : [...currentUserSavedPosts, postId]
     } else {
       // Remove save
-      updatedPostSavedBy = currentPostSavedBy.filter(id => id !== userId)
-      updatedUserSavedPosts = currentUserSavedPosts.filter(id => id !== postId)
+      updatedPostSavedBy = currentPostSavedBy.filter((id: string) => id !== userId)
+      updatedUserSavedPosts = currentUserSavedPosts.filter((id: string) => id !== postId)
     }
 
     // Update post
@@ -1228,7 +1228,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
 // Haversine formula to calculate distance between two points on Earth
 
 export async function getFeedPosts(feedType: string, sortBy: string, page: number, category?: string, currentUserId?: string): Promise<Post[]> {
-  console.log(`Getting feed posts type=${feedType}, sortBy=${sortBy}, page=${page}${category ? ', category=' + category : ''}`)
+  // Getting feed posts
   
   try {
     const payload = await getPayload({ config })
@@ -1289,7 +1289,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
       return []
     }
 
-    console.log(`Found ${posts.length} posts out of ${totalDocs} total`)
+    // Found posts
 
     // Get current user's liked and saved posts if user is provided
     let userLikedPosts: string[] = []
@@ -1306,7 +1306,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
         if (user) {
           userLikedPosts = user.likedPosts || []
           userSavedPosts = user.savedPosts || []
-          console.log(`User ${currentUserId} has ${userLikedPosts.length} liked posts and ${userSavedPosts.length} saved posts`)
+          // User interaction data loaded
         }
       } catch (userError) {
         console.error("Error fetching user data:", userError)
@@ -1314,7 +1314,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
     }
 
     // Format posts for the frontend with safe property access
-    const formattedPosts: Post[] = posts.map((post: any) => {
+    const formattedPosts = posts.map((post: any) => {
       try {
         return {
           id: String(post.id),
@@ -1326,6 +1326,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
           title: post.title || "",
           content: post.content || "",
           createdAt: post.createdAt || new Date().toISOString(),
+          updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
           image: post.image?.url || post.featuredImage?.url || undefined,
           likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
           commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
@@ -1333,13 +1334,12 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
           saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
           isLiked: currentUserId ? userLikedPosts.includes(String(post.id)) : false,
           isSaved: currentUserId ? userSavedPosts.includes(String(post.id)) : false,
-          type: post.type || "post",
+          type: (post.type === "review" || post.type === "recommendation" ? post.type : "post") as "post" | "review" | "recommendation",
           rating: post.rating,
           location: post.location
             ? {
                 id: typeof post.location === "object" && post.location ? post.location.id : post.location,
                 name: typeof post.location === "object" && post.location ? post.location.name : "Unknown Location",
-                address: typeof post.location === "object" && post.location ? post.location.address : undefined,
               }
             : undefined,
           categories: Array.isArray(post.categories) ? post.categories : [],
@@ -1358,13 +1358,14 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
           title: "",
           content: "Post content unavailable",
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
           image: undefined,
           likeCount: 0,
           commentCount: 0,
           shareCount: 0,
           isLiked: false,
           isSaved: false,
-          type: "post",
+          type: "post" as "post" | "review" | "recommendation",
           rating: undefined,
           location: undefined,
           categories: [],
@@ -1373,7 +1374,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
       }
     }).filter(Boolean) // Remove any null/undefined posts
 
-    return formattedPosts
+    return formattedPosts as Post[]
   } catch (error) {
     console.error("Error fetching feed posts:", error)
     return [] // Return an empty array in case of any error
@@ -1414,6 +1415,7 @@ export async function getPostById(postId: string): Promise<Post | null> {
       title: post.title || "",
       content: post.content || "",
       createdAt: post.createdAt || new Date().toISOString(),
+      updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
       image: post.image?.url || post.featuredImage?.url || undefined,
       likeCount: post.likes?.length || 0,
       commentCount: post.comments?.length || 0,
@@ -1421,13 +1423,12 @@ export async function getPostById(postId: string): Promise<Post | null> {
       saveCount: post.savedBy?.length || 0,
       isLiked: false, // This will be updated client-side
       isSaved: false, // This will be updated client-side
-      type: post.type || "post",
+      type: (post.type === "review" || post.type === "recommendation" ? post.type : "post") as "post" | "review" | "recommendation",
       rating: post.rating,
       location: post.location
         ? {
             id: typeof post.location === "object" ? post.location.id : post.location,
             name: typeof post.location === "object" ? post.location.name : "Unknown Location",
-            address: typeof post.location === "object" ? post.location.address : undefined,
           }
         : undefined,
     };
@@ -4153,7 +4154,7 @@ export async function getCommentsWithReplies(postId: string, currentUserId?: str
 
 // Enhanced Feed Algorithms for different tabs
 export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize = 10): Promise<Post[]> {
-  console.log(`Getting discover feed for user ${currentUserId}, page=${page}`)
+  // Getting discover feed
   
   try {
     const payload = await getPayload({ config })
@@ -4270,7 +4271,7 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
 }
 
 export async function getPopularFeed(currentUserId?: string, page = 1, pageSize = 10, timeframe = '7d'): Promise<Post[]> {
-  console.log(`Getting popular feed for user ${currentUserId}, page=${page}, timeframe=${timeframe}`)
+  // Getting popular feed
   
   try {
     const payload = await getPayload({ config })
@@ -4351,7 +4352,7 @@ export async function getPopularFeed(currentUserId?: string, page = 1, pageSize 
 }
 
 export async function getLatestFeed(currentUserId?: string, page = 1, pageSize = 10, category?: string): Promise<Post[]> {
-  console.log(`Getting latest feed for user ${currentUserId}, page=${page}, category=${category}`)
+  // Getting latest feed
   
   try {
     const payload = await getPayload({ config })
@@ -4397,7 +4398,7 @@ export async function getLatestFeed(currentUserId?: string, page = 1, pageSize =
 }
 
 export async function getSavedPostsFeed(currentUserId: string, page = 1, pageSize = 10): Promise<Post[]> {
-  console.log(`Getting saved posts feed for user ${currentUserId}, page=${page}`)
+  // Getting saved posts feed
   
   if (!currentUserId) {
     return []
@@ -4472,6 +4473,7 @@ function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
         title: post.title || "",
         content: post.content || "",
         createdAt: post.createdAt || new Date().toISOString(),
+        updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
         image: post.image?.url || post.featuredImage?.url || undefined,
         likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
         commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
@@ -4485,7 +4487,6 @@ function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
           ? {
               id: typeof post.location === "object" && post.location ? post.location.id : post.location,
               name: typeof post.location === "object" && post.location ? post.location.name : "Unknown Location",
-              address: typeof post.location === "object" && post.location ? post.location.address : undefined,
             }
           : undefined,
         categories: Array.isArray(post.categories) ? post.categories : [],
@@ -4503,6 +4504,7 @@ function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
         title: "",
         content: "Post content unavailable",
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         image: undefined,
         likeCount: 0,
         commentCount: 0,

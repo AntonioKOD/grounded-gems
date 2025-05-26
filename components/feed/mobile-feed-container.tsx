@@ -23,8 +23,8 @@ interface MobileFeedContainerProps {
   initialPosts?: Post[]
   showPostForm?: boolean
   className?: string
-  feedType?: string
-  sortBy?: string
+  feedType?: "all" | "personalized" | "user"
+  sortBy?: "recent" | "popular" | "trending"
 }
 
 export default function MobileFeedContainer({
@@ -58,45 +58,33 @@ export default function MobileFeedContainer({
   const initialLoadComplete = useRef(false)
   const touchStartY = useRef<number>(0)
   const scrollPosition = useRef<number>(0)
-  const observer = useRef<IntersectionObserver>()
-  const scrollTimeoutRef = useRef<NodeJS.Timeout>()
+  const observer = useRef<IntersectionObserver | null>(null)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fetch user data on mount
+  // Fetch user data on mount if needed
   useEffect(() => {
-    if (!user && !isUserLoading) {
+    if (!user && !isUserLoading && !initialLoadComplete.current) {
       dispatch(fetchUser())
     }
   }, [dispatch, user, isUserLoading])
 
   // Initialize posts slice with user's liked and saved posts
   useEffect(() => {
-    if (user?.id) {
-      // Initialize with user's actual liked and saved posts
+    if (user?.id && !initialLoadComplete.current) {
       const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
       const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
-      // For now, initialize liked comments as empty array - will be populated from server
       const likedCommentIds: string[] = []
       
-      console.log('MobileFeedContainer: Initializing posts state with:', { 
-        likedPostIds: likedPostIds.length, 
-        savedPostIds: savedPostIds.length,
-        likedCommentIds: likedCommentIds.length,
-        likedPosts: likedPostIds,
-        savedPosts: savedPostIds,
-        likedComments: likedCommentIds
-      })
       dispatch(initializeLikedPosts(likedPostIds))
       dispatch(initializeSavedPosts(savedPostIds))
       dispatch(initializeLikedComments(likedCommentIds))
     }
   }, [dispatch, user?.id, user?.savedPosts, user?.likedPosts])
 
-  // Listen for user updates to refresh posts with correct like/save states
+  // Listen for user updates and post creation events
   useEffect(() => {
     const handleUserUpdate = async (event: CustomEvent) => {
-      console.log("MobileFeedContainer: User update detected, refreshing posts immediately");
-      if (event.detail && isMounted) {
-        // Refresh posts with new user context
+      if (event.detail && isMounted && !loading) {
         dispatch(fetchFeedPosts({ 
           feedType: "all", 
           sortBy: "recent", 
@@ -108,9 +96,7 @@ export default function MobileFeedContainer({
     };
 
     const handleUserLogin = async (event: CustomEvent) => {
-      console.log("MobileFeedContainer: User login detected, refreshing posts immediately");
-      if (event.detail && isMounted) {
-        // Refresh posts with new user context
+      if (event.detail && isMounted && !loading) {
         dispatch(fetchFeedPosts({ 
           feedType: "all", 
           sortBy: "recent", 
@@ -121,14 +107,22 @@ export default function MobileFeedContainer({
       }
     };
 
+    const handlePostCreated = async () => {
+      if (isMounted && !loading) {
+        await refreshPosts()
+      }
+    };
+
     window.addEventListener("user-updated", handleUserUpdate as EventListener);
     window.addEventListener("user-login", handleUserLogin as EventListener);
+    window.addEventListener("postCreated", handlePostCreated as EventListener);
 
     return () => {
       window.removeEventListener("user-updated", handleUserUpdate as EventListener);
       window.removeEventListener("user-login", handleUserLogin as EventListener);
+      window.removeEventListener("postCreated", handlePostCreated as EventListener);
     };
-  }, [dispatch, feedType, sortBy, activeCategory, isMounted]);
+  }, [dispatch, feedType, sortBy, activeCategory, isMounted, loading]);
 
   // Categories for feed filtering
   const categories = [
@@ -138,9 +132,23 @@ export default function MobileFeedContainer({
     { id: "bookmarks", name: "Saved", icon: BookmarkIcon },
   ]
 
-  // Set mounted state to prevent hydration errors
+  // Set mounted state and load initial data
   useEffect(() => {
     setIsMounted(true)
+    
+    // Load initial data only once
+    if (!initialLoadComplete.current && !isUserLoading) {
+      dispatch(fetchFeedPosts({ 
+        feedType: "all", 
+        sortBy: "recent", 
+        userId,
+        category: activeCategory,
+        currentUserId: user?.id,
+        force: false // Don't force on initial load
+      }))
+      initialLoadComplete.current = true
+    }
+
     return () => {
       setIsMounted(false)
       if (scrollTimeoutRef.current) {
@@ -150,26 +158,12 @@ export default function MobileFeedContainer({
         observer.current.disconnect()
       }
     }
-  }, [])
-
-  // Initial data loading
-  useEffect(() => {
-    if (isMounted && !isUserLoading && !initialLoadComplete.current) {
-      console.log("MobileFeedContainer: Initial load, fetching posts")
-      dispatch(fetchFeedPosts({ 
-        feedType: "all", 
-        sortBy: "recent", 
-        userId,
-        category: activeCategory,
-        currentUserId: user?.id,
-        force: true 
-      }))
-      initialLoadComplete.current = true
-    }
-  }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id, isMounted, isUserLoading])
+  }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id, isUserLoading])
 
   // Refresh posts
   const refreshPosts = async () => {
+    if (loading || refreshing) return
+    
     // Only use vibration on client-side after hydration
     if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(50)
@@ -186,19 +180,17 @@ export default function MobileFeedContainer({
       })).unwrap()
       toast.success("Feed refreshed")
     } catch (error) {
-      console.error("Error refreshing posts:", error)
       toast.error("Error refreshing posts")
     }
   }
 
   // Load more posts
   const handleLoadMore = async () => {
-    if (loadingMore || !hasMore) return
+    if (loadingMore || !hasMore || loading) return
     
     try {
       await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
     } catch (error) {
-      console.error("Error loading more posts:", error)
       toast.error("Error loading more posts")
     }
   }
@@ -231,10 +223,10 @@ export default function MobileFeedContainer({
         
         // Load more posts when reaching the bottom
         const { scrollTop, scrollHeight, clientHeight } = container
-        if (scrollTop + clientHeight >= scrollHeight - 300 && !loadingMore && hasMore) {
+        if (scrollTop + clientHeight >= scrollHeight - 300 && !loadingMore && hasMore && !loading) {
           handleLoadMore()
         }
-      }, 100) // 100ms debounce
+      }, 150) // Increased debounce to reduce excessive calls
     }
     
     container?.addEventListener('scroll', handleScroll)
@@ -244,11 +236,11 @@ export default function MobileFeedContainer({
         clearTimeout(scrollTimeoutRef.current)
       }
     }
-  }, [loadingMore, hasMore, isMounted])
+  }, [loadingMore, hasMore, isMounted, loading])
   
   // Pull-to-refresh implementation
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isMounted) return
+    if (!isMounted || loading || refreshing) return
     
     if (scrollPosition.current === 0) {
       touchStartY.current = e.touches[0].clientY
@@ -256,7 +248,7 @@ export default function MobileFeedContainer({
   }
   
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isMounted) return
+    if (!isMounted || loading || refreshing) return
     
     if (scrollPosition.current === 0 && touchStartY.current > 0) {
       const currentY = e.touches[0].clientY
@@ -270,7 +262,7 @@ export default function MobileFeedContainer({
   }
   
   const handleTouchEnd = () => {
-    if (!isMounted) return
+    if (!isMounted || loading || refreshing) return
     
     if (isPullingToRefresh && pullToRefreshDelta > 80) {
       refreshPosts()
@@ -283,7 +275,7 @@ export default function MobileFeedContainer({
   
   // Handle category change
   const handleCategoryChange = (category: string) => {
-    if (!isMounted || category === activeCategory) return
+    if (!isMounted || category === activeCategory || loading) return
     
     setActiveCategory(category)
     
@@ -313,7 +305,7 @@ export default function MobileFeedContainer({
     if (loading || loadingMore) return
     if (observer.current) observer.current.disconnect()
     observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore) {
+      if (entries[0].isIntersecting && hasMore && !loading) {
         handleLoadMore()
       }
     })
@@ -322,7 +314,6 @@ export default function MobileFeedContainer({
 
   // Don't render anything before hydration completes
   if (!isMounted) {
-    // Return a consistent skeleton that matches what will be rendered
     return <MobileFeedSkeleton />
   }
 
@@ -345,6 +336,7 @@ export default function MobileFeedContainer({
                         "bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm" : 
                         "text-white/60 hover:text-white hover:bg-white/5"}`}
                     onClick={() => handleCategoryChange(category.id)}
+                    disabled={loading}
                   >
                     <Icon className="h-3.5 w-3.5" />
                     <span className="text-sm font-medium">{category.name}</span>
@@ -389,7 +381,7 @@ export default function MobileFeedContainer({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
-          {loading ? (
+          {loading && posts.length === 0 ? (
             <MobileFeedSkeleton />
           ) : (
             <>
@@ -408,7 +400,11 @@ export default function MobileFeedContainer({
                     >
                       <MobileFeedPost
                         post={post}
-                        user={user}
+                        user={user ? {
+                          id: user.id,
+                          name: user.name || '',
+                          avatar: user.profileImage?.url || user.avatar
+                        } : undefined}
                         onPostUpdated={handlePostUpdate}
                         className="w-full h-full"
                       />
