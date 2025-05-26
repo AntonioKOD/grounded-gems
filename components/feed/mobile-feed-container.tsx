@@ -113,14 +113,14 @@ export default function MobileFeedContainer({
       }
     };
 
-    window.addEventListener("user-updated", handleUserUpdate as EventListener);
-    window.addEventListener("user-login", handleUserLogin as EventListener);
-    window.addEventListener("postCreated", handlePostCreated as EventListener);
+    window.addEventListener("user-updated", handleUserUpdate as any);
+    window.addEventListener("user-login", handleUserLogin as any);
+    window.addEventListener("postCreated", handlePostCreated as any);
 
     return () => {
-      window.removeEventListener("user-updated", handleUserUpdate as EventListener);
-      window.removeEventListener("user-login", handleUserLogin as EventListener);
-      window.removeEventListener("postCreated", handlePostCreated as EventListener);
+      window.removeEventListener("user-updated", handleUserUpdate as any);
+      window.removeEventListener("user-login", handleUserLogin as any);
+      window.removeEventListener("postCreated", handlePostCreated as any);
     };
   }, [dispatch, feedType, sortBy, activeCategory, isMounted, loading]);
 
