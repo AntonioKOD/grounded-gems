@@ -7,6 +7,7 @@ import StoreProvider from "@/app/StoreProvider"
 import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
+import AuthTest from "@/components/auth/auth-test"
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -66,6 +67,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           <Footer />
           <PWAInstallBanner />
           <Toaster />
+          <AuthTest />
         </StoreProvider>
         
         {/* Service Worker Registration */}

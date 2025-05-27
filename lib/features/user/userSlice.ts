@@ -45,7 +45,7 @@ export const fetchUser = createAsyncThunk(
       const now = Date.now()
       
       // Skip fetch if we have recent data and not forcing
-      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < 30000) {
+      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < 60000) {
         return state.user.user
       }
 

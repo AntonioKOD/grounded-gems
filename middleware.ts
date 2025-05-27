@@ -3,15 +3,30 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl
+  
+  // Skip middleware for login, signup, and other auth pages to prevent loops
+  if (pathname.startsWith('/login') || 
+      pathname.startsWith('/signup') || 
+      pathname.startsWith('/verify') ||
+      pathname.startsWith('/_next') ||
+      pathname.startsWith('/api/users/login') ||
+      pathname.startsWith('/api/users/signup') ||
+      pathname.startsWith('/api/users/verify') ||
+      pathname.includes('.')) {
+    return NextResponse.next()
+  }
+
   // Payload's default cookiePrefix is "payload" → cookie name is "payload-token"
   const token = req.cookies.get('payload-token')
 
-  // If there's no payload-token, redirect straight to /login
+  // If there's no payload-token, redirect to /login
   if (!token) {
+    console.log(`Middleware: No token found, redirecting ${pathname} to login`)
     const loginUrl = req.nextUrl.clone()
     loginUrl.pathname = '/login'
     // Add the current path as a redirect parameter
-    loginUrl.searchParams.set('redirect', req.nextUrl.pathname)
+    loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
@@ -31,7 +46,6 @@ export const config = {
     '/matchmaking/:path*',
     '/notifications/:path*',
     '/post/:path*',
-    '/verify/:path*',
     '/my-route/:path*',
     
     // API routes that require auth

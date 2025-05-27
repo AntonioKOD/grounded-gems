@@ -31,7 +31,7 @@ const LoginForm = memo(function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/feed"
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
   const { preloadUser } = useAuth()
 
   const [formData, setFormData] = useState({ 
@@ -40,13 +40,18 @@ const LoginForm = memo(function LoginForm() {
     rememberMe: false
   })
   const [showPassword, setShowPassword] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [hasRedirected, setHasRedirected] = useState(false)
 
-  // If already logged in, redirect
+  // If already logged in, redirect (but only once and after loading is complete)
   useEffect(() => {
-    if (isAuthenticated) router.replace(redirectPath)
-  }, [isAuthenticated, router, redirectPath])
+    if (!isLoading && isAuthenticated && !hasRedirected) {
+      console.log("LoginForm: User already authenticated, redirecting to:", redirectPath)
+      setHasRedirected(true)
+      router.replace(redirectPath)
+    }
+  }, [isAuthenticated, isLoading, router, redirectPath, hasRedirected])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -60,7 +65,11 @@ const LoginForm = memo(function LoginForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+    
+    // Prevent multiple submissions
+    if (isSubmitting || hasRedirected) return
+    
+    setIsSubmitting(true)
     setError("")
 
     try {
@@ -87,15 +96,18 @@ const LoginForm = memo(function LoginForm() {
         localStorage.removeItem('savedEmail')
       }
       
-      // Longer delay to ensure all state updates are processed
+      // Mark as redirected to prevent multiple redirects
+      setHasRedirected(true)
+      
+      // Redirect after successful login
       setTimeout(() => {
         router.replace(redirectPath)
-      }, 300)
+      }, 100)
       
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials and try again.")
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
@@ -108,6 +120,30 @@ const LoginForm = memo(function LoginForm() {
       }
     }
   }, [])
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[70vh] px-4">
+        <div className="flex flex-col items-center gap-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B6B]"></div>
+          <p className="text-sm text-gray-500">Checking authentication...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // If already authenticated and redirecting, show loading state
+  if (isAuthenticated && hasRedirected) {
+    return (
+      <div className="flex justify-center items-center min-h-[70vh] px-4">
+        <div className="flex flex-col items-center gap-2">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B6B]"></div>
+          <p className="text-sm text-gray-500">Redirecting...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex justify-center items-center min-h-[70vh] px-4">
@@ -134,7 +170,7 @@ const LoginForm = memo(function LoginForm() {
                 placeholder="john@example.com"
                 value={formData.email}
                 onChange={handleChange}
-                disabled={isLoading}
+                disabled={isSubmitting}
                 required
                 autoComplete="email"
               />
@@ -154,7 +190,7 @@ const LoginForm = memo(function LoginForm() {
                   placeholder="••••••••"
                   value={formData.password}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                   required
                   autoComplete="current-password"
                 />
@@ -181,8 +217,8 @@ const LoginForm = memo(function LoginForm() {
                 Remember me
               </label>
             </div>
-            <Button type="submit" className="w-full mt-6 bg-[#FF6B6B]" disabled={isLoading}>
-              {isLoading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Log in"}
+            <Button type="submit" className="w-full mt-6 bg-[#FF6B6B]" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Log in"}
             </Button>
           </form>
         </CardContent>

@@ -5,7 +5,7 @@ import { Users, MapPin, Calendar, Star } from "lucide-react"
 import Hero from "@/components/hero"
 import AnimatedStats from "@/components/animated-stats"
 import GeolocationLocations from "@/components/geolocation-locations"
-import MobileRedirect from "@/components/mobile-redirect"
+
 
 // Import server actions and types
 import { getUpcomingEvents, getPublicLocations, getFeaturedCategories, getPlatformStats } from "@/app/(frontend)/home-page-actions/actions"
@@ -88,9 +88,6 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Mobile Redirect Component */}
-      <MobileRedirect />
-      
       {/* Hero Section */}
       <Hero />
       
