@@ -141,7 +141,7 @@ export default function MapExplorer() {
         id: loc.id,
         latitude: Number(loc.latitude),
         longitude: Number(loc.longitude),
-        category: loc.categories?.[0]?.name || loc.categories?.[0] || '',
+        category: (typeof loc.categories?.[0] === 'object' ? loc.categories[0]?.name : loc.categories?.[0]) || '',
         isSelected: loc.id === selectedLocation?.id
       })),
       lastUpdated: Date.now(),
@@ -199,29 +199,30 @@ export default function MapExplorer() {
           const url = new URL(window.location.href)
           const locationId = url.searchParams.get("locationId")
 
-        if (locationId && allLocations.length > 0) {
-          // Find the location with the matching ID
-          const location = allLocations.find((loc) => loc.id === locationId)
+          if (locationId && allLocations.length > 0) {
+            // Find the location with the matching ID
+            const location = allLocations.find((loc) => loc.id === locationId)
 
-          if (location) {
-            console.log("Opening location from URL parameter:", location.name)
+            if (location) {
+              console.log("Opening location from URL parameter:", location.name)
 
-            // Select the location
-            setSelectedLocation(location)
+              // Select the location
+              setSelectedLocation(location)
 
-            // Open the detail dialog
-            setIsDetailOpen(true)
+              // Open the detail dialog
+              setIsDetailOpen(true)
 
-            // Center map on the location
-            const coordinates = getLocationCoordinates(location)
-            if (coordinates) {
-              setMapCenter(coordinates)
-              setMapZoom(14)
-            }
+              // Center map on the location
+              const coordinates = getLocationCoordinates(location)
+              if (coordinates) {
+                setMapCenter(coordinates)
+                setMapZoom(14)
+              }
 
-            // Switch to map view if on mobile
-            if (isMobile && activeView !== "map") {
-              setActiveView("map")
+              // Switch to map view if on mobile
+              if (isMobile && activeView !== "map") {
+                setActiveView("map")
+              }
             }
           }
         } catch (error) {
@@ -643,26 +644,20 @@ export default function MapExplorer() {
     const zoomThreshold = 0.1
     
     // Batch state updates to prevent multiple rerenders
-    let shouldUpdateCenter = false
-    let shouldUpdateZoom = false
-    
     setMapCenter(prevCenter => {
       if (Math.abs(prevCenter[0] - center[0]) > positionThreshold || 
           Math.abs(prevCenter[1] - center[1]) > positionThreshold) {
-        shouldUpdateCenter = true
         return center
       }
       return prevCenter
     })
     
-    if (shouldUpdateCenter) {
-      setMapZoom(prevZoom => {
-        if (Math.abs(prevZoom - zoom) > zoomThreshold) {
-          return zoom
-        }
-        return prevZoom
-      })
-    }
+    setMapZoom(prevZoom => {
+      if (Math.abs(prevZoom - zoom) > zoomThreshold) {
+        return zoom
+      }
+      return prevZoom
+    })
   }, [])
 
   // Toggle category selection
