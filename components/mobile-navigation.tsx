@@ -42,8 +42,6 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
     }
   }
 
-
-
   // Get navigation items - always start with unauthenticated state to avoid hydration mismatch
   const getNavItems = () => {
     const user = initialUser
@@ -53,19 +51,19 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
       {
         href: "/feed",
         icon: LayoutList,
-        label: "Feed",
+        label: "Home",
         isCenter: false,
       },
       {
-        href: "/events",
-        icon: Calendar,
-        label: "Events", 
+        href: "/map",
+        icon: MapPin,
+        label: "Explore",
         isCenter: false,
       },
       {
         href: "#",
         icon: Plus,
-        label: "Create",
+        label: "Add",
         isCenter: true,
         onClick: () => {
           if (!isAuthenticated) {
@@ -79,9 +77,9 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
         }
       },
       {
-        href: "/map",
-        icon: MapPin,
-        label: "Explore",
+        href: "/events",
+        icon: Calendar,
+        label: "Events", 
         isCenter: false,
       },
       {

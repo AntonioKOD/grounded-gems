@@ -44,21 +44,25 @@ export const fetchUser = createAsyncThunk(
       const state = getState() as { user: UserState }
       const now = Date.now()
       
-      // Reduced cache time for faster updates
-      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < 10000) {
+      // Reduced cache time for faster updates - but not too aggressive in production
+      const cacheTime = process.env.NODE_ENV === 'production' ? 30000 : 10000 // 30s in prod, 10s in dev
+      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < cacheTime) {
         return state.user.user
       }
 
-      // Optimized fetch with shorter timeout
+      // Optimized fetch with production-appropriate timeout
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 3000) // Reduced from default
+      const timeout = process.env.NODE_ENV === 'production' ? 8000 : 3000 // Longer timeout in production
+      const timeoutId = setTimeout(() => controller.abort(), timeout)
 
       const response = await fetch('/api/users/me', {
         method: 'GET',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
         },
         signal: controller.signal,
       })
@@ -67,20 +71,37 @@ export const fetchUser = createAsyncThunk(
 
       if (!response.ok) {
         if (response.status === 401) {
+          console.log('User not authenticated (401)')
           return null // User not authenticated
+        }
+        if (response.status === 503) {
+          console.log('Service temporarily unavailable (503)')
+          // Return cached user if available, don't clear auth state
+          return state.user.user
         }
         throw new Error(`Failed to fetch user: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('User fetch successful:', data.user ? 'User found' : 'No user')
       return data.user || null
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('User fetch timed out - using cached data if available')
         const state = getState() as { user: UserState }
-        return state.user.user // Return cached user if available
+        // Return cached user instead of failing completely
+        return state.user.user || null
       }
+      
       console.error('Error fetching user:', error)
+      
+      // Don't reject with value for network errors in production
+      // This prevents the auth state from being cleared on temporary network issues
+      if (process.env.NODE_ENV === 'production') {
+        const state = getState() as { user: UserState }
+        return state.user.user || null
+      }
+      
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch user')
     }
   }

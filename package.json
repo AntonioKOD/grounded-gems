@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "clean": "rm -rf .next && rm -rf node_modules/.cache",
+    "fresh-build": "npm run clean && npm run build",
+    "debug-auth": "NODE_ENV=development next dev"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",

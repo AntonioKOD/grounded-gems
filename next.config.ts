@@ -47,6 +47,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '10mb', // Adjust the body size limit as needed
     },
+    // Fix for Next.js App Router production issues
+    optimisticClientCache: false,
+    staleTimes: {
+      dynamic: 0,
+      static: 0,
+    },
   },
   serverExternalPackages: ['payload'],
   env: {
@@ -93,6 +99,41 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'no-store, max-age=0',
+          },
+        ],
+      },
+      // Add headers to prevent authentication caching issues
+      {
+        source: '/api/users/me',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
+        ],
+      },
+      {
+        source: '/api/users/login',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
           },
         ],
       },

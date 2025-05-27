@@ -97,8 +97,15 @@ export default function NavBar({ initialUser }: NavBarProps) {
               </div>
             </Link>
 
-            {/* Navigation Links */}
-            <div className="hidden lg:flex items-center space-x-8">
+            {/* Navigation Links - Zipf's Law: Most used features first */}
+            <div className="hidden lg:flex items-center space-x-6">
+              <Link 
+                href="/map"
+                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
+              >
+                Explore
+                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
+              </Link>
               <Link 
                 href="/feed"
                 className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
@@ -111,13 +118,6 @@ export default function NavBar({ initialUser }: NavBarProps) {
                 className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
               >
                 Events
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-              </Link>
-              <Link 
-                href="/map"
-                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-              >
-                Explore
                 <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
               </Link>
             </div>

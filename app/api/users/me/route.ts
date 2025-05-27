@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       extractedLikedPostIds: likedPostIds
     })
 
-    return NextResponse.json({ 
+    const response = NextResponse.json({ 
       user: {
         id: fullUser.id,
         name: fullUser.name,
@@ -55,11 +55,38 @@ export async function GET(request: NextRequest) {
         location: fullUser.location,
         savedPosts: savedPostIds,
         likedPosts: likedPostIds,
+        role: fullUser.role,
         // Add any other fields you need
       }
     })
+
+    // Add headers to prevent caching issues in production
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+    response.headers.set('Surrogate-Control', 'no-store')
+
+    return response
+
   } catch (error) {
     console.error('Error fetching current user:', error)
+    
+    // More specific error handling
+    if (error instanceof Error) {
+      // Check for specific Payload errors
+      if (error.message.includes('Unauthorized') || error.message.includes('Invalid token')) {
+        return NextResponse.json({ user: null }, { status: 401 })
+      }
+      
+      // Check for database connection errors
+      if (error.message.includes('ECONNREFUSED') || error.message.includes('timeout')) {
+        return NextResponse.json(
+          { error: 'Database connection failed' },
+          { status: 503 }
+        )
+      }
+    }
+    
     return NextResponse.json(
       { error: 'Failed to fetch user data' },
       { status: 500 }

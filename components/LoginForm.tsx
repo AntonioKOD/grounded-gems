@@ -13,18 +13,20 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
-import { prefetchCommonRoutes, smartPrefetch } from "@/lib/prefetch-utils"
 
 // Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
   const res = await fetch("/api/users/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { 
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache"
+    },
     credentials: "include",
     body: JSON.stringify({ email, password, rememberMe }),
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.message || "Authentication failed")
+  if (!res.ok) throw new Error(data.error || data.message || "Authentication failed")
   return data
 }
 
@@ -50,24 +52,10 @@ const LoginForm = memo(function LoginForm() {
     if (!isLoading && isAuthenticated && !hasRedirected) {
       console.log("LoginForm: User already authenticated, redirecting immediately to:", redirectPath)
       setHasRedirected(true)
-      // Use push instead of replace for faster navigation
-      router.push(redirectPath)
+      // Use replace instead of push to avoid back button issues
+      router.replace(redirectPath)
     }
   }, [isAuthenticated, isLoading, router, redirectPath, hasRedirected])
-
-  // Prefetch routes for faster navigation
-  useEffect(() => {
-    // Prefetch the specific redirect destination
-    if (redirectPath && redirectPath !== '/login') {
-      router.prefetch(redirectPath)
-    }
-    
-    // Prefetch common routes
-    prefetchCommonRoutes(router)
-    
-    // Smart prefetch based on login page
-    smartPrefetch(router, '/login')
-  }, [router, redirectPath])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -89,10 +77,10 @@ const LoginForm = memo(function LoginForm() {
     setError("")
 
     try {
-      // Start prefetching the destination immediately
-      router.prefetch(redirectPath)
+      console.log("Starting login process...")
       
       const loginResponse = await loginUser(formData)
+      console.log("Login API response received:", loginResponse.success)
       
       // If the login response includes user data, preload it immediately
       if (loginResponse.user) {
@@ -118,10 +106,13 @@ const LoginForm = memo(function LoginForm() {
       // Mark as redirected to prevent multiple redirects
       setHasRedirected(true)
       
-      // Immediate redirect - no delay needed since we've preloaded everything
-      router.push(redirectPath)
+      // Use window.location for more reliable navigation in production
+      // This prevents the Next.js Link caching issues mentioned in the GitHub discussion
+      console.log("Redirecting to:", redirectPath)
+      window.location.href = redirectPath
       
     } catch (err: any) {
+      console.error("Login error:", err)
       setError(err.message || "Login failed. Please check your credentials and try again.")
     } finally {
       setIsSubmitting(false)
@@ -195,7 +186,7 @@ const LoginForm = memo(function LoginForm() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link href="/forgot-password" className="text-sm text-[#FF6B6B] hover:underline">
+                <Link href="/forgot-password" className="text-sm text-[#FF6B6B] hover:underline" prefetch={false}>
                   Forgot password?
                 </Link>
               </div>
@@ -242,7 +233,7 @@ const LoginForm = memo(function LoginForm() {
         <CardFooter className="p-6 text-center">
           <p className="text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-[#FF6B6B] font-medium">
+            <Link href="/signup" className="text-[#FF6B6B] font-medium" prefetch={false}>
               Sign up
             </Link>
           </p>
