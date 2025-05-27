@@ -6,32 +6,89 @@ import { fetchUser, logoutUser as logoutUserAction, setUser, updateUser } from '
 import { clearPostInteractions } from '@/lib/features/posts/postsSlice'
 import { clearFeed } from '@/lib/features/feed/feedSlice'
 import type { UserData } from '@/lib/features/user/userSlice'
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { prefetchUserRoutes, prefetchApiData } from '@/lib/prefetch-utils'
+
+// Circuit breaker to prevent infinite API calls
+const circuitBreaker = {
+  failures: 0,
+  lastFailure: 0,
+  isOpen: false,
+  threshold: 3,
+  timeout: 30000, // 30 seconds
+  
+  canExecute(): boolean {
+    if (!this.isOpen) return true
+    
+    const now = Date.now()
+    if (now - this.lastFailure > this.timeout) {
+      this.isOpen = false
+      this.failures = 0
+      return true
+    }
+    
+    return false
+  },
+  
+  onSuccess() {
+    this.failures = 0
+    this.isOpen = false
+  },
+  
+  onFailure() {
+    this.failures++
+    this.lastFailure = Date.now()
+    
+    if (this.failures >= this.threshold) {
+      this.isOpen = true
+      console.warn('Circuit breaker opened - too many auth failures')
+    }
+  }
+}
 
 export function useAuth() {
   const dispatch = useAppDispatch()
   const router = useRouter()
   const { user, isLoading, isAuthenticated, error } = useAppSelector((state) => state.user)
+  const fetchAttempted = useRef(false)
 
-  // Prefetch user data on mount for faster authentication checks
+  // Note: User fetching is now handled by the controlled effect below with circuit breaker
+
+  // Controlled user fetch with circuit breaker
   useEffect(() => {
-    if (!user && !isLoading) {
+    if (!user && !isLoading && !fetchAttempted.current && circuitBreaker.canExecute()) {
+      fetchAttempted.current = true
+      
       dispatch(fetchUser())
+        .unwrap()
+        .then(() => {
+          circuitBreaker.onSuccess()
+        })
+        .catch((error) => {
+          console.error('Auth fetch failed:', error)
+          circuitBreaker.onFailure()
+          
+          // Reset attempt flag after a delay to allow retry
+          setTimeout(() => {
+            fetchAttempted.current = false
+          }, 5000)
+        })
     }
   }, [dispatch, user, isLoading])
 
-  // Prefetch user-specific routes when authenticated
-  useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      prefetchUserRoutes(router, user.id)
-      prefetchApiData()
-    }
-  }, [isAuthenticated, user?.id, router])
-
   const refetchUser = useCallback(async () => {
-    await dispatch(fetchUser({ force: true }))
+    if (!circuitBreaker.canExecute()) {
+      console.warn('Circuit breaker is open - skipping user fetch')
+      return
+    }
+    
+    try {
+      await dispatch(fetchUser({ force: true })).unwrap()
+      circuitBreaker.onSuccess()
+    } catch (error) {
+      circuitBreaker.onFailure()
+      throw error
+    }
   }, [dispatch])
 
   const logout = useCallback(async () => {
@@ -40,6 +97,11 @@ export function useAuth() {
       // Clear all related state
       dispatch(clearPostInteractions())
       dispatch(clearFeed())
+      
+      // Reset circuit breaker on logout
+      circuitBreaker.failures = 0
+      circuitBreaker.isOpen = false
+      fetchAttempted.current = false
       
       // Dispatch logout event for other components
       window.dispatchEvent(new Event('logout-success'))
@@ -51,6 +113,8 @@ export function useAuth() {
 
   const preloadUser = useCallback((userData: UserData) => {
     dispatch(setUser(userData))
+    circuitBreaker.onSuccess()
+    fetchAttempted.current = true
   }, [dispatch])
 
   const updateUserData = useCallback((userData: Partial<UserData>) => {

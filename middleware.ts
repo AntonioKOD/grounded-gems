@@ -6,7 +6,7 @@ import { safeRedirectURL } from '@/lib/url-utils'
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   
-  // Fast path exclusions - skip middleware for auth pages and static assets
+  // Fast path exclusions - skip middleware for auth pages, API auth endpoints, and static assets
   if (pathname.startsWith('/login') || 
       pathname.startsWith('/signup') || 
       pathname.startsWith('/verify') ||
@@ -14,6 +14,8 @@ export function middleware(req: NextRequest) {
       pathname.startsWith('/api/users/login') ||
       pathname.startsWith('/api/users/signup') ||
       pathname.startsWith('/api/users/verify') ||
+      pathname === '/api/users/me' ||  // CRITICAL: Allow /api/users/me to pass through
+      pathname.startsWith('/api/auth-check') ||
       pathname.includes('.') ||
       pathname === '/') {
     return NextResponse.next()
@@ -32,7 +34,7 @@ export function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
-// Optimized matcher - only match specific protected routes
+// Optimized matcher - exclude /api/users/me from matching
 export const config = {
   matcher: [
     // Frontend routes that require auth
@@ -46,8 +48,7 @@ export const config = {
     '/post/:path*',
     '/my-route/:path*',
     
-    // API routes that require auth
-    '/api/users/me/:path*',
+    // API routes that require auth (EXCLUDING /api/users/me)
     '/api/users/[id]/:path*',
     '/api/locations/interactions/:path*',
     '/api/locations/event-requests/:path*',

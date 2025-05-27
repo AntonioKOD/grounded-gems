@@ -36,6 +36,9 @@ const initialState: UserState = {
   lastFetched: null,
 }
 
+// Request deduplication - prevent multiple simultaneous requests
+let currentFetchPromise: Promise<any> | null = null
+
 // Async thunk for fetching user data
 export const fetchUser = createAsyncThunk(
   'user/fetchUser',
@@ -50,42 +53,68 @@ export const fetchUser = createAsyncThunk(
         return state.user.user
       }
 
-      // Optimized fetch with production-appropriate timeout
-      const controller = new AbortController()
-      const timeout = process.env.NODE_ENV === 'production' ? 8000 : 3000 // Longer timeout in production
-      const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-      const response = await fetch('/api/users/me', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0',
-        },
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.log('User not authenticated (401)')
-          return null // User not authenticated
-        }
-        if (response.status === 503) {
-          console.log('Service temporarily unavailable (503)')
-          // Return cached user if available, don't clear auth state
-          return state.user.user
-        }
-        throw new Error(`Failed to fetch user: ${response.status}`)
+      // Request deduplication - if there's already a request in flight, wait for it
+      if (currentFetchPromise && !options?.force) {
+        console.log('Deduplicating user fetch request')
+        return await currentFetchPromise
       }
 
-      const data = await response.json()
-      console.log('User fetch successful:', data.user ? 'User found' : 'No user')
-      return data.user || null
+      // Create the fetch promise
+      const fetchPromise = (async () => {
+        // Optimized fetch with production-appropriate timeout
+        const controller = new AbortController()
+        const timeout = process.env.NODE_ENV === 'production' ? 8000 : 3000 // Longer timeout in production
+        const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+        const response = await fetch('/api/users/me', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            console.log('User not authenticated (401)')
+            return null // User not authenticated
+          }
+          if (response.status === 503) {
+            console.log('Service temporarily unavailable (503)')
+            // Return cached user if available, don't clear auth state
+            return state.user.user
+          }
+          if (response.status === 307 || response.status === 308) {
+            console.error('Redirect detected on /api/users/me - this should not happen')
+            throw new Error('Authentication endpoint is redirecting - check middleware configuration')
+          }
+          throw new Error(`Failed to fetch user: ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('User fetch successful:', data.user ? 'User found' : 'No user')
+        return data.user || null
+      })()
+
+      // Store the promise for deduplication
+      currentFetchPromise = fetchPromise
+
+      const result = await fetchPromise
+
+      // Clear the promise when done
+      currentFetchPromise = null
+
+      return result
     } catch (error) {
+      // Clear the promise on error
+      currentFetchPromise = null
+
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('User fetch timed out - using cached data if available')
         const state = getState() as { user: UserState }
