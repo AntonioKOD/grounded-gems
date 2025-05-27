@@ -1,4 +1,5 @@
 import { cookies } from "next/headers"
+import { getApiUrl } from "./utils"
 
 // Cache for user data to avoid redundant fetches
 const userCache = new Map<string, { user: any; timestamp: number }>()
@@ -21,12 +22,12 @@ export async function getServerSideUser() {
       return cached.user
     }
 
-    // Use Payload's built-in /api/users/me endpoint for authentication
-    // This works because we're making the request with the same cookie
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000'
+    // Use the utility function to get the correct API URL
+    const apiUrl = getApiUrl('/api/users/me')
+    console.log(`Making request to: ${apiUrl}`)
     
     // Use Promise.race with timeout to prevent slow requests
-    const fetchPromise = fetch(`${baseUrl}/api/users/me`, {
+    const fetchPromise = fetch(apiUrl, {
       headers: {
         Cookie: `payload-token=${payloadToken}`,
         "Content-Type": "application/json",
@@ -35,7 +36,7 @@ export async function getServerSideUser() {
     })
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Request timeout')), 3000) // 3 second timeout
+      setTimeout(() => reject(new Error('Request timeout')), 5000) // Increased to 5 seconds for production
     })
 
     const response = await Promise.race([fetchPromise, timeoutPromise])

@@ -109,6 +109,13 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validate user data
+    if (!user || !user.id) {
+      toast.error("User authentication required. Please log in again.")
+      return
+    }
+
     if (!content.trim()) {
       toast.error("Please enter some content for your post")
       return
@@ -127,21 +134,40 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
     setIsSubmitting(true)
 
     try {
-      // Create FormData
+      // Create FormData with validation
       const formData = new FormData()
-      formData.append("userId", user.id)
-      formData.append("content", content)
+      formData.append("userId", user.id.toString())
+      formData.append("content", content.trim())
       formData.append("type", postType)
-      if (title) formData.append("title", title)
-      if (location) formData.append("locationName", location)
-      if (rating > 0) formData.append("rating", rating.toString())
-      if (selectedImage) formData.append("image", selectedImage)
+      
+      if (title && title.trim()) {
+        formData.append("title", title.trim())
+      }
+      if (location && location.trim()) {
+        formData.append("locationName", location.trim())
+      }
+      if (rating > 0) {
+        formData.append("rating", rating.toString())
+      }
+      if (selectedImage) {
+        formData.append("image", selectedImage)
+      }
+
+      console.log("Submitting post with data:", {
+        userId: user.id,
+        content: content.trim(),
+        type: postType,
+        title: title?.trim(),
+        location: location?.trim(),
+        rating,
+        hasImage: !!selectedImage
+      })
 
       // Import and call server action
       const { createPost } = await import("@/app/actions")
       const result = await createPost(formData)
 
-      if (result.success) {
+      if (result?.success) {
         toast.success("Post created successfully!")
         
         // Reset form
@@ -168,11 +194,21 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
         
         if (onClose) onClose()
       } else {
-        toast.error(result.message || "Failed to create post")
+        const errorMessage = result?.message || "Failed to create post"
+        console.error("Post creation failed:", errorMessage)
+        toast.error(errorMessage)
       }
     } catch (error) {
       console.error("Error creating post:", error)
-      toast.error("Failed to create post. Please try again.")
+      
+      // More specific error handling
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        toast.error("Network error. Please check your connection and try again.")
+      } else if (error instanceof Error) {
+        toast.error(`Error: ${error.message}`)
+      } else {
+        toast.error("Failed to create post. Please try again.")
+      }
     } finally {
       setIsSubmitting(false)
     }

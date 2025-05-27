@@ -568,47 +568,51 @@ export async function getUserbyId(id: string) {
   try {
     console.log("getUserbyId called with ID:", id)
     
-    if (!id) {
-      console.error("getUserbyId called with empty id")
+    if (!id || id.trim() === '') {
+      console.error("getUserbyId called with empty or invalid id")
+      return null
+    }
+
+    // Validate ID format (basic check for ObjectId or UUID)
+    if (id.length < 12) {
+      console.error("getUserbyId called with invalid id format:", id)
       return null
     }
     
-    // Add retry logic for MongoDB session errors
-    let retries = 3
-    let lastError: any = null
+    const payload = await getPayload({ config: config })
     
-    while (retries > 0) {
-      try {
-        const payload = await getPayload({ config: config })
-        const result = await payload.findByID({
-          collection: "users",
-          id,
-          depth: 2,
-          overrideAccess: true,
-        })
-        
-        console.log(`Found user:`, result ? `${result.name || 'Unknown'} (ID: ${result.id})` : 'No user found')
+    try {
+      const result = await payload.findByID({
+        collection: "users",
+        id: id.trim(),
+        depth: 2,
+        overrideAccess: true,
+      })
+      
+      if (result) {
+        console.log(`Found user: ${result.name || 'Unknown'} (ID: ${result.id})`)
         return result
-      } catch (error: any) {
-        lastError = error
-        
-        // If it's a MongoDB session error, retry
-        if (error.name === 'MongoExpiredSessionError' || error.message?.includes('session')) {
-          console.log(`Retrying getUserbyId due to session error, ${retries - 1} retries left`)
-          retries--
-          if (retries > 0) {
-            // Wait a bit before retrying
-            await new Promise(resolve => setTimeout(resolve, 100))
-            continue
-          }
-        } else {
-          // For other errors, don't retry
-          throw error
-        }
+      } else {
+        console.log(`No user found with ID: ${id}`)
+        return null
       }
+    } catch (error: any) {
+      // Handle specific Payload CMS errors
+      if (error.status === 404 || error.message?.includes('Not Found')) {
+        console.log(`User with ID ${id} not found (404)`)
+        return null
+      }
+      
+      // Handle validation errors
+      if (error.message?.includes('Invalid ID')) {
+        console.error(`Invalid user ID format: ${id}`)
+        return null
+      }
+      
+      // Log other errors but don't throw
+      console.error("Error fetching user from Payload:", error)
+      return null
     }
-    
-    throw lastError
   } catch (error) {
     console.error("Error in getUserbyId:", error)
     return null

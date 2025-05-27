@@ -37,6 +37,8 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
     // Trigger feed refresh via custom event
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('postCreated'))
+      // Also trigger a general refresh event
+      window.dispatchEvent(new CustomEvent('refreshFeed'))
     }
   }
 
@@ -142,21 +144,27 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
               }
               
               // Handle profile navigation - use Link component for proper navigation
-              if ((item as any).isProfile) {
+              if ('isProfile' in item && item.isProfile) {
+                const profileItem = item as typeof item & {
+                  hasProfileImage?: boolean
+                  profileImageUrl?: string
+                  profileImageAlt?: string
+                }
+                
                 return (
                   <Link
                     key={index}
                     href={item.href}
                     className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
                   >
-                    {item.label === "Profile" && (item as any).hasProfileImage ? (
+                    {item.label === "Profile" && profileItem.hasProfileImage ? (
                       <>
                         <Image
                           unoptimized
                           width={20}
                           height={20}
-                          src={(item as any).profileImageUrl} 
-                          alt={(item as any).profileImageAlt}
+                          src={profileItem.profileImageUrl || ''} 
+                          alt={profileItem.profileImageAlt || 'Profile'}
                           className="h-5 w-5 rounded-full object-cover border border-gray-300 mb-0.5"
                           onError={(e) => {
                             // Fallback to icon if image fails to load

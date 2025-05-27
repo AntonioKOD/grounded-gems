@@ -46,7 +46,16 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb', // Adjust the body size limit as needed
-    }
+    },
+  },
+  serverExternalPackages: ['payload'],
+  env: {
+    // Ensure NEXTAUTH_URL is available in production
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL || (
+      process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}` 
+        : 'http://localhost:3000'
+    ),
   },
   async headers() {
     return [
@@ -73,6 +82,15 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=0, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, max-age=0',
           },
         ],
       },
