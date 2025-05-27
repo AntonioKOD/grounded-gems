@@ -5,11 +5,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutList, Calendar, Plus, MapPin, Users } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-
 import EnhancedPostForm from "@/components/post/enhanced-post-form"
-import { toast } from "sonner"
 import type { UserData } from "@/lib/features/user/userSlice"
-import type { Post } from "@/types/feed"
 import Image from "next/image"
 
 interface MobileNavigationProps {

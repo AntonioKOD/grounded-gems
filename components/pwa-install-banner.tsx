@@ -9,6 +9,7 @@ import { isPWA, canInstallPWA, setupInstallPrompt, showInstallPrompt } from '@/l
 export default function PWAInstallBanner() {
   const [showBanner, setShowBanner] = useState(false)
   const [installPromptReady, setInstallPromptReady] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   useEffect(() => {
     // Don't show banner if already running as PWA
@@ -16,28 +17,57 @@ export default function PWAInstallBanner() {
       return
     }
 
+    // Detect if on mobile device
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent.toLowerCase()
+      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent)
+      setIsMobile(isMobileDevice)
+      return isMobileDevice
+    }
+
+    const isMobileDevice = checkMobile()
+
     // Setup install prompt listener
     setupInstallPrompt()
 
     // Check if install prompt is available
     const checkInstallPrompt = () => {
-      if (canInstallPWA()) {
+      const dismissed = localStorage.getItem('pwa-install-dismissed')
+      console.log('PWA Banner: Checking install prompt', { 
+        dismissed, 
+        isMobileDevice, 
+        canInstallPWA: canInstallPWA(),
+        isPWA: isPWA()
+      })
+      
+      if (dismissed) {
+        console.log('PWA Banner: Previously dismissed')
+        return
+      }
+
+      // For mobile devices, show banner even if beforeinstallprompt isn't available
+      if (isMobileDevice) {
+        console.log('PWA Banner: Mobile device detected, showing banner')
         setInstallPromptReady(true)
-        
-        // Show banner after a delay if user hasn't dismissed it
-        const dismissed = localStorage.getItem('pwa-install-dismissed')
-        if (!dismissed) {
-          setTimeout(() => {
-            setShowBanner(true)
-          }, 3000) // Show after 3 seconds
-        }
+        setTimeout(() => {
+          setShowBanner(true)
+        }, 5000) // Show after 5 seconds on mobile
+      } else if (canInstallPWA()) {
+        console.log('PWA Banner: Desktop with install prompt available')
+        setInstallPromptReady(true)
+        setTimeout(() => {
+          setShowBanner(true)
+        }, 3000) // Show after 3 seconds on desktop
+      } else {
+        console.log('PWA Banner: No install prompt available')
       }
     }
 
     checkInstallPrompt()
 
     // Listen for the beforeinstallprompt event
-    const handleBeforeInstallPrompt = () => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault()
       setInstallPromptReady(true)
       
       const dismissed = localStorage.getItem('pwa-install-dismissed')
@@ -56,6 +86,14 @@ export default function PWAInstallBanner() {
   }, [])
 
   const handleInstall = async () => {
+    if (isMobile && !canInstallPWA()) {
+      // For mobile devices without native install prompt, show manual instructions
+      alert('To install this app:\n\n1. Tap the share button in your browser\n2. Select "Add to Home Screen"\n3. Tap "Add" to install')
+      setShowBanner(false)
+      localStorage.setItem('pwa-install-dismissed', 'true')
+      return
+    }
+
     const installed = await showInstallPrompt()
     if (installed) {
       setShowBanner(false)
@@ -73,7 +111,7 @@ export default function PWAInstallBanner() {
   }
 
   return (
-    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 z-50 max-w-sm mx-auto">
+    <div className="fixed bottom-20 md:bottom-6 left-4 right-4 z-[60] max-w-sm mx-auto">
       <Card className="p-4 bg-white shadow-lg border border-gray-200 rounded-lg">
         <div className="flex items-start gap-3">
           <div className="flex-shrink-0">
@@ -87,7 +125,10 @@ export default function PWAInstallBanner() {
               Install Grounded Gems
             </h3>
             <p className="text-xs text-gray-600 mb-3">
-                              Get the full app experience! Install Grounded Gems for faster access and offline features.
+              {isMobile 
+                ? "Add to your home screen for quick access and a native app experience!"
+                : "Get the full app experience! Install Grounded Gems for faster access and offline features."
+              }
             </p>
             
             <div className="flex gap-2">
@@ -97,7 +138,7 @@ export default function PWAInstallBanner() {
                 className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white text-xs px-3 py-1 h-auto"
               >
                 <Download className="w-3 h-3 mr-1" />
-                Install
+                {isMobile ? "Add to Home" : "Install"}
               </Button>
               <Button
                 size="sm"
