@@ -548,6 +548,8 @@ export function CommentSystemDark({
                     <div className="flex-1">
                       <Textarea
                         ref={textareaRef}
+                        id={`comment-textarea-dark-${postId}`}
+                        name={`comment-dark-${postId}`}
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder="Share your thoughts..."

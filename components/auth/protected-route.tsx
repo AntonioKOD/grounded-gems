@@ -13,13 +13,8 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const [redirectAttempted, setRedirectAttempted] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
 
-  // Force a refetch of user data when the component mounts
-  useEffect(() => {
-    // Only refetch if we're not already loading
-    if (!isLoading) {
-      refetchUser()
-    }
-  }, [refetchUser, isLoading])
+  // Note: User data is already initialized in StoreProvider from server-side data
+  // No need to refetch user data on mount as it causes unnecessary refetching
 
   useEffect(() => {
     // Only redirect if:

@@ -61,12 +61,8 @@ export default function MobileFeedContainer({
   const observer = useRef<IntersectionObserver | null>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Fetch user data on mount if needed
-  useEffect(() => {
-    if (!user && !isUserLoading && !initialLoadComplete.current) {
-      dispatch(fetchUser())
-    }
-  }, [dispatch, user, isUserLoading])
+  // Note: User data is already initialized in StoreProvider from server-side data
+  // No need to fetch user data on mount as it causes unnecessary refetching
 
   // Initialize posts slice with user's liked and saved posts
   useEffect(() => {

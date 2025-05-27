@@ -64,12 +64,8 @@ export default function FeedContainer({
     }
   }, [])
 
-  // Fetch user data on mount
-  useEffect(() => {
-    if (!user && !isUserLoading) {
-      dispatch(fetchUser())
-    }
-  }, [dispatch, user, isUserLoading])
+  // Note: User data is already initialized in StoreProvider from server-side data
+  // No need to fetch user data on mount as it causes unnecessary refetching
 
   // Initialize posts slice with user's liked and saved posts
   useEffect(() => {
@@ -122,12 +118,12 @@ export default function FeedContainer({
       }
     };
 
-    window.addEventListener("user-updated", handleUserUpdate as EventListener);
-    window.addEventListener("user-login", handleUserLogin as EventListener);
+    window.addEventListener("user-updated", handleUserUpdate as any);
+    window.addEventListener("user-login", handleUserLogin as any);
 
     return () => {
-      window.removeEventListener("user-updated", handleUserUpdate as EventListener);
-      window.removeEventListener("user-login", handleUserLogin as EventListener);
+      window.removeEventListener("user-updated", handleUserUpdate as any);
+      window.removeEventListener("user-login", handleUserLogin as any);
     };
   }, [dispatch, feedType, sortBy]);
 

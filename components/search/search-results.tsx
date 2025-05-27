@@ -136,6 +136,8 @@ export default function SearchResults({ initialQuery = "", initialType = "all" }
 
             {/* Input field */}
             <Input
+              id="search-input"
+              name="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search for locations, users, experiences..."

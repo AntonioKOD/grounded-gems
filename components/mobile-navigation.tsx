@@ -5,12 +5,12 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { LayoutList, Calendar, Plus, MapPin, Users } from "lucide-react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+
 import EnhancedPostForm from "@/components/post/enhanced-post-form"
 import { toast } from "sonner"
 import type { UserData } from "@/lib/features/user/userSlice"
 import type { Post } from "@/types/feed"
+import Image from "next/image"
 
 interface MobileNavigationProps {
   initialUser: UserData | null;
@@ -43,25 +43,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
     }
   }
 
-  const handleProfileClick = (e: React.MouseEvent) => {
-    e.preventDefault()
-    
-    if (!isHydrated) return
-    
-    const user = initialUser
-    const isAuthenticated = isHydrated && !!user
-    
-    if (!isAuthenticated) {
-      router.push("/login")
-    } else {
-      router.push(`/profile/${user.id}`)
-    }
-    
-    // Haptic feedback
-    if (navigator.vibrate) {
-      navigator.vibrate(30)
-    }
-  }
+
 
   // Get navigation items - always start with unauthenticated state to avoid hydration mismatch
   const getNavItems = () => {
@@ -104,7 +86,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
         isCenter: false,
       },
       {
-        href: isAuthenticated ? `/profile/${user?.id}` : "/login",
+        href: `/profile/${user?.id}`,
         icon: Users,
         label: "Profile",
         isCenter: false,
@@ -162,17 +144,20 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                 )
               }
               
-              // Handle profile navigation specially to prevent page reload
+              // Handle profile navigation - use Link component for proper navigation
               if ((item as any).isProfile) {
                 return (
-                  <button
+                  <Link
                     key={index}
-                    onClick={handleProfileClick}
+                    href={item.href}
                     className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
                   >
                     {item.label === "Profile" && (item as any).hasProfileImage ? (
                       <>
-                        <img 
+                        <Image
+                          unoptimized
+                          width={20}
+                          height={20}
                           src={(item as any).profileImageUrl} 
                           alt={(item as any).profileImageAlt}
                           className="h-5 w-5 rounded-full object-cover border border-gray-300 mb-0.5"
@@ -190,7 +175,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                       <Icon className="h-5 w-5 mb-0.5" />
                     )}
                     <span className="text-xs font-medium">{item.label}</span>
-                  </button>
+                  </Link>
                 )
               }
               

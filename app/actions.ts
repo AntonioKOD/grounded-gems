@@ -615,7 +615,7 @@ export async function getUserbyId(id: string) {
   }
 }
 
-export async function getFeedPostsByUser(id: string, category?: string) {
+export async function getFeedPostsByUser(id: string, category?: string, currentUserId?: string) {
   const payload = await getPayload({ config })
   const cookieStore = await cookies()
   const cookieHeader = cookieStore
@@ -657,36 +657,8 @@ export async function getFeedPostsByUser(id: string, category?: string) {
     sort: '-createdAt', // optional: most recent first
   })
 
-  // Format posts for the frontend to match the getFeedPosts return format
-  const formattedPosts = docs.map((post) => ({
-    id: String(post.id),
-    author: {
-      id: typeof post.author === "object" ? post.author.id : post.author,
-      name: typeof post.author === "object" ? post.author.name : "Unknown User",
-      avatar: typeof post.author === "object" && post.author.profileImage ? post.author.profileImage.url : undefined,
-    },
-    title: post.title || "",
-    content: post.content || "",
-    createdAt: post.createdAt || new Date().toISOString(),
-    updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
-    image: post.image?.url || post.featuredImage?.url || undefined,
-    likeCount: post.likes?.length || 0,
-    commentCount: post.comments?.length || 0,
-    shareCount: post.shares || 0,
-    isLiked: false, // This will be updated client-side
-    type: post.type || "post",
-    rating: post.rating,
-    location: post.location
-      ? {
-          id: typeof post.location === "object" ? post.location.id : post.location,
-          name: typeof post.location === "object" ? post.location.name : "Unknown Location",
-        }
-      : undefined,
-    categories: post.categories || [],
-    tags: post.tags || []
-  }))
-
-  return formattedPosts
+  // Use the centralized formatting function
+  return await formatPostsForFrontend(docs, currentUserId)
 }
 
 
@@ -1187,36 +1159,13 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
     })
 
     // 4. Sort & paginate
-    const feed = scored
+    const sortedPosts = scored
       .sort((a, b) => b.finalScore - a.finalScore)
       .slice(offset, offset + pageSize)
-      .map((item) => {
-        // Convert Payload post to our frontend Post type
-        const post = item.post
-        return {
-          id: String(post.id),
-          author: {
-            id: post.author.id,
-            name: post.author.name,
-            avatar: post.author.avatar?.url,
-          },
-          title: post.title,
-          content: post.content,
-          createdAt: post.createdAt,
-          image: post.image?.url,
-          likeCount: post.likes?.length || 0,
-          commentCount: post.comments?.length || 0,
-          isLiked: post.likes?.includes(currentUserId) || false,
-          type: post.type || "post",
-          rating: post.rating,
-          location: post.location
-            ? {
-                id: post.location.id,
-                name: post.location.name,
-              }
-            : undefined,
-        }
-      })
+      .map((item) => item.post)
+
+    // Use the centralized formatting function
+    const feed = await formatPostsForFrontend(sortedPosts, currentUserId)
 
     console.log(`Returning ${feed.length} personalized posts`)
     return feed
@@ -1291,97 +1240,15 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
 
     // Found posts
 
-    // Get current user's liked and saved posts if user is provided
-    let userLikedPosts: string[] = []
-    let userSavedPosts: string[] = []
-    
-    if (currentUserId) {
-      try {
-        const user = await payload.findByID({
-          collection: 'users',
-          id: currentUserId,
-          depth: 0,
-        })
-        
-        if (user) {
-          userLikedPosts = user.likedPosts || []
-          userSavedPosts = user.savedPosts || []
-          // User interaction data loaded
-        }
-      } catch (userError) {
-        console.error("Error fetching user data:", userError)
-      }
-    }
-
-    // Format posts for the frontend with safe property access
-    const formattedPosts = posts.map((post: any) => {
-      try {
-        return {
-          id: String(post.id),
-          author: {
-            id: typeof post.author === "object" && post.author ? post.author.id : post.author || "unknown",
-            name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
-            avatar: typeof post.author === "object" && post.author && post.author.profileImage ? post.author.profileImage.url : undefined,
-          },
-          title: post.title || "",
-          content: post.content || "",
-          createdAt: post.createdAt || new Date().toISOString(),
-          updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
-          image: post.image?.url || post.featuredImage?.url || undefined,
-          likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
-          commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
-          shareCount: post.shares || 0,
-          saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
-          isLiked: currentUserId ? userLikedPosts.includes(String(post.id)) : false,
-          isSaved: currentUserId ? userSavedPosts.includes(String(post.id)) : false,
-          type: (post.type === "review" || post.type === "recommendation" ? post.type : "post") as "post" | "review" | "recommendation",
-          rating: post.rating,
-          location: post.location
-            ? {
-                id: typeof post.location === "object" && post.location ? post.location.id : post.location,
-                name: typeof post.location === "object" && post.location ? post.location.name : "Unknown Location",
-              }
-            : undefined,
-          categories: Array.isArray(post.categories) ? post.categories : [],
-          tags: Array.isArray(post.tags) ? post.tags : []
-        }
-      } catch (formatError) {
-        console.error("Error formatting post:", formatError, post)
-        // Return a safe default post object
-        return {
-          id: String(post.id || Math.random()),
-          author: {
-            id: "unknown",
-            name: "Unknown User",
-            avatar: undefined,
-          },
-          title: "",
-          content: "Post content unavailable",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          image: undefined,
-          likeCount: 0,
-          commentCount: 0,
-          shareCount: 0,
-          isLiked: false,
-          isSaved: false,
-          type: "post" as "post" | "review" | "recommendation",
-          rating: undefined,
-          location: undefined,
-          categories: [],
-          tags: []
-        }
-      }
-    }).filter(Boolean) // Remove any null/undefined posts
-
-    return formattedPosts as Post[]
+    // Use the centralized formatting function
+    return await formatPostsForFrontend(posts, currentUserId)
   } catch (error) {
     console.error("Error fetching feed posts:", error)
     return [] // Return an empty array in case of any error
   }
 }
 
-export async function getPostById(postId: string): Promise<Post | null> {
+export async function getPostById(postId: string, currentUserId?: string): Promise<Post | null> {
   console.log(`Getting post by ID: ${postId}`);
   const cookieStore = await cookies()
   const cookieHeader = cookieStore
@@ -1404,38 +1271,10 @@ export async function getPostById(postId: string): Promise<Post | null> {
       return null;
     }
 
-    // Format post for the frontend
-    const formattedPost: Post = {
-      id: String(post.id),
-      author: {
-        id: typeof post.author === "object" ? post.author.id : post.author,
-        name: typeof post.author === "object" ? post.author.name : "Unknown User",
-        avatar: typeof post.author === "object" && post.author.profileImage ? post.author.profileImage.url : undefined,
-      },
-      title: post.title || "",
-      content: post.content || "",
-      createdAt: post.createdAt || new Date().toISOString(),
-      updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
-      image: post.image?.url || post.featuredImage?.url || undefined,
-      likeCount: post.likes?.length || 0,
-      commentCount: post.comments?.length || 0,
-      shareCount: post.shares || 0,
-      saveCount: post.savedBy?.length || 0,
-      isLiked: false, // This will be updated client-side
-      isSaved: false, // This will be updated client-side
-      type: (post.type === "review" || post.type === "recommendation" ? post.type : "post") as "post" | "review" | "recommendation",
-      rating: post.rating,
-      location: post.location
-        ? {
-            id: typeof post.location === "object" ? post.location.id : post.location,
-            name: typeof post.location === "object" ? post.location.name : "Unknown Location",
-          }
-        : undefined,
-    };
-    console.log(formattedPost.image)
-    console.log(post.image?.url)
-
-    return formattedPost;
+    // Use the centralized formatting function
+    const formattedPosts = await formatPostsForFrontend([post], currentUserId);
+    
+    return formattedPosts.length > 0 ? formattedPosts[0] : null;
   } catch (error) {
     console.error("Error fetching post by ID:", error);
     return null;
@@ -4263,7 +4102,7 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
       .sort((a, b) => b.discoveryScore - a.discoveryScore)
       .slice((page - 1) * pageSize, page * pageSize)
 
-    return formatPostsForFrontend(sortedPosts, currentUserId)
+    return await formatPostsForFrontend(sortedPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching discover feed:", error)
     return []
@@ -4344,7 +4183,7 @@ export async function getPopularFeed(currentUserId?: string, page = 1, pageSize 
       .sort((a, b) => b.popularityScore - a.popularityScore)
       .slice((page - 1) * pageSize, page * pageSize)
 
-    return formatPostsForFrontend(sortedPosts, currentUserId)
+    return await formatPostsForFrontend(sortedPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching popular feed:", error)
     return []
@@ -4390,7 +4229,7 @@ export async function getLatestFeed(currentUserId?: string, page = 1, pageSize =
       return hasContent && hasEngagement
     })
 
-    return formatPostsForFrontend(qualityFilteredPosts, currentUserId)
+    return await formatPostsForFrontend(qualityFilteredPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching latest feed:", error)
     return []
@@ -4452,7 +4291,7 @@ export async function getSavedPostsFeed(currentUserId: string, page = 1, pageSiz
       return aIndex - bIndex // Earlier in savedPosts array = more recently saved
     })
 
-    return formatPostsForFrontend(sortedPosts, currentUserId)
+    return await formatPostsForFrontend(sortedPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching saved posts feed:", error)
     return []
@@ -4460,11 +4299,35 @@ export async function getSavedPostsFeed(currentUserId: string, page = 1, pageSiz
 }
 
 // Helper function to format posts consistently
-function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
+async function formatPostsForFrontend(posts: any[], currentUserId?: string): Promise<Post[]> {
+  // Get user's liked and saved posts if currentUserId is provided
+  let userLikedPosts: string[] = []
+  let userSavedPosts: string[] = []
+  
+  if (currentUserId) {
+    try {
+      const payload = await getPayload({ config })
+      const user = await payload.findByID({
+        collection: 'users',
+        id: currentUserId,
+        depth: 0,
+      })
+      
+      if (user) {
+        userLikedPosts = Array.isArray(user.likedPosts) ? user.likedPosts : []
+        userSavedPosts = Array.isArray(user.savedPosts) ? user.savedPosts : []
+      }
+    } catch (error) {
+      console.error("Error fetching user interaction data:", error)
+    }
+  }
+
   return posts.map((post: any) => {
     try {
+      const postId = String(post.id)
+      
       return {
-        id: String(post.id),
+        id: postId,
         author: {
           id: typeof post.author === "object" && post.author ? post.author.id : post.author || "unknown",
           name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
@@ -4479,8 +4342,8 @@ function formatPostsForFrontend(posts: any[], currentUserId?: string): Post[] {
         commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
         shareCount: post.shares || 0,
         saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
-        isLiked: false, // Will be set by Redux
-        isSaved: false, // Will be set by Redux
+        isLiked: userLikedPosts.includes(postId), // Check if user has liked this post
+        isSaved: userSavedPosts.includes(postId), // Check if user has saved this post
         type: post.type || "post",
         rating: post.rating,
         location: post.location

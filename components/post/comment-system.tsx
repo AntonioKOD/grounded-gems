@@ -410,6 +410,8 @@ export function CommentSystem({ postId, user, initialComments = [], className }:
               </Avatar>
               <div className="flex-1">
                 <Textarea
+                  id={`reply-textarea-${comment.id}`}
+                  name={`reply-${comment.id}`}
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   placeholder="Write a reply..."
@@ -485,6 +487,8 @@ export function CommentSystem({ postId, user, initialComments = [], className }:
                     <div className="flex-1">
                       <Textarea
                         ref={textareaRef}
+                        id={`comment-textarea-${postId}`}
+                        name={`comment-${postId}`}
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder="Share your thoughts..."

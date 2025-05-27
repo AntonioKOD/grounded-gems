@@ -206,6 +206,8 @@ export function LocationSearch({ value, onChange, onLocationSelect }: Props) {
         <div className="relative flex-1">
           <Input
             ref={searchInputRef}
+            id="location-search"
+            name="locationSearch"
             type="text"
             placeholder="Search locations..."
             value={searchQuery}

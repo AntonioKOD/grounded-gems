@@ -47,6 +47,8 @@ export default function Hero() {
                   <Search className="h-5 w-5 text-gray-400" />
                 </div>
                 <Input
+                  id="hero-search"
+                  name="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search for places, events, experiences..."
