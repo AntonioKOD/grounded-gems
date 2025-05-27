@@ -15,7 +15,12 @@ export function getBaseUrl(): string {
     return window.location.origin
   }
   
-  // Server-side
+  // Server-side - production URL
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://groundedgems.com'
+  }
+  
+  // Server-side - check environment variables
   if (process.env.NEXTAUTH_URL) {
     return process.env.NEXTAUTH_URL
   }

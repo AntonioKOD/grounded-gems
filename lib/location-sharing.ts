@@ -15,19 +15,26 @@ declare global {
  * @returns A shareable URL with the locationId parameter
  */
 export function createLocationShareUrl(locationId: string, baseUrl?: string): string {
-    // Use provided baseUrl or current URL
-    const url = new URL(baseUrl || (typeof window !== "undefined" ? window.location.href : ""))
-  
-    // Remove any existing path segments after the base path
-    url.pathname = url.pathname.split("/").slice(0, 2).join("/")
-  
-    // Clear any existing locationId parameter
-    url.searchParams.delete("locationId")
-  
-    // Add the location ID
-    url.searchParams.set("locationId", locationId)
-  
-    return url.toString()
+    try {
+      // Use provided baseUrl or current URL with fallback
+      const fallbackUrl = typeof window !== "undefined" ? window.location.href : "https://groundedgems.com"
+      const url = new URL(baseUrl || fallbackUrl)
+    
+      // Remove any existing path segments after the base path
+      url.pathname = url.pathname.split("/").slice(0, 2).join("/")
+    
+      // Clear any existing locationId parameter
+      url.searchParams.delete("locationId")
+    
+      // Add the location ID
+      url.searchParams.set("locationId", locationId)
+    
+      return url.toString()
+    } catch (error) {
+      console.error('Failed to create location share URL:', error)
+      // Fallback URL construction
+      return `https://groundedgems.com?locationId=${locationId}`
+    }
   }
   
   /**
@@ -38,8 +45,13 @@ export function createLocationShareUrl(locationId: string, baseUrl?: string): st
   export function getLocationIdFromUrl(url?: string): string | null {
     if (typeof window === "undefined") return null
   
-    const urlObj = new URL(url || window.location.href)
-    return urlObj.searchParams.get("locationId")
+    try {
+      const urlObj = new URL(url || window.location.href)
+      return urlObj.searchParams.get("locationId")
+    } catch (error) {
+      console.error('Failed to parse URL for location ID:', error)
+      return null
+    }
   }
   
   /**
@@ -55,9 +67,16 @@ export function createLocationShareUrl(locationId: string, baseUrl?: string): st
     }
   
     // Fallback: update URL and reload
-    const url = new URL(window.location.href)
-    url.searchParams.set("locationId", locationId)
-    window.location.href = url.toString()
-    return true
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set("locationId", locationId)
+      window.location.href = url.toString()
+      return true
+    } catch (error) {
+      console.error('Failed to update URL with location ID:', error)
+      // Simple fallback
+      window.location.href = `${window.location.origin}?locationId=${locationId}`
+      return true
+    }
   }
   

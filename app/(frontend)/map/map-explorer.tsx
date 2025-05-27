@@ -195,8 +195,9 @@ export default function MapExplorer() {
     // Check for locationId in URL when the component mounts
     const handleInitialLocationId = async () => {
       if (typeof window !== "undefined") {
-        const url = new URL(window.location.href)
-        const locationId = url.searchParams.get("locationId")
+        try {
+          const url = new URL(window.location.href)
+          const locationId = url.searchParams.get("locationId")
 
         if (locationId && allLocations.length > 0) {
           // Find the location with the matching ID
@@ -223,6 +224,9 @@ export default function MapExplorer() {
               setActiveView("map")
             }
           }
+        } catch (error) {
+          console.error('Failed to parse URL for location ID:', error)
+          // Continue without location ID
         }
       }
     }

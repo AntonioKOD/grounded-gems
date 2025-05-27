@@ -1,11 +1,12 @@
 // middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { safeRedirectURL } from '@/lib/url-utils'
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   
-  // Skip middleware for login, signup, and other auth pages to prevent loops
+  // Fast path exclusions - skip middleware for auth pages and static assets
   if (pathname.startsWith('/login') || 
       pathname.startsWith('/signup') || 
       pathname.startsWith('/verify') ||
@@ -13,28 +14,25 @@ export function middleware(req: NextRequest) {
       pathname.startsWith('/api/users/login') ||
       pathname.startsWith('/api/users/signup') ||
       pathname.startsWith('/api/users/verify') ||
-      pathname.includes('.')) {
+      pathname.includes('.') ||
+      pathname === '/') {
     return NextResponse.next()
   }
 
-  // Payload's default cookiePrefix is "payload" → cookie name is "payload-token"
-  const token = req.cookies.get('payload-token')
+  // Quick token check
+  const token = req.cookies.get('payload-token')?.value
 
-  // If there's no payload-token, redirect to /login
+  // Fast redirect for unauthenticated users
   if (!token) {
-    console.log(`Middleware: No token found, redirecting ${pathname} to login`)
-    const loginUrl = req.nextUrl.clone()
-    loginUrl.pathname = '/login'
-    // Add the current path as a redirect parameter
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
+    const redirectUrl = safeRedirectURL('/login', pathname)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  // Otherwise let the request through
+  // Allow request to proceed
   return NextResponse.next()
 }
 
-// Only protect routes that require authentication (user actions):
+// Optimized matcher - only match specific protected routes
 export const config = {
   matcher: [
     // Frontend routes that require auth

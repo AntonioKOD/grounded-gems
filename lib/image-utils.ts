@@ -24,9 +24,15 @@ export function getImageUrl(image: any): string {
   
       // Check if the URL already has a localhost prefix, and remove it
       if (image.startsWith("http://localhost:")) {
-        // Extract just the path portion
-        const url = new URL(image)
-        return url.pathname // Returns just "/api/media/abc123"
+        try {
+          // Extract just the path portion
+          const url = new URL(image)
+          return url.pathname // Returns just "/api/media/abc123"
+        } catch (error) {
+          console.error('Failed to parse localhost URL:', error)
+          // Fallback: extract path manually
+          return image.replace(/^http:\/\/localhost:\d+/, '')
+        }
       }
   
       // Otherwise, use the string as is (might be a relative path)
@@ -39,8 +45,14 @@ export function getImageUrl(image: any): string {
       if (image.url) {
         // Check if URL has localhost and strip it if needed
         if (typeof image.url === "string" && image.url.startsWith("http://localhost:")) {
-          const url = new URL(image.url)
-          return url.pathname
+          try {
+            const url = new URL(image.url)
+            return url.pathname
+          } catch (error) {
+            console.error('Failed to parse localhost image URL:', error)
+            // Fallback: extract path manually
+            return image.url.replace(/^http:\/\/localhost:\d+/, '')
+          }
         }
         return image.url
       }
@@ -49,8 +61,14 @@ export function getImageUrl(image: any): string {
       if (image.filename) {
         // Check if filename has localhost and strip it if needed
         if (typeof image.filename === "string" && image.filename.startsWith("http://localhost:")) {
-          const url = new URL(image.filename)
-          return url.pathname
+          try {
+            const url = new URL(image.filename)
+            return url.pathname
+          } catch (error) {
+            console.error('Failed to parse localhost filename URL:', error)
+            // Fallback: extract path manually
+            return image.filename.replace(/^http:\/\/localhost:\d+/, '')
+          }
         }
         return image.filename
       }

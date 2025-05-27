@@ -7,11 +7,19 @@ import { makeStore, AppStore } from '../lib/store'
 import { setUser } from '../lib/features/user/userSlice'
 import { initializeLikedPosts, initializeSavedPosts } from '../lib/features/posts/postsSlice'
 import type { UserData } from '../lib/features/user/userSlice'
-import { LoadingSpinner } from '../components/ui/loading-spinner'
 
 interface StoreProviderProps {
   children: React.ReactNode
   initialUser?: UserData | null
+}
+
+// Minimal loading component for faster rendering
+function MinimalLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF6B6B]"></div>
+    </div>
+  )
 }
 
 export default function StoreProvider({ children, initialUser }: StoreProviderProps) {
@@ -23,7 +31,7 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     storeRef.current = makeStore()
     persistorRef.current = persistStore(storeRef.current)
     
-    // Initialize the store with any initial data
+    // Immediately initialize with user data if available
     if (initialUser) {
       storeRef.current.dispatch(setUser(initialUser))
       
@@ -32,32 +40,23 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
         const likedPostIds = Array.isArray(initialUser.likedPosts) ? initialUser.likedPosts : []
         const savedPostIds = Array.isArray(initialUser.savedPosts) ? initialUser.savedPosts : []
         
-        console.log('StoreProvider: Initializing with user posts:', { 
-          likedCount: likedPostIds.length, 
-          savedCount: savedPostIds.length 
-        })
-        
         storeRef.current.dispatch(initializeLikedPosts(likedPostIds))
         storeRef.current.dispatch(initializeSavedPosts(savedPostIds))
       }
     }
   }
 
-  // Listen for user login events to update the store
+  // Optimized event listeners with immediate updates
   useEffect(() => {
     const handleUserLogin = (event: CustomEvent) => {
       if (event.detail && storeRef.current) {
+        // Immediate state update
         storeRef.current.dispatch(setUser(event.detail))
         
         // Initialize post interactions for the logged-in user
         if (event.detail.id) {
           const likedPostIds = Array.isArray(event.detail.likedPosts) ? event.detail.likedPosts : []
           const savedPostIds = Array.isArray(event.detail.savedPosts) ? event.detail.savedPosts : []
-          
-          console.log('StoreProvider: User login - initializing posts:', { 
-            likedCount: likedPostIds.length, 
-            savedCount: savedPostIds.length 
-          })
           
           storeRef.current.dispatch(initializeLikedPosts(likedPostIds))
           storeRef.current.dispatch(initializeSavedPosts(savedPostIds))
@@ -68,13 +67,13 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     const handleUserLogout = () => {
       if (storeRef.current) {
         storeRef.current.dispatch(setUser(null))
-        // Clear post interactions will be handled by the user slice
       }
     }
 
-    window.addEventListener('user-login', handleUserLogin as EventListener)
-    window.addEventListener('user-updated', handleUserLogin as EventListener)
-    window.addEventListener('logout-success', handleUserLogout)
+    // Use passive listeners for better performance
+    window.addEventListener('user-login', handleUserLogin as EventListener, { passive: true })
+    window.addEventListener('user-updated', handleUserLogin as EventListener, { passive: true })
+    window.addEventListener('logout-success', handleUserLogout, { passive: true })
 
     return () => {
       window.removeEventListener('user-login', handleUserLogin as EventListener)
@@ -85,7 +84,7 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
 
   return (
     <Provider store={storeRef.current}>
-      <PersistGate loading={<LoadingSpinner />} persistor={persistorRef.current}>
+      <PersistGate loading={<MinimalLoading />} persistor={persistorRef.current}>
         {children}
       </PersistGate>
     </Provider>

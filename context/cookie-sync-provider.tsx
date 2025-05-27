@@ -95,7 +95,7 @@ export function CookieSyncProvider({ children }: PropsWithChildren) {
       }
 
       lastAuthStatus.current = isAuthenticated
-    }, 30000) // Check every 30 seconds instead of 10
+    }, 60000) // Check every 60 seconds for better performance
 
     // Set up event listeners for tab visibility changes
     const handleVisibilityChange = () => {

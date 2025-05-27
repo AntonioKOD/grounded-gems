@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
+import { prefetchCommonRoutes, smartPrefetch } from "@/lib/prefetch-utils"
 
 // Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
@@ -44,14 +45,29 @@ const LoginForm = memo(function LoginForm() {
   const [error, setError] = useState("")
   const [hasRedirected, setHasRedirected] = useState(false)
 
-  // If already logged in, redirect (but only once and after loading is complete)
+  // Immediate redirect for authenticated users (no delay)
   useEffect(() => {
     if (!isLoading && isAuthenticated && !hasRedirected) {
-      console.log("LoginForm: User already authenticated, redirecting to:", redirectPath)
+      console.log("LoginForm: User already authenticated, redirecting immediately to:", redirectPath)
       setHasRedirected(true)
-      router.replace(redirectPath)
+      // Use push instead of replace for faster navigation
+      router.push(redirectPath)
     }
   }, [isAuthenticated, isLoading, router, redirectPath, hasRedirected])
+
+  // Prefetch routes for faster navigation
+  useEffect(() => {
+    // Prefetch the specific redirect destination
+    if (redirectPath && redirectPath !== '/login') {
+      router.prefetch(redirectPath)
+    }
+    
+    // Prefetch common routes
+    prefetchCommonRoutes(router)
+    
+    // Smart prefetch based on login page
+    smartPrefetch(router, '/login')
+  }, [router, redirectPath])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -73,6 +89,9 @@ const LoginForm = memo(function LoginForm() {
     setError("")
 
     try {
+      // Start prefetching the destination immediately
+      router.prefetch(redirectPath)
+      
       const loginResponse = await loginUser(formData)
       
       // If the login response includes user data, preload it immediately
@@ -80,7 +99,7 @@ const LoginForm = memo(function LoginForm() {
         console.log("Login successful, preloading user data:", loginResponse.user)
         preloadUser(loginResponse.user)
         
-        // Dispatch multiple events for immediate UI updates
+        // Dispatch events immediately for instant UI updates
         window.dispatchEvent(new CustomEvent("user-login", { detail: loginResponse.user }))
         window.dispatchEvent(new CustomEvent("user-updated", { detail: loginResponse.user }))
         window.dispatchEvent(new Event("login-success"))
@@ -99,10 +118,8 @@ const LoginForm = memo(function LoginForm() {
       // Mark as redirected to prevent multiple redirects
       setHasRedirected(true)
       
-      // Redirect after successful login
-      setTimeout(() => {
-        router.replace(redirectPath)
-      }, 100)
+      // Immediate redirect - no delay needed since we've preloaded everything
+      router.push(redirectPath)
       
     } catch (err: any) {
       setError(err.message || "Login failed. Please check your credentials and try again.")
@@ -121,25 +138,25 @@ const LoginForm = memo(function LoginForm() {
     }
   }, [])
 
-  // Show loading state while checking authentication
+  // Optimized loading state - show minimal loading
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[70vh] px-4">
         <div className="flex flex-col items-center gap-2">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B6B]"></div>
-          <p className="text-sm text-gray-500">Checking authentication...</p>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF6B6B]"></div>
+          <p className="text-xs text-gray-500">Loading...</p>
         </div>
       </div>
     )
   }
 
-  // If already authenticated and redirecting, show loading state
+  // If already authenticated and redirecting, show minimal loading
   if (isAuthenticated && hasRedirected) {
     return (
       <div className="flex justify-center items-center min-h-[70vh] px-4">
         <div className="flex flex-col items-center gap-2">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B6B]"></div>
-          <p className="text-sm text-gray-500">Redirecting...</p>
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#FF6B6B]"></div>
+          <p className="text-xs text-gray-500">Redirecting...</p>
         </div>
       </div>
     )

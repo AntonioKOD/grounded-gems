@@ -1,43 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
-  try {
-    // Check for the payload token cookie
-    const token = request.cookies.get('payload-token')
-    
-    if (!token) {
-      return NextResponse.json(
-        { authenticated: false },
-        { 
-          status: 401,
-          headers: {
-            'x-auth-status': 'unauthenticated'
-          }
-        }
-      )
-    }
-
-    // If we have a token, consider the user authenticated
-    // (We don't need to validate the token here, just check if it exists)
-    return NextResponse.json(
-      { authenticated: true },
-      {
-        headers: {
-          'x-auth-status': 'authenticated'
-        }
-      }
-    )
-
-  } catch (error) {
-    console.error('Auth check error:', error)
-    return NextResponse.json(
-      { authenticated: false },
+  // Fast token check without try-catch overhead
+  const token = request.cookies.get('payload-token')?.value
+  
+  if (!token) {
+    return new NextResponse(
+      JSON.stringify({ authenticated: false }),
       { 
-        status: 500,
+        status: 401,
         headers: {
-          'x-auth-status': 'error'
+          'Content-Type': 'application/json',
+          'x-auth-status': 'unauthenticated',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         }
       }
     )
   }
+
+  // Fast response for authenticated users
+  return new NextResponse(
+    JSON.stringify({ authenticated: true }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-status': 'authenticated',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+      }
+    }
+  )
 } 

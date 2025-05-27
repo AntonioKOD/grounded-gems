@@ -382,14 +382,27 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
   // Update browser URL when showing location details
   useEffect(() => {
     if (isOpen && location) {
-      const url = new URL(window.location.href)
-      url.searchParams.set("locationId", location.id)
-      window.history.pushState({}, "", url.toString())
+      try {
+        const url = new URL(window.location.href)
+        url.searchParams.set("locationId", location.id)
+        window.history.pushState({}, "", url.toString())
 
-      return () => {
-        const originalUrl = new URL(window.location.href)
-        originalUrl.searchParams.delete("locationId")
-        window.history.pushState({}, "", originalUrl.toString())
+        return () => {
+          try {
+            const originalUrl = new URL(window.location.href)
+            originalUrl.searchParams.delete("locationId")
+            window.history.pushState({}, "", originalUrl.toString())
+          } catch (error) {
+            console.error('Failed to clean up URL:', error)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to update URL with location ID:', error)
+        // Fallback: use simple query string manipulation
+        const currentUrl = window.location.href
+        const separator = currentUrl.includes('?') ? '&' : '?'
+        const newUrl = `${currentUrl}${separator}locationId=${location.id}`
+        window.history.pushState({}, "", newUrl)
       }
     }
   }, [isOpen, location])

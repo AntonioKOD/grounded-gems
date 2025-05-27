@@ -44,10 +44,14 @@ export const fetchUser = createAsyncThunk(
       const state = getState() as { user: UserState }
       const now = Date.now()
       
-      // Skip fetch if we have recent data and not forcing
-      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < 60000) {
+      // Reduced cache time for faster updates
+      if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < 10000) {
         return state.user.user
       }
+
+      // Optimized fetch with shorter timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000) // Reduced from default
 
       const response = await fetch('/api/users/me', {
         method: 'GET',
@@ -56,7 +60,10 @@ export const fetchUser = createAsyncThunk(
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache',
         },
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -68,6 +75,11 @@ export const fetchUser = createAsyncThunk(
       const data = await response.json()
       return data.user || null
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('User fetch timed out - using cached data if available')
+        const state = getState() as { user: UserState }
+        return state.user.user // Return cached user if available
+      }
       console.error('Error fetching user:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch user')
     }

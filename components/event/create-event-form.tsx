@@ -212,7 +212,13 @@ export default function CreateEventForm() {
     fetchCurrentUser()
 
     // Handle URL parameters from approved event requests or public space redirects
-    const urlParams = new URLSearchParams(window.location.search)
+    let urlParams: URLSearchParams
+    try {
+      urlParams = new URLSearchParams(window.location.search)
+    } catch (error) {
+      console.error('Failed to parse URL search params:', error)
+      urlParams = new URLSearchParams() // Empty params as fallback
+    }
     const locationId = urlParams.get('locationId')
     const locationName = urlParams.get('locationName')
     const requestId = urlParams.get('requestId')
