@@ -69,6 +69,7 @@ export default function CreatePostForm({
 }: CreatePostFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   // State for user data
   const [user, setUser] = useState<UserData | null>(null)
@@ -172,8 +173,8 @@ export default function CreatePostForm({
     }
   }
 
-  // Image handling
-  const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB
+  // Image handling with enhanced format support
+  const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB for social media
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
@@ -181,14 +182,41 @@ export default function CreatePostForm({
 
     // Size guard
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error("Image must be less than 5 MB")
+      toast.error("Image must be less than 10MB")
       return
+    }
+
+    // Validate file type
+    const allowedTypes = [
+      'image/jpeg',
+      'image/jpg', 
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/heic',
+      'image/heif',
+      'image/avif',
+      'image/bmp',
+      'image/tiff'
+    ]
+
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      toast.error("Please select a valid image format (JPEG, PNG, WebP, GIF, HEIC, etc.)")
+      return
+    }
+
+    // For HEIC files, show a loading state since they might need conversion
+    if (file.type.toLowerCase().includes('heic') || file.type.toLowerCase().includes('heif')) {
+      toast.info("Processing HEIC image...")
     }
 
     // Create preview
     const reader = new FileReader()
     reader.onload = () => {
       setImagePreview(reader.result as string)
+    }
+    reader.onerror = () => {
+      toast.error("Failed to read image file")
     }
     reader.readAsDataURL(file)
 
@@ -223,6 +251,14 @@ export default function CreatePostForm({
     setFormErrors({})
     setActiveTab("content")
     setFormProgress(0)
+    
+    // Clear file inputs
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = ""
+    }
   }
 
   // Form validation
@@ -488,36 +524,72 @@ export default function CreatePostForm({
                                 Tap to add an image
                               </p>
                               <p className="text-xs md:text-sm text-muted-foreground text-center mb-4">
-                                Recommended size: 1200 x 800 pixels (Max: 5MB)
+                                Supports JPEG, PNG, WebP, GIF, HEIC, and more • Max: 10MB
                               </p>
+                              {/* Hidden file inputs */}
                               <input
                                 type="file"
-                                accept="image/*"
+                                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,image/bmp,image/tiff"
                                 className="hidden"
                                 id="post-image-upload"
                                 ref={fileInputRef}
                                 onChange={handleImageUpload}
                                 disabled={isUploading}
                               />
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="cursor-pointer"
-                                type="button"
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,image/bmp,image/tiff"
+                                capture="environment"
+                                className="hidden"
+                                id="post-camera-upload"
+                                ref={cameraInputRef}
+                                onChange={handleImageUpload}
                                 disabled={isUploading}
-                              >
-                                {isUploading ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                    Uploading... {uploadProgress.toFixed(0)}%
-                                  </>
-                                ) : (
-                                  <>
-                                    <Upload className="h-4 w-4 mr-2" />
-                                    Upload Image
-                                  </>
-                                )}
-                              </Button>
+                              />
+                              
+                              {/* Upload buttons */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="cursor-pointer h-12"
+                                  type="button"
+                                  disabled={isUploading}
+                                  onClick={() => cameraInputRef.current?.click()}
+                                >
+                                  {isUploading ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Camera className="h-4 w-4 mr-2" />
+                                      Take Photo
+                                    </>
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="cursor-pointer h-12"
+                                  type="button"
+                                  disabled={isUploading}
+                                  onClick={() => fileInputRef.current?.click()}
+                                >
+                                  {isUploading ? (
+                                    <>
+                                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                      Uploading...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      Choose Photo
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                               {uploadError && <p className="text-red-500 text-xs md:text-sm mt-2">{uploadError}</p>}
                             </div>
                           ) : (
@@ -537,6 +609,12 @@ export default function CreatePostForm({
                                     onClick={() => {
                                       setPostImage(null)
                                       setImagePreview(null)
+                                      if (fileInputRef.current) {
+                                        fileInputRef.current.value = ""
+                                      }
+                                      if (cameraInputRef.current) {
+                                        cameraInputRef.current.value = ""
+                                      }
                                     }}
                                     type="button"
                                     disabled={isUploading}
@@ -561,9 +639,10 @@ export default function CreatePostForm({
                                   </Button>
                                   <input
                                     type="file"
-                                    accept="image/*"
+                                    accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,image/bmp,image/tiff"
+                                    capture="environment"
                                     className="hidden"
-                                    id="post-image-upload"
+                                    id="post-image-upload-change"
                                     ref={fileInputRef}
                                     onChange={handleImageUpload}
                                     disabled={isUploading}

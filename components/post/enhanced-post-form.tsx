@@ -44,18 +44,54 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Handle image selection
+  // Handle image selection with format validation
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      setSelectedImage(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!file) return
+
+    // Validate file size (max 10MB for social media)
+    const maxSize = 10 * 1024 * 1024 // 10MB
+    if (file.size > maxSize) {
+      toast.error("Image must be less than 10MB")
+      return
     }
+
+    // Validate file type
+    const allowedTypes = [
+      'image/jpeg',
+      'image/jpg', 
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/heic',
+      'image/heif',
+      'image/avif',
+      'image/bmp',
+      'image/tiff'
+    ]
+
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      toast.error("Please select a valid image format (JPEG, PNG, WebP, GIF, HEIC, etc.)")
+      return
+    }
+
+    setSelectedImage(file)
+    
+    // For HEIC files, show a loading state since they might need conversion
+    if (file.type.toLowerCase().includes('heic') || file.type.toLowerCase().includes('heif')) {
+      toast.info("Processing HEIC image...")
+    }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string)
+    }
+    reader.onerror = () => {
+      toast.error("Failed to read image file")
+    }
+    reader.readAsDataURL(file)
   }, [])
 
   // Remove selected image
@@ -64,6 +100,9 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
     setImagePreview(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = ""
     }
   }, [])
 
@@ -114,6 +153,9 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
         setImagePreview(null)
         if (fileInputRef.current) {
           fileInputRef.current.value = ""
+        }
+        if (cameraInputRef.current) {
+          cameraInputRef.current.value = ""
         }
         
         // Call callbacks
@@ -299,10 +341,20 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
           {/* Image Upload */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Image (optional)</Label>
+            
+            {/* Hidden file inputs for different capture modes */}
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,image/bmp,image/tiff"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif,image/avif,image/bmp,image/tiff"
+              capture="environment"
               onChange={handleImageSelect}
               className="hidden"
             />
@@ -325,18 +377,32 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
                 </Button>
               </div>
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full h-20 border-dashed border-2 touch-manipulation"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="flex flex-col items-center gap-1">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-20 border-dashed border-2 touch-manipulation flex flex-col items-center gap-1"
+                  onClick={() => cameraInputRef.current?.click()}
+                >
+                  <Camera className="h-5 w-5 text-gray-400" />
+                  <span className="text-xs text-gray-500">Take Photo</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-20 border-dashed border-2 touch-manipulation flex flex-col items-center gap-1"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <ImageIcon className="h-5 w-5 text-gray-400" />
-                  <span className="text-xs text-gray-500">Add image</span>
-                </div>
-              </Button>
+                  <span className="text-xs text-gray-500">Choose Photo</span>
+                </Button>
+              </div>
             )}
+            
+            {/* Format support info */}
+            <p className="text-xs text-gray-500 text-center">
+              Supports JPEG, PNG, WebP, GIF, HEIC, and more • Max 10MB
+            </p>
           </div>
         </div>
 
