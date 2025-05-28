@@ -126,6 +126,36 @@
     min-width: 44px;
     padding: 12px 16px;
   }
+
+  /* Ensure content doesn't get hidden behind floating elements */
+  .mobile-content {
+    padding-bottom: 90px; /* Reduced padding for mobile nav + FAB space */
+  }
+
+  /* Specific padding for pages with bottom content */
+  .mobile-feed-container {
+    padding-bottom: 70px; /* Just space for mobile nav since feed is fullscreen */
+  }
+
+  /* Safe zones for floating elements */
+  .mobile-safe-zone {
+    margin-bottom: 80px; /* Reduced margin for FAB */
+  }
+
+  /* Global mobile page padding to prevent FAB overlap */
+  body {
+    padding-bottom: 0;
+  }
+
+  /* Container padding for all pages */
+  main, .main-content {
+    padding-bottom: 90px; /* Reduced space for mobile nav + FAB */
+  }
+
+  /* Special handling for fullscreen content like feeds */
+  .fullscreen-content {
+    padding-bottom: 70px; /* Just mobile nav space */
+  }
   
   /* Improved tap highlighting */
   button, .button, a {

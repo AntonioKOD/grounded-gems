@@ -20,6 +20,7 @@ import { LocationSubscriptions } from './collections/LocationSubscriptions'
 import { EventRequests } from './collections/EventRequests'
 import { LocationInteractions } from './collections/LocationInteractions'
 import { MatchmakingSessions } from './collections/MatchmakingSessions'
+import { Journeys } from './collections/Journeys'
 
 export default buildConfig({
   
@@ -86,5 +87,6 @@ export default buildConfig({
     EventRequests,
     LocationInteractions,
     MatchmakingSessions,
+    Journeys,
   ],
 })

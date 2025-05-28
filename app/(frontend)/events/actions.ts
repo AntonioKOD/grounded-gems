@@ -11,6 +11,7 @@ import { LocationFormData } from "@/types/location"
 import type { Where } from "payload"
 
 import {cookies } from "next/headers"
+import { getServerSideUser } from '@/lib/auth-server'
 
 export async function createEvent(formData: EventFormData, userId: string, userName: string, userAvatar?: string) {
   try {
@@ -1119,4 +1120,43 @@ export async function createLocation(data: LocationFormData) {
       error: error instanceof Error ? error.message : "Failed to create location",
     }
   }
+}
+
+export async function getSavedGemJourneys() {
+  const user = await getServerSideUser()
+  if (!user) return []
+
+  const payload = await getPayload({ config })
+  const dbUser = await payload.findByID({ collection: 'users', id: user.id, depth: 0 })
+  const savedJourneyIds = Array.isArray(dbUser.savedGemJourneys)
+    ? dbUser.savedGemJourneys.map((j: any) => typeof j === 'string' ? j : j.id || j._id)
+    : []
+
+  if (!savedJourneyIds.length) return []
+
+  const journeys = await payload.find({
+    collection: 'journeys',
+    where: { id: { in: savedJourneyIds } },
+    depth: 2,
+    limit: 100,
+  })
+
+  return journeys.docs
+}
+
+export async function saveGemJourney(journeyId: string) {
+  const user = await getServerSideUser()
+  if (!user) return { success: false, error: 'Unauthorized' }
+  const payload = await getPayload({ config })
+  const dbUser = await payload.findByID({ collection: 'users', id: user.id, depth: 0 })
+  const savedJourneyIds = Array.isArray(dbUser.savedGemJourneys)
+    ? dbUser.savedGemJourneys.map((j: any) => typeof j === 'string' ? j : j.id || j._id)
+    : []
+  if (savedJourneyIds.includes(journeyId)) return { success: true }
+  await payload.update({
+    collection: 'users',
+    id: user.id,
+    data: { savedGemJourneys: [...savedJourneyIds, journeyId] }
+  })
+  return { success: true }
 }

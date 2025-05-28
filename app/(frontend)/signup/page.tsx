@@ -1,8 +1,7 @@
 
-export const dynamic = "force-dynamic"
-
-import SignupForm from "@/components/SignupForm"
+import { redirect } from 'next/navigation'
 
 export default function SignupPage() {
-  return <SignupForm />
+  // Redirect to enhanced signup
+  redirect('/signup/enhanced')
 }

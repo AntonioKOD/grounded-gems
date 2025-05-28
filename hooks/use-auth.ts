@@ -93,23 +93,25 @@ export function useAuth() {
 
   const logout = useCallback(async () => {
     try {
+      // Call backend logout API to clear session/cookie
+      await fetch('/api/users/logout', { method: 'POST', credentials: 'include' })
       await dispatch(logoutUserAction()).unwrap()
       // Clear all related state
       dispatch(clearPostInteractions())
       dispatch(clearFeed())
-      
       // Reset circuit breaker on logout
       circuitBreaker.failures = 0
       circuitBreaker.isOpen = false
       fetchAttempted.current = false
-      
       // Dispatch logout event for other components
       window.dispatchEvent(new Event('logout-success'))
+      // Redirect to login page
+      router.push('/login')
     } catch (error) {
       console.error('Logout failed:', error)
       throw error
     }
-  }, [dispatch])
+  }, [dispatch, router])
 
   const preloadUser = useCallback((userData: UserData) => {
     dispatch(setUser(userData))

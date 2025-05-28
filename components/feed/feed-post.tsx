@@ -408,32 +408,30 @@ export const FeedPost = memo(function FeedPost({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </div>
 
-            {/* Save Button */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="group flex items-center gap-3 hover:bg-white rounded-full px-3 py-2 transition-all"
-                    onClick={handleSave}
-                    disabled={isSaving}
-                  >
-                    <div className={`p-2 rounded-full group-hover:bg-yellow-50 transition-all transform group-active:scale-90 ${
-                      isSaved ? 'text-yellow-500 bg-yellow-50' : 'text-gray-600'
-                    }`}>
-                      <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} />
-                    </div>
-                    <span className={`text-sm font-semibold ${isSaved ? 'text-yellow-500' : 'text-gray-600'}`}>
-                      {saveCount}
-                    </span>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{isSaved ? 'Remove from saved' : 'Save'} this post</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+              {/* Save Button - moved here */}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      className="group flex items-center gap-3 hover:bg-white rounded-full px-3 py-2 transition-all"
+                      onClick={handleSave}
+                      disabled={isSaving}
+                    >
+                      <div className={`p-2 rounded-full group-hover:bg-yellow-50 transition-all transform group-active:scale-90 ${
+                        isSaved ? 'text-yellow-500 bg-yellow-50' : 'text-gray-600'
+                      }`}>
+                        <Bookmark className={`h-5 w-5 ${isSaved ? 'fill-current' : ''}`} />
+                      </div>
+                      <span className={`text-sm font-semibold ${isSaved ? 'text-yellow-500' : 'text-gray-600'}`}>{saveCount}</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isSaved ? 'Remove from saved' : 'Save'} this post</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         </CardFooter>
       </Card>

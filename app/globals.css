@@ -293,6 +293,30 @@
   .button-press {
     animation: button-press 0.2s ease-in-out;
   }
+
+  /* FAB-specific bottom positioning for mobile navigation */
+  .bottom-fab {
+    /* Mobile: position above mobile nav (h-16 = 4rem) + safe area + spacing */
+    bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+}
+
+@media (min-width: 768px) {
+  .bottom-fab {
+    /* Desktop: normal bottom positioning */
+    bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  }
+}
+
+/* Floating button styles */
+.floating-button-wrapper {
+  position: fixed;
+  z-index: 40; /* Below mobile nav (z-50) but above content */
+  /* pointer-events: none; */
+}
+
+.floating-button-wrapper > * {
+  pointer-events: auto;
 }
 
 /* Tablet specific styles */
@@ -452,4 +476,17 @@
   background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.1), transparent);
   transform: translateY(-100%);
   animation: connection-flow 3s ease-in-out infinite;
+}
+
+/* Safe area utilities */
+.bottom-safe {
+  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+}
+
+.right-safe {
+  right: max(16px, env(safe-area-inset-right, 16px));
+}
+
+.left-safe {
+  left: max(16px, env(safe-area-inset-left, 16px));
 } 

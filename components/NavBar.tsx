@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import Image from 'next/image'
+import NotificationCenter from "@/components/notifications/notification-center"
 
 interface NavBarProps {
   initialUser?: any; // Keep for compatibility but don't use
@@ -214,18 +215,8 @@ export default function NavBar({ initialUser }: NavBarProps) {
 
               {/* Notifications Button */}
               <div className="relative">
-                <Link href="/notifications">
-                  <Button variant="ghost" size="icon" className="text-gray-600 hover:text-[#FF6B6B] hover:bg-gray-50 transition-all">
-                    <Bell className="h-5 w-5" />
-                  </Button>
-                </Link>
-                {notificationCount > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 text-xs bg-gradient-to-r from-[#FF6B6B] to-[#FF6B6B]/90"
-                  >
-                    {notificationCount > 99 ? '99+' : notificationCount}
-                  </Badge>
+                {user?.id && (
+                  <NotificationCenter userId={user.id} />
                 )}
               </div>
 

@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { resend } from "./resend"
-import nodemailer from 'nodemailer'
 
 export async function sendVerificationEmail(
   email: string,
@@ -91,49 +90,14 @@ interface EmailOptions {
   text?: string
 }
 
-// Create transporter
-const createTransporter = () => {
-  const host = process.env.EMAIL_HOST || 'smtp.gmail.com'
-  const port = parseInt(process.env.EMAIL_PORT || '587')
-  const user = process.env.EMAIL_USER
-  const pass = process.env.EMAIL_PASS
-
-  if (!user || !pass) {
-    console.warn('Email credentials not configured. Email notifications will be skipped.')
-    return null
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // true for 465, false for other ports
-    auth: {
-      user,
-      pass,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-  })
-}
-
 export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
   try {
-    const transporter = createTransporter()
-    
-    if (!transporter) {
-      console.log('Email transporter not configured, skipping email notification')
-      return false
-    }
-
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+    await resend.emails.send({
+      from: `Grounded Gems <info@groundedgems.com>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
-      text: options.text || options.html.replace(/<[^>]*>/g, ''), // Strip HTML for text version
     })
-
     console.log('Email sent successfully to:', options.to)
     return true
   } catch (error) {
@@ -248,3 +212,34 @@ export const eventRequestEmailTemplate = {
     `,
   }),
 }
+
+export const journeyInviteEmailTemplate = (data: {
+  inviteeName: string
+  inviteeEmail: string
+  journeyTitle: string
+  journeySummary: string
+  inviterName: string
+  journeyUrl: string
+}) => ({
+  subject: `You're invited to join a Gem Journey: ${data.journeyTitle}`,
+  html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #FF6B6B;">You've been invited to a Gem Journey!</h2>
+      <p>Hi ${data.inviteeName || data.inviteeEmail},</p>
+      <p><strong>${data.inviterName}</strong> has invited you to join the journey <strong>"${data.journeyTitle}"</strong> on Grounded Gems.</p>
+      <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #333;">Journey Details</h3>
+        <p><strong>Title:</strong> ${data.journeyTitle}</p>
+        <p><strong>Summary:</strong> ${data.journeySummary}</p>
+      </div>
+      <p>
+        <a href="${data.journeyUrl}" 
+           style="background: #4ECDC4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+          View Journey & Accept Invite
+        </a>
+      </p>
+      <p>We hope you enjoy planning and sharing your adventures together!</p>
+      <p style="margin-top: 32px; color: #888; font-size: 13px;">— The Grounded Gems Team</p>
+    </div>
+  `,
+})

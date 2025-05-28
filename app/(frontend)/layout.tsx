@@ -7,7 +7,8 @@ import StoreProvider from "@/app/StoreProvider"
 import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
-import AuthTest from "@/components/auth/auth-test"
+import FloatingSearchWrapper from "@/components/ui/floating-search-wrapper"
+
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -63,11 +64,16 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <body>
         <StoreProvider initialUser={initialUser}>
           <NavigationWrapper initialUser={initialUser} />
-          {children}
+          <main className="min-h-screen w-full bg-white fullscreen-content md:pt-0">
+            {children}
+          </main>
           <Footer />
           <PWAInstallBanner />
           <Toaster />
-          <AuthTest />
+          {/* Desktop FAB remains in its place */}
+          <div className="hidden md:block">
+            <FloatingSearchWrapper />
+          </div>
         </StoreProvider>
         
         {/* Service Worker Registration */}

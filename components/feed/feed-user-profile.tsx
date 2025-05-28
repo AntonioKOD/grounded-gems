@@ -16,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { logoutUser } from "@/app/actions"
+import { logoutUser } from "@/lib/auth"
 
 interface FeedUserProfileProps {
   user: any
@@ -60,11 +60,8 @@ export default function FeedUserProfile({
   const handleLogout = async () => {
     try {
       setIsLoggingOut(true)
-      await logoutUser()
-      
+      await logoutUser();
       toast.success("Logged out successfully")
-      router.push("/login")
-      router.refresh()
     } catch (error) {
       console.error("Error logging out:", error)
       toast.error("Failed to log out")

@@ -315,7 +315,18 @@ interface SignupInput {
   coords: {
     latitude: number;
     longitude: number;
-  }
+  };
+  additionalData?: {
+    username?: string;
+    interests?: string[];
+    onboardingData?: {
+      primaryUseCase?: string;
+      travelRadius?: string;
+      budgetPreference?: string;
+      onboardingCompleted?: boolean;
+      signupStep?: number;
+    };
+  };
 }
 
 
@@ -323,22 +334,38 @@ interface SignupInput {
 export async function signupUser(data: SignupInput){
   const payload = await getPayload({ config: config });
   try{
+    // Prepare user data with additional fields
+    const userData: any = {
+      email: data.email,
+      password: data.password,
+      name: data.name,
+      location: {
+        coordinates: {
+          latitude: data.coords.latitude,
+          longitude: data.coords.longitude,
+        }
+      }
+    };
+
+    // Add additional data if provided
+    if (data.additionalData) {
+      if (data.additionalData.username) {
+        userData.username = data.additionalData.username;
+      }
+      if (data.additionalData.interests) {
+        userData.interests = data.additionalData.interests;
+      }
+      if (data.additionalData.onboardingData) {
+        userData.onboardingData = data.additionalData.onboardingData;
+      }
+    }
+
     const user = await payload.create({
       collection: 'users',
-      data: {
-        email: data.email,
-        password: data.password,
-        name: data.name,
-        location: {
-          coordinates: {
-            latitude: data.coords.latitude,
-            longitude: data.coords.longitude,
-          }
-        }
-      },
+      data: userData,
+    });
     
-    })
-        return user
+    return user;
   } catch (error) { 
     console.error('Error creating user:', error);
     throw new Error('User creation failed');
@@ -1558,21 +1585,85 @@ export async function getNotifications(userId: string, limit = 10): Promise<Noti
       depth: 2, // Load related entities
     })
 
-    return notifications.map((notification) => ({
-      id: String(notification.id), // Ensure id is a string
-      recipient: notification.recipient,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      relatedTo: notification.relatedTo
-        ? {
-            id: typeof notification.relatedTo === "object" ? notification.relatedTo.id : notification.relatedTo,
-            collection: notification.relatedTo.relationTo,
+    // For journey reminders, fetch invite status
+    const enhancedNotifications = await Promise.all(
+      notifications.map(async (notification) => {
+        let inviteStatus: 'pending' | 'accepted' | 'declined' | undefined = undefined
+        let journeyTitle: string | undefined = undefined
+        let journeyOwner: string | undefined = undefined
+        if (
+          notification.type === 'reminder' &&
+          notification.relatedTo &&
+          notification.relatedTo.relationTo === 'journeys'
+        ) {
+          try {
+            let journeyId = undefined;
+            if (typeof notification.relatedTo === 'object') {
+              if (typeof notification.relatedTo.id === 'string') {
+                journeyId = notification.relatedTo.id;
+              } else if (
+                notification.relatedTo.value &&
+                typeof notification.relatedTo.value === 'string'
+              ) {
+                journeyId = notification.relatedTo.value;
+              } else if (
+                notification.relatedTo.value &&
+                typeof notification.relatedTo.value === 'object' &&
+                typeof notification.relatedTo.value.id === 'string'
+              ) {
+                journeyId = notification.relatedTo.value.id;
+              }
+            } else {
+              journeyId = notification.relatedTo;
+            }
+            if (!journeyId) throw new Error('No journey ID found in notification.relatedTo');
+            const journey = await payload.findByID({
+              collection: 'journeys',
+              id: journeyId,
+            })
+            if (journey) {
+              const invitee = (journey.invitees || []).find((inv: any) => String(inv.user) === String(userId))
+              inviteStatus = invitee?.status || 'pending'
+              journeyTitle = journey.title
+              journeyOwner = journey.owner?.name || journey.owner?.email || ''
+            }
+          } catch (err: any) {
+            if (err?.status === 404 || err?.message?.includes('Not Found')) {
+              // Journey not found, skip setting journey fields
+              // Optionally log at debug level
+              if (process.env.NODE_ENV !== 'production') {
+                console.debug('Journey not found for notification:', notification.relatedTo)
+              }
+            } else {
+              console.error('Error fetching journey for notification:', err)
+            }
           }
-        : undefined,
-      read: notification.read,
-      createdAt: notification.createdAt,
-    }))
+        }
+        return {
+          id: String(notification.id),
+          recipient: notification.recipient,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          relatedTo: notification.relatedTo
+            ? {
+                id:
+                  typeof notification.relatedTo === "object"
+                    ? (notification.relatedTo.id || notification.relatedTo.value)
+                    : notification.relatedTo,
+                collection:
+                  notification.relatedTo.relationTo || notification.relatedTo.collection,
+              }
+            : undefined,
+          read: notification.read,
+          createdAt: notification.createdAt,
+          inviteStatus,
+          journeyTitle,
+          journeyOwner,
+        }
+      })
+    )
+    return enhancedNotifications
   } catch (error) {
     console.error("Error fetching notifications:", error)
     return []
@@ -3992,6 +4083,152 @@ export async function getCommentsWithReplies(postId: string, currentUserId?: str
   } catch (error) {
     console.error("Error fetching comments with replies:", error)
     return []
+  }
+}
+
+// Add personalized location actions
+export async function getPersonalizedLocations(
+  userId: string,
+  limit = 20,
+  offset = 0
+): Promise<any[]> {
+  'use server'
+  
+  try {
+    const { locationPersonalizationService } = await import('@/lib/features/locations/personalization-service');
+    return await locationPersonalizationService.getPersonalizedLocations(userId, limit, offset);
+  } catch (error) {
+    console.error('Error getting personalized locations:', error);
+    return [];
+  }
+}
+
+export async function getFilteredLocationsAction(
+  userId: string,
+  filters: {
+    category?: string;
+    priceRange?: string;
+    radius?: number;
+    isOpen?: boolean;
+    rating?: number;
+  },
+  limit = 20,
+  offset = 0
+): Promise<any[]> {
+  'use server'
+  
+  try {
+    const { locationPersonalizationService } = await import('@/lib/features/locations/personalization-service');
+    return await locationPersonalizationService.getFilteredLocations(userId, filters, limit, offset);
+  } catch (error) {
+    console.error('Error getting filtered locations:', error);
+    return [];
+  }
+}
+
+/**
+ * Get user's personalization preferences for display
+ */
+export async function getUserPersonalizationData(userId: string): Promise<{
+  hasCompletedOnboarding: boolean;
+  interests: string[];
+  primaryUseCase?: string;
+  budgetPreference?: string;
+  travelRadius?: string;
+  preferencesSummary: string[];
+}> {
+  'use server'
+  
+  try {
+    const payload = await getPayload({ config });
+    
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+      depth: 1,
+    });
+
+    if (!user) {
+      return {
+        hasCompletedOnboarding: false,
+        interests: [],
+        preferencesSummary: [],
+      };
+    }
+
+    const hasCompletedOnboarding = user.onboardingData?.onboardingCompleted || false;
+    const interests = user.interests || [];
+    const onboardingData = user.onboardingData || {};
+
+    // Generate a summary of preferences
+    const preferencesSummary: string[] = [];
+    
+    if (interests.length > 0) {
+      const interestLabels = interests.map(interest => {
+        const interestMap: { [key: string]: string } = {
+          coffee: 'Coffee Shops',
+          restaurants: 'Restaurants', 
+          nature: 'Nature & Parks',
+          photography: 'Photography Spots',
+          nightlife: 'Nightlife',
+          shopping: 'Shopping',
+          arts: 'Arts & Culture',
+          sports: 'Sports & Recreation',
+          markets: 'Markets & Local Business',
+          events: 'Events & Entertainment'
+        };
+        return interestMap[interest] || interest;
+      });
+      preferencesSummary.push(`Interested in ${interestLabels.join(', ')}`);
+    }
+    
+    if (onboardingData.primaryUseCase) {
+      const useCaseMap: { [key: string]: string } = {
+        explore: 'discovering new places',
+        plan: 'planning outings',
+        share: 'sharing discoveries',
+        connect: 'meeting people',
+      };
+      preferencesSummary.push(`Primarily uses app for ${useCaseMap[onboardingData.primaryUseCase] || onboardingData.primaryUseCase}`);
+    }
+    
+    if (onboardingData.budgetPreference) {
+      const budgetMap: { [key: string]: string } = {
+        free: 'free activities',
+        budget: 'budget-friendly places',
+        moderate: 'moderately priced places',
+        premium: 'premium places',
+        luxury: 'luxury places'
+      };
+      preferencesSummary.push(`Prefers ${budgetMap[onboardingData.budgetPreference] || onboardingData.budgetPreference}`);
+    }
+    
+    if (onboardingData.travelRadius) {
+      const radiusMap: { [key: string]: string } = {
+        '0.5': 'walking distance',
+        '2': 'nearby (2 mi)',
+        '5': 'local area (5 mi)', 
+        '15': 'extended area (15 mi)',
+        'unlimited': 'anywhere',
+      };
+      preferencesSummary.push(`Willing to travel ${radiusMap[onboardingData.travelRadius] || onboardingData.travelRadius}`);
+    }
+
+    return {
+      hasCompletedOnboarding,
+      interests,
+      primaryUseCase: onboardingData.primaryUseCase,
+      budgetPreference: onboardingData.budgetPreference,
+      travelRadius: onboardingData.travelRadius,
+      preferencesSummary,
+    };
+  } catch (error) {
+    console.error('Error getting user personalization data:', error);
+    return {
+      hasCompletedOnboarding: false,
+      interests: [],
+      preferencesSummary: [],
+    };
   }
 }
 

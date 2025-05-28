@@ -196,7 +196,7 @@ export const Users: CollectionConfig = {
       admin: {
         description: 'Unique username for the user (no spaces, lowercase)'
       },
-      validate: (value: string) => {
+      validate: (value: any) => {
         if (!value) return 'Username is required'
         if (!/^[a-z0-9_-].+$/.test(value)) {
           return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'
@@ -226,7 +226,26 @@ export const Users: CollectionConfig = {
         },
       ],
     },
-    { name: 'interests', type: 'array', fields: [{ name: 'interest', type: 'text' }] },
+    { 
+      name: 'interests', 
+      type: 'select', 
+      hasMany: true,
+      options: [
+        { label: 'Coffee Shops', value: 'coffee' },
+        { label: 'Restaurants', value: 'restaurants' },
+        { label: 'Nature & Parks', value: 'nature' },
+        { label: 'Photography Spots', value: 'photography' },
+        { label: 'Nightlife', value: 'nightlife' },
+        { label: 'Shopping', value: 'shopping' },
+        { label: 'Arts & Culture', value: 'arts' },
+        { label: 'Sports & Recreation', value: 'sports' },
+        { label: 'Markets & Local Business', value: 'markets' },
+        { label: 'Events & Entertainment', value: 'events' }
+      ],
+      admin: {
+        description: 'Select your main interests for personalized recommendations'
+      }
+    },
     { name: 'isCreator', type: 'checkbox', defaultValue: false },
     {
       name: 'creatorLevel',
@@ -257,6 +276,78 @@ export const Users: CollectionConfig = {
     { name: 'following', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'likedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
     { name: 'savedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
+    // Add persistent savedGemJourneys field
+    {
+      name: 'savedGemJourneys',
+      type: 'relationship',
+      relationTo: 'journeys',
+      hasMany: true,
+      admin: {
+        description: 'Journeys saved by the user (Gem Journeys)'
+      }
+    },
+    // Simplified onboarding preferences
+    {
+      name: 'onboardingData',
+      type: 'group',
+      admin: {
+        description: 'Essential user preferences for personalization'
+      },
+      fields: [
+        {
+          name: 'primaryUseCase',
+          type: 'select',
+          options: [
+            { label: 'Discover new places', value: 'explore' },
+            { label: 'Plan outings', value: 'plan' },
+            { label: 'Share discoveries', value: 'share' },
+            { label: 'Meet like-minded people', value: 'connect' }
+          ],
+          admin: {
+            description: 'How the user primarily wants to use the app'
+          }
+        },
+        {
+          name: 'travelRadius',
+          type: 'select',
+          options: [
+            { label: 'Walking distance (0.5 mi)', value: '0.5' },
+            { label: 'Nearby (2 mi)', value: '2' },
+            { label: 'Local area (5 mi)', value: '5' },
+            { label: 'Extended area (15 mi)', value: '15' },
+            { label: 'Anywhere', value: 'unlimited' }
+          ],
+          defaultValue: '5'
+        },
+        {
+          name: 'budgetPreference',
+          type: 'select',
+          options: [
+            { label: 'Free activities', value: 'free' },
+            { label: 'Budget-friendly ($)', value: 'budget' },
+            { label: 'Moderate ($$)', value: 'moderate' },
+            { label: 'Premium ($$$)', value: 'premium' },
+            { label: 'Luxury ($$$$)', value: 'luxury' }
+          ]
+        },
+        { 
+          name: 'onboardingCompleted', 
+          type: 'checkbox', 
+          defaultValue: false,
+          admin: {
+            description: 'Whether user completed the basic onboarding flow'
+          }
+        },
+        { 
+          name: 'signupStep', 
+          type: 'number', 
+          defaultValue: 1,
+          admin: {
+            description: 'Current step in signup process (1-3)'
+          }
+        }
+      ]
+    },
     {
       name: 'sportsPreferences',
       type: 'group',

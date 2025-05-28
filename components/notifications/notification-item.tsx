@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { useState } from "react"
 
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
@@ -11,7 +12,7 @@ import type { Notification } from "@/types/notification"
 import { markNotificationAsRead, deleteNotification } from "@/app/actions"
 
 // Icons for different notification types
-import { UserPlus, Heart, MessageSquare, AtSign, Bell, Calendar } from "lucide-react"
+import { UserPlus, Heart, MessageSquare, AtSign, Bell, Calendar, Sparkles } from "lucide-react"
 
 interface NotificationItemProps {
   notification: Notification
@@ -19,6 +20,9 @@ interface NotificationItemProps {
 }
 
 export default function NotificationItem({ notification, onAction }: NotificationItemProps) {
+  const [actionStatus, setActionStatus] = useState<'idle' | 'accepting' | 'declining' | 'accepted' | 'declined' | 'error'>('idle')
+  const [actionError, setActionError] = useState<string | null>(null)
+
   // Get the appropriate icon based on notification type
   const getIcon = () => {
     switch (notification.type) {
@@ -34,6 +38,8 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return <Bell className="h-4 w-4" />
       case "event_update":
         return <Calendar className="h-4 w-4" />
+      case "invite":
+        return <Sparkles className="h-4 w-4 text-[#FF6B6B]" />
       default:
         return <Bell className="h-4 w-4" />
     }
@@ -54,6 +60,8 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return "bg-yellow-100 text-yellow-600"
       case "event_update":
         return "bg-orange-100 text-orange-600"
+      case "invite":
+        return "bg-yellow-100 text-[#FF6B6B]"
       default:
         return "bg-gray-100 text-gray-600"
     }
@@ -64,6 +72,7 @@ export default function NotificationItem({ notification, onAction }: Notificatio
     if (!notification.relatedTo) return "#"
 
     const { collection, id } = notification.relatedTo
+    if (typeof id !== 'string' || !id) return "#"
 
     switch (collection) {
       case "posts":
@@ -72,6 +81,8 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return `/profile/${id}`
       case "locations":
         return `/location/${id}`
+      case "journeys":
+        return `/profile/me/journey/${id}`
       case "comments":
         // For comments, we need to find the parent post
         // This is simplified - in a real app, you might need to fetch the parent post ID
@@ -97,23 +108,88 @@ export default function NotificationItem({ notification, onAction }: Notificatio
     onAction()
   }
 
+  // Accept/Decline handlers for journey invites
+  const handleInviteAction = async (status: 'accepted' | 'declined') => {
+    if (!notification.relatedTo || notification.relatedTo.collection !== 'journeys') return
+    let journeyId = notification.relatedTo.id
+    if (typeof journeyId !== 'string' && notification.relatedTo && typeof notification.relatedTo === 'object') {
+      journeyId = notification.relatedTo.value
+    }
+    if (typeof journeyId !== 'string' || !journeyId) {
+      setActionStatus('error')
+      setActionError('Invalid journey ID for invite action')
+      return
+    }
+    setActionStatus(status === 'accepted' ? 'accepting' : 'declining')
+    setActionError(null)
+    try {
+      const endpoint = status === 'accepted'
+        ? `/api/journeys/${journeyId}/accept-invite`
+        : `/api/journeys/${journeyId}/decline-invite`
+      const res = await fetch(endpoint, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || 'Failed to update invite status')
+      }
+      setActionStatus(status)
+      await markNotificationAsRead(notification.id)
+      onAction()
+    } catch (err: any) {
+      setActionStatus('error')
+      setActionError(err.message || 'Failed to update invite status')
+    }
+  }
+
+  // Accept/Decline for journey invites
+  const isJourneyInvite = notification.type === 'reminder' && notification.relatedTo?.collection === 'journeys'
+
   return (
-    <Link
-      href={getNotificationLink()}
-      onClick={handleClick}
-      className={cn(
-        "flex items-start gap-3 p-3 hover:bg-gray-50 transition-colors rounded-md relative group",
-        !notification.read && "bg-blue-50/50",
-      )}
-    >
+    <div className={cn(
+      "flex items-start gap-3 p-3 hover:bg-gray-50 transition-colors rounded-md relative group",
+      !notification.read && "bg-blue-50/50",
+    )}>
       <div className={cn("p-2 rounded-full flex-shrink-0", getIconBackground())}>{getIcon()}</div>
 
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm", !notification.read && "font-medium")}>{notification.title}</p>
         {notification.message && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notification.message}</p>}
+        {/* Journey invite details */}
+        {isJourneyInvite && (
+          <div className="mt-1 text-xs text-gray-600">
+            {notification.journeyTitle && <span className="font-semibold">Journey: {notification.journeyTitle}</span>}
+            {notification.journeyOwner && <span className="ml-2">by {notification.journeyOwner}</span>}
+            {notification.inviteStatus && notification.inviteStatus !== 'pending' && (
+              <span className={cn("ml-2 font-semibold", notification.inviteStatus === 'accepted' ? 'text-green-600' : 'text-red-600')}>
+                {notification.inviteStatus === 'accepted' ? 'Accepted' : 'Declined'}
+              </span>
+            )}
+          </div>
+        )}
         <p className="text-xs text-gray-400 mt-1">
           {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
         </p>
+        {/* Accept/Decline for journey invites */}
+        {isJourneyInvite && (!notification.inviteStatus || notification.inviteStatus === 'pending') && (
+          <div className="flex gap-2 mt-2">
+            <Button size="sm" variant="outline" disabled={actionStatus === 'accepting'} onClick={e => { e.preventDefault(); handleInviteAction('accepted') }}>
+              {actionStatus === 'accepting' ? 'Accepting...' : actionStatus === 'accepted' ? 'Accepted!' : 'Accept'}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={actionStatus === 'declining'} onClick={e => { e.preventDefault(); handleInviteAction('declined') }}>
+              {actionStatus === 'declining' ? 'Declining...' : actionStatus === 'declined' ? 'Declined' : 'Decline'}
+            </Button>
+            {getNotificationLink() !== '#' && (
+              <Link href={getNotificationLink()} className="ml-2 text-[#4ECDC4] underline text-xs">View Journey</Link>
+            )}
+            {actionStatus === 'error' && (
+              <span className="text-xs text-red-600 ml-2 font-semibold bg-red-50 border border-red-200 rounded px-2 py-1">
+                {actionError || 'Failed to update invite status'}
+              </span>
+            )}
+          </div>
+        )}
+        {isJourneyInvite && notification.inviteStatus && notification.inviteStatus !== 'pending' && getNotificationLink() !== '#' && (
+          <Link href={getNotificationLink()} className="mt-2 inline-block text-[#4ECDC4] underline text-xs">View Journey</Link>
+        )}
       </div>
 
       <Button
@@ -127,6 +203,6 @@ export default function NotificationItem({ notification, onAction }: Notificatio
       </Button>
 
       {!notification.read && <div className="absolute right-3 top-3 h-2 w-2 rounded-full bg-blue-500" />}
-    </Link>
+    </div>
   )
 }

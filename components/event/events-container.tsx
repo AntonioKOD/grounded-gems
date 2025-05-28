@@ -4,14 +4,14 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback, useMemo, useTransition, useRef } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { Calendar, Filter, Plus, Loader2, UserCircle, MapPin, Clock, ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react'
+import { Calendar, Filter, Plus, Loader2, UserCircle, MapPin, Clock, ChevronDown, Search, SlidersHorizontal, X, Bookmark, Sparkles } from 'lucide-react'
 import { EventCard } from "@/components/event/event-card"
 import EventsFilter from "@/components/event/events-filter"
-import { getNearbyEventsAction, getUserEventsByCategory } from "@/app/(frontend)/events/actions"
+import { getNearbyEventsAction, getUserEventsByCategory, getNotifications, getSavedGemJourneys } from "@/app/(frontend)/events/actions"
 import type { Event } from "@/types/event"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -23,14 +23,26 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/hooks/use-auth"
+import SavedGemJourneysClient from './SavedGemJourneysClient'
 
 export default function EventsContainer({
   initialUserId,
+  savedJourneys,
+  initialSearchParams
 }: {
-  initialUserId?: string
+  initialUserId?: string,
+  savedJourneys: any[],
+  initialSearchParams: any
 }) {
   const router = useRouter()
-  const searchParams = useSearchParams()
+  // Convert initialSearchParams to URLSearchParams
+  const searchParams = new URLSearchParams(
+    typeof initialSearchParams === "string"
+      ? initialSearchParams
+      : Object.entries(initialSearchParams)
+          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+          .join("&")
+  )
   const [isPending, startTransition] = useTransition()
   const isMounted = useRef(true)
 
@@ -60,6 +72,7 @@ export default function EventsContainer({
   const [createdEvents, setCreatedEvents] = useState<Event[]>([])
   const [joinedEvents, setJoinedEvents] = useState<Event[]>([])
   const [isLoadingMyEvents, setIsLoadingMyEvents] = useState(false)
+  const [attendingJourneys, setAttendingJourneys] = useState<any[]>([])
 
   // Filter state with default values from URL or set defaults
   const [eventOptions, setEventOptions] = useState<EventFilterOptions>({
@@ -207,12 +220,19 @@ export default function EventsContainer({
     setIsLoadingMyEvents(true)
     try {
       const eventsData = await getUserEventsByCategory(user.id)
-
+      // Fetch journeys where user is an accepted invitee
+      const journeysRes = await fetch(`/api/journeys?attendingFor=${user.id}`)
+      const journeysData = await journeysRes.json()
+      const attending = Array.isArray(journeysData.journeys)
+        ? journeysData.journeys.filter((j: any) => (j.invitees || []).some((inv: any) => String(inv.user) === String(user.id) && inv.status === 'accepted'))
+        : []
+      // Fetch saved journeys using server action
+      const saved = await getSavedGemJourneys()
       if (!isMounted.current) return
-
       if (eventsData.success) {
         setCreatedEvents((eventsData.createdEvents || []) as Event[])
         setJoinedEvents((eventsData.joinedEvents || []) as Event[])
+        setAttendingJourneys(attending)
       } else {
         toast.error("Failed to load your events")
       }
@@ -468,6 +488,43 @@ export default function EventsContainer({
           joinedEvents,
           "You're not attending any events yet. Browse events and join ones that interest you!",
         )}
+
+        {/* Journeys You're Attending */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-[#4ECDC4] flex items-center gap-2">
+            <span>Journeys You're Attending</span>
+            <span className="inline-block bg-[#FF6B6B]/10 text-[#FF6B6B] rounded-full px-2 py-0.5 text-xs font-semibold">{attendingJourneys.length}</span>
+          </h3>
+          {attendingJourneys.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-track-gray-100">
+              {attendingJourneys.map((journey: any) => (
+                <div key={journey.id} className="border rounded-lg p-4 bg-white shadow flex flex-col gap-1">
+                  <div className="font-semibold text-[#FF6B6B] text-lg mb-1 flex items-center gap-2">
+                    <span className="inline-block bg-[#FFD93D] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold">Journey</span>
+                    {journey.title}
+                  </div>
+                  <div className="text-gray-700 text-sm mb-1 line-clamp-2">{journey.summary}</div>
+                  {journey.context && <div className="text-xs text-gray-500 mb-1">Context: {journey.context}</div>}
+                  <div className="text-xs text-gray-400">Date: {journey.date}</div>
+                  <Link href={`/profile/me/journey/${journey.id}`} className="text-xs text-[#4ECDC4] underline mt-2">View Journey</Link>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 border rounded-lg bg-gray-50 shadow-sm">
+              <span className="text-gray-500">You're not attending any journeys yet.</span>
+            </div>
+          )}
+        </div>
+
+        {/* Saved Gem Journeys */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-[#FFD93D] flex items-center gap-2">
+            <Bookmark className="h-5 w-5 text-[#FFD93D]" />
+            <span>Saved Gem Journeys</span>
+          </h3>
+          <SavedGemJourneysClient plans={savedJourneys} />
+        </div>
       </div>
     )
   }

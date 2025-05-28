@@ -125,7 +125,6 @@ export default function MobileFeedContainer({
     { id: "discover", name: "Discover", icon: Sparkles },
     { id: "trending", name: "Popular", icon: Flame },
     { id: "recent", name: "Latest", icon: Clock },
-    { id: "bookmarks", name: "Saved", icon: BookmarkIcon },
   ]
 
   // Set mounted state and load initial data

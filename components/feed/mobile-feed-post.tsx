@@ -240,8 +240,6 @@ const MobileFeedPost = memo(function MobileFeedPost({
     }
   }, [isSaved, post, user, isSaving, onPostUpdated, dispatch, saveCount])
 
-
-
   // Update comment handler - auto-show comments
   const handleComment = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -392,27 +390,25 @@ const MobileFeedPost = memo(function MobileFeedPost({
                     <Share2 className="h-4 w-4 text-white" />
                   </div>
                 </button>
-              </div>
 
-              {/* Save Button */}
-              <button
-                className="group flex items-center gap-2"
-                onClick={handleSave}
-                disabled={isSaving}
-              >
-                <div className={`p-1.5 rounded-full bg-[#FF6B6B]/10 backdrop-blur-sm group-hover:bg-[#FF6B6B]/20 transition-all transform group-active:scale-90 ${
-                  isSaved ? 'text-[#FFE66D]' : 'text-white'
-                }`}>
-                  <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current animate-save' : ''}`} />
-                </div>
-                <span className="text-xs font-medium text-white/90">{saveCount}</span>
-              </button>
+                {/* Save Button - moved here */}
+                <button
+                  className="group flex items-center gap-2"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  <div className={`p-1.5 rounded-full bg-[#FF6B6B]/10 backdrop-blur-sm group-hover:bg-[#FF6B6B]/20 transition-all transform group-active:scale-90 ${
+                    isSaved ? 'text-[#FFE66D]' : 'text-white'
+                  }`}>
+                    <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current animate-save' : ''}`} />
+                  </div>
+                  <span className="text-xs font-medium text-white/90">{saveCount}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </Card>
-
-
 
       <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
         <DialogContent className="sm:max-w-2xl max-h-[80vh] bg-black/95 border-white/20 p-0">

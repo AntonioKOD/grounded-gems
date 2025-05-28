@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import EnhancedPostForm from "@/components/post/enhanced-post-form"
 import type { UserData } from "@/lib/features/user/userSlice"
 import Image from "next/image"
+import FloatingSearchWrapper from './ui/floating-search-wrapper'
 
 interface MobileNavigationProps {
   initialUser: UserData | null;
@@ -51,7 +52,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
       {
         href: "/feed",
         icon: LayoutList,
-        label: "Home",
+        label: "Local Buzz",
         isCenter: false,
       },
       {
@@ -83,7 +84,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
         isCenter: false,
       },
       {
-        href: `/profile/${user?.id}`,
+        href: isAuthenticated ? `/profile/${user?.id}` : "/login",
         icon: Users,
         label: "Profile",
         isCenter: false,
@@ -194,6 +195,10 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
               )
             })}
           </div>
+        </div>
+        {/* Floating search button, absolutely positioned above nav */}
+        <div className="absolute -top-24 right-4 z-60">
+          <FloatingSearchWrapper />
         </div>
       </nav>
     </>

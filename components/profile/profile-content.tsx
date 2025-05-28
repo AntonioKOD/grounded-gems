@@ -40,6 +40,7 @@ import PostsSkeleton from "@/components/feed/posts-skeleton"
 import type { UserProfile } from "@/types/user"
 import Link from "next/link"
 import ResponsiveFeed from "@/components/feed/responsive-feed"
+import { logoutUser } from "@/lib/auth"
 
 export default function ProfileContent({
   initialUserData,
@@ -217,12 +218,7 @@ export default function ProfileContent({
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/users/logout", {
-        method: "POST",
-        credentials: "include",
-      })
-      toast.success("Successfully logged out")
-      router.push("/login")
+      await logoutUser();
     } catch (error) {
       console.error("Logout failed:", error)
       toast.error("Failed to log out")
@@ -403,7 +399,7 @@ export default function ProfileContent({
   const creatorLevel = getCreatorLevelDetails(profile.creatorLevel)
 
   return (
-    <main className="bg-gray-50">
+    <main className="bg-gray-50 mobile-content">
       {/* Hero Section with Cover Image */}
       <div className="relative w-full h-64 md:h-80 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] overflow-hidden">
         {/* Back button */}
@@ -603,6 +599,12 @@ export default function ProfileContent({
                     Posts
                   </TabsTrigger>
                   <TabsTrigger
+                    value="saved"
+                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                  >
+                    Saved
+                  </TabsTrigger>
+                  <TabsTrigger
                     value="about"
                     className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
                   >
@@ -634,6 +636,17 @@ export default function ProfileContent({
                     feedType="user"
                     userId={userId}
                     showPostForm={isCurrentUser}
+                  />
+                </Suspense>
+              </TabsContent>
+
+              <TabsContent value="saved">
+                <Suspense fallback={<PostsSkeleton />}>
+                  <ResponsiveFeed
+                    initialPosts={[]}
+                    feedType="user"
+                    userId={userId}
+                    showPostForm={false}
                   />
                 </Suspense>
               </TabsContent>

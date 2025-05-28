@@ -4,6 +4,7 @@ import { getFeedPosts } from "@/app/actions"
 import FeedSkeleton from "@/components/feed/feed-skeleton"
 import ResponsiveFeed from "@/components/feed/responsive-feed"
 import type { Post } from "@/types/feed"
+import FloatingSearchWrapper from "@/components/ui/floating-search-wrapper"
 
 export const metadata: Metadata = {
   title: "Discover | Grounded Gems",
@@ -24,7 +25,7 @@ export default async function FeedPage() {
   }
 
   return (
-    <main className="min-h-screen w-full bg-black overflow-hidden">
+    <main className="min-h-screen w-full bg-black overflow-hidden fullscreen-content">
       <Suspense fallback={<FeedSkeleton />}>
         <ResponsiveFeed
           initialPosts={initialPosts}
@@ -33,6 +34,10 @@ export default async function FeedPage() {
           showPostForm={true}
         />
       </Suspense>
+      {/* Floating search button in bottom right */}
+      <div className="fixed bottom-fab right-safe z-40 md:hidden">
+        <FloatingSearchWrapper />
+      </div>
     </main>
   )
 }

@@ -1,14 +1,10 @@
-// app/(frontend)/profile/[id]/page.tsx
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { getUserbyId } from "@/app/actions"
 import ProfileContent from "@/components/profile/profile-content"
 import ProfileSkeleton from "@/components/profile/profile-skeleton"
+import ProtectedRoute from '@/components/auth/protected-route'
 import type { UserProfile } from "@/types/user"
-import ResponsiveFeed from "@/components/feed/responsive-feed"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import PostsSkeleton from "@/components/feed/posts-skeleton"
-import ProfileHeader from "@/components/profile/profile-header"
 
 // 1. Async function so we can await params  
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,9 +21,11 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     }
 
     return (
-      <Suspense fallback={<ProfileSkeleton />}>
-        <ProfileContent initialUserData={initialUserData} userId={id} />
-      </Suspense>
+      <ProtectedRoute>
+        <Suspense fallback={<ProfileSkeleton />}>
+          <ProfileContent initialUserData={initialUserData} userId={id} />
+        </Suspense>
+      </ProtectedRoute>
     )
   } catch (error) {
     console.error("Error fetching user:", error)

@@ -1,12 +1,11 @@
-
 import Image from 'next/image'
 import logo from '@/public/logo.svg'
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 border-t border-gray-200 mb-12">
-    
-        <div className="mt-12 pt-8 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center">
+    <footer className="bg-gray-50 border-t border-gray-200 pb-32 md:pb-8">
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center mb-4 md:mb-0">
             <Image src={logo} alt="Logo" width={80} height={80} className="w-20" />
             <span className="text-xl font-bold text-[#FF6B6B] ml-2">Grounded Gems</span>
@@ -31,6 +30,7 @@ export default function Footer() {
             &copy; 2025 Grounded Gems. All rights reserved.
           </div>
         </div>
+      </div>
     </footer>
   )
 }

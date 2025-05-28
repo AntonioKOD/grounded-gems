@@ -14,4 +14,8 @@ export interface Notification {
   }
   read: boolean
   createdAt: string
+  // Journey invite fields (optional)
+  inviteStatus?: 'pending' | 'accepted' | 'declined'
+  journeyTitle?: string
+  journeyOwner?: string
 }

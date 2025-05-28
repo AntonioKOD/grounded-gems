@@ -140,7 +140,7 @@ export default function SearchResults({ initialQuery = "", initialType = "all" }
               name="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for locations, users, experiences..."
+              placeholder="Search for people or locations..."
               className="flex-1 pl-14 pr-32 h-full border-0 bg-transparent text-gray-900 placeholder-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0 text-base font-medium"
             />
 
@@ -234,78 +234,32 @@ export default function SearchResults({ initialQuery = "", initialType = "all" }
 
           {/* Results Tabs */}
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="all" className="flex items-center gap-2">
-                <Search className="h-4 w-4" />
-                All ({results.total})
-              </TabsTrigger>
-              <TabsTrigger value="locations" className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Locations ({results.locations.length})
-              </TabsTrigger>
-              <TabsTrigger value="users" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Users ({results.users.length})
-              </TabsTrigger>
+            <TabsList className="flex gap-2 mb-4">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="users"><Users className="inline-block mr-1 h-4 w-4" /> People</TabsTrigger>
+              <TabsTrigger value="locations"><MapPin className="inline-block mr-1 h-4 w-4" /> Locations</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all" className="space-y-6">
-              {/* Show both locations and users */}
-              {results.locations.length > 0 && (
+            <TabsContent value="all">
+              {/* Show both users and locations */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <MapPin className="h-5 w-5" />
-                    Locations
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {results.locations.map((location) => (
-                      <LocationCard key={location.id} location={location} />
-                    ))}
-                  </div>
+                  <h2 className="text-lg font-semibold mb-2 flex items-center gap-2"><Users className="h-5 w-5 text-[#4ECDC4]" /> People</h2>
+                  {results.users.length === 0 ? <NoResults query={query} type="users" /> : results.users.map(user => <UserCard key={user.id} user={user} />)}
                 </div>
-              )}
-
-              {results.users.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Users
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {results.users.map((user) => (
-                      <UserCard key={user.id} user={user} />
-                    ))}
-                  </div>
+                  <h2 className="text-lg font-semibold mb-2 flex items-center gap-2"><MapPin className="h-5 w-5 text-[#FF6B6B]" /> Locations</h2>
+                  {results.locations.length === 0 ? <NoResults query={query} type="locations" /> : results.locations.map(location => <LocationCard key={location.id} location={location} />)}
                 </div>
-              )}
-
-              {results.total === 0 && !loading && (
-                <NoResults query={query} />
-              )}
+              </div>
             </TabsContent>
 
-            <TabsContent value="locations" className="space-y-4">
-              {results.locations.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {results.locations.map((location) => (
-                    <LocationCard key={location.id} location={location} />
-                  ))}
-                </div>
-              ) : (
-                !loading && <NoResults query={query} type="locations" />
-              )}
+            <TabsContent value="users">
+              {results.users.length === 0 ? <NoResults query={query} type="users" /> : results.users.map(user => <UserCard key={user.id} user={user} />)}
             </TabsContent>
 
-            <TabsContent value="users" className="space-y-4">
-              {results.users.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {results.users.map((user) => (
-                    <UserCard key={user.id} user={user} />
-                  ))}
-                </div>
-              ) : (
-                !loading && <NoResults query={query} type="users" />
-              )}
+            <TabsContent value="locations">
+              {results.locations.length === 0 ? <NoResults query={query} type="locations" /> : results.locations.map(location => <LocationCard key={location.id} location={location} />)}
             </TabsContent>
           </Tabs>
         </div>

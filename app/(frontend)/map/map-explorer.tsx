@@ -1794,12 +1794,12 @@ export default function MapExplorer() {
         <div
           className={cn(
             "border-t bg-white sticky z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]",
-            isSafari || isIOS ? "safari-tabs" : "bottom-0",
+            isSafari || isIOS ? "safari-tabs" : "bottom-0", // Back to bottom with proper safe area
           )}
           style={
             isSafari || isIOS
               ? {
-                  bottom: 0,
+                  bottom: "0", // Let safe-area handle spacing
                   position: "sticky",
                   zIndex: 20,
                 }
@@ -1807,7 +1807,7 @@ export default function MapExplorer() {
           }
         >
           <Tabs defaultValue={activeView} value={activeView} onValueChange={handleViewChange} className="w-full">
-            <TabsList className="w-full grid grid-cols-2 p-1">
+            <TabsList className="w-full grid grid-cols-2 p-1 safe-area-bottom">
               <TabsTrigger
                 value="map"
                 className="data-[state=active]:bg-[#FF6B6B] data-[state=active]:text-white py-3 transition-all duration-200"
@@ -1843,7 +1843,7 @@ export default function MapExplorer() {
       {isMobile && activeView === "list" && selectedLocation && (
         <div
           className={cn("fixed left-0 right-0 mx-4 z-20", isSafari || isIOS ? "safari-view-on-map" : "bottom-20")}
-          style={isSafari || isIOS ? { bottom: "5rem" } : {}}
+          style={isSafari || isIOS ? { bottom: "5rem" } : {}} /* Space for tabs */
         >
           <Button
             className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-lg"
@@ -1994,7 +1994,7 @@ export default function MapExplorer() {
         /* Fix for Safari tabs positioning */
         .safari-tabs {
           position: sticky !important;
-          bottom: 0 !important;
+          bottom: 0 !important; /* Use safe area padding */
           z-index: 20 !important;
         }
 
@@ -2015,7 +2015,7 @@ export default function MapExplorer() {
         /* Fix for Safari view on map button */
         .safari-view-on-map {
           position: fixed !important;
-          bottom: 5rem !important;
+          bottom: 5rem !important; /* Space for tabs */
           z-index: 20 !important;
         }
 

@@ -1046,34 +1046,6 @@ const MapComponent = memo(function MapComponent({
       )}
       
       <div ref={mapContainerRef} className="h-full w-full" />
-      
-      {userLocation && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                className="absolute bottom-4 right-4 z-10 bg-white text-gray-800 shadow-md hover:bg-gray-100"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  if (mapRef.current && userLocation) {
-                    mapRef.current.flyTo({
-                      center: [userLocation[1], userLocation[0]],
-                      zoom: 14,
-                      essential: true
-                    })
-                  }
-                }}
-              >
-                <Navigation className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Go to my location</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
     </div>
   )
 }, (prevProps, nextProps) => {

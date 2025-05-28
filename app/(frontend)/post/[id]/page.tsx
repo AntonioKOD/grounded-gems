@@ -41,6 +41,12 @@ export default async function PostPage({ params }: PostPageProps) {
   // Check if post exists
   try {
     const { id } = await params
+    
+    // If someone tries to access /post/create through this route, redirect them
+    if (id === 'create') {
+      notFound()
+    }
+    
     const post = await getPostById(id)
 
     if (!post) {
