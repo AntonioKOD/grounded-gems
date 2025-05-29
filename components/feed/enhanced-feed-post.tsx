@@ -12,16 +12,25 @@ import {
   Play,
   Volume2,
   VolumeX,
+  X,
+  MoreHorizontal,
 } from "lucide-react"
 import { toast } from "sonner"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import VideoPlayer from "./video-player"
 import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
+import { CommentSystemLight } from "@/components/post/comment-system-light"
 
 interface EnhancedFeedPostProps {
   post: Post
@@ -46,6 +55,8 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const [isLoadingImage, setIsLoadingImage] = useState(true)
   const [imageError, setImageError] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
+  const [showCommentDialog, setShowCommentDialog] = useState(false)
+  const [showMoreActions, setShowMoreActions] = useState(false)
 
   // Get current state from Redux
   const isLiked = likedPosts.includes(post.id)
@@ -193,12 +204,11 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     }
   }, [isSaved, post, user, dispatch, saveCount, onPostUpdated])
 
-  // Handle comment action
+  // Handle comment dialog
   const handleComment = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    // Navigate to post detail for comments
-    window.location.href = `/post/${post.id}`
-  }, [post.id])
+    setShowCommentDialog(true)
+  }, [])
 
   // Get initials for avatar fallback
   const getInitials = (name: string) => {
@@ -211,222 +221,296 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   }
 
   return (
-    <motion.div
-      id={`post-${post.id}`}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className={`relative w-full h-full bg-black overflow-hidden ${className}`}
-      style={{
-        width: '100vw',
-        height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
-        position: 'absolute',
-        inset: 0
-      }}
-    >
-      {/* Main Media */}
-      <div className="absolute inset-0 w-full h-full">
-        {post.video && !imageError ? (
-          <VideoPlayer
-            src={post.video}
-            thumbnail={post.videoThumbnail || post.image}
-            aspectRatio="9/16"
-            onViewStart={() => {
-              // Track view start
-            }}
-            onViewComplete={() => {
-              // Track view completion
-            }}
-            className="w-full h-full object-cover"
-            controls={false}
-            showProgress={false}
-            showPlayButton={false}
-          />
-        ) : post.image && !imageError ? (
-          <Image
-            src={post.image}
-            alt={post.title || "Post image"}
-            fill
-            className="object-cover w-full h-full"
-            loading={priority !== undefined && priority < 3 ? undefined : "lazy"}
-            sizes="100vw"
-            priority={priority !== undefined && priority < 3}
-            onLoadingComplete={() => setIsLoadingImage(false)}
-            onError={() => {
-              setIsLoadingImage(false)
-              setImageError(true)
-            }}
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-            <div className="text-center text-white/80 px-8">
-              <div className="text-8xl mb-6 animate-pulse">✨</div>
-              <p className="text-xl font-light leading-relaxed">{post.content}</p>
+    <>
+      <motion.div
+        id={`post-${post.id}`}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className={`relative w-full h-full bg-black overflow-hidden ${className}`}
+        style={{
+          width: '100vw',
+          height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
+          position: 'absolute',
+          inset: 0
+        }}
+      >
+        {/* Main Media */}
+        <div className="absolute inset-0 w-full h-full">
+          {post.video && !imageError ? (
+            <VideoPlayer
+              src={post.video}
+              thumbnail={post.videoThumbnail || post.image}
+              aspectRatio="9/16"
+              onViewStart={() => {
+                // Track view start
+              }}
+              onViewComplete={() => {
+                // Track view completion
+              }}
+              className="w-full h-full object-cover"
+              controls={false}
+              showProgress={false}
+              showPlayButton={false}
+            />
+          ) : post.image && !imageError ? (
+            <Image
+              src={post.image}
+              alt={post.title || "Post image"}
+              fill
+              className="object-cover w-full h-full"
+              loading={priority !== undefined && priority < 3 ? undefined : "lazy"}
+              sizes="100vw"
+              priority={priority !== undefined && priority < 3}
+              onLoadingComplete={() => setIsLoadingImage(false)}
+              onError={() => {
+                setIsLoadingImage(false)
+                setImageError(true)
+              }}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+              <div className="text-center text-white/80 px-8">
+                <div className="text-8xl mb-6 animate-pulse">✨</div>
+                <p className="text-xl font-light leading-relaxed">{post.content}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {isLoadingImage && post.image && (
-          <div className="absolute inset-0 bg-black flex items-center justify-center">
+          {isLoadingImage && post.image && (
+            <div className="absolute inset-0 bg-black flex items-center justify-center">
+              <div className="relative">
+                <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+                <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-r-white/40 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Enhanced Gradient Overlays */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent via-transparent to-black/80 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/20 pointer-events-none" />
+
+        {/* Author Avatar - Top Left */}
+        <div className="absolute top-12 left-4 z-20">
+          <Link 
+            href={`/profile/${post.author.id}`}
+            className="group flex items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative">
-              <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-              <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-r-white/40 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+              <Avatar className="h-12 w-12 ring-2 ring-white/30 group-hover:ring-white/50 transition-all duration-300 shadow-2xl">
+                <AvatarImage 
+                  src={
+                    post.author.profileImage?.url || 
+                    post.author.avatar || 
+                    (typeof post.author.profilePicture === 'string' ? post.author.profilePicture : post.author.profilePicture?.url) ||
+                    "/placeholder.svg"
+                  } 
+                  alt={post.author.name}
+                  className="object-cover"
+                />
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-base">
+                  {getInitials(post.author.name)}
+                </AvatarFallback>
+              </Avatar>
+              {/* Online indicator */}
+              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-2 border-white shadow-lg animate-pulse" />
             </div>
-          </div>
-        )}
-      </div>
+          </Link>
+        </div>
 
-      {/* Enhanced Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent via-transparent to-black/80 pointer-events-none" />
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/20 pointer-events-none" />
-
-      {/* Author Avatar - Top Left */}
-      <div className="absolute top-12 left-4 z-20">
-        <Link 
-          href={`/profile/${post.author.id}`}
-          className="group flex items-center gap-3"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="relative">
-            <Avatar className="h-12 w-12 ring-2 ring-white/30 group-hover:ring-white/50 transition-all duration-300 shadow-2xl">
-              <AvatarImage 
-                src={
-                  post.author.profileImage?.url || 
-                  post.author.avatar || 
-                  (typeof post.author.profilePicture === 'string' ? post.author.profilePicture : post.author.profilePicture?.url) ||
-                  "/placeholder.svg"
-                } 
-                alt={post.author.name}
-                className="object-cover"
-              />
-              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-base">
-                {getInitials(post.author.name)}
-              </AvatarFallback>
-            </Avatar>
-            {/* Online indicator */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-2 border-white shadow-lg animate-pulse" />
-          </div>
-        </Link>
-      </div>
-
-      {/* Right Side Actions - Enhanced TikTok Style */}
-      <div className="absolute right-4 bottom-32 flex flex-col items-center space-y-4 z-20">
-        {/* Like Button */}
-        <motion.button
-          className="group relative"
-          onClick={handleLike}
-          disabled={isLiking}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          <div className={`relative p-3 rounded-full backdrop-blur-xl border border-white/20 shadow-2xl transition-all duration-300 ${
-            isLiked 
-              ? 'bg-red-500/20 text-red-400 border-red-400/30' 
-              : 'bg-white/10 text-white hover:bg-white/20'
-          }`}>
-            <Heart className={`h-6 w-6 ${isLiked ? 'fill-current animate-bounce' : ''}`} />
-            {isLiked && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: [0, 1.2, 1] }}
-                className="absolute inset-0 rounded-full bg-red-400/20 animate-ping"
-              />
-            )}
-          </div>
-          <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
-            {likeCount}
-          </span>
-        </motion.button>
-
-        {/* Comment Button */}
-        <motion.button
-          className="group relative"
-          onClick={handleComment}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          <div className="relative p-3 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-2xl">
-            <MessageCircle className="h-6 w-6 text-white" />
-          </div>
-          <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
-            {post.commentCount || 0}
-          </span>
-        </motion.button>
-
-        {/* Share Button */}
-        <motion.button
-          className="group relative"
-          onClick={handleShare}
-          disabled={isSharing}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          <div className="relative p-3 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-2xl">
-            <Share2 className="h-6 w-6 text-white" />
-          </div>
-          <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
-            {shareCount}
-          </span>
-        </motion.button>
-
-        {/* Save Button */}
-        <motion.button
-          className="group relative"
-          onClick={handleSave}
-          disabled={isSaving}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
-        >
-          <div className={`relative p-3 rounded-full backdrop-blur-xl border border-white/20 shadow-2xl transition-all duration-300 ${
-            isSaved 
-              ? 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30' 
-              : 'bg-white/10 text-white hover:bg-white/20'
-          }`}>
-            <Bookmark className={`h-6 w-6 ${isSaved ? 'fill-current' : ''}`} />
-          </div>
-          <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
-            {saveCount}
-          </span>
-        </motion.button>
-      </div>
-
-      {/* Bottom Content with Enhanced Glassmorphism */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
-        <div className="backdrop-blur-xl bg-black/20 rounded-3xl p-6 border border-white/10 shadow-2xl">
-          {/* Post Content */}
-          <p className="text-white text-lg leading-relaxed font-light mb-4 line-clamp-3">
-            {post.content}
-          </p>
-
-          {/* Location and Time */}
-          <div className="flex items-center justify-between text-white/60 text-sm">
-            <div className="flex items-center gap-3">
-              {post.location && (
-                <span className="flex items-center gap-1">
-                  📍 {typeof post.location === 'string' ? post.location : post.location.name}
-                </span>
+        {/* Right Side Actions - Enhanced TikTok Style */}
+        <div className="absolute right-4 bottom-40 flex flex-col items-center space-y-4 z-20">
+          {/* Like Button */}
+          <motion.button
+            className="group relative"
+            onClick={handleLike}
+            disabled={isLiking}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <div className={`relative p-3 rounded-full backdrop-blur-xl border border-white/20 shadow-2xl transition-all duration-300 ${
+              isLiked 
+                ? 'bg-red-500/20 text-red-400 border-red-400/30' 
+                : 'bg-white/10 text-white hover:bg-white/20'
+            }`}>
+              <Heart className={`h-6 w-6 ${isLiked ? 'fill-current animate-bounce' : ''}`} />
+              {isLiked && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [0, 1.2, 1] }}
+                  className="absolute inset-0 rounded-full bg-red-400/20 animate-ping"
+                />
               )}
             </div>
-            <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
+            <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
+              {likeCount}
+            </span>
+          </motion.button>
+
+          {/* Comment Button */}
+          <motion.button
+            className="group relative"
+            onClick={handleComment}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <div className="relative p-3 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-2xl">
+              <MessageCircle className="h-6 w-6 text-white" />
+            </div>
+            <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
+              {post.commentCount || 0}
+            </span>
+          </motion.button>
+
+          {/* More Actions Button */}
+          <motion.button
+            className="group relative"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowMoreActions(!showMoreActions)
+              // Haptic feedback
+              if (navigator.vibrate) {
+                navigator.vibrate(50)
+              }
+            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <div className="relative p-3 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-2xl">
+              <motion.div
+                animate={{ rotate: showMoreActions ? 45 : 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <MoreHorizontal className="h-6 w-6 text-white" />
+              </motion.div>
+            </div>
+          </motion.button>
+
+          {/* Additional Actions - Share and Save */}
+          <AnimatePresence>
+            {showMoreActions && (
+              <>
+                {/* Share Button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0, opacity: 0, y: 20 }}
+                  className="group relative"
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                >
+                  <div className="relative p-3 rounded-full backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-2xl">
+                    <Share2 className="h-6 w-6 text-white" />
+                  </div>
+                  <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
+                    {shareCount}
+                  </span>
+                </motion.button>
+
+                {/* Save Button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0, opacity: 0, y: 20 }}
+                  className="group relative"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17, delay: 0.1 }}
+                >
+                  <div className={`relative p-3 rounded-full backdrop-blur-xl border border-white/20 shadow-2xl transition-all duration-300 ${
+                    isSaved 
+                      ? 'bg-yellow-500/20 text-yellow-400 border-yellow-400/30' 
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}>
+                    <Bookmark className={`h-6 w-6 ${isSaved ? 'fill-current' : ''}`} />
+                  </div>
+                  <span className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 text-white font-bold text-xs bg-black/50 backdrop-blur-sm px-1.5 py-0.5 rounded-full min-w-[1.5rem] text-center">
+                    {saveCount}
+                  </span>
+                </motion.button>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Bottom Content with Enhanced Glassmorphism */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
+          <div className="backdrop-blur-xl bg-black/20 rounded-3xl p-6 border border-white/10 shadow-2xl">
+            {/* Post Content */}
+            <p className="text-white text-lg leading-relaxed font-light mb-4 line-clamp-3">
+              {post.content}
+            </p>
+
+            {/* Location and Time */}
+            <div className="flex items-center justify-between text-white/60 text-sm">
+              <div className="flex items-center gap-3">
+                {post.location && (
+                  <span className="flex items-center gap-1">
+                    📍 {typeof post.location === 'string' ? post.location : post.location.name}
+                  </span>
+                )}
+              </div>
+              <span>{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Mobile Tap to Pause/Play (for videos) */}
-      {post.video && (
-        <div 
-          className="absolute inset-0 md:hidden z-5"
-          onClick={(e) => {
-            e.stopPropagation()
-            // Video tap handling will be managed by VideoPlayer
-          }}
-        />
-      )}
-    </motion.div>
+        {/* Mobile Tap to Pause/Play (for videos) */}
+        {post.video && (
+          <div 
+            className="absolute inset-0 md:hidden z-5"
+            onClick={(e) => {
+              e.stopPropagation()
+              // Video tap handling will be managed by VideoPlayer
+            }}
+          />
+        )}
+      </motion.div>
+
+      {/* Enhanced Comments Dialog */}
+      <Dialog open={showCommentDialog} onOpenChange={setShowCommentDialog}>
+        <DialogContent className="sm:max-w-4xl max-h-[85vh] bg-white border-0 shadow-2xl p-0 gap-0">
+          <DialogHeader className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-3">
+                <MessageCircle className="h-5 w-5 text-[#FF6B6B]" />
+                Comments ({post.commentCount || 0})
+              </DialogTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowCommentDialog(false)}
+                className="h-8 w-8 rounded-full hover:bg-gray-200"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto bg-white">
+            <CommentSystemLight 
+              postId={post.id}
+              user={user ? {
+                id: user.id,
+                name: user.name,
+                avatar: user.profileImage?.url || user.avatar
+              } : undefined}
+              className="bg-transparent"
+              autoShow={true}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 })
 

@@ -1768,9 +1768,18 @@ export async function createPost(formData: FormData) {
     const payload = await getPayload({ config })
 
     // Get current user
+    const userId = formData.get("userId") as string
+    
+    if (!userId) {
+      return {
+        success: false,
+        message: "User ID is required",
+      }
+    }
+
     const user = await payload.findByID({
       collection: "users",
-      id: formData.get("userId") as string, // Ensure `userId` is passed in `formData`
+      id: userId,
       depth: 0,
     });
 
@@ -1781,20 +1790,14 @@ export async function createPost(formData: FormData) {
       };
     }
 
-    if (!user) {
-      return {
-        success: false,
-        message: "You must be logged in to create a post",
-      }
-    }
-
     // Extract form data
     const content = formData.get("content") as string
     const title = formData.get("title") as string
-    const type = formData.get("type") as "post" | "review" | "recommendation"
+    const type = (formData.get("type") as "post" | "review" | "recommendation") || "post"
     const locationName = formData.get("locationName") as string
     const rating = formData.get("rating") ? Number.parseInt(formData.get("rating") as string) : undefined
     const image = formData.get("image") as File | null
+    const video = formData.get("video") as File | null
 
     // Validate required fields
     if (!content) {
@@ -1806,12 +1809,12 @@ export async function createPost(formData: FormData) {
 
     // Handle location if provided
     let locationId = null
-    if (locationName && (type === "review" || type === "recommendation")) {
+    if (locationName && locationName.trim()) {
       // Check if location exists
       const { docs: existingLocations } = await payload.find({
         collection: "locations",
         where: {
-          name: { equals: locationName },
+          name: { equals: locationName.trim() },
         },
         limit: 1,
       })
@@ -1819,16 +1822,22 @@ export async function createPost(formData: FormData) {
       if (existingLocations.length > 0) {
         locationId = existingLocations[0].id
       } else {
-        // Create new location
-        const newLocation = await payload.create({
-          collection: "locations",
-          data: {
-            name: locationName,
-            createdBy: user.id,
-            isVerified: false,
-          },
-        })
-        locationId = newLocation.id
+        // Create new location for any post type that includes location
+        try {
+          const newLocation = await payload.create({
+            collection: "locations",
+            data: {
+              name: locationName.trim(),
+              createdBy: user.id,
+              isVerified: false,
+              status: 'published',
+            },
+          })
+          locationId = newLocation.id
+        } catch (error) {
+          console.error("Error creating location:", error)
+          // Continue without location if creation fails
+        }
       }
     }
 
@@ -1836,17 +1845,20 @@ export async function createPost(formData: FormData) {
     let imageId = null
     if (image && image.size > 0) {
       try {
-        // Convert the File to a Buffer that Payload can process
+        // Convert the File to the format Payload expects
+        const arrayBuffer = await image.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        
         const uploadedImage = await payload.create({
           collection: "media",
           data: {
             alt: title || `Post image by ${user.name || 'user'}`,
           },
           file: {
-            data: Buffer.from(await image.arrayBuffer()),
+            data: buffer,
             mimetype: image.type,
-            name: "",
-            size: 0
+            name: image.name || `post-image-${Date.now()}.${image.type.split('/')[1]}`,
+            size: image.size
           },
         })
 
@@ -1858,31 +1870,65 @@ export async function createPost(formData: FormData) {
       }
     }
 
+    // Handle video upload if provided
+    let videoId = null
+    if (video && video.size > 0) {
+      try {
+        // Convert the File to the format Payload expects
+        const arrayBuffer = await video.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+        
+        const uploadedVideo = await payload.create({
+          collection: "media",
+          data: {
+            alt: title || `Post video by ${user.name || 'user'}`,
+          },
+          file: {
+            data: buffer,
+            mimetype: video.type,
+            name: video.name || `post-video-${Date.now()}.${video.type.split('/')[1]}`,
+            size: video.size
+          },
+        })
+
+        videoId = uploadedVideo.id
+        console.log("Video uploaded successfully:", videoId)
+      } catch (uploadError) {
+        console.error("Error uploading video:", uploadError)
+        // Continue with post creation even if video upload fails
+      }
+    }
+
     // Create post
     const postData: any = {
-      content,
+      content: content.trim(),
       author: user.id,
       type,
       status: "published",
     }
 
-    if (title) postData.title = title
+    if (title && title.trim()) postData.title = title.trim()
     if (locationId) postData.location = locationId
     if (rating && type === "review") postData.rating = rating
     if (imageId) postData.image = imageId
+    if (videoId) postData.video = videoId
 
     const post = await payload.create({
       collection: "posts",
       data: postData,
     })
 
+    console.log("Post created successfully:", post.id)
+
     // Revalidate paths
     revalidatePath("/feed")
     revalidatePath(`/profile/${user.id}`)
+    revalidatePath("/")
 
     return {
       success: true,
       postId: post.id,
+      message: "Post created successfully!"
     }
   } catch (error) {
     console.error("Error creating post:", error)

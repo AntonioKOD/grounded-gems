@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef } from "react"
-import { Camera, ImageIcon, MapPin, Sparkles, Send, X, Loader2, Heart, Smile, Hash, AtSign } from "lucide-react"
+import { Camera, ImageIcon, MapPin, Send, X, Loader2, Smile, Video, FileText, Plus } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
@@ -17,6 +17,9 @@ interface EnhancedPostFormProps {
     id: string
     name: string
     avatar?: string
+    profileImage?: {
+      url: string
+    }
   }
   onClose?: () => void
   onPostCreated?: () => void
@@ -27,16 +30,29 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
   const [content, setContent] = useState("")
   const [location, setLocation] = useState("")
   const [image, setImage] = useState<File | null>(null)
+  const [video, setVideo] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showLocationInput, setShowLocationInput] = useState(false)
-  const [currentStep, setCurrentStep] = useState<'content' | 'details'>('content')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [mediaType, setMediaType] = useState<'none' | 'image' | 'video'>('none')
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
   
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      // Check file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("Image must be less than 10MB")
+        return
+      }
+      
       setImage(file)
+      setVideo(null)
+      setVideoPreview(null)
+      setMediaType('image')
+      
       const reader = new FileReader()
       reader.onload = (e) => {
         setImagePreview(e.target?.result as string)
@@ -45,12 +61,43 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
     }
   }
 
-  const removeImage = () => {
-    setImage(null)
-    setImagePreview(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Check file size (50MB limit for videos)
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error("Video must be less than 50MB")
+        return
+      }
+
+      // Check video format
+      const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/avi']
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Please select a valid video format (MP4, WebM, OGG, MOV, AVI)")
+        return
+      }
+      
+      setVideo(file)
+      setImage(null)
+      setImagePreview(null)
+      setMediaType('video')
+      
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setVideoPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
     }
+  }
+
+  const removeMedia = () => {
+    setImage(null)
+    setVideo(null)
+    setImagePreview(null)
+    setVideoPreview(null)
+    setMediaType('none')
+    if (imageInputRef.current) imageInputRef.current.value = ""
+    if (videoInputRef.current) videoInputRef.current.value = ""
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,15 +124,18 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
         formData.append("image", image)
       }
 
+      if (video) {
+        formData.append("video", video)
+      }
+
       const result = await createPost(formData)
 
       if (result.success) {
         toast.success("Post shared! ✨")
         setContent("")
         setLocation("")
-        removeImage()
+        removeMedia()
         setShowLocationInput(false)
-        setCurrentStep('content')
         
         // Notify parent components
         onPostCreated?.()
@@ -120,61 +170,98 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className={`relative ${className}`}
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Main Content Area */}
-        <div className="space-y-4">
-          {/* Content Input */}
-          <div className="relative">
-            <Textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="What's happening? ✨"
-              className="min-h-[120px] bg-white/5 border-white/10 text-white placeholder-white/50 resize-none text-lg p-4 rounded-2xl backdrop-blur-sm focus:bg-white/10 transition-all"
-              maxLength={500}
+    <div className={`bg-white rounded-2xl border border-gray-200 shadow-sm ${className}`}>
+      <form onSubmit={handleSubmit} className="p-4">
+        {/* Header with User Avatar */}
+        <div className="flex items-center gap-3 mb-3">
+          <Avatar className="h-10 w-10 ring-2 ring-gray-100">
+            <AvatarImage 
+              src={user.profileImage?.url || user.avatar || "/placeholder.svg"} 
+              alt={user.name}
+              className="object-cover"
             />
-            <div className="absolute bottom-3 right-3 text-white/40 text-sm">
-              {content.length}/500
-            </div>
+            <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold">
+              {getInitials(user.name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="font-medium text-gray-900">{user.name}</p>
+            <p className="text-xs text-gray-500">Share your thoughts</p>
+          </div>
+          {onClose && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="h-8 w-8 p-0 text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Content Input - More Compact */}
+        <div className="space-y-3">
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="What's on your mind? ✨"
+            className="min-h-[80px] resize-none border-0 bg-gray-50 text-gray-900 placeholder-gray-500 focus:bg-gray-100 p-3 text-base"
+            maxLength={500}
+          />
+
+          {/* Character Counter */}
+          <div className="flex justify-between items-center text-xs text-gray-400">
+            <span>{content.length}/500</span>
+            {mediaType !== 'none' && (
+              <span className="text-purple-500 font-medium">
+                {mediaType === 'image' ? '📷 Photo' : '🎥 Video'} added
+              </span>
+            )}
           </div>
 
-          {/* Image Preview */}
+          {/* Media Preview - Compact */}
           <AnimatePresence>
-            {imagePreview && (
+            {(imagePreview || videoPreview) && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="relative rounded-2xl overflow-hidden bg-white/5 border border-white/10"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="relative rounded-xl overflow-hidden bg-gray-100 border border-gray-200"
               >
-                <div className="relative h-64">
-                  <Image
-                    src={imagePreview}
-                    alt="Preview"
-                    fill
-                    className="object-cover"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                <div className="relative h-40">
+                  {imagePreview && (
+                    <Image
+                      src={imagePreview}
+                      alt="Preview"
+                      fill
+                      className="object-cover"
+                    />
+                  )}
+                  {videoPreview && (
+                    <video
+                      src={videoPreview}
+                      className="w-full h-full object-cover"
+                      controls
+                      muted
+                    />
+                  )}
                   
                   {/* Remove button */}
                   <button
                     type="button"
-                    onClick={removeImage}
-                    className="absolute top-3 right-3 w-8 h-8 bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+                    onClick={removeMedia}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/60 backdrop-blur-sm rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
 
-          {/* Location Input */}
+          {/* Location Input - Compact */}
           <AnimatePresence>
             {showLocationInput && (
               <motion.div
@@ -184,12 +271,12 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
                 className="relative"
               >
                 <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-white/60" />
+                  <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
                   <Input
                     value={location}
                     onChange={(e) => setLocation(e.target.value)}
                     placeholder="Add location..."
-                    className="pl-12 bg-white/5 border-white/10 text-white placeholder-white/50 h-12 rounded-2xl backdrop-blur-sm focus:bg-white/10 transition-all"
+                    className="pl-9 h-9 bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-500 text-sm"
                   />
                   <button
                     type="button"
@@ -197,9 +284,9 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
                       setShowLocationInput(false)
                       setLocation("")
                     }}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-white/60 hover:text-white transition-colors"
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3 w-3" />
                   </button>
                 </div>
               </motion.div>
@@ -207,82 +294,99 @@ export default function EnhancedPostForm({ user, onClose, onPostCreated, classNa
           </AnimatePresence>
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between">
+        {/* Action Bar - More Compact */}
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
           {/* Media & Options */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Photo Button */}
-            <motion.button
+            <Button
               type="button"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => fileInputRef.current?.click()}
-              className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full border border-white/10 transition-all"
+              variant="ghost"
+              size="sm"
+              onClick={() => imageInputRef.current?.click()}
+              className="h-8 px-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50"
             >
-              <Camera className="h-5 w-5 text-white" />
-            </motion.button>
+              <Camera className="h-4 w-4" />
+            </Button>
+
+            {/* Video Button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => videoInputRef.current?.click()}
+              className="h-8 px-2 text-gray-500 hover:text-pink-600 hover:bg-pink-50"
+            >
+              <Video className="h-4 w-4" />
+            </Button>
 
             {/* Location Button */}
-            <motion.button
+            <Button
               type="button"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              variant="ghost"
+              size="sm"
               onClick={() => setShowLocationInput(!showLocationInput)}
-              className={`p-3 backdrop-blur-sm rounded-full border border-white/10 transition-all ${
+              className={`h-8 px-2 transition-colors ${
                 showLocationInput || location 
-                  ? 'bg-purple-500/30 text-purple-200' 
-                  : 'bg-white/10 hover:bg-white/20 text-white'
+                  ? 'text-blue-600 bg-blue-50' 
+                  : 'text-gray-500 hover:text-blue-600 hover:bg-blue-50'
               }`}
             >
-              <MapPin className="h-5 w-5" />
-            </motion.button>
+              <MapPin className="h-4 w-4" />
+            </Button>
 
             {/* Emoji Button */}
-            <motion.button
+            <Button
               type="button"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="p-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full border border-white/10 transition-all"
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-gray-500 hover:text-yellow-600 hover:bg-yellow-50"
             >
-              <Smile className="h-5 w-5 text-white" />
-            </motion.button>
+              <Smile className="h-4 w-4" />
+            </Button>
           </div>
 
-          {/* Submit Button */}
-          <motion.button
+          {/* Submit Button - More Compact */}
+          <Button
             type="submit"
             disabled={!isFormValid() || isSubmitting}
-            whileHover={isFormValid() ? { scale: 1.05 } : {}}
-            whileTap={isFormValid() ? { scale: 0.95 } : {}}
-            className={`px-8 py-3 rounded-full font-bold text-base transition-all flex items-center gap-2 ${
+            size="sm"
+            className={`h-8 px-4 text-sm font-medium transition-all ${
               isFormValid() && !isSubmitting
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg'
-                : 'bg-white/10 text-white/40 cursor-not-allowed'
+                ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
             }`}
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Sharing...
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Posting...
               </>
             ) : (
               <>
-                <Send className="h-5 w-5" />
-                Share
+                <Send className="h-3 w-3 mr-1" />
+                Post
               </>
             )}
-          </motion.button>
+          </Button>
         </div>
 
-        {/* Hidden file input */}
+        {/* Hidden file inputs */}
         <input
-          ref={fileInputRef}
+          ref={imageInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/heic,image/heif"
           onChange={handleImageUpload}
           className="hidden"
         />
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept="video/mp4,video/webm,video/ogg,video/mov,video/avi"
+          onChange={handleVideoUpload}
+          className="hidden"
+        />
       </form>
-    </motion.div>
+    </div>
   )
 } 

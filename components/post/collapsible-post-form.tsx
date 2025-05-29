@@ -10,19 +10,22 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import CreatePostForm from "./create-post-form"
+import EnhancedPostForm from "./enhanced-post-form"
 
 interface CollapsiblePostFormProps {
   user: {
     id: string
     name: string
     avatar?: string
+    profileImage?: {
+      url: string
+    }
   }
   className?: string
   onSuccess?: () => void
 }
 
-export default function CollapsiblePostForm({ user, className = "" }: CollapsiblePostFormProps) {
+export default function CollapsiblePostForm({ user, className = "", onSuccess }: CollapsiblePostFormProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [quickText, setQuickText] = useState("")
 
@@ -45,6 +48,11 @@ export default function CollapsiblePostForm({ user, className = "" }: Collapsibl
     setQuickText("")
   }
 
+  const handlePostCreated = () => {
+    onSuccess?.()
+    handleCollapseForm()
+  }
+
   return (
     <div className={className}>
       {!isExpanded ? (
@@ -61,7 +69,11 @@ export default function CollapsiblePostForm({ user, className = "" }: Collapsibl
             <div className="flex items-center gap-3 md:gap-4 mb-3 md:mb-4">
               <div className="relative">
                 <Avatar className="h-12 w-12 md:h-14 md:w-14 ring-2 ring-white/20 shadow-xl">
-                  <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} className="object-cover" />
+                  <AvatarImage 
+                    src={user.profileImage?.url || user.avatar || "/placeholder.svg"} 
+                    alt={user.name} 
+                    className="object-cover" 
+                  />
                   <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold">
                     {getInitials(user.name)}
                   </AvatarFallback>
@@ -135,7 +147,11 @@ export default function CollapsiblePostForm({ user, className = "" }: Collapsibl
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <Avatar className="h-10 w-10 md:h-12 md:w-12 ring-2 ring-white/20 shadow-xl">
-                      <AvatarImage src={user.avatar || "/placeholder.svg"} alt={user.name} className="object-cover" />
+                      <AvatarImage 
+                        src={user.profileImage?.url || user.avatar || "/placeholder.svg"} 
+                        alt={user.name} 
+                        className="object-cover" 
+                      />
                       <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold">
                         {getInitials(user.name)}
                       </AvatarFallback>
@@ -161,7 +177,15 @@ export default function CollapsiblePostForm({ user, className = "" }: Collapsibl
 
             {/* Content Area - Better mobile layout */}
             <div className="p-4 md:p-6">
-              <CreatePostForm />
+              <EnhancedPostForm 
+                user={{
+                  id: user.id,
+                  name: user.name,
+                  avatar: user.profileImage?.url || user.avatar
+                }}
+                onClose={handleCollapseForm}
+                onPostCreated={handlePostCreated}
+              />
             </div>
           </motion.div>
         </AnimatePresence>
