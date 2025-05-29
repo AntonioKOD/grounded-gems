@@ -1,6 +1,6 @@
 import type { User } from "./feed"
 
-export type NotificationType = "follow" | "like" | "comment" | "mention" | "reminder" | "event_update" | 'event'
+export type NotificationType = "follow" | "like" | "comment" | "mention" | "reminder" | "event_update" | 'event' | "journey_invite" | "journey_invite_accepted" | "journey_invite_declined"
 
 export interface Notification {
   id: string

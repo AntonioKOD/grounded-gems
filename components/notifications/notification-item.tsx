@@ -6,13 +6,14 @@ import { useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Trash2 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Trash2, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Notification } from "@/types/notification"
 import { markNotificationAsRead, deleteNotification } from "@/app/actions"
 
 // Icons for different notification types
-import { UserPlus, Heart, MessageSquare, AtSign, Bell, Calendar, Sparkles } from "lucide-react"
+import { UserPlus, Heart, MessageSquare, AtSign, Bell, Calendar, Sparkles, Check, X } from "lucide-react"
 
 interface NotificationItemProps {
   notification: Notification
@@ -38,6 +39,12 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return <Bell className="h-4 w-4" />
       case "event_update":
         return <Calendar className="h-4 w-4" />
+      case "journey_invite":
+        return <Sparkles className="h-4 w-4 text-[#FF6B6B]" />
+      case "journey_invite_accepted":
+        return <Check className="h-4 w-4 text-green-600" />
+      case "journey_invite_declined":
+        return <X className="h-4 w-4 text-red-600" />
       case "invite":
         return <Sparkles className="h-4 w-4 text-[#FF6B6B]" />
       default:
@@ -49,21 +56,27 @@ export default function NotificationItem({ notification, onAction }: Notificatio
   const getIconBackground = () => {
     switch (notification.type) {
       case "follow":
-        return "bg-blue-100 text-blue-600"
+        return "bg-blue-500 text-white"
       case "like":
-        return "bg-red-100 text-red-600"
+        return "bg-red-500 text-white"
       case "comment":
-        return "bg-green-100 text-green-600"
+        return "bg-green-500 text-white"
       case "mention":
-        return "bg-purple-100 text-purple-600"
+        return "bg-purple-500 text-white"
       case "reminder":
-        return "bg-yellow-100 text-yellow-600"
+        return "bg-yellow-500 text-white"
       case "event_update":
-        return "bg-orange-100 text-orange-600"
+        return "bg-orange-500 text-white"
+      case "journey_invite":
+        return "bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white"
+      case "journey_invite_accepted":
+        return "bg-green-500 text-white"
+      case "journey_invite_declined":
+        return "bg-red-500 text-white"
       case "invite":
-        return "bg-yellow-100 text-[#FF6B6B]"
+        return "bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white"
       default:
-        return "bg-gray-100 text-gray-600"
+        return "bg-gray-500 text-white"
     }
   }
 
@@ -141,69 +154,223 @@ export default function NotificationItem({ notification, onAction }: Notificatio
     }
   }
 
-  // Accept/Decline for journey invites
-  const isJourneyInvite = notification.type === 'reminder' && notification.relatedTo?.collection === 'journeys'
+  // Accept/Decline for journey invites - simplified logic using specific notification types
+  const isJourneyInvite = notification.type === 'journey_invite' || 
+    (notification.type === 'reminder' && notification.relatedTo?.collection === 'journeys')
+  
+  // Only show accept/decline buttons for actual pending invites (journey_invite type)
+  // Don't show them for notifications about responses (journey_invite_accepted/declined)
+  const shouldShowInviteButtons = notification.type === 'journey_invite' && 
+    (!notification.inviteStatus || notification.inviteStatus === 'pending')
+
+  const timeAgo = formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })
+  const link = getNotificationLink()
 
   return (
     <div className={cn(
-      "flex items-start gap-3 p-3 hover:bg-gray-50 transition-colors rounded-md relative group",
-      !notification.read && "bg-blue-50/50",
+      "group relative bg-white rounded-2xl border border-gray-100 p-4 transition-all duration-300 hover:shadow-lg hover:shadow-gray-100 hover:border-gray-200",
+      !notification.read && "bg-gradient-to-r from-blue-50/50 to-purple-50/30 border-blue-200/50"
     )}>
-      <div className={cn("p-2 rounded-full flex-shrink-0", getIconBackground())}>{getIcon()}</div>
+      {/* Unread indicator */}
+      {!notification.read && (
+        <div className="absolute top-4 right-4 w-3 h-3 bg-[#FF6B6B] rounded-full animate-pulse"></div>
+      )}
 
-      <div className="flex-1 min-w-0">
-        <p className={cn("text-sm", !notification.read && "font-medium")}>{notification.title}</p>
-        {notification.message && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{notification.message}</p>}
-        {/* Journey invite details */}
-        {isJourneyInvite && (
-          <div className="mt-1 text-xs text-gray-600">
-            {notification.journeyTitle && <span className="font-semibold">Journey: {notification.journeyTitle}</span>}
-            {notification.journeyOwner && <span className="ml-2">by {notification.journeyOwner}</span>}
-            {notification.inviteStatus && notification.inviteStatus !== 'pending' && (
-              <span className={cn("ml-2 font-semibold", notification.inviteStatus === 'accepted' ? 'text-green-600' : 'text-red-600')}>
-                {notification.inviteStatus === 'accepted' ? 'Accepted' : 'Declined'}
-              </span>
-            )}
+      <div className="flex items-start gap-4">
+        {/* Profile Avatar or Icon */}
+        <div className="flex-shrink-0 relative">
+          {notification.actionBy && typeof notification.actionBy === 'object' ? (
+            <Avatar className="w-12 h-12 ring-2 ring-white shadow-md">
+              <AvatarImage 
+                src={notification.actionBy.profileImage?.url} 
+                alt={notification.actionBy.name}
+              />
+              <AvatarFallback className="bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 font-semibold">
+                {notification.actionBy.name?.charAt(0)?.toUpperCase() || '?'}
+              </AvatarFallback>
+            </Avatar>
+          ) : (
+            <div className={cn(
+              "w-12 h-12 rounded-full flex items-center justify-center shadow-md",
+              getIconBackground()
+            )}>
+              {getIcon()}
+            </div>
+          )}
+          
+          {/* Notification type badge */}
+          <div className={cn(
+            "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center shadow-md ring-2 ring-white",
+            getIconBackground()
+          )}>
+            {getIcon()}
           </div>
-        )}
-        <p className="text-xs text-gray-400 mt-1">
-          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-        </p>
-        {/* Accept/Decline for journey invites */}
-        {isJourneyInvite && (!notification.inviteStatus || notification.inviteStatus === 'pending') && (
-          <div className="flex gap-2 mt-2">
-            <Button size="sm" variant="outline" disabled={actionStatus === 'accepting'} onClick={e => { e.preventDefault(); handleInviteAction('accepted') }}>
-              {actionStatus === 'accepting' ? 'Accepting...' : actionStatus === 'accepted' ? 'Accepted!' : 'Accept'}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={actionStatus === 'declining'} onClick={e => { e.preventDefault(); handleInviteAction('declined') }}>
-              {actionStatus === 'declining' ? 'Declining...' : actionStatus === 'declined' ? 'Declined' : 'Decline'}
-            </Button>
-            {getNotificationLink() !== '#' && (
-              <Link href={getNotificationLink()} className="ml-2 text-[#4ECDC4] underline text-xs">View Journey</Link>
-            )}
-            {actionStatus === 'error' && (
-              <span className="text-xs text-red-600 ml-2 font-semibold bg-red-50 border border-red-200 rounded px-2 py-1">
-                {actionError || 'Failed to update invite status'}
-              </span>
-            )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1">
+              {/* Title */}
+              <p className={cn(
+                "text-gray-900 leading-relaxed",
+                !notification.read ? "font-semibold" : "font-medium"
+              )}>
+                {notification.title}
+              </p>
+              
+              {/* Message */}
+              {notification.message && (
+                <p className="text-gray-600 text-sm mt-1 leading-relaxed line-clamp-2">
+                  {notification.message}
+                </p>
+              )}
+
+              {/* Journey invite details */}
+              {isJourneyInvite && (
+                <div className="mt-2 text-sm text-gray-600">
+                  {notification.journeyTitle && (
+                    <span className="font-semibold text-gray-800">📍 {notification.journeyTitle}</span>
+                  )}
+                  {notification.journeyOwner && (
+                    <span className="ml-2 text-gray-500">by {notification.journeyOwner}</span>
+                  )}
+                  {notification.inviteStatus && notification.inviteStatus !== 'pending' && (
+                    <span className={cn(
+                      "ml-2 px-2 py-1 rounded-full text-xs font-bold",
+                      notification.inviteStatus === 'accepted' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    )}>
+                      {notification.inviteStatus === 'accepted' ? '✅ Accepted' : '❌ Declined'}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Timestamp */}
+              <p className="text-gray-400 text-xs mt-2 font-medium">
+                {timeAgo}
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-2">
+              {/* Mark as read button */}
+              {!notification.read && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClick}
+                  className="text-gray-400 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/10 transition-colors"
+                  title="Mark as read"
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+              )}
+
+              {/* Delete button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDelete}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all duration-200"
+                title="Delete notification"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        )}
-        {isJourneyInvite && notification.inviteStatus && notification.inviteStatus !== 'pending' && getNotificationLink() !== '#' && (
-          <Link href={getNotificationLink()} className="mt-2 inline-block text-[#4ECDC4] underline text-xs">View Journey</Link>
-        )}
+
+          {/* Accept/Decline buttons for journey invites */}
+          {shouldShowInviteButtons && (
+            <div className="flex items-center gap-3 mt-4 pt-3 border-t border-gray-100">
+              <Button 
+                size="sm" 
+                disabled={actionStatus === 'accepting'} 
+                onClick={e => { e.preventDefault(); handleInviteAction('accepted') }}
+                className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold px-6 py-2 rounded-xl shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                {actionStatus === 'accepting' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Accepting...
+                  </div>
+                ) : actionStatus === 'accepted' ? (
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4" />
+                    Accepted!
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4" />
+                    Accept
+                  </div>
+                )}
+              </Button>
+              
+              <Button 
+                size="sm" 
+                variant="outline" 
+                disabled={actionStatus === 'declining'} 
+                onClick={e => { e.preventDefault(); handleInviteAction('declined') }}
+                className="border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold px-6 py-2 rounded-xl transition-all duration-200"
+              >
+                {actionStatus === 'declining' ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                    Declining...
+                  </div>
+                ) : actionStatus === 'declined' ? (
+                  <div className="flex items-center gap-2">
+                    <X className="h-4 w-4" />
+                    Declined
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <X className="h-4 w-4" />
+                    Decline
+                  </div>
+                )}
+              </Button>
+
+              {/* Error state */}
+              {actionStatus === 'error' && (
+                <span className="text-xs text-red-600 font-semibold bg-red-50 border border-red-200 rounded-lg px-3 py-1">
+                  {actionError || 'Failed to update invite status'}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* View link for journey notifications */}
+          {isJourneyInvite && !shouldShowInviteButtons && link !== '#' && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <Link 
+                href={link} 
+                className="inline-flex items-center gap-2 text-[#4ECDC4] hover:text-[#4ECDC4]/80 font-semibold text-sm transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" />
+                View Journey
+              </Link>
+            </div>
+          )}
+
+          {/* General view link for other notifications */}
+          {!isJourneyInvite && link !== '#' && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <Link 
+                href={link} 
+                onClick={handleClick}
+                className="inline-flex items-center gap-2 text-[#4ECDC4] hover:text-[#4ECDC4]/80 font-semibold text-sm transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" />
+                View Details
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7"
-        onClick={handleDelete}
-        title="Delete notification"
-      >
-        <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" />
-      </Button>
-
-      {!notification.read && <div className="absolute right-3 top-3 h-2 w-2 rounded-full bg-blue-500" />}
     </div>
   )
 }

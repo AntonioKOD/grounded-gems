@@ -65,6 +65,10 @@ export const Notifications: CollectionConfig = {
         { label: "Mention", value: "mention" },
         { label: "Reminder", value: "reminder" },
         { label: "Event Update", value: "event_update" },
+        // Journey invite notifications
+        { label: "Journey Invite", value: "journey_invite" },
+        { label: "Journey Invite Accepted", value: "journey_invite_accepted" },
+        { label: "Journey Invite Declined", value: "journey_invite_declined" },
         // Location-based notifications
         { label: "Location Liked", value: "location_liked" },
         { label: "Location Shared", value: "location_shared" },

@@ -1,10 +1,12 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
-import { Sparkles, User, Users, Heart, Users2, Loader2, Utensils, Music, GlassWater, MapPin, Film, Star, PartyPopper, Coffee, Book, ShoppingBag, Sun, Moon, Share2, Bookmark, RefreshCw, Wand2, Calendar, Clock, ArrowRight, CheckCircle2, UserPlus, Home } from "lucide-react"
+import { Sparkles, User, Users, Heart, Users2, Loader2, Utensils, Music, GlassWater, MapPin, Film, Star, PartyPopper, Coffee, Book, ShoppingBag, Sun, Moon, Share2, Bookmark, RefreshCw, Wand2, Calendar, Clock, ArrowRight, CheckCircle2, UserPlus, Home, Copy, Check } from "lucide-react"
 import { cn } from '@/lib/utils'
 import ProtectedRoute from '@/components/auth/protected-route'
 import { saveGemJourney } from '@/app/(frontend)/events/actions'
+import { toast } from 'sonner'
+import Head from 'next/head'
 
 const CONTEXTS = [
   { label: "Solo", value: "solo", icon: User, gradient: "from-purple-500 to-purple-600", color: "text-purple-600" },
@@ -22,6 +24,41 @@ const QUICK_IDEAS = [
   "Local brewery hopping"
 ]
 
+// Function to generate meta tags for sharing
+function generateMetaTags(plan: any) {
+  if (!plan) return null;
+  
+  const title = `${plan.title || 'Amazing Hangout Plan'} - Grounded Gems`;
+  const description = plan.summary ? 
+    `${plan.summary.slice(0, 150)}...` : 
+    `Check out this awesome hangout plan with ${plan.steps?.length || 'amazing'} steps created with Grounded Gems AI Planner!`;
+  
+  return (
+    <Head>
+      <title>{title}</title>
+      <meta name="description" content={description} />
+      
+      {/* Open Graph Meta Tags */}
+      <meta property="og:title" content={title} />
+      <meta property="og:description" content={description} />
+      <meta property="og:type" content="article" />
+      <meta property="og:url" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/planner`} />
+      <meta property="og:image" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/icon-512.png`} />
+      <meta property="og:site_name" content="Grounded Gems" />
+      
+      {/* Twitter Meta Tags */}
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content={title} />
+      <meta name="twitter:description" content={description} />
+      <meta name="twitter:image" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/icon-512.png`} />
+      
+      {/* Additional Meta Tags */}
+      <meta name="author" content="Grounded Gems AI Planner" />
+      <meta name="robots" content="index, follow" />
+    </Head>
+  );
+}
+
 export default function PlannerPage() {
   const [input, setInput] = useState("")
   const [context, setContext] = useState("solo")
@@ -30,6 +67,7 @@ export default function PlannerPage() {
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>("idle")
   const [showQuickIdeas, setShowQuickIdeas] = useState(false)
+  const [shareStatus, setShareStatus] = useState<'idle' | 'copying' | 'copied'>('idle')
 
   // Ref for the quick ideas dropdown container
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -123,9 +161,61 @@ export default function PlannerPage() {
     setShowQuickIdeas(false)
   }
 
+  // Enhanced share function with better formatting and URL generation
+  const handleSharePlan = async () => {
+    if (!plan) return
+    
+    setShareStatus('copying')
+    
+    try {
+      // Create a more detailed and attractive share text
+      const planTitle = plan.title || 'My Perfect Hangout Plan'
+      const planSteps = plan.steps ? plan.steps.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n') : ''
+      
+      const shareText = `🎉 ${planTitle}
+
+${plan.summary ? `✨ ${plan.summary}\n` : ''}
+📋 Your Hangout Timeline:
+${planSteps}
+
+🤖 Generated with Grounded Gems AI Planner
+👉 Create your own plan: ${window.location.origin}/planner
+
+#GroundedGems #HangoutPlan #AI #Fun`
+
+      const shareData = {
+        title: planTitle,
+        text: shareText,
+        url: `${window.location.origin}/planner`
+      }
+      
+      // Try to use the Web Share API first (mobile)
+      if (navigator.share && /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        await navigator.share(shareData)
+        setShareStatus('copied')
+        toast.success('Plan shared successfully! 🎉')
+      } else {
+        // Fallback to clipboard with better formatting
+        await navigator.clipboard.writeText(shareText)
+        setShareStatus('copied')
+        toast.success('Plan copied to clipboard! 📋 Ready to share!')
+      }
+      
+      // Reset status after 3 seconds
+      setTimeout(() => setShareStatus('idle'), 3000)
+    } catch (err) {
+      console.error('Error sharing plan:', err)
+      setShareStatus('idle')
+      toast.error('Failed to share plan. Please try again.')
+    }
+  }
+
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden pb-20">
+      {/* Dynamic Meta Tags for better sharing */}
+      {plan && generateMetaTags(plan)}
+      
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 relative overflow-hidden">
         {/* Background decorations */}
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-10 sm:top-20 left-5 sm:left-10 w-48 sm:w-72 h-48 sm:h-72 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-full blur-3xl"></div>
@@ -384,18 +474,39 @@ export default function PlannerPage() {
                     >
                       <Bookmark className="h-4 w-4 sm:h-5 sm:w-5" />
                       <span className="hidden sm:inline">
-                        {saveStatus === 'saved' ? 'Saved to Gem List! ✨' : saveStatus === 'saving' ? 'Saving...' : 'Save to Gem List'}
+                        {saveStatus === 'saved' ? 'Saved to Hangout Plans! ✨' : saveStatus === 'saving' ? 'Saving...' : 'Save to Hangout Plans'}
                       </span>
                       <span className="sm:hidden">
                         {saveStatus === 'saved' ? 'Saved! ✨' : saveStatus === 'saving' ? 'Saving...' : 'Save'}
                       </span>
                     </button>
-                    <button className="flex items-center justify-center gap-2 sm:gap-3 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[#4ECDC4] to-[#26C6DA] text-white font-bold rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 text-sm sm:text-base">
-                      <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                      Share Plan
+                    <button 
+                      onClick={handleSharePlan}
+                      disabled={shareStatus === 'copying'}
+                      className="flex items-center justify-center gap-2 sm:gap-3 px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-[#4ECDC4] to-[#26C6DA] text-white font-bold rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 disabled:opacity-60 disabled:transform-none text-sm sm:text-base"
+                    >
+                      {shareStatus === 'copied' ? (
+                        <>
+                          <Check className="h-4 w-4 sm:h-5 sm:w-5" />
+                          <span className="hidden sm:inline">Copied!</span>
+                          <span className="sm:hidden">Copied!</span>
+                        </>
+                      ) : shareStatus === 'copying' ? (
+                        <>
+                          <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+                          <span className="hidden sm:inline">Copying...</span>
+                          <span className="sm:hidden">Copying...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                          <span className="hidden sm:inline">Share Plan</span>
+                          <span className="sm:hidden">Share</span>
+                        </>
+                      )}
                     </button>
                     <button 
-                      onClick={() => { setPlan(null); setInput(""); setError(null); setSaveStatus('idle'); }}
+                      onClick={() => { setPlan(null); setInput(""); setError(null); setSaveStatus('idle'); setShareStatus('idle'); }}
                       className="flex items-center justify-center gap-2 sm:gap-3 px-4 sm:px-6 py-2.5 sm:py-3 bg-white text-gray-700 font-bold rounded-lg sm:rounded-xl border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 text-sm sm:text-base"
                     >
                       <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />

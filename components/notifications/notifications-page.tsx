@@ -2,19 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Check } from "lucide-react"
+import { Check, Bell, Heart, Sparkles, Settings, Filter } from "lucide-react"
 import NotificationItem from "./notification-item"
 import { getNotifications, markAllNotificationsAsRead } from "@/app/actions"
 import type { Notification } from "@/types/notification"
 import TestNotificationButton from "../test-notification-button"
+import { cn } from "@/lib/utils"
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("all")
   const [user, setUser] = useState<{ id: string } | null>(null)
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
@@ -45,7 +46,7 @@ export default function NotificationsPage() {
   const fetchNotifications = async (userId: string) => {
     setIsLoading(true)
     try {
-      const fetchedNotifications = await getNotifications(userId, 50) // Get more notifications for the full page
+      const fetchedNotifications = await getNotifications(userId, 50)
       setNotifications(fetchedNotifications)
     } catch (error) {
       console.error("Error fetching notifications:", error)
@@ -59,7 +60,6 @@ export default function NotificationsPage() {
 
     try {
       await markAllNotificationsAsRead(user.id)
-      // Update local state
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     } catch (error) {
       console.error("Error marking all as read:", error)
@@ -69,101 +69,221 @@ export default function NotificationsPage() {
   // Filter notifications based on active tab
   const filteredNotifications = activeTab === "unread" ? notifications.filter((n) => !n.read) : notifications
 
-  // Group notifications by date
-  const groupedNotifications = filteredNotifications.reduce(
-    (groups, notification) => {
-      const date = new Date(notification.createdAt).toLocaleDateString()
-      if (!groups[date]) {
-        groups[date] = []
-      }
-      groups[date].push(notification)
-      return groups
-    },
-    {} as Record<string, Notification[]>,
-  )
+  // Group notifications by time periods (like Instagram)
+  const groupNotificationsByTime = (notifications: Notification[]) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+    const thisWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
 
-  // Count unread notifications
+    const groups: Record<string, Notification[]> = {
+      "Today": [],
+      "Yesterday": [],
+      "This Week": [],
+      "Earlier": []
+    }
+
+    notifications.forEach(notification => {
+      const notificationDate = new Date(notification.createdAt)
+      
+      if (notificationDate >= today) {
+        groups["Today"].push(notification)
+      } else if (notificationDate >= yesterday) {
+        groups["Yesterday"].push(notification)
+      } else if (notificationDate >= thisWeek) {
+        groups["This Week"].push(notification)
+      } else {
+        groups["Earlier"].push(notification)
+      }
+    })
+
+    // Remove empty groups
+    Object.keys(groups).forEach(key => {
+      if (groups[key].length === 0) {
+        delete groups[key]
+      }
+    })
+
+    return groups
+  }
+
+  const groupedNotifications = groupNotificationsByTime(filteredNotifications)
   const unreadCount = notifications.filter((n) => !n.read).length
 
   if (!user) {
     return (
-      <Card className="p-8 text-center">
-        <h2 className="text-xl font-semibold mb-2">Sign in to view notifications</h2>
-        <p className="text-gray-500 mb-4">You need to be logged in to see your notifications.</p>
-        <Button asChild>
-          <a href="/login">Sign In</a>
-        </Button>
-      </Card>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-8 text-center max-w-md w-full">
+          <div className="w-20 h-20 bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] rounded-full mx-auto mb-6 flex items-center justify-center">
+            <Bell className="w-10 h-10 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Sign in to view notifications</h2>
+          <p className="text-gray-600 mb-6 leading-relaxed">You need to be logged in to see your notifications and stay connected.</p>
+          <Button asChild className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 text-white font-semibold py-3 rounded-2xl shadow-lg">
+            <a href="/login">Sign In</a>
+          </Button>
+        </div>
+      </div>
     )
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Modern Header */}
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-lg border-b border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] rounded-full flex items-center justify-center">
+                <Bell className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+                <p className="text-sm text-gray-500">Stay connected with your community</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <Button 
+                  onClick={handleMarkAllAsRead}
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-[#FF6B6B] hover:text-[#FF6B6B]/80 hover:bg-[#FF6B6B]/10 font-medium"
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Mark all read
+                </Button>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              >
+                <Filter className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Modern Tabs */}
+          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-gray-100 rounded-2xl p-1 h-12">
+              <TabsTrigger 
+                value="all" 
+                className="rounded-xl font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-gray-900 text-gray-600"
+              >
+                All
+                {notifications.length > 0 && (
+                  <span className="ml-2 bg-gray-200 text-gray-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                    {notifications.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger 
+                value="unread" 
+                className="rounded-xl font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-gray-900 text-gray-600"
+              >
+                Unread
+                {unreadCount > 0 && (
+                  <span className="ml-2 bg-[#FF6B6B] text-white rounded-full px-2 py-0.5 text-xs font-bold animate-pulse">
+                    {unreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
+
       {/* Debug Tools - Only show in development */}
       {process.env.NODE_ENV === 'development' && user && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Tools (Development Only)</h3>
-          <div className="flex gap-2 flex-wrap">
-            <TestNotificationButton userId={user.id} />
-            <Button asChild variant="outline" size="sm">
-              <a href="/notifications/debug">Debug Page</a>
-            </Button>
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4">
+            <h3 className="text-sm font-medium text-yellow-800 mb-2">Debug Tools (Development Only)</h3>
+            <div className="flex gap-2 flex-wrap">
+              <TestNotificationButton userId={user.id} />
+              <Button asChild variant="outline" size="sm" className="rounded-xl">
+                <a href="/notifications/debug">Debug Page</a>
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="flex justify-between items-center mb-6">
-        <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full max-w-md">
-          <TabsList>
-            <TabsTrigger value="all" className="flex-1">
-              All Notifications
-            </TabsTrigger>
-            <TabsTrigger value="unread" className="flex-1">
-              Unread
-              {unreadCount > 0 && (
-                <span className="ml-2 bg-[#FF6B6B] text-white rounded-full px-2 py-0.5 text-xs">{unreadCount}</span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        <Button variant="outline" size="sm" onClick={handleMarkAllAsRead} disabled={unreadCount === 0} className="ml-4">
-          <Check className="h-4 w-4 mr-2" />
-          Mark all as read
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center items-center py-12">
-          <div className="h-8 w-8 rounded-full border-2 border-t-[#FF6B6B] border-r-[#FF6B6B]/30 border-b-[#FF6B6B]/10 border-l-[#FF6B6B]/60 animate-spin"></div>
-        </div>
-      ) : filteredNotifications.length > 0 ? (
-        <div className="space-y-6">
-          {Object.entries(groupedNotifications).map(([date, notifications]) => (
-            <div key={date}>
-              <h3 className="text-sm font-medium text-gray-500 mb-3">{date}</h3>
-              <Card>
-                <div className="divide-y">
-                  {notifications.map((notification) => (
-                    <NotificationItem
+      {/* Content */}
+      <div className="max-w-4xl mx-auto px-4 pb-8">
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-full border-4 border-gray-200"></div>
+              <div className="w-16 h-16 rounded-full border-4 border-[#FF6B6B] border-t-transparent absolute top-0 animate-spin"></div>
+            </div>
+            <p className="text-gray-500 mt-4 font-medium">Loading notifications...</p>
+          </div>
+        ) : filteredNotifications.length > 0 ? (
+          <div className="space-y-8">
+            {Object.entries(groupedNotifications).map(([timeGroup, notifications]) => (
+              <div key={timeGroup} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-lg font-bold text-gray-900">{timeGroup}</h3>
+                  <div className="flex-1 h-px bg-gradient-to-r from-gray-200 to-transparent"></div>
+                  <span className="text-sm text-gray-500 font-medium">{notifications.length}</span>
+                </div>
+                
+                <div className="space-y-2">
+                  {notifications.map((notification, index) => (
+                    <div 
                       key={notification.id}
-                      notification={notification}
-                      onAction={() => fetchNotifications(user.id)}
-                    />
+                      className={cn(
+                        "transform transition-all duration-300 hover:scale-[1.02]",
+                        "animate-in slide-in-from-bottom-2",
+                      )}
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <NotificationItem
+                        notification={notification}
+                        onAction={() => fetchNotifications(user.id)}
+                      />
+                    </div>
                   ))}
                 </div>
-              </Card>
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Beautiful Empty State
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="relative mb-8">
+              <div className="w-32 h-32 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                <Bell className="w-16 h-16 text-gray-400" />
+              </div>
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] rounded-full flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-white" />
+              </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <Card className="p-8 text-center">
-          <h2 className="text-xl font-semibold mb-2">No notifications</h2>
-          <p className="text-gray-500">
-            {activeTab === "unread" ? "You've read all your notifications." : "You don't have any notifications yet."}
-          </p>
-        </Card>
-      )}
+            
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              {activeTab === "unread" ? "All caught up! 🎉" : "No notifications yet"}
+            </h2>
+            <p className="text-gray-600 max-w-md leading-relaxed mb-6">
+              {activeTab === "unread" 
+                ? "You've read all your notifications. Great job staying up to date with your community!"
+                : "When people interact with your content or invite you to hangouts, you'll see notifications here. Start exploring and connecting!"
+              }
+            </p>
+            
+            {activeTab !== "unread" && (
+              <Button 
+                asChild 
+                className="bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 text-white font-semibold px-8 py-3 rounded-2xl shadow-lg transform hover:scale-105 transition-all duration-200"
+              >
+                <a href="/feed">Explore Feed</a>
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
