@@ -11,6 +11,29 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 /**
+ * Get comprehensive category information
+ */
+export function getCategoryInfo(categories?: Array<Category | string>): { color: string; name: string; type?: string } {
+  // If no categories provided, return default
+  if (!categories || !Array.isArray(categories) || categories.length === 0) {
+    return {
+      color: TYPE_COLORS.default,
+      name: "Uncategorized",
+      type: "general"
+    }
+  }
+
+  // Get the primary (first) category
+  const primaryCategory = categories[0]
+  
+  return {
+    color: getCategoryColor(primaryCategory),
+    name: getCategoryName(primaryCategory),
+    type: typeof primaryCategory === "object" && primaryCategory.type ? primaryCategory.type : "general"
+  }
+}
+
+/**
  * Get color for a category
  */
 export function getCategoryColor(category: any): string {

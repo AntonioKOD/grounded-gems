@@ -170,7 +170,8 @@ export default function MapExplorer() {
     }
 
     if (lat != null && lng != null && !isNaN(lat) && !isNaN(lng)) {
-      return [lat, lng]
+      // Return in [lng, lat] format for Mapbox (not [lat, lng])
+      return [lng, lat]
     }
 
     return null
@@ -354,11 +355,12 @@ export default function MapExplorer() {
         console.log("📍 Accuracy:", position.coords.accuracy, "meters")
         console.log("🎯 Setting map center to user location")
         
-        setUserLocation(userCoords)
+        setUserLocation(userCoords) // Store as [lat, lng] for consistency
         setLocationRequestStatus('granted')
         
-        // Center map on user location
-        setMapCenter(userCoords)
+        // Center map on user location - convert to [lng, lat] for Mapbox
+        const mapCenter: [number, number] = [userCoords[1], userCoords[0]] // [lng, lat]
+        setMapCenter(mapCenter)
         setMapZoom(14) // Zoom in closer when centering on user
         
         toast.success(`Map centered on your location (±${Math.round(position.coords.accuracy)}m accuracy)`)
@@ -1573,9 +1575,13 @@ export default function MapExplorer() {
                       size="icon"
                       onClick={() => {
                         console.log("🎯 Centering map on user location:", userLocation)
-                        setMapCenter(userLocation)
-                        setMapZoom(15)
-                        toast.success("Centered on your location")
+                        // userLocation is [lat, lng] but map needs [lng, lat]
+                        if (userLocation) {
+                          const mapCenter = [userLocation[1], userLocation[0]] as [number, number] // Convert to [lng, lat]
+                          setMapCenter(mapCenter)
+                          setMapZoom(15)
+                          toast.success("Centered on your location")
+                        }
                       }}
                       className="bg-white text-gray-800 shadow-md hover:bg-gray-100 border border-gray-200 rounded-full h-10 w-10"
                       aria-label="Go to my location"

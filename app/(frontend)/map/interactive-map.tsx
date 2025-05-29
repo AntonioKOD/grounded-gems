@@ -12,7 +12,10 @@ const MapComponent = dynamic(() => import("./map-component"), {
   ssr: false,
   loading: () => (
     <div className="h-full w-full flex items-center justify-center bg-gray-100">
-      <div className="w-8 h-8 border-4 border-[#FF6B6B] border-t-transparent rounded-full animate-spin"></div>
+      <div className="text-center space-y-4">
+        <div className="w-8 h-8 border-4 border-[#FF6B6B] border-t-transparent rounded-full animate-spin mx-auto"></div>
+        <p className="text-sm text-gray-600">Loading map...</p>
+      </div>
     </div>
   ),
 })
@@ -33,7 +36,12 @@ interface InteractiveMapProps {
 }
 
 const InteractiveMap = memo(function InteractiveMap(props: InteractiveMapProps) {
-  return <MapComponent {...props} />
+  // Wrap in a div to ensure proper container handling
+  return (
+    <div className="w-full h-full relative">
+      <MapComponent {...props} />
+    </div>
+  )
 })
 
 export default InteractiveMap
