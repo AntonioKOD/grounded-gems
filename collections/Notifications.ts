@@ -102,7 +102,7 @@ export const Notifications: CollectionConfig = {
     {
       name: "relatedTo",
       type: "relationship",
-      relationTo: ["posts", "users", "locations", "events", "specials", "eventRequests"],
+      relationTo: ["posts", "users", "locations", "events", "specials", "eventRequests", "journeys"],
       hasMany: false,
     },
     {

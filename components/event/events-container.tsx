@@ -499,14 +499,17 @@ export default function EventsContainer({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-track-gray-100">
               {attendingJourneys.map((journey: any) => (
                 <div key={journey.id} className="border rounded-lg p-4 bg-white shadow flex flex-col gap-1">
-                  <div className="font-semibold text-[#FF6B6B] text-lg mb-1 flex items-center gap-2">
-                    <span className="inline-block bg-[#FFD93D] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold">Journey</span>
-                    {journey.title}
-                  </div>
+                  <span className="inline-block bg-[#FFD93D] text-gray-900 px-2 py-0.5 rounded-full text-xs font-bold">Journey</span>
+                  {journey.title}
                   <div className="text-gray-700 text-sm mb-1 line-clamp-2">{journey.summary}</div>
-                  {journey.context && <div className="text-xs text-gray-500 mb-1">Context: {journey.context}</div>}
-                  <div className="text-xs text-gray-400">Date: {journey.date}</div>
-                  <Link href={`/profile/me/journey/${journey.id}`} className="text-xs text-[#4ECDC4] underline mt-2">View Journey</Link>
+                  {journey.context && <div className="text-xs text-gray-400 mb-1">{journey.context}</div>}
+                  <Link href={`/events/journey/${journey.id}`} className="text-xs text-[#4ECDC4] underline mt-2">View Journey</Link>
+                  <button
+                    onClick={() => handleUnsave(journey.id)}
+                    className="mt-2 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition self-start"
+                  >
+                    Unsave
+                  </button>
                 </div>
               ))}
             </div>
@@ -517,11 +520,11 @@ export default function EventsContainer({
           )}
         </div>
 
-        {/* Saved Gem Journeys */}
+        {/* Saved Hangout Plans */}
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-[#FFD93D] flex items-center gap-2">
             <Bookmark className="h-5 w-5 text-[#FFD93D]" />
-            <span>Saved Gem Journeys</span>
+            <span>Saved Hangout Plans</span>
           </h3>
           <SavedGemJourneysClient plans={savedJourneys} />
         </div>

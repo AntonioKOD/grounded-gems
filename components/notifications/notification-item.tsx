@@ -70,10 +70,9 @@ export default function NotificationItem({ notification, onAction }: Notificatio
   // Get the appropriate link based on notification type and related entity
   const getNotificationLink = () => {
     if (!notification.relatedTo) return "#"
-
-    const { collection, id } = notification.relatedTo
+    const collection = notification.relatedTo.relationTo || notification.relatedTo.collection
+    const id = notification.relatedTo.value || notification.relatedTo.id
     if (typeof id !== 'string' || !id) return "#"
-
     switch (collection) {
       case "posts":
         return `/post/${id}`
@@ -82,10 +81,8 @@ export default function NotificationItem({ notification, onAction }: Notificatio
       case "locations":
         return `/location/${id}`
       case "journeys":
-        return `/profile/me/journey/${id}`
+        return `/events/${id}/journey/${id}`
       case "comments":
-        // For comments, we need to find the parent post
-        // This is simplified - in a real app, you might need to fetch the parent post ID
         return `/post/${id.split("-")[0]}`
       default:
         return "#"
@@ -110,12 +107,16 @@ export default function NotificationItem({ notification, onAction }: Notificatio
 
   // Accept/Decline handlers for journey invites
   const handleInviteAction = async (status: 'accepted' | 'declined') => {
-    if (!notification.relatedTo || notification.relatedTo.collection !== 'journeys') return
-    let journeyId = notification.relatedTo.id
-    if (typeof journeyId !== 'string' && notification.relatedTo && typeof notification.relatedTo === 'object') {
-      journeyId = notification.relatedTo.value
+    if (!notification.relatedTo) return
+    // Accept both relationTo and collection for compatibility
+    const collection = notification.relatedTo.relationTo || notification.relatedTo.collection
+    let journeyId = notification.relatedTo.value || notification.relatedTo.id
+    // Fallback: if journeyId is an object, try id/_id
+    if (typeof journeyId === 'object' && journeyId !== null) {
+      journeyId = journeyId.id || journeyId._id || ''
     }
-    if (typeof journeyId !== 'string' || !journeyId) {
+    if (collection !== 'journeys' || typeof journeyId !== 'string' || !journeyId) {
+      console.error('Invalid journey ID for invite action:', notification.relatedTo)
       setActionStatus('error')
       setActionError('Invalid journey ID for invite action')
       return

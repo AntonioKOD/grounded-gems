@@ -9,8 +9,10 @@ export interface Notification {
   title: string
   message?: string
   relatedTo?: {
-    id: string
-    collection: "posts" | "comments" | "users" | "locations" | 'events'
+    id?: string
+    value?: string
+    relationTo?: "posts" | "comments" | "users" | "locations" | "events" | "journeys"
+    collection?: string
   }
   read: boolean
   createdAt: string

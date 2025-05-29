@@ -89,7 +89,7 @@ export default function SavedPlansTab() {
 
   if (loading) return <div className="flex items-center gap-2 text-gray-500"><Loader2 className="animate-spin h-5 w-5" /> Loading...</div>
   if (error) return <div className="text-red-600 font-medium">{error}</div>
-  if (plans.length === 0) return <div className="text-gray-500">No saved Gem Journeys yet.</div>
+  if (plans.length === 0) return <div className="text-gray-500">No saved Hangout Plans yet.</div>
 
   return (
     <div className="space-y-4 mt-4">

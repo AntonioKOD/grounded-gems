@@ -8,10 +8,10 @@ export const Journeys: CollectionConfig = {
     plural: 'Journeys',
   },
   access: {
-    read: ({ req: { user } }) => Boolean(user),
+    read: () => true,
     create: ({ req: { user } }) => Boolean(user),
-    update: ({ req: { user } }) => Boolean(user),
-    delete: ({ req: { user } }) => Boolean(user),
+    update: () => true,
+    delete: () => true,
   },
   admin: {
     useAsTitle: 'title',

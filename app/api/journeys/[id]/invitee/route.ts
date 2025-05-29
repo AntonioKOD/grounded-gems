@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, context: any) {
+  const params = typeof context.params?.then === 'function' ? await context.params : context.params || {};
   try {
     const payload = await getPayload({ config })
     const { user } = await payload.auth({ headers: req.headers })

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest, context: any) {
     try {
       const invitee = await payload.findByID({ collection: 'users', id: inviteeId })
       if (invitee?.email) {
-        const journeyUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/profile/${inviteeId}/journey/${journey.id}`
+        const journeyUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/events/journey/${journey.id}`
         const emailTemplate = journeyInviteEmailTemplate({
           inviteeName: invitee.name || '',
           inviteeEmail: invitee.email,

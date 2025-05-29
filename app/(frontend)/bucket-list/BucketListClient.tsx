@@ -12,9 +12,9 @@ export default function BucketListClient({ plans }: { plans: any[] }) {
           <Bookmark className="h-8 w-8 text-[#FFD93D]" />
           <h1 className="text-2xl font-bold">Gem List</h1>
         </div>
-        <p className="mb-6 text-gray-600">Your saved Gem Journeys and bucket list plans will appear here.</p>
+        <p className="mb-6 text-gray-600">Your saved Hangout Plans and bucket list plans will appear here.</p>
         {plans.length === 0 ? (
-          <div className="text-gray-500">No saved Gem Journeys yet.</div>
+          <div className="text-gray-500">No saved Hangout Plans yet.</div>
         ) : (
           <div className="space-y-4">
             {plans.map(plan => (

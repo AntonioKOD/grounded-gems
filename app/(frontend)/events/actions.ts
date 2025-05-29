@@ -1160,3 +1160,20 @@ export async function saveGemJourney(journeyId: string) {
   })
   return { success: true }
 }
+
+export async function unsaveGemJourney(journeyId: string) {
+  const user = await getServerSideUser()
+  if (!user) return { success: false, error: 'Unauthorized' }
+  const payload = await getPayload({ config })
+  const dbUser = await payload.findByID({ collection: 'users', id: user.id, depth: 0 })
+  const savedJourneyIds = Array.isArray(dbUser.savedGemJourneys)
+    ? dbUser.savedGemJourneys.map((j: any) => typeof j === 'string' ? j : j.id || j._id)
+    : []
+  if (!savedJourneyIds.includes(journeyId)) return { success: true }
+  await payload.update({
+    collection: 'users',
+    id: user.id,
+    data: { savedGemJourneys: savedJourneyIds.filter((id: string) => id !== journeyId) }
+  })
+  return { success: true }
+}

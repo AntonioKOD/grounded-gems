@@ -2008,7 +2008,9 @@ export async function getRecentNotifications(userId: string, limit = 5){
       relatedTo: notification.relatedTo
         ? {
             id: typeof notification.relatedTo === "object" ? notification.relatedTo.id : notification.relatedTo,
-            collection: notification.relatedTo.relationTo,
+            value: typeof notification.relatedTo === "object" ? notification.relatedTo.value : undefined,
+            relationTo: notification.relatedTo.relationTo,
+            collection: notification.relatedTo.collection,
           }
         : undefined,
       read: notification.read,
