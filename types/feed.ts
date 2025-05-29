@@ -40,7 +40,7 @@ export interface User {
     isLiked?: boolean
     isSaved?: boolean
     isViewed?: boolean
-    type?: "post" | "review" | "video" | "story" | "tip"
+    type?: "post" | "review" | "video" | "story" | "tip" | "recommendation"
     rating?: number | null
     location?: {
       id: string

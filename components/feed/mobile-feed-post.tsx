@@ -40,6 +40,7 @@ import { useAppSelector, useAppDispatch } from "@/lib/hooks"
 import { savePostAsync, toggleSaveOptimistic } from "@/lib/features/posts/postsSlice"
 import { formatDistanceToNow } from "date-fns"
 import { CommentSystemLight } from "@/components/post/comment-system-light"
+import VideoPlayer from "./video-player"
 
 interface MobileFeedPostProps {
   post: Post
@@ -337,7 +338,23 @@ const MobileFeedPost = memo(function MobileFeedPost({
       >
         {/* Main Media with Enhanced Visual Effects */}
         <div className="absolute inset-0 w-full h-full">
-          {post.image && post.image !== "" && !imageError ? (
+          {post.video && !imageError ? (
+            <VideoPlayer
+              src={post.video}
+              thumbnail={post.videoThumbnail || post.image}
+              aspectRatio="9/16"
+              className="w-full h-full object-cover"
+              onViewStart={() => {
+                // Track video view start
+              }}
+              onViewComplete={() => {
+                // Track video view completion
+              }}
+              controls={false}
+              showProgress={false}
+              showPlayButton={false}
+            />
+          ) : post.image && post.image !== "" && !imageError ? (
             <div className="relative w-full h-full">
               <Image
                 src={post.image}

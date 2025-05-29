@@ -1903,7 +1903,7 @@ export async function createPost(formData: FormData) {
     const postData: any = {
       content: content.trim(),
       author: user.id,
-      type,
+      type: videoId ? "video" : type, // Set type to 'video' if video is uploaded
       status: "published",
     }
 
@@ -4644,6 +4644,8 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         createdAt: post.createdAt || new Date().toISOString(),
         updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
         image: post.image?.url || post.featuredImage?.url || undefined,
+        video: post.video?.url || undefined,
+        videoThumbnail: post.videoThumbnail?.url || post.image?.url || undefined,
         likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
         commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
         shareCount: post.shares || 0,

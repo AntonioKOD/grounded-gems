@@ -148,6 +148,8 @@ export const Posts: CollectionConfig = {
     ]},
     { name: 'rating', type: 'number', min: 1, max: 5 },
     { name: 'image', type: 'upload', relationTo: 'media' },
+    { name: 'video', type: 'upload', relationTo: 'media' },
+    { name: 'videoThumbnail', type: 'upload', relationTo: 'media' },
     { name: 'photos', type: 'upload', relationTo: 'media', hasMany: true },
     { name: 'location', type: 'relationship', relationTo: 'locations' },
     { name: 'author', type: 'relationship', relationTo: 'users', required: true },

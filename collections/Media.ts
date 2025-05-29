@@ -19,6 +19,14 @@ export const Media: CollectionConfig = {
       'image/jfif',
       'image/pjpeg',
       'image/pjp',
+      // Video formats
+      'video/mp4',
+      'video/webm',
+      'video/ogg',
+      'video/mov',
+      'video/avi',
+      'video/quicktime',
+      'video/x-msvideo',
     ],
     imageSizes: [
       {

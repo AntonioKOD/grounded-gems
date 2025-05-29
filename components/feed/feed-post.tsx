@@ -42,6 +42,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { likePost, sharePost, savePost } from "@/app/actions"
 import { CommentSystemLight } from "@/components/post/comment-system-light"
+import VideoPlayer from "./video-player"
 import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
@@ -315,22 +316,37 @@ export const FeedPost = memo(function FeedPost({
           </div>
 
           {/* Post Media */}
-          {post.image && !imageError && (
+          {(post.video || post.image) && !imageError && (
             <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-100 mb-6 shadow-sm">
-              <Image
-                src={post.image}
-                alt={post.title || "Post image"}
-                fill
-                className="object-cover transition-opacity duration-500 hover:scale-105 transition-transform"
-                loading="lazy"
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                onLoadingComplete={() => setIsLoadingImage(false)}
-                onError={() => {
-                  setIsLoadingImage(false)
-                  setImageError(true)
-                }}
-              />
-              {isLoadingImage && (
+              {post.video ? (
+                <VideoPlayer
+                  src={post.video}
+                  thumbnail={post.videoThumbnail || post.image}
+                  aspectRatio="4/3"
+                  className="w-full h-full"
+                  onViewStart={() => {
+                    // Track video view start
+                  }}
+                  onViewComplete={() => {
+                    // Track video view completion
+                  }}
+                />
+              ) : post.image ? (
+                <Image
+                  src={post.image}
+                  alt={post.title || "Post image"}
+                  fill
+                  className="object-cover transition-opacity duration-500 hover:scale-105 transition-transform"
+                  loading="lazy"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  onLoadingComplete={() => setIsLoadingImage(false)}
+                  onError={() => {
+                    setIsLoadingImage(false)
+                    setImageError(true)
+                  }}
+                />
+              ) : null}
+              {isLoadingImage && !post.video && (
                 <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
                   <div className="relative w-8 h-8">
                     <div className="absolute inset-0 border-2 border-gray-200 rounded-full animate-ping" />
