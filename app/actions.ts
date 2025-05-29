@@ -4358,8 +4358,9 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
     let userFollowing: string[] = []
     let userLocation: { latitude?: number; longitude?: number } = {}
     
-    if (currentUserId) {
+    if (currentUserId && currentUserId.trim() !== '') {
       try {
+        console.log(`Attempting to fetch user data for ID: ${currentUserId}`)
         const user = await payload.findByID({
           collection: 'users',
           id: currentUserId,
@@ -4367,6 +4368,7 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
         })
         
         if (user) {
+          console.log(`Successfully fetched user data for ${currentUserId}`)
           userFollowing = user.following || []
           userLocation = user.location || {}
           // Get user's interaction history to understand preferences
@@ -4376,9 +4378,13 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
             interactionHistory: user.likedPosts || []
           }
         }
-      } catch (error) {
-        console.error("Error fetching user data for discover feed:", error)
+      } catch (userError) {
+        console.error(`Error fetching user data for discover feed (ID: ${currentUserId}):`, userError)
+        // Continue without user data - this is fine for discovery
+        // Don't throw error, just log it and continue with generic discovery
       }
+    } else {
+      console.log('No currentUserId provided, using anonymous discovery feed')
     }
 
     // Build complex query for discover algorithm
@@ -4397,6 +4403,11 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
     })
 
     let posts = result.docs || []
+
+    if (posts.length === 0) {
+      console.log('No posts found for discover feed')
+      return []
+    }
 
     // Apply Discover Algorithm
     const scoredPosts = posts.map((post: any) => {
@@ -4457,6 +4468,7 @@ export async function getDiscoverFeed(currentUserId?: string, page = 1, pageSize
       .sort((a, b) => b.discoveryScore - a.discoveryScore)
       .slice((page - 1) * pageSize, page * pageSize)
 
+    console.log(`Successfully processed ${sortedPosts.length} posts for discover feed`)
     return await formatPostsForFrontend(sortedPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching discover feed:", error)
@@ -4469,6 +4481,13 @@ export async function getPopularFeed(currentUserId?: string, page = 1, pageSize 
   
   try {
     const payload = await getPayload({ config })
+    
+    // Log the user ID for debugging
+    if (currentUserId) {
+      console.log(`Fetching popular feed for user ID: ${currentUserId}`)
+    } else {
+      console.log('Fetching popular feed for anonymous user')
+    }
     
     // Calculate date threshold based on timeframe
     const now = new Date()
@@ -4506,6 +4525,11 @@ export async function getPopularFeed(currentUserId?: string, page = 1, pageSize 
 
     let posts = result.docs || []
 
+    if (posts.length === 0) {
+      console.log('No posts found for popular feed')
+      return []
+    }
+
     // Apply Popular Algorithm - weighted engagement scoring
     const scoredPosts = posts.map((post: any) => {
       const likes = post.likes?.length || 0
@@ -4538,6 +4562,7 @@ export async function getPopularFeed(currentUserId?: string, page = 1, pageSize 
       .sort((a, b) => b.popularityScore - a.popularityScore)
       .slice((page - 1) * pageSize, page * pageSize)
 
+    console.log(`Successfully processed ${sortedPosts.length} posts for popular feed`)
     return await formatPostsForFrontend(sortedPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching popular feed:", error)
@@ -4550,6 +4575,13 @@ export async function getLatestFeed(currentUserId?: string, page = 1, pageSize =
   
   try {
     const payload = await getPayload({ config })
+    
+    // Log the user ID for debugging
+    if (currentUserId) {
+      console.log(`Fetching latest feed for user ID: ${currentUserId}`)
+    } else {
+      console.log('Fetching latest feed for anonymous user')
+    }
     
     const query: any = {
       status: { equals: "published" }
@@ -4574,6 +4606,11 @@ export async function getLatestFeed(currentUserId?: string, page = 1, pageSize =
 
     let posts = result.docs || []
 
+    if (posts.length === 0) {
+      console.log('No posts found for latest feed')
+      return []
+    }
+
     // Optional: Apply minimal quality filtering for latest feed
     const qualityFilteredPosts = posts.filter((post: any) => {
       // Filter out very low quality posts
@@ -4584,6 +4621,7 @@ export async function getLatestFeed(currentUserId?: string, page = 1, pageSize =
       return hasContent && hasEngagement
     })
 
+    console.log(`Successfully processed ${qualityFilteredPosts.length} posts for latest feed`)
     return await formatPostsForFrontend(qualityFilteredPosts, currentUserId)
   } catch (error) {
     console.error("Error fetching latest feed:", error)
@@ -4655,12 +4693,13 @@ export async function getSavedPostsFeed(currentUserId: string, page = 1, pageSiz
 
 // Helper function to format posts consistently
 async function formatPostsForFrontend(posts: any[], currentUserId?: string): Promise<Post[]> {
-  // Get user's liked and saved posts if currentUserId is provided
+  // Get user's liked and saved posts if currentUserId is provided and valid
   let userLikedPosts: string[] = []
   let userSavedPosts: string[] = []
   
-  if (currentUserId) {
+  if (currentUserId && currentUserId.trim() !== '' && currentUserId !== 'undefined' && currentUserId !== 'null') {
     try {
+      console.log(`Fetching user interaction data for user ID: ${currentUserId}`)
       const payload = await getPayload({ config })
       const user = await payload.findByID({
         collection: 'users',
@@ -4669,12 +4708,16 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
       })
       
       if (user) {
+        console.log(`Successfully fetched user interaction data for ${currentUserId}`)
         userLikedPosts = Array.isArray(user.likedPosts) ? user.likedPosts : []
         userSavedPosts = Array.isArray(user.savedPosts) ? user.savedPosts : []
       }
     } catch (error) {
-      console.error("Error fetching user interaction data:", error)
+      console.error(`Error fetching user interaction data (ID: ${currentUserId}):`, error)
+      // Continue with empty arrays - this is fine for public viewing
     }
+  } else if (currentUserId) {
+    console.log('Invalid currentUserId provided, using anonymous interaction data')
   }
 
   return posts.map((post: any) => {
