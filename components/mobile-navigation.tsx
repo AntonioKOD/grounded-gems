@@ -132,7 +132,7 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                               name: initialUser?.name || "",
                               avatar: initialUser?.profileImage?.url || initialUser?.avatar,
                             }}
-                            onClose={() => setOpen(false)}
+                            onCancel={() => setOpen(false)}
                             onPostCreated={handlePostCreated}
                           />
                         </div>

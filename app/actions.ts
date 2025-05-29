@@ -1794,112 +1794,141 @@ export async function createPost(formData: FormData) {
     const content = formData.get("content") as string
     const title = formData.get("title") as string
     const type = (formData.get("type") as "post" | "review" | "recommendation") || "post"
-    const locationName = formData.get("locationName") as string
-    const rating = formData.get("rating") ? Number.parseInt(formData.get("rating") as string) : undefined
-    const image = formData.get("image") as File | null
-    const video = formData.get("video") as File | null
+    const rating = formData.get("rating") as string
+    const locationId = formData.get("locationId") as string
+
+    // Get tags array
+    const tags: string[] = []
+    const tagEntries = formData.getAll("tags[]")
+    tagEntries.forEach(tag => {
+      if (typeof tag === 'string' && tag.trim()) {
+        tags.push(tag.trim())
+      }
+    })
 
     // Validate required fields
-    if (!content) {
+    if (!content?.trim()) {
       return {
         success: false,
-        message: "Post content is required",
+        message: "Content is required",
       }
     }
 
-    // Handle location if provided
-    let locationId = null
-    if (locationName && locationName.trim()) {
-      // Check if location exists
-      const { docs: existingLocations } = await payload.find({
-        collection: "locations",
-        where: {
-          name: { equals: locationName.trim() },
-        },
-        limit: 1,
-      })
+    // Handle multiple media uploads
+    const mediaFiles = formData.getAll("media") as File[]
+    const videoFiles = formData.getAll("videos") as File[]
+    
+    let imageId: string | null = null
+    let videoId: string | null = null
+    let videoThumbnailId: string | null = null
+    const photoIds: string[] = []
 
-      if (existingLocations.length > 0) {
-        locationId = existingLocations[0].id
-      } else {
-        // Create new location for any post type that includes location
-        try {
-          const newLocation = await payload.create({
-            collection: "locations",
-            data: {
-              name: locationName.trim(),
-              createdBy: user.id,
-              isVerified: false,
-              status: 'published',
-            },
-          })
-          locationId = newLocation.id
-        } catch (error) {
-          console.error("Error creating location:", error)
-          // Continue without location if creation fails
+    // Process image files
+    if (mediaFiles && mediaFiles.length > 0) {
+      for (const file of mediaFiles) {
+        if (file instanceof File && file.size > 0) {
+          try {
+            // Convert file to buffer
+            const bytes = await file.arrayBuffer()
+            const buffer = Buffer.from(bytes)
+
+            // Create media document in Payload
+            const mediaDoc = await payload.create({
+              collection: 'media',
+              data: {
+                alt: `Image for ${title || 'post'} by ${user.name}`,
+              },
+              file: {
+                data: buffer,
+                mimetype: file.type,
+                name: file.name,
+                size: file.size,
+              },
+            })
+
+            if (mediaDoc?.id) {
+              if (!imageId) {
+                // Set first image as main image
+                imageId = mediaDoc.id
+              }
+              // Add all images to photos array
+              photoIds.push(mediaDoc.id)
+            }
+          } catch (error) {
+            console.error('Error uploading image:', error)
+            return {
+              success: false,
+              message: "Failed to upload image. Please try again.",
+            }
+          }
         }
       }
     }
 
-    // Handle image upload if provided
-    let imageId = null
-    if (image && image.size > 0) {
-      try {
-        // Convert the File to the format Payload expects
-        const arrayBuffer = await image.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        
-        const uploadedImage = await payload.create({
-          collection: "media",
-          data: {
-            alt: title || `Post image by ${user.name || 'user'}`,
-          },
-          file: {
-            data: buffer,
-            mimetype: image.type,
-            name: image.name || `post-image-${Date.now()}.${image.type.split('/')[1]}`,
-            size: image.size
-          },
-        })
+    // Process video files
+    if (videoFiles && videoFiles.length > 0) {
+      for (const file of videoFiles) {
+        if (file instanceof File && file.size > 0) {
+          try {
+            // Convert file to buffer
+            const bytes = await file.arrayBuffer()
+            const buffer = Buffer.from(bytes)
 
-        imageId = uploadedImage.id
-        console.log("Image uploaded successfully:", imageId)
-      } catch (uploadError) {
-        console.error("Error uploading image:", uploadError)
-        // Continue with post creation even if image upload fails
+            // Create video media document
+            const videoDoc = await payload.create({
+              collection: 'media',
+              data: {
+                alt: `Video for ${title || 'post'} by ${user.name}`,
+              },
+              file: {
+                data: buffer,
+                mimetype: file.type,
+                name: file.name,
+                size: file.size,
+              },
+            })
+
+            if (videoDoc?.id && !videoId) {
+              // Set first video as main video
+              videoId = videoDoc.id
+              
+              // For video posts, also set the first image as thumbnail if available
+              if (imageId) {
+                videoThumbnailId = imageId
+              }
+            }
+          } catch (error) {
+            console.error('Error uploading video:', error)
+            return {
+              success: false,
+              message: "Failed to upload video. Please try again.",
+            }
+          }
+        }
       }
     }
 
-    // Handle video upload if provided
-    let videoId = null
-    if (video && video.size > 0) {
+    // Handle location creation if locationId is provided
+    let locationRelationId: string | null = null
+    if (locationId) {
       try {
-        // Convert the File to the format Payload expects
-        const arrayBuffer = await video.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
-        
-        const uploadedVideo = await payload.create({
-          collection: "media",
-          data: {
-            alt: title || `Post video by ${user.name || 'user'}`,
-          },
-          file: {
-            data: buffer,
-            mimetype: video.type,
-            name: video.name || `post-video-${Date.now()}.${video.type.split('/')[1]}`,
-            size: video.size
-          },
+        // Verify location exists
+        const existingLocation = await payload.findByID({
+          collection: 'locations',
+          id: locationId,
+          depth: 0,
         })
-
-        videoId = uploadedVideo.id
-        console.log("Video uploaded successfully:", videoId)
-      } catch (uploadError) {
-        console.error("Error uploading video:", uploadError)
-        // Continue with post creation even if video upload fails
+        
+        if (existingLocation) {
+          locationRelationId = locationId
+        }
+      } catch (error) {
+        console.error('Error finding location:', error)
+        // Continue without location if not found
       }
     }
 
-    // Create post
+    // Create post data
     const postData: any = {
       content: content.trim(),
       author: user.id,
@@ -1907,34 +1936,71 @@ export async function createPost(formData: FormData) {
       status: "published",
     }
 
-    if (title && title.trim()) postData.title = title.trim()
-    if (locationId) postData.location = locationId
-    if (rating && type === "review") postData.rating = rating
-    if (imageId) postData.image = imageId
-    if (videoId) postData.video = videoId
+    // Add optional fields
+    if (title?.trim()) {
+      postData.title = title.trim()
+    }
 
-    const post = await payload.create({
+    if (type === "review" && rating) {
+      const numRating = parseInt(rating, 10)
+      if (numRating >= 1 && numRating <= 5) {
+        postData.rating = numRating
+      }
+    }
+
+    if (imageId) {
+      postData.image = imageId
+    }
+
+    if (videoId) {
+      postData.video = videoId
+    }
+
+    if (videoThumbnailId) {
+      postData.videoThumbnail = videoThumbnailId
+    }
+
+    if (photoIds.length > 0) {
+      postData.photos = photoIds
+    }
+
+    if (locationRelationId) {
+      postData.location = locationRelationId
+    }
+
+    // Add tags as array of objects
+    if (tags.length > 0) {
+      postData.tags = tags.map(tag => ({ tag }))
+    }
+
+    console.log('Creating post with data:', {
+      ...postData,
+      image: imageId ? 'Set' : 'Not set',
+      video: videoId ? 'Set' : 'Not set',
+      photos: `${photoIds.length} photos`,
+      location: locationRelationId ? 'Set' : 'Not set',
+      tags: tags.length
+    })
+
+    // Create the post
+    const newPost = await payload.create({
       collection: "posts",
       data: postData,
     })
 
-    console.log("Post created successfully:", post.id)
-
-    // Revalidate paths
-    revalidatePath("/feed")
-    revalidatePath(`/profile/${user.id}`)
-    revalidatePath("/")
+    console.log('Post created successfully:', newPost.id)
 
     return {
       success: true,
-      postId: post.id,
-      message: "Post created successfully!"
+      message: "Post created successfully!",
+      postId: newPost.id,
     }
+
   } catch (error) {
-    console.error("Error creating post:", error)
+    console.error("Error in createPost:", error)
     return {
       success: false,
-      message: "Failed to create post. Please try again.",
+      message: error instanceof Error ? error.message : "Failed to create post. Please try again.",
     }
   }
 }
