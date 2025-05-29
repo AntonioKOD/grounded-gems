@@ -127,47 +127,73 @@ export async function POST(request: NextRequest) {
 
     console.log('User created successfully:', user.id);
 
-    // Optionally auto-login the user after signup
-    const loginResult = await payload.login({
-      collection: 'users',
-      data: {
-        email,
-        password,
-      },
-      req: request,
-    });
+    // For mobile app, don't auto-login if email verification is required
+    // Let the user verify their email on the web, then they can login normally
+    try {
+      // Attempt to login the user after signup
+      const loginResult = await payload.login({
+        collection: 'users',
+        data: {
+          email,
+          password,
+        },
+        req: request,
+      });
 
-    // Create response with user data
-    const response = NextResponse.json({
-      success: true,
-      message: 'Account created successfully',
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        username: user.username,
-        profileImage: user.profileImage,
-        location: user.location,
-        preferences: user.preferences,
-        additionalData: user.additionalData,
-        role: user.role,
-      },
-      // Include token for mobile app authentication
-      token: loginResult.token,
-    })
+      // If login succeeds, include token for auto-login
+      const response = NextResponse.json({
+        success: true,
+        message: 'Account created and logged in successfully',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.username,
+          profileImage: user.profileImage,
+          location: user.location,
+          preferences: user.preferences,
+          additionalData: user.additionalData,
+          role: user.role,
+        },
+        token: loginResult.token,
+      });
 
-    // Set the authentication cookie for web compatibility
-    if (loginResult.token) {
-      response.cookies.set('payload-token', loginResult.token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax' as const,
-        path: '/',
-        maxAge: 30 * 24 * 60 * 60, // 30 days
-      })
+      // Set the authentication cookie for web compatibility
+      if (loginResult.token) {
+        response.cookies.set('payload-token', loginResult.token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax' as const,
+          path: '/',
+          maxAge: 30 * 24 * 60 * 60, // 30 days
+        });
+      }
+
+      return response;
+
+    } catch (loginError: any) {
+      console.log('Auto-login failed (likely due to email verification requirement):', loginError.message);
+      
+      // If auto-login fails due to email verification, return success without token
+      // This allows the mobile app to show a "check your email" message
+      return NextResponse.json({
+        success: true,
+        message: 'Account created successfully! Please check your email to verify your account, then you can log in.',
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          username: user.username,
+          profileImage: user.profileImage,
+          location: user.location,
+          preferences: user.preferences,
+          additionalData: user.additionalData,
+          role: user.role,
+        },
+        emailVerificationRequired: true,
+        // No token provided - user must verify email first
+      });
     }
-
-    return response
 
   } catch (error: any) {
     console.error('Enhanced signup error:', error)
