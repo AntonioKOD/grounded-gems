@@ -22,6 +22,17 @@ import {
   UserPlus,
   UserCheck,
   Settings,
+  Share2,
+  MoreHorizontal,
+  Bookmark,
+  Grid3X3,
+  Heart,
+  MessageCircle,
+  Eye,
+  Users,
+  TrendingUp,
+  Star,
+  Sparkles
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -30,16 +41,18 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import { followUser, unfollowUser, getFeedPostsByUser, getFollowers, getFollowing, getUserbyId } from "@/app/actions"
 import { PostCard } from "@/components/post/post-card"
 import type { Post } from "@/types/feed"
 import { useAuth } from "@/hooks/use-auth"
 import ProfileSkeleton from "./profile-skeleton"
-import PostsSkeleton from "@/components/feed/posts-skeleton"
+import PostsGridSkeleton from "./posts-grid-skeleton"
+import PostsGrid from "./posts-grid"
+import EnhancedPostsGrid from "./enhanced-posts-grid"
 import type { UserProfile } from "@/types/user"
 import Link from "next/link"
-import ResponsiveFeed from "@/components/feed/responsive-feed"
 import { logoutUser } from "@/lib/auth"
 
 export default function ProfileContent({
@@ -61,15 +74,17 @@ export default function ProfileContent({
   const [isFollowing, setIsFollowing] = useState(false)
   const [isProcessingFollow, setIsProcessingFollow] = useState(false)
   const [userPosts, setUserPosts] = useState<Post[]>([])
+  const [savedPosts, setSavedPosts] = useState<Post[]>([])
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
+  const [isLoadingSavedPosts, setIsLoadingSavedPosts] = useState(false)
   const [followers, setFollowers] = useState<any[]>([])
   const [following, setFollowing] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("posts")
   const [hasLoadedPosts, setHasLoadedPosts] = useState(false)
+  const [hasLoadedSavedPosts, setHasLoadedSavedPosts] = useState(false)
 
   // Helper function to normalize post data
   const normalizePost = useCallback((post: any): any => {
-    // Ensure image is a valid non-empty string or null
     const normalizedImage =
       post.image && typeof post.image === "string" && post.image.trim() !== ""
         ? post.image.trim()
@@ -86,7 +101,6 @@ export default function ProfileContent({
     if (currentUser && profile) {
       setIsCurrentUser(currentUser.id === profile.id)
 
-      // Check if current user is following this profile
       if (followers.length > 0) {
         setIsFollowing(followers.some((follower) => follower.id === currentUser.id))
       }
@@ -96,13 +110,12 @@ export default function ProfileContent({
   // Fetch profile data if not provided or incomplete
   useEffect(() => {
     const fetchProfileData = async () => {
-      if (initialUserData) return // Skip if we already have data
+      if (initialUserData) return
 
       setIsLoading(true)
       setError(null)
 
       try {
-        // Fetch profile data
         const userData = await getUserbyId(userId)
 
         if (!userData) {
@@ -110,7 +123,6 @@ export default function ProfileContent({
           return
         }
 
-        // Map the response to match UserProfile type
         const mappedProfile: UserProfile = {
           id: userData.id as string,
           email: userData.email || '',
@@ -145,13 +157,11 @@ export default function ProfileContent({
       if (!profile?.id) return
 
       try {
-        // Fetch in parallel
         const [followersData, followingData] = await Promise.all([getFollowers(profile.id), getFollowing(profile.id)])
 
         setFollowers(followersData || [])
         setFollowing(followingData || [])
 
-        // Check if current user is following this profile
         if (currentUser && followersData) {
           setIsFollowing(followersData.some((follower: any) => follower.id === currentUser.id))
         }
@@ -172,7 +182,6 @@ export default function ProfileContent({
       try {
         const posts = await getFeedPostsByUser(profile.id)
 
-        // Map the posts to match the expected format
         const formattedPosts = posts.map((post: any) => {
           const normalizedPost = normalizePost(post)
 
@@ -216,6 +225,35 @@ export default function ProfileContent({
     fetchUserPosts()
   }, [profile?.id, activeTab, hasLoadedPosts, normalizePost])
 
+  // Lazy load saved posts only when saved tab is active
+  useEffect(() => {
+    const fetchSavedPosts = async () => {
+      if (!profile?.id || hasLoadedSavedPosts || activeTab !== "saved") return
+      if (!isCurrentUser) return // Only current user can see saved posts
+
+      setIsLoadingSavedPosts(true)
+      try {
+        const response = await fetch(`/api/users/${profile.id}/saved-posts?page=1&limit=50`)
+        const data = await response.json()
+
+        if (data.success && data.posts) {
+          setSavedPosts(data.posts)
+          setHasLoadedSavedPosts(true)
+        } else {
+          console.error("Failed to load saved posts:", data.error)
+          toast.error("Failed to load saved posts")
+        }
+      } catch (error) {
+        console.error("Error fetching saved posts:", error)
+        toast.error("Failed to load saved posts")
+      } finally {
+        setIsLoadingSavedPosts(false)
+      }
+    }
+
+    fetchSavedPosts()
+  }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser])
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -234,7 +272,6 @@ export default function ProfileContent({
         await unfollowUser(profile.id, currentUser.id)
         toast.success(`Unfollowed ${profile.name || "user"}`)
 
-        // Update follower count
         setProfile((prev: UserProfile | null) =>
           prev
             ? {
@@ -244,13 +281,11 @@ export default function ProfileContent({
             : null
         )
 
-        // Update followers list
         setFollowers((prev) => prev.filter((follower) => follower.id !== currentUser.id))
       } else {
         await followUser(profile.id, currentUser.id)
         toast.success(`Now following ${profile.name || "user"}`)
 
-        // Update follower count
         setProfile((prev: UserProfile | null) =>
           prev
             ? {
@@ -260,13 +295,11 @@ export default function ProfileContent({
             : null,
         )
 
-        // Update followers list
         setFollowers((prev) => [...prev, { id: currentUser.id, name: currentUser.name }])
       }
 
       setIsFollowing(!isFollowing)
 
-      // Add haptic feedback if available
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
@@ -306,25 +339,29 @@ export default function ProfileContent({
     const levels = {
       explorer: {
         title: "Local Explorer",
-        color: "bg-emerald-100 text-emerald-800",
+        color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        icon: "🌟",
         progress: 25,
         description: "Just starting to share local discoveries",
       },
       hunter: {
         title: "Hidden Gem Hunter",
-        color: "bg-blue-100 text-blue-800",
+        color: "bg-blue-50 text-blue-700 border-blue-200",
+        icon: "🔍",
         progress: 50,
         description: "Actively finding and sharing hidden gems",
       },
       authority: {
         title: "Local Authority",
-        color: "bg-purple-100 text-purple-800",
+        color: "bg-purple-50 text-purple-700 border-purple-200",
+        icon: "👑",
         progress: 75,
         description: "Recognized expert on local destinations",
       },
       expert: {
         title: "Destination Expert",
-        color: "bg-amber-100 text-amber-800",
+        color: "bg-amber-50 text-amber-700 border-amber-200",
+        icon: "🏆",
         progress: 100,
         description: "Top-tier creator with extensive knowledge",
       },
@@ -333,14 +370,15 @@ export default function ProfileContent({
     return level && level in levels
       ? levels[level as keyof typeof levels]
       : {
-          title: "Member",
-          color: "bg-gray-100 text-gray-800",
+          title: "Community Member",
+          color: "bg-gray-50 text-gray-700 border-gray-200",
+          icon: "👤",
           progress: 0,
-          description: "Regular community member",
+          description: "Part of our amazing community",
         }
   }
 
-  // Get social icon - memoized to prevent re-renders
+  // Get social icon
   const getSocialIcon = useCallback((platform: string) => {
     switch (platform) {
       case "instagram":
@@ -380,16 +418,21 @@ export default function ProfileContent({
   // Error state
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-3xl">
-        <Alert variant="destructive" className="mb-6">
-          <AlertTitle className="text-lg font-semibold">Profile Not Available</AlertTitle>
-          <AlertDescription className="mt-2">{error}</AlertDescription>
-        </Alert>
-        <div className="flex justify-center">
-          <Button onClick={() => router.push("/")} className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white">
-            Return Home
-          </Button>
-        </div>
+      <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertDescription className="text-red-600 text-2xl">⚠️</AlertDescription>
+              </div>
+              <h2 className="text-xl font-semibold text-red-800 mb-2">Profile Not Available</h2>
+              <p className="text-red-600 mb-6">{error}</p>
+              <Button onClick={() => router.push("/")} className="bg-red-600 hover:bg-red-700 text-white">
+                Return Home
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -399,306 +442,426 @@ export default function ProfileContent({
   const creatorLevel = getCreatorLevelDetails(profile.creatorLevel)
 
   return (
-    <main className="bg-gray-50 mobile-content">
-      {/* Hero Section with Cover Image */}
-      <div className="relative w-full h-64 md:h-80 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] overflow-hidden">
-        {/* Back button */}
-        <div className="absolute top-4 left-4 z-10">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+      {/* Modern Header Section */}
+      <div className="relative bg-gradient-to-r from-[#FF6B6B] via-[#FF8E53] to-[#FFD93D] pb-32">
+        {/* Navigation */}
+        <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
-            className="bg-white/90 hover:bg-white border-0 shadow-sm"
+            className="bg-white/90 hover:bg-white text-gray-700 border-0 backdrop-blur-md shadow-lg transition-all duration-200 hover:scale-105"
             onClick={() => router.back()}
           >
             <ChevronLeft className="h-4 w-4 mr-1" />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </Button>
+
+          <div className="flex gap-3">
+            {!isCurrentUser && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-white/90 hover:bg-white text-gray-700 border-0 backdrop-blur-md shadow-lg transition-all duration-200 hover:scale-105"
+              >
+                <Share2 className="h-4 w-4" />
+                <span className="sr-only">Share</span>
+              </Button>
+            )}
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="bg-white/90 hover:bg-white text-gray-700 border-0 backdrop-blur-md shadow-lg transition-all duration-200 hover:scale-105"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">More options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-white/95 backdrop-blur-md border-white/20 shadow-xl">
+                {isCurrentUser ? (
+                  <>
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link href={`/profile/${profile.id}/edit`} className="flex items-center">
+                        <Edit3 className="h-4 w-4 mr-3" />
+                        <span>Edit Profile</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                      <Link href={`/profile/${profile.id}/location-dashboard`} className="flex items-center">
+                        <MapPin className="h-4 w-4 mr-3" />
+                        <span>My Locations</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Settings className="h-4 w-4 mr-3" />
+                      <span>Settings</span>
+                    </DropdownMenuItem>
+                    <Separator />
+                    <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer focus:text-red-700 focus:bg-red-50">
+                      <LogOut className="h-4 w-4 mr-3" />
+                      <span>Log Out</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Share2 className="h-4 w-4 mr-3" />
+                      <span>Share Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <MessageCircle className="h-4 w-4 mr-3" />
+                      <span>Send Message</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Bookmark className="h-4 w-4 mr-3" />
+                      <span>Save Profile</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        {/* Actions for current user */}
-        {isCurrentUser && (
-          <div className="absolute top-4 right-4 z-10 flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-white/90 hover:bg-white border-0 shadow-sm"
-              asChild
-            >
-              <Link href={`/profile/${profile.id}/location-dashboard`}>
-                <MapPin className="h-4 w-4 mr-1" />
-                Locations
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-white/90 hover:bg-white border-0 shadow-sm"
-              onClick={() => router.push(`/profile/${profile.id}/edit`)}
-            >
-              <Edit3 className="h-4 w-4 mr-1" />
-              Edit Profile
-            </Button>
-            <Button variant="outline" size="sm" className="bg-white/90 hover:bg-white border-0 shadow-sm">
-              <Settings className="h-4 w-4" />
-              <span className="sr-only">Settings</span>
-            </Button>
-          </div>
-        )}
-
-        {/* Decorative pattern overlay */}
-        <div className="absolute inset-0 opacity-10 bg-[url('/placeholder.svg?key=kj61m')] bg-repeat"></div>
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/40"></div>
+        {/* Decorative Elements */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -right-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+          <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-white/10 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-white/5 rounded-full blur-2xl"></div>
+        </div>
       </div>
 
-      <div className="container max-w-5xl px-4 sm:px-6 -mt-24 relative z-10">
-        {/* Profile Card */}
-        <Card className="overflow-visible shadow-lg border-0 mb-8">
-          <CardContent className="p-0">
-            <div className="p-6 pb-0 relative">
-              {/* Avatar */}
-              <div className="flex flex-col md:flex-row gap-6 items-start md:items-end">
-                <div className="relative -mt-20 group z-20">
-                  <Avatar className="h-32 w-32 border-4 border-white shadow-md">
-                    {profile.profileImage ? (
-                      <AvatarImage src={profile.profileImage.url || "/placeholder.svg"} alt={profile.name || "User"} />
-                    ) : (
-                      <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B] text-4xl">
-                        {getInitials()}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  {isCurrentUser && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                      <Camera className="h-8 w-8 text-white" />
+      {/* Profile Content */}
+      <div className="relative -mt-24 z-10 px-4 pb-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Main Profile Card */}
+          <Card className="mb-6 overflow-hidden shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+            <CardContent className="p-0">
+              {/* Profile Header */}
+              <div className="p-6 pb-4">
+                <div className="flex flex-col sm:flex-row gap-6 items-start">
+                  {/* Avatar */}
+                  <div className="relative group">
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 relative">
+                      <Avatar className="w-full h-full border-4 border-white shadow-lg">
+                        {profile.profileImage ? (
+                          <AvatarImage src={profile.profileImage.url || "/placeholder.svg"} alt={profile.name || "User"} />
+                        ) : (
+                          <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white text-2xl font-bold">
+                            {getInitials()}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      {isCurrentUser && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                          <Camera className="h-6 w-6 text-white" />
+                        </div>
+                      )}
+                      {profile.isCreator && (
+                        <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-gradient-to-r from-[#FFD93D] to-[#FF6B6B] rounded-full flex items-center justify-center border-2 border-white shadow-lg">
+                          <span className="text-sm">{creatorLevel.icon}</span>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                <div className="flex-1">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-8">
-                    <div>
-                      <h1 className="text-3xl font-bold text-gray-900">{profile.name || "User"}</h1>
+                  {/* Profile Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 truncate">
+                          {profile.name || "User"}
+                        </h1>
+                        
+                        {/* Creator Badge */}
+                        {profile.isCreator && (
+                          <Badge className={`${creatorLevel.color} border px-3 py-1 mb-3 font-medium`}>
+                            <Award className="h-3 w-3 mr-1" />
+                            {creatorLevel.title}
+                          </Badge>
+                        )}
 
-                      <div className="flex flex-wrap items-center gap-3 mt-2">
-                        <div className="flex items-center text-gray-600">
-                          <Mail className="h-4 w-4 mr-1 text-gray-400" />
-                          <span className="text-sm">{profile.email}</span>
+                        {/* Bio */}
+                        {profile.bio && (
+                          <p className="text-gray-700 mb-3 leading-relaxed">{profile.bio}</p>
+                        )}
+
+                        {/* Meta Info */}
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 mr-1" />
+                            <span className="truncate">{profile.email}</span>
+                          </div>
+                          
+                          {profile.location && (profile.location.city || profile.location.country) && (
+                            <div className="flex items-center">
+                              <MapPin className="h-4 w-4 mr-1" />
+                              <span>
+                                {[profile.location.city, profile.location.state, profile.location.country]
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            <span>Joined {formatDate(profile.createdAt)}</span>
+                          </div>
                         </div>
 
-                        {profile.location && (profile.location.city || profile.location.country) && (
-                          <div className="flex items-center text-gray-600">
-                            <MapPin className="h-4 w-4 mr-1 text-gray-400" />
-                            <span className="text-sm">
-                              {[profile.location.city, profile.location.state, profile.location.country]
-                                .filter(Boolean)
-                                .join(", ")}
-                            </span>
+                        {/* Social Links */}
+                        {profile.socialLinks && profile.socialLinks.length > 0 && (
+                          <div className="flex items-center gap-2 mt-3">
+                            {profile.socialLinks.map((link: { url: string | undefined; platform: string | undefined }, index: Key | null | undefined) => (
+                              <a
+                                key={index}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 transition-colors flex items-center justify-center"
+                                title={link.platform}
+                              >
+                                {getSocialIcon(link.platform || 'website')}
+                              </a>
+                            ))}
                           </div>
                         )}
-
-                        <div className="flex items-center text-gray-600">
-                          <Calendar className="h-4 w-4 mr-1 text-gray-400" />
-                          <span className="text-sm">Joined {formatDate(profile.createdAt)}</span>
-                        </div>
                       </div>
-                    </div>
 
-                    {/* Follow button for non-owners */}
-                    {!isCurrentUser && currentUser && (
-                      <Button
-                        variant={isFollowing ? "outline" : "default"}
-                        onClick={handleFollowToggle}
-                        disabled={isProcessingFollow}
-                        size="sm"
-                        className={
-                          isFollowing
-                            ? "border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/10 min-w-[100px]"
-                            : "bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 min-w-[100px]"
-                        }
-                      >
-                        {isProcessingFollow ? (
-                          <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
-                        ) : isFollowing ? (
-                          <UserCheck className="h-4 w-4 mr-2" />
-                        ) : (
-                          <UserPlus className="h-4 w-4 mr-2" />
-                        )}
-                        {isFollowing ? "Following" : "Follow"}
-                      </Button>
-                    )}
+                      {/* Action Button */}
+                      {!isCurrentUser && currentUser && (
+                        <Button
+                          onClick={handleFollowToggle}
+                          disabled={isProcessingFollow}
+                          size="sm"
+                          className={
+                            isFollowing
+                              ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                              : "bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] hover:from-[#FF5252] hover:to-[#FF7043] text-white border-0"
+                          }
+                        >
+                          {isProcessingFollow ? (
+                            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                          ) : isFollowing ? (
+                            <UserCheck className="h-4 w-4 mr-2" />
+                          ) : (
+                            <UserPlus className="h-4 w-4 mr-2" />
+                          )}
+                          {isFollowing ? "Following" : "Follow"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
-
-                  {/* Creator badge */}
-                  {profile.isCreator && (
-                    <div className="mt-4">
-                      <Badge className={`${creatorLevel.color} px-3 py-1 text-sm font-medium`}>
-                        <Award className="h-4 w-4 mr-1" />
-                        {creatorLevel.title}
-                      </Badge>
-                    </div>
-                  )}
                 </div>
               </div>
 
-              {/* Bio */}
-              {profile.bio && (
-                <div className="mt-6">
-                  <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
-                </div>
-              )}
-
-              {/* Stats Row */}
-              <div className="flex flex-wrap gap-6 mt-6 pb-6 border-b">
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl font-bold text-gray-900">{userPosts.length}</span>
-                  <span className="text-sm text-gray-500">Posts</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl font-bold text-gray-900">
-                    {followers.length || profile.followerCount || 0}
-                  </span>
-                  <span className="text-sm text-gray-500">Followers</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <span className="text-2xl font-bold text-gray-900">
-                    {following.length || profile.followingCount || 0}
-                  </span>
-                  <span className="text-sm text-gray-500">Following</span>
-                </div>
-
-                {/* Social links */}
-                {profile.socialLinks && profile.socialLinks.length > 0 && (
-                  <div className="ml-auto flex flex-wrap gap-2 items-center">
-                    {profile.socialLinks.map((link: { url: string | undefined; platform: string | undefined }, index: Key | null | undefined) => (
-                      <a
-                        key={index}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-                        title={link.platform}
-                      >
-                        {getSocialIcon(link.platform || 'website')}
-                      </a>
-                    ))}
+              {/* Stats Section */}
+              <div className="px-6 py-4 bg-gray-50/50 border-t">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div className="space-y-1">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900">{userPosts.length}</div>
+                    <div className="text-xs sm:text-sm text-gray-500">Posts</div>
                   </div>
-                )}
+                  <div className="space-y-1">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                      {followers.length || profile.followerCount || 0}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-500">Followers</div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xl sm:text-2xl font-bold text-gray-900">
+                      {following.length || profile.followingCount || 0}
+                    </div>
+                    <div className="text-xs sm:text-sm text-gray-500">Following</div>
+                  </div>
+                </div>
               </div>
-            </div>
+            </CardContent>
+          </Card>
 
-            {/* Tabs */}
+          {/* Content Tabs */}
+          <Card className="shadow-lg border-0 bg-white/95 backdrop-blur-sm">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <div className="px-6">
-                <TabsList className="w-full justify-start border-b pb-0 bg-transparent h-auto rounded-none">
+              <div className="px-6 pt-6 pb-0">
+                <TabsList className="w-full h-14 bg-gray-100/50 p-1 rounded-xl">
                   <TabsTrigger
                     value="posts"
-                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                    className="flex-1 data-[state=active]:bg-white data-[state=active]:text-[#FF6B6B] data-[state=active]:shadow-sm font-medium rounded-lg transition-all duration-300 flex items-center gap-2 px-4 py-3"
                   >
-                    Posts
+                    <Grid3X3 className="h-4 w-4" />
+                    <span>Posts</span>
+                    <span className="ml-1 px-2 py-0.5 bg-gray-200 data-[state=active]:bg-[#FF6B6B]/10 rounded-full text-xs font-semibold">
+                      {userPosts.length}
+                    </span>
                   </TabsTrigger>
                   <TabsTrigger
                     value="saved"
-                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                    className="flex-1 data-[state=active]:bg-white data-[state=active]:text-[#FF6B6B] data-[state=active]:shadow-sm font-medium rounded-lg transition-all duration-300 flex items-center gap-2 px-4 py-3"
                   >
-                    Saved
+                    <Bookmark className="h-4 w-4" />
+                    <span>Saved</span>
+                    {isCurrentUser && (
+                      <span className="ml-1 px-2 py-0.5 bg-gray-200 data-[state=active]:bg-[#FF6B6B]/10 rounded-full text-xs font-semibold">
+                        {savedPosts.length}
+                      </span>
+                    )}
                   </TabsTrigger>
                   <TabsTrigger
                     value="about"
-                    className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
+                    className="flex-1 data-[state=active]:bg-white data-[state=active]:text-[#FF6B6B] data-[state=active]:shadow-sm font-medium rounded-lg transition-all duration-300 flex items-center gap-2 px-4 py-3"
                   >
-                    About
+                    <Users className="h-4 w-4" />
+                    <span>About</span>
                   </TabsTrigger>
-                  {profile.interests && profile.interests.length > 0 && (
-                    <TabsTrigger
-                      value="interests"
-                      className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
-                    >
-                      Interests
-                    </TabsTrigger>
-                  )}
-                  {profile.isCreator && (
-                    <TabsTrigger
-                      value="creator"
-                      className="py-3 px-4 rounded-none border-b-2 border-transparent data-[state=active]:border-[#FF6B6B] data-[state=active]:text-[#FF6B6B] data-[state=active]:bg-transparent"
-                    >
-                      Creator
-                    </TabsTrigger>
-                  )}
                 </TabsList>
               </div>
 
-              <TabsContent value="posts">
-                <Suspense fallback={<PostsSkeleton />}>
-                  <ResponsiveFeed
-                    initialPosts={userPosts}
-                    feedType="user"
-                    userId={userId}
-                    showPostForm={isCurrentUser}
-                  />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="saved">
-                <Suspense fallback={<PostsSkeleton />}>
-                  <ResponsiveFeed
-                    initialPosts={[]}
-                    feedType="user"
-                    userId={userId}
-                    showPostForm={false}
-                  />
-                </Suspense>
-              </TabsContent>
-
-              <TabsContent value="about" className="p-6 pt-4">
-                <Card className="bg-white border-0 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xl">About {profile.name || "User"}</CardTitle>
-                    <CardDescription>Personal information and details</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                      <div>
-                        <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
-                          <Mail className="h-4 w-4 mr-2 text-[#FF6B6B]" />
-                          Contact Info
-                        </h3>
-                        <div className="space-y-3 pl-6">
-                          <div className="flex flex-col">
-                            <span className="text-sm text-gray-500">Email</span>
-                            <span className="text-gray-800">{profile.email}</span>
-                          </div>
+              <TabsContent value="posts" className="mt-0">
+                <div className="p-6 pt-4">
+                  {/* Grid Layout Switcher */}
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      Posts {userPosts.length > 0 && `(${userPosts.length})`}
+                    </h3>
+                    <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-2 data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                        onClick={() => {/* Switch to dynamic layout */}}
+                      >
+                        <Grid3X3 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="p-2"
+                        onClick={() => {/* Switch to masonry layout */}}
+                      >
+                        <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
+                          <div className="bg-current rounded-sm h-1.5"></div>
+                          <div className="bg-current rounded-sm h-2"></div>
+                          <div className="bg-current rounded-sm h-2"></div>
+                          <div className="bg-current rounded-sm h-1.5"></div>
                         </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
-                          <MapPin className="h-4 w-4 mr-2 text-[#FF6B6B]" />
-                          Location
-                        </h3>
-                        <div className="space-y-3 pl-6">
-                          {profile.location ? (
-                            <div className="flex flex-col">
-                              {profile.location.city && <span className="text-gray-800">{profile.location.city}</span>}
-                              {profile.location.state && (
-                                <span className="text-gray-800">{profile.location.state}</span>
-                              )}
-                              {profile.location.country && (
-                                <span className="text-gray-800">{profile.location.country}</span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-gray-500 italic">No location provided</span>
-                          )}
-                        </div>
-                      </div>
+                      </Button>
                     </div>
+                  </div>
+                  
+                  <Suspense fallback={<PostsGridSkeleton />}>
+                    {isLoadingPosts ? (
+                      <PostsGridSkeleton />
+                    ) : (
+                      <EnhancedPostsGrid
+                        posts={userPosts}
+                        isCurrentUser={isCurrentUser}
+                        gridType="dynamic"
+                      />
+                    )}
+                  </Suspense>
+                </div>
+              </TabsContent>
 
-                    <Separator className="my-6" />
+              <TabsContent value="saved" className="mt-0">
+                <div className="p-6 pt-4">
+                  {!isCurrentUser ? (
+                    <div className="text-center py-16">
+                      <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                        <Bookmark className="h-12 w-12 text-gray-400" />
+                      </div>
+                      <h3 className="text-xl font-semibold text-gray-700 mb-2">
+                        Private collection
+                      </h3>
+                      <p className="text-gray-500">
+                        Only {profile?.name || "this user"} can see their saved posts.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Saved Posts Header */}
+                      <div className="flex justify-between items-center mb-6">
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            Saved Posts {savedPosts.length > 0 && `(${savedPosts.length})`}
+                          </h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            Your collection of saved discoveries
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-[#FFD93D]/20 text-[#FF8E53] border-[#FFD93D]/30">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Masonry View
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <Suspense fallback={<PostsGridSkeleton />}>
+                        {isLoadingSavedPosts ? (
+                          <PostsGridSkeleton />
+                        ) : (
+                          <EnhancedPostsGrid
+                            posts={savedPosts}
+                            isCurrentUser={isCurrentUser}
+                            gridType="masonry"
+                          />
+                        )}
+                      </Suspense>
+                    </>
+                  )}
+                </div>
+              </TabsContent>
 
-                    <div>
-                      <h3 className="text-base font-medium mb-3 text-gray-900">Bio</h3>
+              <TabsContent value="about" className="mt-0">
+                <div className="p-6 pt-4 space-y-6">
+                  {/* About Information */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card className="border-gray-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center">
+                          <Mail className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                          Contact
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium text-gray-500">Email</label>
+                          <p className="text-gray-900">{profile.email}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-gray-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center">
+                          <MapPin className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                          Location
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {profile.location ? (
+                          <div>
+                            {profile.location.city && <p className="text-gray-900">{profile.location.city}</p>}
+                            {profile.location.state && <p className="text-gray-900">{profile.location.state}</p>}
+                            {profile.location.country && <p className="text-gray-900">{profile.location.country}</p>}
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 italic">No location provided</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Bio Section */}
+                  <Card className="border-gray-200">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg">About {profile.name || "User"}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
                       {profile.bio ? (
                         <div className="bg-gray-50 p-4 rounded-lg">
                           <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
@@ -706,142 +869,93 @@ export default function ProfileContent({
                       ) : (
                         <p className="text-gray-500 italic">No bio provided</p>
                       )}
-                    </div>
-
-                    <Separator className="my-6" />
-
-                    <div>
-                      <h3 className="text-base font-medium mb-3 text-gray-900 flex items-center">
-                        <Calendar className="h-4 w-4 mr-2 text-[#FF6B6B]" />
-                        Member Since
-                      </h3>
-                      <p className="text-gray-800">{formatDate(profile.createdAt)}</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {profile.interests && profile.interests.length > 0 && (
-                <TabsContent value="interests" className="p-6 pt-4">
-                  <Card className="bg-white border-0 shadow-sm">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xl">Interests</CardTitle>
-                      <CardDescription>Things {profile.name || "this user"} is interested in</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        {profile.interests.map((item: { interest: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined }, index: Key | null | undefined) => (
-                          <Badge
-                            key={index}
-                            variant="secondary"
-                            className="px-3 py-1 bg-[#FF6B6B]/10 text-[#FF6B6B] border-0"
-                          >
-                            <Tag className="h-3 w-3 mr-1" />
-                            {item.interest}
-                          </Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              )}
-
-              {profile.isCreator && (
-                <TabsContent value="creator" className="p-6 pt-4">
-                  <Card className="bg-white border-0 shadow-sm mb-6">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-xl">Creator Status</CardTitle>
-                      <CardDescription>Information about {profile.name || "this user"} as a creator</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="mb-6">
-                        <div className="flex items-center mb-3">
-                          <div className="bg-[#FF6B6B]/10 p-2 rounded-full mr-3">
-                            <Award className="h-5 w-5 text-[#FF6B6B]" />
-                          </div>
-                          <div>
-                            <h3 className="text-lg font-medium text-gray-900">{creatorLevel.title}</h3>
-                            <p className="text-gray-600 text-sm">{creatorLevel.description}</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4">
-                          <div className="w-full bg-gray-100 rounded-full h-2 mb-1">
-                            <div
-                              className="h-2 rounded-full bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53]"
-                              style={{ width: `${creatorLevel.progress}%` }}
-                            ></div>
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-500">
-                            <span>Explorer</span>
-                            <span>Hunter</span>
-                            <span>Authority</span>
-                            <span>Expert</span>
-                          </div>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
 
-                  {profile.socialLinks && profile.socialLinks.length > 0 && (
-                    <Card className="bg-white border-0 shadow-sm">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-xl">Connect</CardTitle>
-                        <CardDescription>Follow {profile.name || "this creator"} on social media</CardDescription>
+                  {/* Interests */}
+                  {profile.interests && profile.interests.length > 0 && (
+                    <Card className="border-gray-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center">
+                          <Tag className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                          Interests
+                        </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {profile.socialLinks.map((link: { url: string; platform: string }, index: Key | null | undefined) => (
-                            <Link
+                        <div className="flex flex-wrap gap-2">
+                          {profile.interests.map((item: { interest: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined }, index: Key | null | undefined) => (
+                            <Badge
                               key={index}
-                              href={link.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center p-4 rounded-lg border border-gray-100 hover:border-[#FF6B6B] hover:shadow-sm transition-all group"
+                              variant="secondary"
+                              className="px-3 py-1 bg-[#FF6B6B]/10 text-[#FF6B6B] border-[#FF6B6B]/20 hover:bg-[#FF6B6B]/20 transition-colors"
                             >
-                              <div className="h-10 w-10 rounded-full bg-[#FF6B6B]/10 flex items-center justify-center mr-3 group-hover:bg-[#FF6B6B]/20 transition-colors">
-                                {getSocialIcon(link.platform)}
-                              </div>
-                              <div>
-                                <div className="font-medium capitalize text-gray-900">{link.platform}</div>
-                                <div className="text-xs text-gray-500 truncate max-w-[180px]">{link.url}</div>
-                              </div>
-                            </Link>
+                              {item.interest}
+                            </Badge>
                           ))}
                         </div>
                       </CardContent>
                     </Card>
                   )}
-                </TabsContent>
-              )}
-            </Tabs>
-          </CardContent>
 
-          {/* Actions footer - only show for current user */}
-          {isCurrentUser && (
-            <CardFooter className="px-6 py-4 border-t bg-gray-50">
-              <div className="w-full flex flex-wrap justify-between gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(`/profile/${profile.id}/edit`)}
-                  className="flex-1 border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5"
-                >
-                  <Edit3 className="h-4 w-4 mr-2" />
-                  Edit Profile
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="flex-1 text-red-500 hover:text-red-700 hover:bg-red-50"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Log Out
-                </Button>
-              </div>
-            </CardFooter>
-          )}
-        </Card>
+                  {/* Creator Info */}
+                  {profile.isCreator && (
+                    <Card className="border-gray-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center">
+                          <Award className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                          Creator Status
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-gradient-to-r from-[#FF6B6B] to-[#FFD93D] rounded-full flex items-center justify-center text-xl">
+                            {creatorLevel.icon}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{creatorLevel.title}</h3>
+                            <p className="text-sm text-gray-600">{creatorLevel.description}</p>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-gray-600">Creator Progress</span>
+                            <span className="font-medium">{creatorLevel.progress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="h-2 rounded-full bg-gradient-to-r from-[#FF6B6B] to-[#FFD93D] transition-all duration-500"
+                              style={{ width: `${creatorLevel.progress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Member Since */}
+                  <Card className="border-gray-200">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center">
+                        <Calendar className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                        Member Since
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-900 font-medium">{formatDate(profile.createdAt)}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {profile.createdAt 
+                          ? Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+                          : 0} days on Grounded Gems
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </Card>
+        </div>
       </div>
-    </main>
+    </div>
   )
 }

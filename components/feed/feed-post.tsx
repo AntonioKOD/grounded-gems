@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, memo, useCallback } from "react"
+import { useState, memo, useCallback, useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -80,6 +80,13 @@ export const FeedPost = memo(function FeedPost({
   const [likeCount, setLikeCount] = useState(post.likeCount || 0)
   const [saveCount, setSaveCount] = useState(post.saveCount || 0)
   const [shareCount, setShareCount] = useState(post.shareCount || 0)
+
+  // Initialize states correctly on load
+  useEffect(() => {
+    setLikeCount(post.likeCount || 0)
+    setSaveCount(post.saveCount || 0)
+    setShareCount(post.shareCount || 0)
+  }, [post.likeCount, post.saveCount, post.shareCount])
 
   // Determine if content should be truncated
   const isLongContent = post.content.length > 280

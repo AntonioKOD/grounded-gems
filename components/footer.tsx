@@ -3,8 +3,8 @@ import logo from '@/public/logo.svg'
 
 export default function Footer() {
   return (
-    <footer className="bg-gray-50 border-t border-gray-200 pb-20 md:pb-4">
-      <div className="container mx-auto px-4 py-4">
+    <footer className="bg-gray-50 border-t border-gray-200">
+      <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col md:flex-row justify-between items-center">
           <div className="flex items-center mb-3 md:mb-0">
             <Image src={logo} alt="Logo" width={60} height={60} className="w-15" />

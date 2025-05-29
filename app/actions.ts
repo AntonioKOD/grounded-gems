@@ -4574,7 +4574,24 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         author: {
           id: typeof post.author === "object" && post.author ? post.author.id : post.author || "unknown",
           name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
-          avatar: typeof post.author === "object" && post.author && post.author.profileImage ? post.author.profileImage.url : undefined,
+          avatar: (() => {
+            if (typeof post.author === "object" && post.author) {
+              // Try multiple possible avatar fields
+              if (post.author.profileImage?.url) return post.author.profileImage.url;
+              if (post.author.avatar) return post.author.avatar;
+              if (post.author.profilePicture?.url) return post.author.profilePicture.url;
+              if (typeof post.author.profilePicture === 'string') return post.author.profilePicture;
+            }
+            return undefined;
+          })(),
+          profileImage: (() => {
+            if (typeof post.author === "object" && post.author) {
+              if (post.author.profileImage?.url) return { url: post.author.profileImage.url };
+              if (post.author.profilePicture?.url) return { url: post.author.profilePicture.url };
+              if (typeof post.author.profilePicture === 'string') return { url: post.author.profilePicture };
+            }
+            return undefined;
+          })(),
         },
         title: post.title || "",
         content: post.content || "",

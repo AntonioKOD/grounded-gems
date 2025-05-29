@@ -149,7 +149,7 @@
 
   /* Container padding for all pages */
   main, .main-content {
-    padding-bottom: 90px; /* Reduced space for mobile nav + FAB */
+    padding-bottom: 70px; /* Reduced space - only for mobile nav */
   }
 
   /* Special handling for fullscreen content like feeds */
@@ -206,6 +206,17 @@
   }
 }
 
+/* Desktop styles - remove mobile padding since footer is visible */
+@media (min-width: 768px) {
+  main, .main-content {
+    padding-bottom: 0; /* No bottom padding on desktop */
+  }
+  
+  .fullscreen-content {
+    padding-bottom: 0; /* No bottom padding on desktop */
+  }
+}
+
 /* Desktop specific styles */
 @media (min-width: 1024px) {
   /* Hover effects only on desktop */
@@ -237,13 +248,31 @@
 /* Landscape orientation specific styles */
 @media (max-width: 767px) and (orientation: landscape) {
   .landscape-adjust {
-    height: 70vh;
-    max-height: 70vh;
+    height: calc(100vh - 70px); /* Account for mobile nav in landscape */
+    max-height: calc(100vh - 70px);
   }
   
   /* Reduce padding in landscape to maximize space */
   .landscape-compact {
     padding: 8px 16px;
+  }
+  
+  /* Ensure mobile posts still work in landscape */
+  .mobile-post-container {
+    height: calc(100vh - 70px);
+    min-height: 300px; /* Slightly smaller min-height for landscape */
+  }
+  
+  /* Adjust mobile feed container for landscape */
+  .mobile-feed-container {
+    height: calc(100vh - 70px);
+    bottom: 70px;
+  }
+  
+  /* Ensure posts don't get too small in landscape */
+  .mobile-feed-post {
+    height: calc(100vh - 70px) !important;
+    min-height: 300px !important;
   }
 }
 
@@ -697,5 +726,295 @@
 /* Enhanced safe area handling for mobile navigation */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Enhanced Feed Animations */
+@layer components {
+  /* Like Animation */
+  @keyframes like-bounce {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes like-sparkle {
+    0% { transform: scale(0) rotate(0deg); opacity: 0; }
+    50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+    100% { transform: scale(0) rotate(360deg); opacity: 0; }
+  }
+
+  .animate-like {
+    animation: like-bounce 0.6s ease-out;
+  }
+
+  .animate-sparkle {
+    animation: like-sparkle 0.8s ease-out;
+  }
+
+  /* Save Animation */
+  @keyframes save-fill {
+    0% { transform: scale(1) rotate(0deg); }
+    25% { transform: scale(0.8) rotate(-5deg); }
+    50% { transform: scale(1.1) rotate(5deg); }
+    75% { transform: scale(0.95) rotate(-2deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  .animate-save {
+    animation: save-fill 0.5s ease-out;
+  }
+
+  /* Engagement Pulse */
+  @keyframes engagement-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 107, 107, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+  }
+
+  .animate-engagement-pulse {
+    animation: engagement-pulse 2s infinite;
+  }
+
+  /* Gradient Text Animation */
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  .animate-gradient-text {
+    background: linear-gradient(-45deg, #FF6B6B, #FF8E53, #FFD93D, #4ECDC4);
+    background-size: 400% 400%;
+    animation: gradient-shift 3s ease infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Floating Animation */
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  /* Shimmer Effect */
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  .animate-shimmer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.4) 50%,
+      transparent 100%
+    );
+    animation: shimmer 2s infinite;
+  }
+
+  /* Smooth scroll behavior */
+  .mobile-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Glass morphism effect */
+  .glass-morphism {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  /* Engagement Ring Animation */
+  @keyframes engagement-ring {
+    0% { 
+      box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 0 20px rgba(255, 107, 107, 0);
+      transform: scale(1.05);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(255, 107, 107, 0);
+      transform: scale(1);
+    }
+  }
+
+  .animate-engagement-ring {
+    animation: engagement-ring 1.5s ease-out;
+  }
+
+  /* Video Loading Animation */
+  @keyframes video-loading {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+  }
+
+  .animate-video-loading {
+    animation: video-loading 1.5s ease-in-out infinite;
+  }
+
+  /* Stagger Animation Delays */
+  .stagger-delay-1 { animation-delay: 0.1s; }
+  .stagger-delay-2 { animation-delay: 0.2s; }
+  .stagger-delay-3 { animation-delay: 0.3s; }
+  .stagger-delay-4 { animation-delay: 0.4s; }
+  .stagger-delay-5 { animation-delay: 0.5s; }
+
+  /* Interaction Feedback */
+  .interaction-feedback {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .interaction-feedback:active {
+    transform: scale(0.95);
+  }
+
+  /* Content Reveal Animation */
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-reveal {
+    animation: reveal 0.6s ease-out forwards;
+  }
+}
+
+/* Mobile-specific improvements */
+@media (max-width: 768px) {
+  .mobile-scroll {
+    scroll-snap-type: y mandatory;
+  }
+
+  .mobile-scroll > * {
+    scroll-snap-align: start;
+  }
+
+  /* Better touch targets */
+  button, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Reduce motion for users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* Focus states for accessibility */
+@layer components {
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-[#FF6B6B] focus:ring-offset-2 focus:ring-offset-white;
+  }
+
+  .focus-ring-dark {
+    @apply focus:outline-none focus:ring-2 focus:ring-[#FF6B6B] focus:ring-offset-2 focus:ring-offset-gray-900;
+  }
+}
+
+/* Performance optimizations */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+.hardware-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Loading states */
+.loading-shimmer {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Ensure proper spacing for full-screen posts minus mobile nav */
+.mobile-post-container {
+  height: calc(100vh - 70px);
+  min-height: 400px;
+  width: 100vw;
+}
+
+/* Hide scrollbars for cleaner mobile experience */
+.snap-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-scroll-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure touch targets are large enough */
+button, .clickable {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Better text scaling on mobile */
+.mobile-optimized {
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+  line-height: 1.5;
+}
+
+/* Ensure full coverage without nav interference */
+.mobile-feed-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 70px; /* Leave space for mobile nav */
+  width: 100vw;
+  height: calc(100vh - 70px);
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure full viewport coverage for mobile feed posts */
+.mobile-feed-post {
+  width: 100vw !important;
+  height: calc(100vh - 70px) !important;
+  position: absolute;
+  inset: 0;
 }
 

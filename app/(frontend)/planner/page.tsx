@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
-import { Sparkles, User, Users, Heart, Users2, Loader2, Utensils, Music, GlassWater, MapPin, Film, Star, PartyPopper, Coffee, Book, ShoppingBag, Sun, Moon, Share2, Bookmark, RefreshCw, Wand2, Calendar, Clock, ArrowRight, CheckCircle2, UserPlus, Home, Copy, Check } from "lucide-react"
+import { User, Users, Heart, Users2, Loader2, Utensils, Music, GlassWater, MapPin, Film, Star, PartyPopper, Coffee, Book, ShoppingBag, Sun, Moon, Share2, Bookmark, RefreshCw, Wand2, Calendar, Clock, ArrowRight, CheckCircle2, UserPlus, Home, Copy, Check, Sparkles } from "lucide-react"
 import { cn } from '@/lib/utils'
 import ProtectedRoute from '@/components/auth/protected-route'
 import { saveGemJourney } from '@/app/(frontend)/events/actions'
@@ -13,15 +13,6 @@ const CONTEXTS = [
   { label: "Date", value: "date", icon: Heart, gradient: "from-pink-500 to-rose-500", color: "text-pink-600" },
   { label: "Group", value: "group", icon: UserPlus, gradient: "from-blue-500 to-cyan-500", color: "text-blue-600" },
   { label: "Family", value: "family", icon: Home, gradient: "from-green-500 to-emerald-500", color: "text-green-600" },
-]
-
-const QUICK_IDEAS = [
-  "Live music and great food",
-  "Cozy coffee shop vibes",
-  "Outdoor adventure day",
-  "Museum and art exploration",
-  "Beach sunset and dinner",
-  "Local brewery hopping"
 ]
 
 // Function to generate meta tags for sharing
@@ -66,28 +57,42 @@ export default function PlannerPage() {
   const [plan, setPlan] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>("idle")
-  const [showQuickIdeas, setShowQuickIdeas] = useState(false)
   const [shareStatus, setShareStatus] = useState<'idle' | 'copying' | 'copied'>('idle')
+  
+  // New geolocation states
+  const [coordinates, setCoordinates] = useState<{latitude: number, longitude: number} | null>(null)
+  const [nearbyLocationsCount, setNearbyLocationsCount] = useState<number>(0)
+  const [userLocationName, setUserLocationName] = useState<string>('')
 
-  // Ref for the quick ideas dropdown container
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Close dropdown when clicking outside
+  // Request location permission on component mount
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setShowQuickIdeas(false)
+    const requestLocation = async () => {
+      if (!navigator.geolocation) {
+        return
       }
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          }
+          setCoordinates(coords)
+          console.log('Location granted:', coords)
+        },
+        (error) => {
+          console.error('Geolocation error:', error)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      )
     }
 
-    if (showQuickIdeas) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showQuickIdeas])
+    requestLocation()
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -98,11 +103,19 @@ export default function PlannerPage() {
       const res = await fetch("/api/ai-planner", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input, context })
+        body: JSON.stringify({ 
+          input, 
+          context,
+          coordinates: coordinates // Pass coordinates to AI
+        })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Unknown error")
+      
       setPlan(data.plan)
+      setNearbyLocationsCount(data.nearbyLocationsFound || 0)
+      setUserLocationName(data.userLocation || '')
+      
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.")
     } finally {
@@ -132,33 +145,59 @@ export default function PlannerPage() {
     setSaveStatus('saving')
     try {
       const steps = (plan.steps || []).map((step: string) => ({ step }))
+      
+      // Enhanced journey data with location and AI metadata
+      const journeyData = {
+        title: plan.title,
+        summary: plan.summary,
+        steps,
+        context: plan.context,
+        date: new Date().toISOString().slice(0, 10),
+        type: context,
+        // New location data
+        coordinates: coordinates ? {
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude
+        } : undefined,
+        usedRealLocations: plan.usedRealLocations || false,
+        referencedLocations: plan.locationIds || [],
+        // AI metadata
+        aiMetadata: {
+          nearbyLocationsCount,
+          userLocation: userLocationName,
+          generatedAt: plan.generatedAt || new Date().toISOString(),
+          model: 'gpt-4'
+        }
+      }
+      
       const res = await fetch('/api/journeys', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: plan.title,
-          summary: plan.summary,
-          steps,
-          context: plan.context,
-          date: new Date().toISOString().slice(0, 10),
-          type: context,
-        })
+        body: JSON.stringify(journeyData)
       })
+      
       if (!res.ok) throw new Error('Failed to save plan')
       const data = await res.json()
       const journeyId = data.journey?.id
       if (!journeyId) throw new Error('No journey ID returned')
+      
       const saveResult = await saveGemJourney(journeyId)
       if (!saveResult.success) throw new Error(saveResult.error || 'Failed to save to Gem List')
+      
       setSaveStatus('saved')
+      
+      // Show success message with location info
+      if (nearbyLocationsCount > 0) {
+        toast.success(`Plan saved! Used ${nearbyLocationsCount} nearby locations from ${userLocationName || 'your area'} 🎉`)
+      } else {
+        toast.success('Plan saved to your Gem List! 🎉')
+      }
+      
     } catch (err) {
       setSaveStatus('error')
+      toast.error('Failed to save plan. Please try again.')
+      console.error('Save plan error:', err)
     }
-  }
-
-  const handleQuickIdeaClick = (idea: string) => {
-    setInput(idea)
-    setShowQuickIdeas(false)
   }
 
   // Enhanced share function with better formatting and URL generation
@@ -298,44 +337,12 @@ ${planSteps}
                   <div className="relative group">
                     <input
                       type="text"
-                      className="w-full h-12 sm:h-16 px-4 sm:px-6 pr-10 sm:pr-12 text-base sm:text-lg bg-white/70 backdrop-blur-sm border-2 border-gray-200 rounded-xl sm:rounded-2xl focus:outline-none focus:border-[#FF6B6B] focus:bg-white transition-all duration-300 placeholder-gray-400 shadow-lg group-hover:shadow-xl"
+                      className="w-full h-12 sm:h-16 px-4 sm:px-6 text-base sm:text-lg bg-white/70 backdrop-blur-sm border-2 border-gray-200 rounded-xl sm:rounded-2xl focus:outline-none focus:border-[#FF6B6B] focus:bg-white transition-all duration-300 placeholder-gray-400 shadow-lg group-hover:shadow-xl"
                       placeholder="e.g., I want live music and great food..."
                       value={input}
                       onChange={e => setInput(e.target.value)}
-                      onFocus={() => setShowQuickIdeas(true)}
                     />
-                    <button
-                      type="button"
-                      className="absolute right-3 sm:right-4 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-[#FF6B6B] transition-colors"
-                      onClick={() => setShowQuickIdeas(!showQuickIdeas)}
-                    >
-                      <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
-                    </button>
                   </div>
-
-                  {/* Quick Ideas */}
-                  {showQuickIdeas && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 backdrop-blur-sm rounded-xl sm:rounded-2xl border border-gray-200 shadow-2xl z-[9999] overflow-hidden animate-in slide-in-from-top-2 duration-300" ref={dropdownRef}>
-                      <div className="p-3 sm:p-4">
-                        <h4 className="text-xs sm:text-sm font-semibold text-gray-600 mb-2 sm:mb-3">💡 Quick Ideas</h4>
-                        <div className="space-y-1 sm:space-y-2">
-                          {QUICK_IDEAS.map((idea, index) => (
-                            <button
-                              key={index}
-                              type="button"
-                              className="w-full text-left px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#FF6B6B]/10 transition-all duration-200 text-sm sm:text-base text-gray-700 hover:text-[#FF6B6B] group"
-                              onClick={() => handleQuickIdeaClick(idea)}
-                            >
-                              <span className="flex items-center gap-2 sm:gap-3">
-                                <ArrowRight className="h-3 w-3 sm:h-4 sm:w-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                {idea}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Generate Button */}
@@ -422,6 +429,29 @@ ${planSteps}
                     <p className="text-base sm:text-lg text-gray-700 leading-relaxed bg-white/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-white">
                       {plan.summary}
                     </p>
+                  )}
+                  
+                  {/* Location Metadata */}
+                  {(nearbyLocationsCount > 0 || userLocationName) && (
+                    <div className="mt-4 p-3 sm:p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg sm:rounded-xl border border-green-200">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1 bg-green-100 rounded">
+                          <MapPin className="h-3 w-3 text-green-600" />
+                        </div>
+                        <span className="text-sm font-semibold text-green-800">Location-Enhanced Plan</span>
+                      </div>
+                      <div className="text-xs text-green-700 space-y-1">
+                        {userLocationName && (
+                          <p>📍 Planned for: {userLocationName}</p>
+                        )}
+                        {nearbyLocationsCount > 0 && (
+                          <p>🎯 Found {nearbyLocationsCount} nearby verified locations</p>
+                        )}
+                        {plan.usedRealLocations && (
+                          <p>✨ This plan includes real places from our database</p>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
 

@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { Bookmark, Sparkles } from "lucide-react"
+import { Bookmark, Sparkles, MapPin } from "lucide-react"
 import Link from "next/link"
 import { unsaveGemJourney } from '@/app/(frontend)/events/actions'
 import { toast } from 'sonner'
@@ -35,6 +35,13 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
           ownerId = ownerId.id || ownerId._id;
         }
         ownerId = ownerId || plan.userId;
+        
+        // Extract location metadata
+        const hasCoordinates = plan.coordinates?.latitude && plan.coordinates?.longitude
+        const nearbyLocationsCount = plan.aiMetadata?.nearbyLocationsCount || 0
+        const userLocation = plan.aiMetadata?.userLocation
+        const usedRealLocations = plan.usedRealLocations
+        
         return (
           <div
             key={plan.id}
@@ -83,6 +90,28 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
               <p className="text-gray-700 text-sm leading-relaxed mb-4 line-clamp-2">
                 {plan.summary}
               </p>
+              
+              {/* Location Enhancement Badge */}
+              {(hasCoordinates || nearbyLocationsCount > 0 || usedRealLocations) && (
+                <div className="mb-3 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 bg-green-100 rounded">
+                      <MapPin className="h-3 w-3 text-green-600" />
+                    </div>
+                    <div className="text-xs text-green-700 space-y-0.5">
+                      {userLocation && (
+                        <p className="font-medium">📍 {userLocation}</p>
+                      )}
+                      {nearbyLocationsCount > 0 && (
+                        <p>🎯 {nearbyLocationsCount} nearby locations found</p>
+                      )}
+                      {usedRealLocations && (
+                        <p>✨ Uses real verified places</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs text-gray-500">

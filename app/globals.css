@@ -1,3 +1,6 @@
+@import "tailwindcss/preflight";
+@tailwind utilities;
+
 /* Marker Styles */
 .marker-container {
   width: 32px;
@@ -299,6 +302,36 @@
     /* Mobile: position above mobile nav (h-16 = 4rem) + safe area + spacing */
     bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem);
   }
+
+  .mobile-feed-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Hide scrollbars on mobile */
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .mobile-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Ensure full viewport coverage for mobile feed */
+  .mobile-feed-post {
+    width: 100vw !important;
+    height: 100vh !important;
+    position: absolute;
+    inset: 0;
+  }
 }
 
 @media (min-width: 768px) {
@@ -489,4 +522,57 @@
 
 .left-safe {
   left: max(16px, env(safe-area-inset-left, 16px));
+}
+
+/* Enhanced scrollbar hiding for all feed containers */
+.snap-scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-scroll-container {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile-first responsive design */
+@media (max-width: 768px) {
+  /* Mobile feed optimizations */
+  .snap-scroll-container {
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  .snap-scroll-container > * {
+    scroll-snap-align: start;
+  }
+  
+  /* Ensure proper spacing for 80vh posts */
+  .mobile-post-container {
+    height: 80vh;
+    min-height: 400px;
+    max-height: 80vh;
+  }
+  
+  /* Hide scrollbars for cleaner mobile experience */
+  .snap-scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .snap-scroll-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Ensure touch targets are large enough */
+  button, .clickable {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better text scaling on mobile */
+  .mobile-optimized {
+    font-size: clamp(0.875rem, 2.5vw, 1rem);
+    line-height: 1.5;
+  }
 } 

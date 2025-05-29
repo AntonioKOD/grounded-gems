@@ -51,7 +51,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={metadata.title} />
         <meta name="twitter:description" content={metadata.description} />
-        <meta name="twitter:image" content="/icon-512.png" />
+        <meta name="twitter:image" content="/icon-192.png" />
         
         {/* Apple Touch Icons */}
         <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -61,13 +61,16 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         
         {/* Performance optimization - removed unused external script preloads */}
       </head>
-      <body>
+      <body className="overflow-x-hidden">
         <StoreProvider initialUser={initialUser}>
           <NavigationWrapper initialUser={initialUser} />
-          <main className="min-h-screen w-full bg-white fullscreen-content md:pt-0">
+          <main className="min-h-screen w-full bg-white">
             {children}
           </main>
-          <Footer />
+          {/* Hide footer on mobile, show on desktop */}
+          <div className="hidden md:block">
+            <Footer />
+          </div>
           <PWAInstallBanner />
           <Toaster />
           {/* Desktop FAB remains in its place */}

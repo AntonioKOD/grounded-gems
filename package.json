@@ -48,7 +48,7 @@
     "cmdk": "^1.1.1",
     "command": "^1.1.1",
     "date-fns": "^3.6.0",
-    "framer-motion": "^12.12.2",
+    "framer-motion": "^12.15.0",
     "graphql": "^16.10.0",
     "haversine-distance": "^1.2.3",
     "isomorphic-unfetch": "^4.0.2",

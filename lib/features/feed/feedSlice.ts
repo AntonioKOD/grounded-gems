@@ -213,7 +213,11 @@ const feedSlice = createSlice({
       }
     },
     addPost: (state, action: PayloadAction<Post>) => {
-      state.posts.unshift(action.payload)
+      // Check if post already exists to prevent duplicates
+      const existsIndex = state.posts.findIndex(post => post.id === action.payload.id)
+      if (existsIndex === -1) {
+        state.posts.unshift(action.payload)
+      }
     },
     removePost: (state, action: PayloadAction<string>) => {
       state.posts = state.posts.filter(post => post.id !== action.payload)
@@ -241,7 +245,13 @@ const feedSlice = createSlice({
       .addCase(fetchFeedPosts.fulfilled, (state, action) => {
         state.isLoading = false
         state.isRefreshing = false
-        state.posts = action.payload.posts
+        
+        // Deduplicate posts to ensure unique entries
+        const uniquePosts = action.payload.posts.filter(
+          (post, index, array) => array.findIndex(p => p.id === post.id) === index
+        )
+        
+        state.posts = uniquePosts
         state.hasMore = action.payload.hasMore
         state.page = action.payload.page || 1
         state.feedType = action.payload.feedType || state.feedType
@@ -263,7 +273,12 @@ const feedSlice = createSlice({
       })
       .addCase(loadMorePosts.fulfilled, (state, action) => {
         state.isLoadingMore = false
-        state.posts = [...state.posts, ...action.payload.posts]
+        
+        // Deduplicate posts to prevent duplicate keys
+        const existingPostIds = new Set(state.posts.map(post => post.id))
+        const newPosts = action.payload.posts.filter(post => !existingPostIds.has(post.id))
+        
+        state.posts = [...state.posts, ...newPosts]
         state.hasMore = action.payload.hasMore
         state.page = action.payload.page
         state.error = null

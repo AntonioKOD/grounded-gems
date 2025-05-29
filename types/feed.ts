@@ -20,26 +20,41 @@ export interface User {
     id: string
     title?: string
     content: string
-    image?: string
-    createdAt: string
-    updatedAt: string
+    image?: string | null
+    video?: string | null
+    videoThumbnail?: string | null
+    videoDuration?: number | null
     author: {
       id: string
       name: string
       avatar?: string
     }
-    type?: 'post' | 'review' | 'recommendation'
-    location?: {
-      id: string
-      name: string
-    }
-    rating?: number
+    createdAt: string
+    updatedAt?: string
     likeCount?: number
     commentCount?: number
     shareCount?: number
     saveCount?: number
+    viewCount?: number
+    engagementScore?: number
     isLiked?: boolean
     isSaved?: boolean
+    isViewed?: boolean
+    type?: "post" | "review" | "video" | "story" | "tip"
+    rating?: number | null
+    location?: {
+      id: string
+      name: string
+      coordinates?: {
+        lat: number
+        lng: number
+      }
+    }
+    tags?: string[]
+    mentions?: string[]
+    isSponsored?: boolean
+    priority?: "normal" | "high" | "urgent"
+    mediaAspectRatio?: string
   }
   
   export interface Comment {

@@ -375,6 +375,10 @@ export default function MobileFeedContainer({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          style={{
+            height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
+            paddingBottom: 0
+          }}
         >
           {loading && posts.length === 0 ? (
             <MobileFeedSkeleton />
@@ -387,11 +391,25 @@ export default function MobileFeedContainer({
                 />
               ) : (
                 <div className="space-y-0 pb-16">
-                  {posts.map((post, index) => (
+                  {posts
+                    // Deduplicate posts by ID to prevent duplicate keys
+                    .filter((post, index, array) => {
+                      const firstIndex = array.findIndex(p => p.id === post.id)
+                      const isDuplicate = firstIndex !== index
+                      if (isDuplicate) {
+                        console.warn(`Duplicate post detected: ${post.id} at index ${index}, first seen at ${firstIndex}`)
+                      }
+                      return firstIndex === index
+                    })
+                    .map((post, index) => (
                     <div
-                      key={post.id}
+                      key={`${post.id}-${index}`}
                       ref={index === posts.length - 1 ? lastPostElementRef : null}
-                      className="snap-start h-[85dvh] w-full flex items-center justify-center relative"
+                      className="snap-start w-full flex items-center justify-center relative"
+                      style={{
+                        height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
+                        minHeight: '400px'
+                      }}
                     >
                       <MobileFeedPost
                         post={post}
@@ -408,7 +426,7 @@ export default function MobileFeedContainer({
                   
                   {/* Load more indicator */}
                   {loadingMore && (
-                    <div className="absolute bottom-16 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="absolute bottom-4 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
                         <span className="text-sm text-white/80">Loading more posts...</span>
