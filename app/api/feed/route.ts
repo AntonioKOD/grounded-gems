@@ -17,18 +17,18 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const currentUserId = searchParams.get('currentUserId')
 
-    let posts = []
+    let posts: any[] = []
 
     // Route to appropriate feed function based on parameters
     switch (category) {
       case 'discover':
-        posts = await getDiscoverFeed(currentUserId, page, 10)
+        posts = await getDiscoverFeed(currentUserId || undefined, page, 10)
         break
       case 'trending':
-        posts = await getPopularFeed(currentUserId, page, 10, '7d')
+        posts = await getPopularFeed(currentUserId || undefined, page, 10, '7d')
         break
       case 'recent':
-        posts = await getLatestFeed(currentUserId, page, 10)
+        posts = await getLatestFeed(currentUserId || undefined, page, 10)
         break
       case 'bookmarks':
         if (currentUserId) {
@@ -39,9 +39,10 @@ export async function GET(request: NextRequest) {
         break
       default:
         if (feedType === 'personalized' && currentUserId) {
-          posts = await getPersonalizedFeed(currentUserId, 10, (page - 1) * 10, category)
+          const personalizedPosts = await getPersonalizedFeed(currentUserId, 10, (page - 1) * 10, category || undefined)
+          posts = personalizedPosts || []
         } else {
-          posts = await getFeedPosts(feedType, sortBy, page, category, currentUserId)
+          posts = await getFeedPosts(feedType, sortBy, page, category || undefined, currentUserId || undefined)
         }
     }
 
