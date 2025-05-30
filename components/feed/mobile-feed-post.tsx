@@ -168,10 +168,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
   // Enhanced like action with proper Redux integration
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!user || isLiking) {
-      if (!user) {
-        toast.error("Please log in to like posts")
-      }
+    if (isLiking) {
       return
     }
 
@@ -189,7 +186,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
       await dispatch(likePostAsync({
         postId: post.id,
         shouldLike: !previousLiked,
-        userId: user.id
+        userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
       
       if (onPostUpdated) {
@@ -204,7 +201,12 @@ const MobileFeedPost = memo(function MobileFeedPost({
 
     } catch (error) {
       console.error("Error liking post:", error)
-      toast.error("Failed to like post")
+      
+      if (error instanceof Error && error.message.includes('not authenticated')) {
+        toast.error("Please log in to like posts")
+      } else {
+        toast.error("Failed to like post")
+      }
     }
   }, [isLiked, likeCount, post, user, onPostUpdated, isLiking, dispatch])
 
@@ -230,10 +232,11 @@ const MobileFeedPost = memo(function MobileFeedPost({
         toast.success("Link copied to clipboard! 📋")
       }
 
+      // Track share if user is available
       if (user) {
         await dispatch(sharePostAsync({
           postId: post.id,
-          userId: user.id
+          userId: user.id || '' // Keep for Redux state management, but API will use authenticated user
         })).unwrap()
         
         if (onPostUpdated) {
@@ -248,7 +251,12 @@ const MobileFeedPost = memo(function MobileFeedPost({
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
         console.error("Error sharing post:", error)
-        toast.error("Failed to share post")
+        
+        if (error.message.includes('not authenticated')) {
+          toast.error("Please log in to track shares")
+        } else {
+          toast.error("Failed to share post")
+        }
       }
     } finally {
       setIsSharing(false)
@@ -258,11 +266,6 @@ const MobileFeedPost = memo(function MobileFeedPost({
   // Enhanced save action with visual feedback
   const handleSave = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!user) {
-      toast.error("Please log in to save posts")
-      return
-    }
-
     if (isSaving) return
 
     mediumHaptics()
@@ -278,7 +281,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
       const result = await dispatch(savePostAsync({
         postId: post.id,
         shouldSave: newIsSaved,
-        userId: user.id
+        userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
       
       if (onPostUpdated) {
@@ -296,7 +299,12 @@ const MobileFeedPost = memo(function MobileFeedPost({
       }
     } catch (error) {
       console.error("Error saving post:", error)
-      toast.error("Failed to save post")
+      
+      if (error instanceof Error && error.message.includes('not authenticated')) {
+        toast.error("Please log in to save posts")
+      } else {
+        toast.error("Failed to save post")
+      }
     }
   }, [isSaved, post, user, isSaving, onPostUpdated, dispatch, saveCount])
 
@@ -478,32 +486,46 @@ const MobileFeedPost = memo(function MobileFeedPost({
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="relative">
-                  {/* Enhanced profile avatar with glow effect */}
+                  {/* Enhanced profile avatar with Instagram-style design */}
                   <motion.div
                     whileHover={{ scale: 1.1 }}
                     whileTap={{ scale: 0.95 }}
                     className="relative"
                   >
-                    <Avatar className="h-12 w-12 ring-2 ring-white/40 group-hover:ring-white/60 transition-all duration-300 shadow-2xl">
-                      <AvatarImage 
-                        src={getAuthorProfileImageUrl()} 
-                        alt={post.author.name} 
-                        className="object-cover"
-                      />
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-sm">
-                        {getInitials(post.author.name)}
-                      </AvatarFallback>
-                    </Avatar>
+                    {/* Instagram-style gradient ring */}
+                    <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
+                      <div className="w-full h-full rounded-full bg-black p-[2px]">
+                        <Avatar className="h-full w-full border-0 shadow-2xl">
+                          <AvatarImage 
+                            src={getAuthorProfileImageUrl()} 
+                            alt={post.author.name} 
+                            className="object-cover rounded-full"
+                          />
+                          <AvatarFallback className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white font-bold text-sm rounded-full">
+                            {getInitials(post.author.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    </div>
                     
-                    {/* Premium online indicator */}
+                    {/* Premium online indicator with pulse animation */}
                     <motion.div 
-                      animate={{ scale: [1, 1.2, 1] }}
-                      transition={{ duration: 2, repeat: Infinity }}
-                      className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-400 rounded-full border-2 border-white shadow-lg"
-                    />
+                      animate={{ 
+                        scale: [1, 1.3, 1],
+                        opacity: [1, 0.7, 1]
+                      }}
+                      transition={{ 
+                        duration: 2, 
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                      }}
+                      className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-black shadow-lg"
+                    >
+                      <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
+                    </motion.div>
                     
-                    {/* Subtle glow effect */}
-                    <div className="absolute inset-0 rounded-full bg-white/10 blur-lg scale-110 group-hover:bg-white/20 transition-all duration-300" />
+                    {/* Subtle glow effect on hover */}
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/20 via-red-500/20 to-purple-600/20 blur-md scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   </motion.div>
                 </div>
                 

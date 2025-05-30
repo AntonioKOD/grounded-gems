@@ -99,11 +99,6 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     
-    if (!user) {
-      toast.error("Please log in to like posts")
-      return
-    }
-
     // Haptic feedback
     if (navigator.vibrate) {
       navigator.vibrate(50)
@@ -117,7 +112,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       await dispatch(likePostAsync({
         postId: post.id,
         shouldLike: !isLiked,
-        userId: user.id
+        userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
 
       // Update parent component if callback provided
@@ -131,7 +126,12 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
 
     } catch (error) {
       console.error("Error liking post:", error)
-      toast.error("Failed to like post")
+      
+      if (error instanceof Error && error.message.includes('not authenticated')) {
+        toast.error("Please log in to like posts")
+      } else {
+        toast.error("Failed to like post")
+      }
       // Revert optimistic update
       setLikeCount(prev => isLiked ? prev + 1 : prev - 1)
     }
@@ -240,7 +240,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
           {post.video && !imageError ? (
             <VideoPlayer
               src={post.video}
-              thumbnail={post.videoThumbnail || post.image}
+              thumbnail={post.videoThumbnail || post.image || undefined}
               aspectRatio="9/16"
               onViewStart={() => {
                 // Track view start
@@ -299,23 +299,46 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative">
-              <Avatar className="h-12 w-12 ring-2 ring-white/30 group-hover:ring-white/50 transition-all duration-300 shadow-2xl">
-                <AvatarImage 
-                  src={
-                    post.author.profileImage?.url || 
-                    post.author.avatar || 
-                    (typeof post.author.profilePicture === 'string' ? post.author.profilePicture : post.author.profilePicture?.url) ||
-                    "/placeholder.svg"
-                  } 
-                  alt={post.author.name}
-                  className="object-cover"
-                />
-                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-base">
-                  {getInitials(post.author.name)}
-                </AvatarFallback>
-              </Avatar>
-              {/* Online indicator */}
-              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-400 rounded-full border-2 border-white shadow-lg animate-pulse" />
+              {/* Instagram-style gradient ring */}
+              <motion.div
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                className="relative"
+              >
+                <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
+                  <div className="w-full h-full rounded-full bg-black p-[2px]">
+                    <Avatar className="h-full w-full border-0 shadow-2xl">
+                      <AvatarImage 
+                        src={post.author.avatar || "/placeholder.svg"} 
+                        alt={post.author.name}
+                        className="object-cover rounded-full"
+                      />
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white font-bold text-sm rounded-full">
+                        {getInitials(post.author.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                </div>
+                
+                {/* Premium online indicator with pulse animation */}
+                <motion.div 
+                  animate={{ 
+                    scale: [1, 1.3, 1],
+                    opacity: [1, 0.7, 1]
+                  }}
+                  transition={{ 
+                    duration: 2, 
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                  className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-black shadow-lg"
+                >
+                  <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
+                </motion.div>
+                
+                {/* Subtle glow effect on hover */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/20 via-red-500/20 to-purple-600/20 blur-md scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              </motion.div>
             </div>
           </Link>
         </div>

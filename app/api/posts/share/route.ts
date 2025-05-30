@@ -1,18 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { sharePost } from '@/app/actions'
 
 export async function POST(request: NextRequest) {
   try {
-    const { postId, userId } = await request.json()
+    const payload = await getPayload({ config })
 
-    if (!postId || !userId) {
+    // Authenticate the user
+    const { user } = await payload.auth({
+      headers: request.headers,
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not authenticated' },
+        { status: 401 }
+      )
+    }
+
+    const { postId } = await request.json()
+
+    if (!postId) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
       )
     }
 
-    const result = await sharePost(postId, userId)
+    // Use the authenticated user's ID
+    const result = await sharePost(postId, user.id)
     
     return NextResponse.json({
       success: true,

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 import { savePost } from '@/app/actions'
 
 export async function POST(
@@ -6,17 +8,32 @@ export async function POST(
   { params }: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const { userId, shouldSave } = await request.json()
+    const payload = await getPayload({ config })
+
+    // Authenticate the user
+    const { user } = await payload.auth({
+      headers: request.headers,
+    })
+
+    if (!user) {
+      return NextResponse.json(
+        { error: 'User not authenticated' },
+        { status: 401 }
+      )
+    }
+
+    const { shouldSave } = await request.json()
     const { postId } = await params
     
-    if (!userId) {
+    if (typeof shouldSave !== 'boolean') {
       return NextResponse.json(
-        { error: 'User ID is required' },
+        { error: 'shouldSave is required and must be boolean' },
         { status: 400 }
       )
     }
 
-    const result = await savePost(postId, userId, shouldSave)
+    // Use the authenticated user's ID
+    const result = await savePost(postId, user.id, shouldSave)
     
     return NextResponse.json(result)
   } catch (error) {

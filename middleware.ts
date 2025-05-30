@@ -16,6 +16,7 @@ export function middleware(req: NextRequest) {
       pathname.startsWith('/api/users/verify') ||
       pathname === '/api/users/me' ||  // CRITICAL: Allow /api/users/me to pass through
       pathname.startsWith('/api/auth-check') ||
+      pathname.startsWith('/api/posts/debug') || // Allow debug route
       pathname.includes('.') ||
       pathname === '/') {
     return NextResponse.next()
@@ -24,8 +25,17 @@ export function middleware(req: NextRequest) {
   // Quick token check
   const token = req.cookies.get('payload-token')?.value
 
-  // Fast redirect for unauthenticated users
+  // Handle unauthenticated requests
   if (!token) {
+    // For API routes, return 401 JSON response instead of redirect
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, error: 'User not authenticated' },
+        { status: 401 }
+      )
+    }
+    
+    // For frontend routes, redirect to login
     const redirectUrl = safeRedirectURL('/login', pathname)
     return NextResponse.redirect(redirectUrl)
   }
@@ -50,6 +60,9 @@ export const config = {
     
     // API routes that require auth (EXCLUDING /api/users/me)
     '/api/users/[id]/:path*',
+    '/api/posts/like',
+    '/api/posts/share',
+    '/api/posts/[postId]/save',
     '/api/locations/interactions/:path*',
     '/api/locations/event-requests/:path*',
     '/api/locations/save/:path*',

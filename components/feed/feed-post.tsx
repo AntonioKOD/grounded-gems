@@ -96,11 +96,6 @@ export const FeedPost = memo(function FeedPost({
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    
-    if (!user) {
-      toast.error("Please log in to like posts")
-      return
-    }
 
     try {
       // Optimistic update
@@ -110,7 +105,7 @@ export const FeedPost = memo(function FeedPost({
       await dispatch(likePostAsync({
         postId: post.id,
         shouldLike: !isLiked,
-        userId: user.id
+        userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
 
       // Update parent component if callback provided
@@ -124,7 +119,12 @@ export const FeedPost = memo(function FeedPost({
 
     } catch (error) {
       console.error("Error liking post:", error)
-      toast.error("Failed to like post")
+      
+      if (error instanceof Error && error.message.includes('not authenticated')) {
+        toast.error("Please log in to like posts")
+      } else {
+        toast.error("Failed to like post")
+      }
       // Revert optimistic update
       setLikeCount(prev => isLiked ? prev + 1 : prev - 1)
     }
@@ -162,11 +162,6 @@ export const FeedPost = memo(function FeedPost({
   // Handle save action
   const handleSave = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
-    
-    if (!user) {
-      toast.error("Please log in to save posts")
-      return
-    }
 
     try {
       // Optimistic update
@@ -176,7 +171,7 @@ export const FeedPost = memo(function FeedPost({
       await dispatch(savePostAsync({
         postId: post.id,
         shouldSave: !isSaved,
-        userId: user.id
+        userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
 
       // Update parent component if callback provided
@@ -191,7 +186,12 @@ export const FeedPost = memo(function FeedPost({
       toast.success(isSaved ? "Post removed from saved items" : "Post saved for later")
     } catch (error) {
       console.error("Error saving post:", error)
-      toast.error("Failed to save post")
+      
+      if (error instanceof Error && error.message.includes('not authenticated')) {
+        toast.error("Please log in to save posts")
+      } else {
+        toast.error("Failed to save post")
+      }
       // Revert optimistic update
       setSaveCount(prev => isSaved ? prev + 1 : prev - 1)
     }
@@ -229,12 +229,27 @@ export const FeedPost = memo(function FeedPost({
               className="group flex items-center gap-4 hover:opacity-90 transition-opacity"
               onClick={(e) => e.stopPropagation()}
             >
-              <Avatar className="h-12 w-12 ring-2 ring-gray-100 group-hover:ring-[#FF6B6B]/30 transition-all shadow-sm">
-                <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} />
-                <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B]/10 to-[#FF6B6B]/20 text-[#FF6B6B] font-semibold">
-                  {getInitials(post.author.name)}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                {/* Instagram-style gradient ring */}
+                <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
+                  <div className="w-full h-full rounded-full bg-white p-[2px] group-hover:bg-gray-50 transition-colors">
+                    <Avatar className="h-full w-full border-0 shadow-xl">
+                      <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} className="object-cover rounded-full" />
+                      <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] via-purple-500 to-pink-500 text-white font-bold text-sm rounded-full">
+                        {getInitials(post.author.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                </div>
+                
+                {/* Online indicator with subtle animation */}
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-white shadow-lg">
+                  <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
+                </div>
+                
+                {/* Subtle hover glow effect */}
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/10 via-red-500/10 to-purple-600/10 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors text-lg">

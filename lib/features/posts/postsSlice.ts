@@ -62,8 +62,28 @@ export const likePostAsync = createAsyncThunk(
       // Perform optimistic update first
       dispatch(toggleLikeOptimistic({ postId: params.postId, isLiked: params.shouldLike }))
       
-      await likePost(params.postId, params.shouldLike, params.userId)
-      return params
+      const response = await fetch('/api/posts/like', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          postId: params.postId,
+          shouldLike: params.shouldLike,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to like post')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to like post')
+      }
+      
+      return { ...params, likeCount: result.data?.likeCount }
     } catch (error) {
       console.error('Error liking post:', error)
       // Revert optimistic update on error
@@ -87,7 +107,6 @@ export const savePostAsync = createAsyncThunk(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: params.userId,
           shouldSave: params.shouldSave,
         }),
       })
@@ -117,8 +136,27 @@ export const sharePostAsync = createAsyncThunk(
     { rejectWithValue, dispatch }
   ) => {
     try {
-      const result = await sharePost(params.postId, params.userId)
-      return { ...params, shareCount: result.shareCount }
+      const response = await fetch('/api/posts/share', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          postId: params.postId,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to share post')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to share post')
+      }
+      
+      return { ...params, shareCount: result.data?.shareCount }
     } catch (error) {
       console.error('Error sharing post:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to share post')
