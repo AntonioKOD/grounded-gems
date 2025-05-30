@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         location: result.user.location,
         role: result.user.role,
       },
+      token: result.token, // Include token for mobile apps
     })
 
     // Set the authentication cookie

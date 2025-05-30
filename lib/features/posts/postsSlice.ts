@@ -56,13 +56,18 @@ export const likePostAsync = createAsyncThunk(
   'posts/likePost',
   async (
     params: { postId: string; shouldLike: boolean; userId: string },
-    { rejectWithValue }
+    { rejectWithValue, dispatch }
   ) => {
     try {
+      // Perform optimistic update first
+      dispatch(toggleLikeOptimistic({ postId: params.postId, isLiked: params.shouldLike }))
+      
       await likePost(params.postId, params.shouldLike, params.userId)
       return params
     } catch (error) {
       console.error('Error liking post:', error)
+      // Revert optimistic update on error
+      dispatch(toggleLikeOptimistic({ postId: params.postId, isLiked: !params.shouldLike }))
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to like post')
     }
   }
@@ -109,7 +114,7 @@ export const sharePostAsync = createAsyncThunk(
   'posts/sharePost',
   async (
     params: { postId: string; userId: string },
-    { rejectWithValue }
+    { rejectWithValue, dispatch }
   ) => {
     try {
       const result = await sharePost(params.postId, params.userId)

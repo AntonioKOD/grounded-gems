@@ -67,13 +67,26 @@ export default function MobileFeedContainer({
   // Initialize posts slice with user's liked and saved posts
   useEffect(() => {
     if (user?.id && !initialLoadComplete.current) {
-      const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
-      const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
-      const likedCommentIds: string[] = []
-      
-      dispatch(initializeLikedPosts(likedPostIds))
-      dispatch(initializeSavedPosts(savedPostIds))
-      dispatch(initializeLikedComments(likedCommentIds))
+      try {
+        const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
+        const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
+        const likedCommentIds: string[] = []
+        
+        console.log('Initializing Redux with user data:', {
+          userId: user.id,
+          likedPosts: likedPostIds,
+          savedPosts: savedPostIds
+        })
+        
+        dispatch(initializeLikedPosts(likedPostIds))
+        dispatch(initializeSavedPosts(savedPostIds))
+        dispatch(initializeLikedComments(likedCommentIds))
+        
+        console.log('Redux state initialized successfully')
+      } catch (error) {
+        console.error('Error initializing Redux state:', error)
+        toast.error("Error initializing user preferences")
+      }
     }
   }, [dispatch, user?.id, user?.savedPosts, user?.likedPosts])
 
@@ -133,6 +146,14 @@ export default function MobileFeedContainer({
     
     // Load initial data only once
     if (!initialLoadComplete.current && !isUserLoading) {
+      console.log('Loading initial feed data:', {
+        feedType: "all",
+        sortBy: "recent",
+        userId,
+        activeCategory,
+        currentUserId: user?.id
+      })
+      
       dispatch(fetchFeedPosts({ 
         feedType: "all", 
         sortBy: "recent", 
@@ -141,7 +162,15 @@ export default function MobileFeedContainer({
         currentUserId: user?.id,
         force: false // Don't force on initial load
       }))
-      initialLoadComplete.current = true
+      .unwrap()
+      .then((result) => {
+        console.log('Feed data loaded successfully:', result)
+        initialLoadComplete.current = true
+      })
+      .catch((error) => {
+        console.error('Error loading initial feed data:', error)
+        toast.error("Error loading posts")
+      })
     }
 
     return () => {
@@ -311,6 +340,17 @@ export default function MobileFeedContainer({
   if (!isMounted) {
     return <MobileFeedSkeleton />
   }
+
+  // Debug posts data
+  console.log('MobileFeedContainer render:', {
+    postsCount: posts.length,
+    loading,
+    error,
+    hasMore,
+    isAuthenticated,
+    userId: user?.id,
+    activeCategory
+  })
 
   return (
     <div className={`max-w-2xl mx-auto relative ${className}`}>

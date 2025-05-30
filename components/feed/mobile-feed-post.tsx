@@ -41,6 +41,8 @@ import { savePostAsync, toggleSaveOptimistic } from "@/lib/features/posts/postsS
 import { formatDistanceToNow } from "date-fns"
 import { CommentSystemLight } from "@/components/post/comment-system-light"
 import VideoPlayer from "./video-player"
+import { likePostAsync } from "@/lib/features/posts/postsSlice"
+import { sharePostAsync } from "@/lib/features/posts/postsSlice"
 
 interface MobileFeedPostProps {
   post: Post
@@ -63,27 +65,39 @@ const MobileFeedPost = memo(function MobileFeedPost({
   className = "" 
 }: MobileFeedPostProps) {
   const dispatch = useAppDispatch()
-  const { savedPosts, loadingSaves } = useAppSelector((state) => state.posts)
+  const { savedPosts, loadingSaves, likedPosts, loadingLikes } = useAppSelector((state) => state.posts)
   
-  const [isLiked, setIsLiked] = useState(post.isLiked || false)
-  const [likeCount, setLikeCount] = useState(post.likeCount || 0)
+  // Use Redux state as single source of truth
+  const isLiked = likedPosts.includes(post.id)
+  const isSaved = savedPosts.includes(post.id)
+  const isLiking = loadingLikes.includes(post.id)
+  const isSaving = loadingSaves.includes(post.id)
+  
+  // Use post data directly for counts (no local state that can get out of sync)
+  const likeCount = post.likeCount || 0
+  const saveCount = post.saveCount || 0
+  const shareCount = post.shareCount || 0
+  
   const [isSharing, setIsSharing] = useState(false)
-  const [saveCount, setSaveCount] = useState(post.saveCount || 0)
   const [isLoadingImage, setIsLoadingImage] = useState(true)
   const [imageError, setImageError] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
-  const [isLiking, setIsLiking] = useState(false)
-  const [shareCount, setShareCount] = useState(post.shareCount || 0)
   const [showActions, setShowActions] = useState(true)
   const [isViewing, setIsViewing] = useState(false)
   const [viewTime, setViewTime] = useState(0)
   const [showCommentDialog, setShowCommentDialog] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   
-  // Get saved state from Redux
-  const isSaved = savedPosts.includes(post.id)
-  const isSaving = loadingSaves.includes(post.id)
-
+  // Get author profile image URL with robust fallbacks
+  const getAuthorProfileImageUrl = () => {
+    // Match the exact priority from the web app's EnhancedFeedPost component
+    if (post.author.profileImage?.url) return post.author.profileImage.url;
+    if (post.author.avatar) return post.author.avatar;
+    if (typeof post.author.profilePicture === 'string') return post.author.profilePicture;
+    if (post.author.profilePicture?.url) return post.author.profilePicture.url;
+    return "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=facearea&facepad=2&q=80";
+  };
+  
   // Auto-hide actions after 4 seconds, longer than before for better UX
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -128,24 +142,30 @@ const MobileFeedPost = memo(function MobileFeedPost({
       if (!user?.id || !isMounted) return
 
       try {
-        setIsLiked(post.isLiked || false)
-        setSaveCount(post.saveCount || 0)
-        setLikeCount(post.likeCount || 0)
-        setShareCount(post.shareCount || 0)
+        // Use Redux state as single source of truth
+        const isLiked = likedPosts.includes(post.id)
+        const isSaved = savedPosts.includes(post.id)
+        const isLiking = loadingLikes.includes(post.id)
+        const isSaving = loadingSaves.includes(post.id)
+        
+        // Use post data directly for counts (no local state that can get out of sync)
+        const likeCount = post.likeCount || 0
+        const saveCount = post.saveCount || 0
+        const shareCount = post.shareCount || 0
       } catch (error) {
         console.error("Error checking post status:", error)
       }
     }
 
     checkStatus()
-  }, [post.id, user?.id, isMounted, post.isLiked, post.isSaved, post.likeCount, post.saveCount, post.shareCount])
+  }, [post.id, user?.id, isMounted, likedPosts, savedPosts, loadingLikes, loadingSaves, post.likeCount, post.saveCount, post.shareCount])
 
   // Set mounted state after hydration
   useEffect(() => {
     setIsMounted(true)
   }, [])
 
-  // Enhanced like action with heart explosion effect
+  // Enhanced like action with proper Redux integration
   const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!user || isLiking) {
@@ -157,47 +177,36 @@ const MobileFeedPost = memo(function MobileFeedPost({
 
     mediumHaptics()
     setShowActions(true)
-    setIsLiking(true)
     const previousLiked = isLiked
-    const previousCount = likeCount
 
     try {
-      // Optimistic update with animation
-      setIsLiked(!previousLiked)
-      setLikeCount(previousLiked ? previousCount - 1 : previousCount + 1)
-
       // Enhanced haptic pattern for likes
       if (navigator.vibrate) {
         navigator.vibrate([30, 50, 30, 50, 100])
       }
 
-      await likePost(post.id, !previousLiked, user.id)
+      // Use Redux action with optimistic updates
+      await dispatch(likePostAsync({
+        postId: post.id,
+        shouldLike: !previousLiked,
+        userId: user.id
+      })).unwrap()
       
       if (onPostUpdated) {
         onPostUpdated({
           ...post,
           isLiked: !previousLiked,
-          likeCount: previousLiked ? previousCount - 1 : previousCount + 1
+          likeCount: !previousLiked ? likeCount + 1 : likeCount - 1
         })
       }
+
+      toast.success(previousLiked ? "Unliked ✨" : "Liked! 💫")
 
     } catch (error) {
       console.error("Error liking post:", error)
       toast.error("Failed to like post")
-      setIsLiked(previousLiked)
-      setLikeCount(previousCount)
-      
-      if (onPostUpdated) {
-        onPostUpdated({
-          ...post,
-          isLiked: previousLiked,
-          likeCount: previousCount
-        })
-      }
-    } finally {
-      setIsLiking(false)
     }
-  }, [isLiked, likeCount, post, user, onPostUpdated, isLiking])
+  }, [isLiked, likeCount, post, user, onPostUpdated, isLiking, dispatch])
 
   // Enhanced share with native sharing API (Instagram Reels-style)
   const handleShare = useCallback(async (e: React.MouseEvent) => {
@@ -221,10 +230,20 @@ const MobileFeedPost = memo(function MobileFeedPost({
         toast.success("Link copied to clipboard! 📋")
       }
 
-      setShareCount(prev => prev + 1)
-
       if (user) {
-        await sharePost(post.id, user.id)
+        await dispatch(sharePostAsync({
+          postId: post.id,
+          userId: user.id
+        })).unwrap()
+        
+        if (onPostUpdated) {
+          onPostUpdated({
+            ...post,
+            shareCount: shareCount + 1
+          })
+        }
+        
+        toast.success("Post shared successfully! 🚀")
       }
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
@@ -234,7 +253,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
     } finally {
       setIsSharing(false)
     }
-  }, [post, user, isMounted, isSharing])
+  }, [post, user, isMounted, isSharing, shareCount, onPostUpdated, dispatch])
 
   // Enhanced save action with visual feedback
   const handleSave = useCallback(async (e: React.MouseEvent) => {
@@ -253,8 +272,8 @@ const MobileFeedPost = memo(function MobileFeedPost({
     try {
       const newIsSaved = !previousSaved
       
+      // Use Redux optimistic update
       dispatch(toggleSaveOptimistic({ postId: post.id, isSaved: newIsSaved }))
-      setSaveCount(prev => newIsSaved ? prev + 1 : prev - 1)
 
       const result = await dispatch(savePostAsync({
         postId: post.id,
@@ -262,15 +281,11 @@ const MobileFeedPost = memo(function MobileFeedPost({
         userId: user.id
       })).unwrap()
       
-      if (result.saveCount !== undefined) {
-        setSaveCount(result.saveCount)
-      }
-      
       if (onPostUpdated) {
         onPostUpdated({
           ...post,
           isSaved: newIsSaved,
-          saveCount: result.saveCount || saveCount
+          saveCount: result.saveCount || (newIsSaved ? saveCount + 1 : saveCount - 1)
         })
       }
       
@@ -471,12 +486,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
                   >
                     <Avatar className="h-12 w-12 ring-2 ring-white/40 group-hover:ring-white/60 transition-all duration-300 shadow-2xl">
                       <AvatarImage 
-                        src={
-                          post.author.profileImage?.url || 
-                          post.author.avatar || 
-                          (typeof post.author.profilePicture === 'string' ? post.author.profilePicture : post.author.profilePicture?.url) ||
-                          "/placeholder-avatar.png"
-                        } 
+                        src={getAuthorProfileImageUrl()} 
                         alt={post.author.name} 
                         className="object-cover"
                       />
