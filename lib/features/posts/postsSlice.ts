@@ -143,6 +143,7 @@ export const sharePostAsync = createAsyncThunk(
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           postId: params.postId,
         }),

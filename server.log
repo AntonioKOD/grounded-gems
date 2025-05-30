@@ -20,3 +20,10 @@
  POST /api/posts/testpost/save 401 in 4742ms
  ✓ Compiled in 182ms (1382 modules)
  ✓ Compiled in 105ms (1382 modules)
+ ✓ Compiled in 39ms
+ ✓ Compiled /api/posts/debug in 78ms (84 modules)
+ GET /api/posts/debug 200 in 106ms
+ ✓ Compiled in 46ms (109 modules)
+ ✓ Compiled in 25ms (109 modules)
+ ✓ Compiled in 8ms
+ ✓ Compiled in 95ms (388 modules)

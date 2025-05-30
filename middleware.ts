@@ -16,7 +16,6 @@ export function middleware(req: NextRequest) {
       pathname.startsWith('/api/users/verify') ||
       pathname === '/api/users/me' ||  // CRITICAL: Allow /api/users/me to pass through
       pathname.startsWith('/api/auth-check') ||
-      pathname.startsWith('/api/posts/debug') || // Allow debug route
       pathname.includes('.') ||
       pathname === '/') {
     return NextResponse.next()
