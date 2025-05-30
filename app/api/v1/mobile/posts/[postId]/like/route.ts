@@ -66,10 +66,11 @@ export async function POST(
       )
     }
 
-    // Check if post exists
+    // Get the post with its current likes
     const post = await payload.findByID({
       collection: 'posts',
       id: postId,
+      depth: 1, // Include relationship data
     })
 
     if (!post) {
@@ -85,20 +86,13 @@ export async function POST(
     }
 
     // Check if user already liked this post
-    const existingLike = await payload.find({
-      collection: 'post-likes',
-      where: {
-        and: [
-          { post: { equals: postId } },
-          { user: { equals: user.id } }
-        ]
-      },
-      limit: 1,
+    const currentLikes = Array.isArray(post.likes) ? post.likes : []
+    const userAlreadyLiked = currentLikes.some((like: any) => {
+      const likeId = typeof like === 'string' ? like : like.id
+      return likeId === user.id
     })
 
-    const isAlreadyLiked = existingLike.docs.length > 0
-
-    if (isAlreadyLiked) {
+    if (userAlreadyLiked) {
       return NextResponse.json(
         {
           success: false,
@@ -110,48 +104,19 @@ export async function POST(
       )
     }
 
-    // Create like record
-    await payload.create({
-      collection: 'post-likes',
-      data: {
-        post: postId,
-        user: user.id,
-        createdAt: new Date(),
-      },
-    })
-
-    // Update post like count
-    const currentLikeCount = post.likeCount || 0
-    const newLikeCount = currentLikeCount + 1
-
+    // Add user to likes array
+    const newLikes = [...currentLikes.map((like: any) => typeof like === 'string' ? like : like.id), user.id]
+    
+    // Update the post with new likes
     await payload.update({
       collection: 'posts',
       id: postId,
       data: {
-        likeCount: newLikeCount,
+        likes: newLikes,
       },
     })
 
-    // Update user's liked posts array (if this field exists)
-    try {
-      const userData = await payload.findByID({
-        collection: 'users',
-        id: user.id,
-      })
-
-      const currentLikedPosts = Array.isArray(userData.likedPosts) ? userData.likedPosts : []
-      if (!currentLikedPosts.includes(postId)) {
-        await payload.update({
-          collection: 'users',
-          id: user.id,
-          data: {
-            likedPosts: [...currentLikedPosts, postId],
-          },
-        })
-      }
-    } catch (userUpdateError) {
-      console.warn('Failed to update user liked posts:', userUpdateError)
-    }
+    const newLikeCount = newLikes.length
 
     const response: MobileLikeResponse = {
       success: true,
@@ -234,10 +199,11 @@ export async function DELETE(
       )
     }
 
-    // Check if post exists
+    // Get the post with its current likes
     const post = await payload.findByID({
       collection: 'posts',
       id: postId,
+      depth: 1, // Include relationship data
     })
 
     if (!post) {
@@ -252,19 +218,14 @@ export async function DELETE(
       )
     }
 
-    // Find and delete like record
-    const existingLike = await payload.find({
-      collection: 'post-likes',
-      where: {
-        and: [
-          { post: { equals: postId } },
-          { user: { equals: user.id } }
-        ]
-      },
-      limit: 1,
+    // Check if user has liked this post
+    const currentLikes = Array.isArray(post.likes) ? post.likes : []
+    const userHasLiked = currentLikes.some((like: any) => {
+      const likeId = typeof like === 'string' ? like : like.id
+      return likeId === user.id
     })
 
-    if (existingLike.docs.length === 0) {
+    if (!userHasLiked) {
       return NextResponse.json(
         {
           success: false,
@@ -276,44 +237,21 @@ export async function DELETE(
       )
     }
 
-    // Delete like record
-    await payload.delete({
-      collection: 'post-likes',
-      id: existingLike.docs[0].id,
-    })
-
-    // Update post like count
-    const currentLikeCount = post.likeCount || 0
-    const newLikeCount = Math.max(0, currentLikeCount - 1)
-
+    // Remove user from likes array
+    const newLikes = currentLikes
+      .map((like: any) => typeof like === 'string' ? like : like.id)
+      .filter((likeId: string) => likeId !== user.id)
+    
+    // Update the post with new likes
     await payload.update({
       collection: 'posts',
       id: postId,
       data: {
-        likeCount: newLikeCount,
+        likes: newLikes,
       },
     })
 
-    // Update user's liked posts array (if this field exists)
-    try {
-      const userData = await payload.findByID({
-        collection: 'users',
-        id: user.id,
-      })
-
-      const currentLikedPosts = Array.isArray(userData.likedPosts) ? userData.likedPosts : []
-      const updatedLikedPosts = currentLikedPosts.filter((id: string) => id !== postId)
-      
-      await payload.update({
-        collection: 'users',
-        id: user.id,
-        data: {
-          likedPosts: updatedLikedPosts,
-        },
-      })
-    } catch (userUpdateError) {
-      console.warn('Failed to update user liked posts:', userUpdateError)
-    }
+    const newLikeCount = newLikes.length
 
     const response: MobileLikeResponse = {
       success: true,

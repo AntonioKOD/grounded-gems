@@ -14,6 +14,7 @@ import {
   VolumeX,
   X,
   MoreHorizontal,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -235,53 +236,52 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
           inset: 0
         }}
       >
-        {/* Main Media */}
-        <div className="absolute inset-0 w-full h-full">
+        {/* Main Media - Reduced height to make room for caption */}
+        <div className="absolute inset-0 w-full" style={{ height: 'calc(100% - 120px)' }}>
           {post.video && !imageError ? (
             <VideoPlayer
               src={post.video}
               thumbnail={post.videoThumbnail || post.image || undefined}
-              aspectRatio="9/16"
-              onViewStart={() => {
-                // Track view start
-              }}
-              onViewComplete={() => {
-                // Track view completion
-              }}
-              className="w-full h-full object-cover"
+              autoPlay={isVisible}
+              muted={true}
+              loop={true}
               controls={false}
+              aspectRatio="9/16"
+              className="w-full h-full object-cover"
+              onPlay={() => console.log('Video started playing')}
               showProgress={false}
               showPlayButton={false}
             />
           ) : post.image && !imageError ? (
-            <Image
-              src={post.image}
-              alt={post.title || "Post image"}
-              fill
-              className="object-cover w-full h-full"
-              loading={priority !== undefined && priority < 3 ? undefined : "lazy"}
-              sizes="100vw"
-              priority={priority !== undefined && priority < 3}
-              onLoadingComplete={() => setIsLoadingImage(false)}
-              onError={() => {
-                setIsLoadingImage(false)
-                setImageError(true)
-              }}
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
-              <div className="text-center text-white/80 px-8">
-                <div className="text-8xl mb-6 animate-pulse">✨</div>
-                <p className="text-xl font-light leading-relaxed">{post.content}</p>
-              </div>
+            <div className="relative w-full h-full bg-black">
+              <Image
+                src={post.image}
+                alt={post.content?.slice(0, 100) || "Post image"}
+                fill
+                className={`object-cover transition-opacity duration-500 ${
+                  isLoadingImage ? 'opacity-0' : 'opacity-100'
+                }`}
+                onLoad={() => setIsLoadingImage(false)}
+                onError={() => {
+                  setImageError(true)
+                  setIsLoadingImage(false)
+                }}
+                priority={priority < 3}
+                sizes="100vw"
+              />
+              
+              {/* Loading state */}
+              {isLoadingImage && (
+                <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+                </div>
+              )}
             </div>
-          )}
-
-          {isLoadingImage && post.image && (
-            <div className="absolute inset-0 bg-black flex items-center justify-center">
-              <div className="relative">
-                <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin" />
-                <div className="absolute inset-0 w-12 h-12 border-4 border-transparent border-r-white/40 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
+              <div className="text-center text-white/60">
+                <Image className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No media available</p>
               </div>
             </div>
           )}
@@ -344,7 +344,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         </div>
 
         {/* Right Side Actions - Enhanced TikTok Style */}
-        <div className="absolute right-4 bottom-40 flex flex-col items-center space-y-4 z-20">
+        <div className="absolute right-4 flex flex-col items-center space-y-4 z-20" style={{ bottom: 'calc(120px + 1rem)', top: 'auto' }}>
           {/* Like Button */}
           <motion.button
             className="group relative"
@@ -466,16 +466,16 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
           </AnimatePresence>
         </div>
 
-        {/* Bottom Content with Enhanced Glassmorphism */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 z-10">
-          <div className="backdrop-blur-xl bg-black/20 rounded-3xl p-6 border border-white/10 shadow-2xl">
+        {/* Bottom Content - Now in dedicated space, not overlaying media */}
+        <div className="absolute bottom-0 left-0 right-0 bg-black z-10" style={{ height: '120px' }}>
+          <div className="h-full p-4 flex flex-col justify-center">
             {/* Post Content */}
-            <p className="text-white text-lg leading-relaxed font-light mb-4 line-clamp-3">
+            <p className="text-white text-sm leading-relaxed font-light mb-2 line-clamp-2">
               {post.content}
             </p>
 
             {/* Location and Time */}
-            <div className="flex items-center justify-between text-white/60 text-sm">
+            <div className="flex items-center justify-between text-white/60 text-xs">
               <div className="flex items-center gap-3">
                 {post.location && (
                   <span className="flex items-center gap-1">

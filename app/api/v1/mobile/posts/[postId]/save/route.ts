@@ -66,10 +66,11 @@ export async function POST(
       )
     }
 
-    // Check if post exists
+    // Get the post with its current saves
     const post = await payload.findByID({
       collection: 'posts',
       id: postId,
+      depth: 1, // Include relationship data
     })
 
     if (!post) {
@@ -85,20 +86,13 @@ export async function POST(
     }
 
     // Check if user already saved this post
-    const existingSave = await payload.find({
-      collection: 'saved-posts',
-      where: {
-        and: [
-          { post: { equals: postId } },
-          { user: { equals: user.id } }
-        ]
-      },
-      limit: 1,
+    const currentSaves = Array.isArray(post.savedBy) ? post.savedBy : []
+    const userAlreadySaved = currentSaves.some((save: any) => {
+      const saveId = typeof save === 'string' ? save : save.id
+      return saveId === user.id
     })
 
-    const isAlreadySaved = existingSave.docs.length > 0
-
-    if (isAlreadySaved) {
+    if (userAlreadySaved) {
       return NextResponse.json(
         {
           success: false,
@@ -110,48 +104,20 @@ export async function POST(
       )
     }
 
-    // Create save record
-    await payload.create({
-      collection: 'saved-posts',
-      data: {
-        post: postId,
-        user: user.id,
-        createdAt: new Date(),
-      },
-    })
-
-    // Update post save count
-    const currentSaveCount = post.saveCount || 0
-    const newSaveCount = currentSaveCount + 1
-
+    // Add user to savedBy array
+    const newSaves = [...currentSaves.map((save: any) => typeof save === 'string' ? save : save.id), user.id]
+    
+    // Update the post with new saves
     await payload.update({
       collection: 'posts',
       id: postId,
       data: {
-        saveCount: newSaveCount,
+        savedBy: newSaves,
+        saveCount: newSaves.length, // Update the count field as well
       },
     })
 
-    // Update user's saved posts array (if this field exists)
-    try {
-      const userData = await payload.findByID({
-        collection: 'users',
-        id: user.id,
-      })
-
-      const currentSavedPosts = Array.isArray(userData.savedPosts) ? userData.savedPosts : []
-      if (!currentSavedPosts.includes(postId)) {
-        await payload.update({
-          collection: 'users',
-          id: user.id,
-          data: {
-            savedPosts: [...currentSavedPosts, postId],
-          },
-        })
-      }
-    } catch (userUpdateError) {
-      console.warn('Failed to update user saved posts:', userUpdateError)
-    }
+    const newSaveCount = newSaves.length
 
     const response: MobileSaveResponse = {
       success: true,
@@ -234,10 +200,11 @@ export async function DELETE(
       )
     }
 
-    // Check if post exists
+    // Get the post with its current saves
     const post = await payload.findByID({
       collection: 'posts',
       id: postId,
+      depth: 1, // Include relationship data
     })
 
     if (!post) {
@@ -252,19 +219,14 @@ export async function DELETE(
       )
     }
 
-    // Find and delete save record
-    const existingSave = await payload.find({
-      collection: 'saved-posts',
-      where: {
-        and: [
-          { post: { equals: postId } },
-          { user: { equals: user.id } }
-        ]
-      },
-      limit: 1,
+    // Check if user has saved this post
+    const currentSaves = Array.isArray(post.savedBy) ? post.savedBy : []
+    const userHasSaved = currentSaves.some((save: any) => {
+      const saveId = typeof save === 'string' ? save : save.id
+      return saveId === user.id
     })
 
-    if (existingSave.docs.length === 0) {
+    if (!userHasSaved) {
       return NextResponse.json(
         {
           success: false,
@@ -276,44 +238,22 @@ export async function DELETE(
       )
     }
 
-    // Delete save record
-    await payload.delete({
-      collection: 'saved-posts',
-      id: existingSave.docs[0].id,
-    })
-
-    // Update post save count
-    const currentSaveCount = post.saveCount || 0
-    const newSaveCount = Math.max(0, currentSaveCount - 1)
-
+    // Remove user from savedBy array
+    const newSaves = currentSaves
+      .map((save: any) => typeof save === 'string' ? save : save.id)
+      .filter((saveId: string) => saveId !== user.id)
+    
+    // Update the post with new saves
     await payload.update({
       collection: 'posts',
       id: postId,
       data: {
-        saveCount: newSaveCount,
+        savedBy: newSaves,
+        saveCount: newSaves.length, // Update the count field as well
       },
     })
 
-    // Update user's saved posts array (if this field exists)
-    try {
-      const userData = await payload.findByID({
-        collection: 'users',
-        id: user.id,
-      })
-
-      const currentSavedPosts = Array.isArray(userData.savedPosts) ? userData.savedPosts : []
-      const updatedSavedPosts = currentSavedPosts.filter((id: string) => id !== postId)
-      
-      await payload.update({
-        collection: 'users',
-        id: user.id,
-        data: {
-          savedPosts: updatedSavedPosts,
-        },
-      })
-    } catch (userUpdateError) {
-      console.warn('Failed to update user saved posts:', userUpdateError)
-    }
+    const newSaveCount = newSaves.length
 
     const response: MobileSaveResponse = {
       success: true,
