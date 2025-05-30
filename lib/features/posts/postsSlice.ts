@@ -67,6 +67,7 @@ export const likePostAsync = createAsyncThunk(
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           postId: params.postId,
           shouldLike: params.shouldLike,
@@ -106,6 +107,7 @@ export const savePostAsync = createAsyncThunk(
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include',
         body: JSON.stringify({
           shouldSave: params.shouldSave,
         }),
