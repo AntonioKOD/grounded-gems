@@ -82,12 +82,18 @@ interface MobileFeedResponse {
 
 export async function GET(request: NextRequest): Promise<NextResponse<MobileFeedResponse>> {
   try {
+    console.log('🚀 Mobile feed endpoint called - ENHANCED VERSION')
+    
     const payload = await getPayload({ config })
+    console.log('✅ Payload instance created')
+    
     const { searchParams } = new URL(request.url)
+    console.log('📊 Raw search params:', Object.fromEntries(searchParams))
     
     // Validate query parameters
     const queryValidation = feedQuerySchema.safeParse(Object.fromEntries(searchParams))
     if (!queryValidation.success) {
+      console.error('❌ Validation failed:', queryValidation.error.errors)
       return NextResponse.json(
         {
           success: false,
@@ -99,254 +105,220 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       )
     }
 
-    const { page, limit, feedType, category, sortBy, lastSeen } = queryValidation.data
+    const { page, limit, feedType, category, sortBy } = queryValidation.data
+    console.log('📊 Validated feed params:', { page, limit, feedType, category, sortBy })
 
-    // Get current user (optional for some feed types)
+    // Get current user (optional for personalization)
     let currentUser = null
     try {
       const authHeader = request.headers.get('Authorization')
       if (authHeader?.startsWith('Bearer ')) {
         const { user } = await payload.auth({ headers: request.headers })
         currentUser = user
+        console.log('👤 Current user:', currentUser?.name || 'None')
       }
     } catch (authError) {
       console.log('No authenticated user for feed request')
     }
 
-    // Build base query
+    // Build query - start with published posts
     let whereClause: any = {
       status: { equals: 'published' }
     }
 
+    // Apply basic feed type filtering
+    if (feedType === 'discover' && currentUser) {
+      // Exclude current user's posts for discover feed
+      whereClause.author = { not_equals: currentUser.id }
+      console.log('🔍 Discover feed - excluding user posts')
+    }
+
     // Apply category filter
-    if (category) {
-      whereClause.categories = { contains: category }
+    if (category && category !== 'all') {
+      console.log('🏷️ Filtering by category:', category)
+      whereClause.categories = { in: [category] }
     }
 
-    // Apply feed type specific filters
-    switch (feedType) {
-      case 'following':
-        if (!currentUser) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: 'Authentication required for following feed',
-              error: 'Must be logged in to view following feed',
-              code: 'AUTH_REQUIRED'
-            },
-            { status: 401 }
-          )
-        }
-        
-        // Get user's following list
-        const userWithFollowing = await payload.findByID({
-          collection: 'users',
-          id: currentUser.id,
-          depth: 1
-        })
-        
-        const followingIds = Array.isArray(userWithFollowing.following) 
-          ? userWithFollowing.following.map((f: any) => typeof f === 'string' ? f : f.id)
-          : []
+    console.log('🔧 Where clause:', JSON.stringify(whereClause))
 
-        if (followingIds.length === 0) {
-          whereClause.author = { equals: 'no-following' } // No results
-        } else {
-          whereClause.author = { in: followingIds }
-        }
-        break
-
-      case 'popular':
-        // Add popularity filter (posts with high engagement)
-        whereClause.likeCount = { greater_than: 5 }
-        break
-
-      case 'latest':
-        // Latest posts (no additional filter needed)
-        break
-
-      case 'discover':
-        // Exclude current user's posts if logged in
-        if (currentUser) {
-          whereClause.author = { not_equals: currentUser.id }
-        }
-        break
-
-      case 'personalized':
-      default:
-        // Personalized feed based on user interests
-        if (currentUser) {
-          try {
-            const userData = await payload.findByID({
-              collection: 'users',
-              id: currentUser.id,
-            })
-            
-            if (userData.interests && userData.interests.length > 0) {
-              whereClause.or = [
-                { categories: { in: userData.interests } },
-                { tags: { in: userData.interests } }
-              ]
-            }
-          } catch (error) {
-            console.warn('Failed to personalize feed:', error)
-          }
-        }
-        break
-    }
-
-    // Apply cursor-based pagination if lastSeen is provided
-    if (lastSeen) {
-      whereClause.createdAt = { less_than: lastSeen }
-    }
-
-    // Determine sort order
-    let sort: any = {}
+    // Determine sort order (Payload expects string format)
+    let sort: string = '-createdAt' // Default: newest first, ensure it's a string
+    
     switch (sortBy) {
       case 'popularity':
-        sort = { likeCount: 'desc', createdAt: 'desc' }
+        // We'll sort by engagement after fetching, but use date for DB query
+        sort = '-createdAt'
         break
       case 'trending':
-        // Trending algorithm: recent posts with high engagement
-        sort = { 
-          likeCount: 'desc',
-          commentCount: 'desc', 
-          createdAt: 'desc' 
-        }
+        // Recent posts that we'll sort by engagement after fetching
+        sort = '-createdAt'
         break
       case 'createdAt':
       default:
-        sort = { createdAt: 'desc' }
+        sort = '-createdAt'
         break
     }
 
-    // Fetch posts
+    // Ensure sort is always a string (safety check)
+    if (typeof sort !== 'string') {
+      console.warn('⚠️ Sort parameter is not a string, converting:', sort)
+      sort = '-createdAt'
+    }
+
+    // To fix pagination issues with duplicate posts when sorting by fields with common values,
+    // we need to add a secondary sort by _id to ensure consistent ordering
+    // Based on: https://github.com/payloadcms/payload/discussions/2409
+    const compoundSort = `${sort},-id` // Always include ID as secondary sort (comma-separated string)
+
+    console.log('📡 Starting database query with sort:', compoundSort, 'primary type:', typeof sort)
+    
+    // Fetch posts with relationships
     const postsResult = await payload.find({
       collection: 'posts',
       where: whereClause,
-      sort,
+      sort: compoundSort, // Use compound sort to prevent pagination duplicates
       page,
-      limit,
-      depth: 3, // Include related data
+      limit: sortBy === 'popularity' || sortBy === 'trending' ? Math.min(limit * 2, 50) : limit, // Cap at 50 to avoid memory issues
+      depth: 2, // Include author and location relationships
     })
 
-    // Format posts for mobile consumption
-    const formattedPosts = await Promise.all(
-      postsResult.docs.map(async (post: any) => {
-        // Get engagement stats for current user
-        let isLiked = false
-        let isSaved = false
+    console.log(`📝 Database query completed: Found ${postsResult.docs.length} posts out of ${postsResult.totalDocs} total`)
 
-        if (currentUser) {
-          try {
-            // Check if user liked this post
-            const userLikes = await payload.find({
-              collection: 'post-likes',
-              where: {
-                and: [
-                  { post: { equals: post.id } },
-                  { user: { equals: currentUser.id } }
-                ]
-              },
-              limit: 1
-            })
-            isLiked = userLikes.docs.length > 0
+    // Enhanced post formatting with relationships
+    console.log('🔧 Starting enhanced post formatting...')
+    const formattedPosts = postsResult.docs.map((post: any, index: number) => {
+      console.log(`🔧 Formatting post ${index + 1}/${postsResult.docs.length}: ${post.id}`)
+      
+      // Calculate engagement stats
+      const likeCount = Array.isArray(post.likes) ? post.likes.length : 0
+      const commentCount = Array.isArray(post.comments) ? post.comments.length : 0
+      const saveCount = Array.isArray(post.savedBy) ? post.savedBy.length : 0
 
-            // Check if user saved this post
-            const userSaves = await payload.find({
-              collection: 'saved-posts',
-              where: {
-                and: [
-                  { post: { equals: post.id } },
-                  { user: { equals: currentUser.id } }
-                ]
-              },
-              limit: 1
-            })
-            isSaved = userSaves.docs.length > 0
-          } catch (engagementError) {
-            console.warn('Failed to fetch engagement for post:', post.id, engagementError)
-          }
-        }
+      // Check if current user liked/saved this post
+      let isLiked = false
+      let isSaved = false
 
-        // Format media
-        let media: any[] = []
-        if (post.featuredImage) {
-          media.push({
+      if (currentUser) {
+        // Check likes using the existing relationship
+        isLiked = Array.isArray(post.likes) && 
+                 post.likes.some((like: any) => {
+                   const likeId = typeof like === 'string' ? like : like.id
+                   return likeId === currentUser.id
+                 })
+
+        // Check saves using the existing relationship
+        isSaved = Array.isArray(post.savedBy) && 
+                 post.savedBy.some((save: any) => {
+                   const saveId = typeof save === 'string' ? save : save.id
+                   return saveId === currentUser.id
+                 })
+      }
+
+      // Enhanced media handling
+      let media: any[] = []
+      
+      // Add main image
+      if (post.image) {
+        media.push({
+          type: 'image',
+          url: typeof post.image === 'object' ? post.image.url : post.image,
+          alt: typeof post.image === 'object' ? post.image.alt : undefined
+        })
+      }
+
+      // Add video if exists
+      if (post.video) {
+        media.push({
+          type: 'video',
+          url: typeof post.video === 'object' ? post.video.url : post.video,
+          thumbnail: post.videoThumbnail 
+            ? (typeof post.videoThumbnail === 'object' ? post.videoThumbnail.url : post.videoThumbnail)
+            : undefined
+        })
+      }
+
+      // Add photos array if exists
+      if (post.photos && Array.isArray(post.photos)) {
+        media = media.concat(
+          post.photos.map((photo: any) => ({
             type: 'image',
-            url: typeof post.featuredImage === 'object' 
-              ? post.featuredImage.url 
-              : post.featuredImage,
-            alt: typeof post.featuredImage === 'object' 
-              ? post.featuredImage.alt 
-              : undefined
-          })
-        }
+            url: typeof photo === 'object' ? photo.url : photo,
+            alt: typeof photo === 'object' ? photo.alt : undefined
+          }))
+        )
+      }
 
-        if (post.gallery && Array.isArray(post.gallery)) {
-          media = media.concat(
-            post.gallery.map((item: any) => ({
-              type: 'image',
-              url: typeof item.image === 'object' ? item.image.url : item.image,
-              alt: item.caption || undefined
-            }))
-          )
-        }
+      return {
+        id: post.id,
+        title: post.title || '',
+        content: post.content || '',
+        author: {
+          id: post.author?.id || 'unknown',
+          name: post.author?.name || 'Anonymous',
+          profileImage: post.author?.profileImage ? {
+            url: typeof post.author.profileImage === 'object'
+              ? post.author.profileImage.url
+              : post.author.profileImage
+          } : null
+        },
+        location: post.location ? {
+          id: post.location.id,
+          name: post.location.name,
+          coordinates: post.location.coordinates
+        } : undefined,
+        media,
+        engagement: {
+          likeCount,
+          commentCount,
+          shareCount: 0, // Not implemented yet
+          saveCount,
+          isLiked,
+          isSaved
+        },
+        categories: Array.isArray(post.categories) 
+          ? post.categories.map((cat: any) => typeof cat === 'string' ? cat : cat.name || cat.slug)
+          : [],
+        tags: Array.isArray(post.tags) 
+          ? post.tags.map((tag: any) => typeof tag === 'string' ? tag : tag.tag)
+          : [],
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        rating: post.rating,
+        isPromoted: post.isSponsored || post.isFeatured || false,
+        // Add engagement score for sorting
+        _engagementScore: likeCount + commentCount * 2 + saveCount * 3
+      }
+    })
 
-        return {
-          id: post.id,
-          title: post.title,
-          content: post.content || '',
-          author: {
-            id: post.author?.id || '',
-            name: post.author?.name || 'Anonymous',
-            profileImage: post.author?.profileImage ? {
-              url: typeof post.author.profileImage === 'object'
-                ? post.author.profileImage.url
-                : post.author.profileImage
-            } : null
-          },
-          location: post.location ? {
-            id: post.location.id,
-            name: post.location.name,
-            coordinates: post.location.coordinates
-          } : undefined,
-          media,
-          engagement: {
-            likeCount: post.likeCount || 0,
-            commentCount: post.commentCount || 0,
-            shareCount: post.shareCount || 0,
-            saveCount: post.saveCount || 0,
-            isLiked,
-            isSaved
-          },
-          categories: Array.isArray(post.categories) 
-            ? post.categories.map((cat: any) => typeof cat === 'string' ? cat : cat.name)
-            : [],
-          tags: Array.isArray(post.tags) 
-            ? post.tags.map((tag: any) => typeof tag === 'string' ? tag : tag.tag)
-            : [],
-          createdAt: post.createdAt,
-          updatedAt: post.updatedAt,
-          rating: post.rating,
-          isPromoted: post.isPromoted || false
-        }
-      })
-    )
+    console.log('✅ All posts formatted successfully')
+
+    // Apply post-processing sorting if needed
+    let finalPosts = formattedPosts
+    if (sortBy === 'popularity') {
+      finalPosts = formattedPosts
+        .sort((a, b) => b.engagement.likeCount - a.engagement.likeCount)
+        .slice(0, limit)
+      console.log('📊 Applied popularity sorting')
+    } else if (sortBy === 'trending') {
+      finalPosts = formattedPosts
+        .sort((a, b) => (b as any)._engagementScore - (a as any)._engagementScore)
+        .slice(0, limit)
+      console.log('📊 Applied trending sorting')
+    }
+
+    // Remove temporary fields
+    finalPosts.forEach((post: any) => delete post._engagementScore)
 
     // Calculate pagination
     const totalPages = Math.ceil(postsResult.totalDocs / limit)
     const hasNext = page < totalPages
     const hasPrev = page > 1
-    const nextCursor = formattedPosts.length > 0 
-      ? formattedPosts[formattedPosts.length - 1].createdAt 
-      : undefined
 
     const response: MobileFeedResponse = {
       success: true,
       message: 'Feed retrieved successfully',
       data: {
-        posts: formattedPosts,
+        posts: finalPosts,
         pagination: {
           page,
           limit,
@@ -354,7 +326,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
           totalPages,
           hasNext,
           hasPrev,
-          nextCursor
+          nextCursor: finalPosts.length > 0 
+            ? finalPosts[finalPosts.length - 1].createdAt 
+            : undefined
         },
         meta: {
           feedType,
@@ -366,6 +340,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       }
     }
 
+    console.log(`✅ Returning ${finalPosts.length} posts successfully`)
+    
     return NextResponse.json(response, {
       status: 200,
       headers: {
@@ -378,13 +354,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
     })
 
   } catch (error) {
-    console.error('Mobile feed error:', error)
+    console.error('❌ Mobile feed error:', error)
+    console.error('❌ Error stack:', error.stack)
     
     return NextResponse.json(
       {
         success: false,
         message: 'Internal server error',
-        error: 'Feed service unavailable',
+        error: `Feed service unavailable: ${error.message}`,
         code: 'SERVER_ERROR'
       },
       { status: 500 }
