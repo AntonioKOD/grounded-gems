@@ -12,7 +12,8 @@ const createPostSchema = z.object({
   tags: z.array(z.string()).optional(),
   media: z.array(z.object({
     type: z.enum(['image', 'video']),
-    url: z.string(),
+    id: z.string(), // Changed from url to id - media ID from upload API
+    url: z.string().optional(), // Keep URL for backward compatibility
     thumbnail: z.string().optional(),
     alt: z.string().optional()
   })).optional(),
@@ -102,8 +103,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       userId: user.id,
       userEmail: user.email,
       bodyKeys: Object.keys(body),
-      contentLength: body.content?.length,
-      mediaCount: body.media?.length || 0
+      captionLength: body.caption?.length,
+      mediaCount: body.media?.length || 0,
+      hasLocation: !!body.location,
+      hasRating: !!body.rating,
+      tagsCount: body.tags?.length || 0
     })
 
     // Validate request data
@@ -126,67 +130,49 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       throw error
     }
 
-    // Handle media uploads - convert URLs to media IDs
+    // Handle media uploads - use media IDs directly from upload API
     let imageId: string | null = null
     let videoId: string | null = null
     let videoThumbnailId: string | null = null
     const photoIds: string[] = []
 
     if (validatedData.media && validatedData.media.length > 0) {
-      console.log('📱 Processing media uploads:', validatedData.media.length)
+      console.log('📱 Processing media items:', validatedData.media.length)
       
       for (const mediaItem of validatedData.media) {
         try {
+          // Validate that the media ID exists in the database
+          const existingMedia = await payload.findByID({
+            collection: 'media',
+            id: mediaItem.id,
+            depth: 0,
+          })
+
+          if (!existingMedia) {
+            console.warn('📱 Media not found:', mediaItem.id)
+            continue
+          }
+
           if (mediaItem.type === 'image') {
-            // For images, we need to create media records from URLs
-            // This assumes the URLs are already uploaded to the server
-            // In a real implementation, you might want to validate these URLs
-            const mediaDoc = await payload.create({
-              collection: 'media',
-              data: {
-                alt: mediaItem.alt || `Image for post by ${user.name}`,
-                url: mediaItem.url,
-              },
-              // Note: For mobile uploads, the file should already be uploaded
-              // This is a simplified version - in production you'd handle actual file uploads
-            })
-
-            if (mediaDoc?.id) {
-              if (!imageId) {
-                imageId = mediaDoc.id
-              }
-              photoIds.push(mediaDoc.id)
+            if (!imageId) {
+              imageId = mediaItem.id
             }
+            photoIds.push(mediaItem.id)
           } else if (mediaItem.type === 'video') {
-            // Similar for videos
-            const videoDoc = await payload.create({
-              collection: 'media',
-              data: {
-                alt: mediaItem.alt || `Video for post by ${user.name}`,
-                url: mediaItem.url,
-              },
-            })
-
-            if (videoDoc?.id && !videoId) {
-              videoId = videoDoc.id
+            if (!videoId) {
+              videoId = mediaItem.id
               
-              // Handle video thumbnail
+              // Handle video thumbnail if provided
               if (mediaItem.thumbnail) {
-                const thumbnailDoc = await payload.create({
-                  collection: 'media',
-                  data: {
-                    alt: `Thumbnail for video by ${user.name}`,
-                    url: mediaItem.thumbnail,
-                  },
-                })
-                if (thumbnailDoc?.id) {
-                  videoThumbnailId = thumbnailDoc.id
-                }
+                // If thumbnail is provided as a URL, we might need to create a media record for it
+                // For now, we'll assume thumbnail is also uploaded separately and has an ID
+                // This could be enhanced to handle thumbnail URLs
+                console.log('📱 Video thumbnail provided:', mediaItem.thumbnail)
               }
             }
           }
         } catch (mediaError) {
-          console.error('📱 Error processing media:', mediaError)
+          console.error('📱 Error validating media:', mediaError)
           // Continue with other media items
         }
       }
@@ -250,7 +236,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       video: videoId ? 'Set' : 'Not set',
       photos: `${photoIds.length} photos`,
       location: locationId ? 'Set' : 'Not set',
-      tagsCount: validatedData.tags?.length || 0
+      tagsCount: validatedData.tags?.length || 0,
+      mediaProcessed: {
+        imageId,
+        videoId,
+        photoIds,
+        totalMediaItems: validatedData.media?.length || 0
+      }
     })
 
     // Create the post
@@ -273,7 +265,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
           url: typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage
         } : null
       },
-      media: validatedData.media || [],
+      media: validatedData.media?.map(m => ({
+        type: m.type,
+        id: m.id,
+        url: m.url || '', // Include URL for display purposes
+        alt: m.alt
+      })) || [],
       location: locationId && newPost.location ? {
         id: newPost.location.id,
         name: newPost.location.name
