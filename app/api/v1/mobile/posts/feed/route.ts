@@ -19,8 +19,7 @@ interface MobileFeedResponse {
   data?: {
     posts: Array<{
       id: string
-      title?: string
-      content: string
+      caption: string
       author: {
         id: string
         name: string
@@ -250,8 +249,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
 
       return {
         id: post.id,
-        title: post.title || '',
-        content: post.content || '',
+        caption: post.content || '',
         author: {
           id: post.author?.id || 'unknown',
           name: post.author?.name || 'Anonymous',

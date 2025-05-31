@@ -5,8 +5,7 @@ import { z } from 'zod'
 
 // Request body validation schema
 const createPostSchema = z.object({
-  content: z.string().min(1, 'Content is required').max(2000, 'Content too long'),
-  title: z.string().optional(),
+  caption: z.string().min(1, 'Caption is required').max(2000, 'Caption too long'),
   type: z.enum(['post', 'review', 'recommendation']).default('post'),
   rating: z.number().min(1).max(5).optional(),
   location: z.string().optional(), // Location ID
@@ -24,7 +23,7 @@ interface MobileCreatePostResponse {
   message: string
   data?: {
     id: string
-    content: string
+    caption: string
     author: {
       id: string
       name: string
@@ -213,20 +212,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
 
     // Prepare post data
     const postData: any = {
-      content: validatedData.content.trim(),
+      content: validatedData.caption.trim(),
       author: user.id,
       type: videoId ? 'video' : validatedData.type,
       status: 'published',
       visibility: 'public',
-    }
-
-    // Add optional fields
-    if (validatedData.title?.trim()) {
-      postData.title = validatedData.title.trim()
-    }
-
-    if (validatedData.type === 'review' && validatedData.rating) {
-      postData.rating = validatedData.rating
     }
 
     if (imageId) {
@@ -275,7 +265,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
     // Format response data
     const responseData = {
       id: newPost.id,
-      content: newPost.content,
+      caption: newPost.content,
       author: {
         id: user.id,
         name: user.name,

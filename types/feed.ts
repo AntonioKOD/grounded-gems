@@ -18,43 +18,52 @@ export interface User {
   
   export interface Post {
     id: string
-    title?: string
-    content: string
-    image?: string | null
-    video?: string | null
-    videoThumbnail?: string | null
-    videoDuration?: number | null
+    caption: string
     author: {
       id: string
       name: string
       avatar?: string
+      profileImage?: {
+        url: string
+      } | null
+      profilePicture?: {
+        url: string
+      } | null
     }
-    createdAt: string
-    updatedAt?: string
-    likeCount?: number
-    commentCount?: number
+    featuredImage?: {
+      url: string
+    } | null
+    video?: {
+      url: string
+    } | null
+    videoThumbnail?: {
+      url: string
+    } | null
+    likeCount: number
+    commentCount: number
     shareCount?: number
     saveCount?: number
-    viewCount?: number
-    engagementScore?: number
     isLiked?: boolean
     isSaved?: boolean
-    isViewed?: boolean
-    type?: "post" | "review" | "video" | "story" | "tip" | "recommendation"
-    rating?: number | null
+    createdAt: string
+    updatedAt: string
     location?: {
       id: string
       name: string
+      address?: string
       coordinates?: {
-        lat: number
-        lng: number
+        latitude: number
+        longitude: number
       }
     }
+    categories?: {
+      id: string
+      name: string
+      slug: string
+    }[]
     tags?: string[]
-    mentions?: string[]
-    isSponsored?: boolean
-    priority?: "normal" | "high" | "urgent"
-    mediaAspectRatio?: string
+    type?: string
+    rating?: number
   }
   
   export interface Comment {
