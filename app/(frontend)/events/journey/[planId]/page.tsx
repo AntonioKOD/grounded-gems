@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react"
 import { useParams } from "next/navigation"
-import { Sparkles, Loader2, User } from "lucide-react"
+import { Sparkles, Loader2, User, MapPin } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from '@/hooks/use-auth'
 import { unsaveGemJourney } from '@/app/(frontend)/events/actions'
@@ -27,6 +27,15 @@ interface Plan {
   date: string
   invitees?: Invitee[]
   type?: string
+  aiMetadata?: {
+    userLocation?: string
+    nearbyLocationsCount?: number
+    generatedAt?: string
+    model?: string
+  }
+  coordinates?: { latitude: number; longitude: number }
+  referencedLocations?: string[]
+  usedRealLocations?: boolean
 }
 
 type MinimalUser = {
@@ -257,6 +266,28 @@ export default function JourneyDetailsPage() {
           </div>
         </div>
 
+        {/* Location Enhancement Badge */}
+        {(plan.coordinates || (plan.referencedLocations && plan.referencedLocations.length > 0) || plan.usedRealLocations) && (
+          <div className="mb-3 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+            <div className="flex items-center gap-2">
+              <div className="p-1 bg-green-100 rounded">
+                <MapPin className="h-3 w-3 text-green-600" />
+              </div>
+              <div className="text-xs text-green-700 space-y-0.5">
+                {plan.coordinates && (
+                  <p className="font-medium">📍 {plan.coordinates.latitude}, {plan.coordinates.longitude}</p>
+                )}
+                {plan.referencedLocations && plan.referencedLocations.length > 0 && (
+                  <p>🏪 References {plan.referencedLocations.length} specific locations</p>
+                )}
+                {plan.usedRealLocations && (
+                  <p>✨ Uses real verified places</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Journey Steps */}
         <div className="bg-white rounded-3xl shadow-xl p-8 mb-8 border border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
@@ -265,8 +296,43 @@ export default function JourneyDetailsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
-            Hangout Steps
+            Journey Steps
+            {plan.usedRealLocations && (
+              <span className="ml-2 px-3 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-full border border-green-200">
+                ✓ REAL LOCATIONS
+              </span>
+            )}
           </h2>
+          
+          {/* Enhanced location context display */}
+          {(plan.aiMetadata?.userLocation || plan.coordinates) && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-blue-800 mb-1">Plan Context</h3>
+                  <div className="text-sm text-blue-700 space-y-1">
+                    {plan.aiMetadata?.userLocation && (
+                      <p>📍 Location: {plan.aiMetadata.userLocation}</p>
+                    )}
+                    {plan.aiMetadata?.nearbyLocationsCount && plan.aiMetadata.nearbyLocationsCount > 0 && (
+                      <p>🎯 Used data from {plan.aiMetadata.nearbyLocationsCount} nearby verified locations</p>
+                    )}
+                    {plan.aiMetadata?.generatedAt && (
+                      <p>🤖 Generated: {new Date(plan.aiMetadata.generatedAt).toLocaleDateString()}</p>
+                    )}
+                    {plan.aiMetadata?.model && (
+                      <p>🧠 AI Model: {plan.aiMetadata.model}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           <div className="space-y-4">
             {plan.steps && plan.steps.map((stepObj, i) => (

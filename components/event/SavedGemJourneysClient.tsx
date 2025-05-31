@@ -41,6 +41,7 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
         const nearbyLocationsCount = plan.aiMetadata?.nearbyLocationsCount || 0
         const userLocation = plan.aiMetadata?.userLocation
         const usedRealLocations = plan.usedRealLocations
+        const referencedLocationsCount = plan.referencedLocations?.length || 0
         
         return (
           <div
@@ -65,11 +66,18 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
                     <h3 className="font-bold text-lg text-gray-900 group-hover:text-[#FF6B6B] transition-colors line-clamp-1">
                       {plan.title}
                     </h3>
-                    {plan.type && (
-                      <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-[#FFD93D]/20 to-[#FFE66D]/20 text-[#B8860B] border border-[#FFD93D]/30">
-                        {plan.type === 'date' ? '💕 Date' : plan.type === 'group' ? '👥 Group' : plan.type === 'friend_group' ? '🎉 Friend Group' : plan.type}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {plan.type && (
+                        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-[#FFD93D]/20 to-[#FFE66D]/20 text-[#B8860B] border border-[#FFD93D]/30">
+                          {plan.type === 'date' ? '💕 Date' : plan.type === 'group' ? '👥 Group' : plan.type === 'friend_group' ? '🎉 Friend Group' : plan.type}
+                        </span>
+                      )}
+                      {usedRealLocations && (
+                        <span className="inline-block px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-200">
+                          ✓ REAL LOCATIONS
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 
@@ -91,10 +99,10 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
                 {plan.summary}
               </p>
               
-              {/* Location Enhancement Badge */}
-              {(hasCoordinates || nearbyLocationsCount > 0 || usedRealLocations) && (
-                <div className="mb-3 p-2 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-2">
+              {/* Enhanced Location Information */}
+              {(hasCoordinates || nearbyLocationsCount > 0 || usedRealLocations || referencedLocationsCount > 0) && (
+                <div className="mb-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                  <div className="flex items-start gap-2">
                     <div className="p-1 bg-green-100 rounded">
                       <MapPin className="h-3 w-3 text-green-600" />
                     </div>
@@ -107,6 +115,9 @@ export default function SavedGemJourneysClient({ plans }: { plans: any[] }) {
                       )}
                       {usedRealLocations && (
                         <p>✨ Uses real verified places</p>
+                      )}
+                      {referencedLocationsCount > 0 && (
+                        <p>🏪 References {referencedLocationsCount} specific locations</p>
                       )}
                     </div>
                   </div>

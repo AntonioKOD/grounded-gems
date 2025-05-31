@@ -32,12 +32,18 @@ const ALLOWED_TYPES = [
 ]
 
 export async function POST(request: NextRequest): Promise<NextResponse<MobileUploadResponse>> {
+  console.log('📱 Mobile upload request started')
+  
   try {
     const payload = await getPayload({ config })
+    console.log('📱 Payload instance obtained')
 
     // Verify authentication
     const authHeader = request.headers.get('Authorization')
+    console.log('📱 Auth header:', authHeader ? 'Present' : 'Missing')
+    
     if (!authHeader?.startsWith('Bearer ')) {
+      console.log('📱 No valid auth header found')
       return NextResponse.json(
         {
           success: false,
@@ -49,8 +55,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
+    console.log('📱 Attempting user authentication...')
     const { user } = await payload.auth({ headers: request.headers })
+    console.log('📱 User auth result:', user ? `User found: ${user.id}` : 'No user found')
+    
     if (!user) {
+      console.log('📱 Authentication failed - invalid token')
       return NextResponse.json(
         {
           success: false,
@@ -62,14 +72,52 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    // Parse form data
-    const formData = await request.formData()
+    console.log('📱 User authenticated successfully, parsing form data...')
+    
+    // Parse form data with detailed error handling
+    let formData: FormData
+    try {
+      formData = await request.formData()
+      console.log('📱 FormData parsed successfully')
+      
+      // Log all form data keys for debugging
+      const keys = Array.from(formData.keys())
+      console.log('📱 FormData keys:', keys)
+      
+      // Log each entry
+      for (const [key, value] of formData.entries()) {
+        console.log(`📱 FormData entry - ${key}:`, {
+          type: typeof value,
+          isFile: value instanceof File,
+          value: value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value
+        })
+      }
+    } catch (formDataError) {
+      console.error('📱 FormData parsing failed:', formDataError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Failed to parse upload data',
+          error: 'Invalid form data format',
+          code: 'INVALID_FORM_DATA'
+        },
+        { status: 400 }
+      )
+    }
+
     const imageFile = formData.get('image') as File
     const folder = formData.get('folder') as string
     const alt = formData.get('alt') as string
 
+    console.log('📱 Extracted form data:', {
+      imageFile: imageFile ? `${imageFile.name} (${imageFile.size} bytes, ${imageFile.type})` : 'null',
+      folder: folder || 'undefined',
+      alt: alt || 'undefined'
+    })
+
     // Validate file presence
     if (!imageFile) {
+      console.log('📱 No image file provided in request')
       return NextResponse.json(
         {
           success: false,
@@ -81,8 +129,49 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
+    // Check if it's actually a File object
+    if (!(imageFile instanceof File)) {
+      console.log('📱 Image field is not a File object:', typeof imageFile, imageFile)
+      
+      // Handle React Native specific FormData format
+      if (typeof imageFile === 'object' && imageFile !== null && 'uri' in imageFile) {
+        console.log('📱 Detected React Native file object, attempting conversion...')
+        // This is likely a React Native file object with uri, type, name properties
+        const rnFile = imageFile as any
+        console.log('📱 RN file properties:', {
+          uri: rnFile.uri,
+          type: rnFile.type,
+          name: rnFile.name,
+          size: rnFile.size
+        })
+        
+        // For now, return a specific error to help with debugging
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'React Native file format detected',
+            error: 'React Native file objects need special handling',
+            code: 'RN_FILE_FORMAT'
+          },
+          { status: 400 }
+        )
+      }
+      
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Invalid file format',
+          error: 'Uploaded item is not a valid file',
+          code: 'INVALID_FILE_OBJECT'
+        },
+        { status: 400 }
+      )
+    }
+
+    console.log('📱 File validation - Type check...')
     // Validate file type
     if (!ALLOWED_TYPES.includes(imageFile.type)) {
+      console.log('📱 Invalid file type:', imageFile.type, 'Allowed:', ALLOWED_TYPES)
       return NextResponse.json(
         {
           success: false,
@@ -94,8 +183,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
+    console.log('📱 File validation - Size check...')
     // Validate file size
     if (imageFile.size > MAX_FILE_SIZE) {
+      console.log('📱 File too large:', imageFile.size, 'Max:', MAX_FILE_SIZE)
       return NextResponse.json(
         {
           success: false,
@@ -107,8 +198,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
+    console.log('📱 File validation - Filename check...')
     // Validate filename
     if (!imageFile.name || imageFile.name.length === 0) {
+      console.log('📱 Invalid filename:', imageFile.name)
       return NextResponse.json(
         {
           success: false,
@@ -120,9 +213,25 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    // Convert File to Buffer for Payload
-    const arrayBuffer = await imageFile.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    console.log('📱 Converting file to buffer...')
+    // Convert File to Buffer for Payload with error handling
+    let buffer: Buffer
+    try {
+      const arrayBuffer = await imageFile.arrayBuffer()
+      buffer = Buffer.from(arrayBuffer)
+      console.log('📱 Buffer created successfully, size:', buffer.length)
+    } catch (bufferError) {
+      console.error('📱 Buffer conversion failed:', bufferError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'File processing failed',
+          error: 'Unable to process uploaded file',
+          code: 'FILE_PROCESSING_ERROR'
+        },
+        { status: 500 }
+      )
+    }
 
     // Prepare upload data
     const uploadData = {
@@ -136,13 +245,44 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       folder: folder || 'uploads',
     }
 
-    // Upload to Payload CMS
-    const uploadResult = await payload.create({
-      collection: 'media',
-      data: uploadData,
+    console.log('📱 Attempting to upload to Payload CMS...', {
+      filename: uploadData.filename,
+      mimeType: uploadData.mimeType,
+      bufferSize: uploadData.data.length,
+      uploadedBy: uploadData.uploadedBy,
+      folder: uploadData.folder
     })
 
+    // Upload to Payload CMS with detailed error handling
+    let uploadResult
+    try {
+      uploadResult = await payload.create({
+        collection: 'media',
+        data: uploadData,
+      })
+      console.log('📱 Payload upload successful:', uploadResult.id)
+    } catch (payloadError) {
+      console.error('📱 Payload upload failed:', payloadError)
+      
+      // Log more details about the error
+      console.error('📱 Payload error details:', {
+        message: payloadError instanceof Error ? payloadError.message : 'Unknown error',
+        stack: payloadError instanceof Error ? payloadError.stack : 'No stack trace'
+      })
+      
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Upload failed',
+          error: 'Failed to upload image to server storage',
+          code: 'PAYLOAD_UPLOAD_FAILED'
+        },
+        { status: 500 }
+      )
+    }
+
     if (!uploadResult) {
+      console.log('📱 Upload result is null/undefined')
       return NextResponse.json(
         {
           success: false,
@@ -162,16 +302,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       if (uploadResult.width && uploadResult.height) {
         width = uploadResult.width
         height = uploadResult.height
+        console.log('📱 Image dimensions:', width, 'x', height)
       }
     } catch (dimensionError) {
-      console.warn('Failed to get image dimensions:', dimensionError)
+      console.warn('📱 Failed to get image dimensions:', dimensionError)
     }
 
-    // Log upload activity (optional)
+    // Log upload activity
     try {
-      console.log(`Mobile image upload: ${uploadResult.filename} by user ${user.id}`)
+      console.log(`📱 Mobile image upload complete: ${uploadResult.filename} by user ${user.id}`)
     } catch (logError) {
-      console.warn('Failed to log upload activity:', logError)
+      console.warn('📱 Failed to log upload activity:', logError)
     }
 
     const response: MobileUploadResponse = {
@@ -189,6 +330,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       },
     }
 
+    console.log('📱 Upload response prepared:', {
+      id: response.data?.id,
+      url: response.data?.url ? 'Present' : 'Missing',
+      filename: response.data?.filename
+    })
+
     return NextResponse.json(response, {
       status: 201,
       headers: {
@@ -198,11 +345,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     })
 
   } catch (error) {
-    console.error('Mobile image upload error:', error)
+    console.error('📱 Mobile image upload error (main catch):', error)
+    
+    // Log detailed error information
+    if (error instanceof Error) {
+      console.error('📱 Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })
+    }
     
     // Handle specific error types
     if (error instanceof Error) {
       if (error.message.includes('413') || error.message.includes('size')) {
+        console.log('📱 File size error detected')
         return NextResponse.json(
           {
             success: false,
@@ -215,6 +372,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       }
 
       if (error.message.includes('415') || error.message.includes('type')) {
+        console.log('📱 File type error detected')
         return NextResponse.json(
           {
             success: false,
@@ -227,6 +385,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       }
     }
     
+    console.log('📱 Returning generic server error')
     return NextResponse.json(
       {
         success: false,

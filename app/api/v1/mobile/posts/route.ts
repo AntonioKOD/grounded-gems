@@ -130,54 +130,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       throw error
     }
 
-    // Handle media uploads - use media IDs directly from upload API
-    let imageId: string | null = null
-    let videoId: string | null = null
-    let videoThumbnailId: string | null = null
-    const photoIds: string[] = []
-
-    if (validatedData.media && validatedData.media.length > 0) {
-      console.log('📱 Processing media items:', validatedData.media.length)
-      
-      for (const mediaItem of validatedData.media) {
-        try {
-          // Validate that the media ID exists in the database
-          const existingMedia = await payload.findByID({
-            collection: 'media',
-            id: mediaItem.id,
-            depth: 0,
-          })
-
-          if (!existingMedia) {
-            console.warn('📱 Media not found:', mediaItem.id)
-            continue
-          }
-
-          if (mediaItem.type === 'image') {
-            if (!imageId) {
-              imageId = mediaItem.id
-            }
-            photoIds.push(mediaItem.id)
-          } else if (mediaItem.type === 'video') {
-            if (!videoId) {
-              videoId = mediaItem.id
-              
-              // Handle video thumbnail if provided
-              if (mediaItem.thumbnail) {
-                // If thumbnail is provided as a URL, we might need to create a media record for it
-                // For now, we'll assume thumbnail is also uploaded separately and has an ID
-                // This could be enhanced to handle thumbnail URLs
-                console.log('📱 Video thumbnail provided:', mediaItem.thumbnail)
-              }
-            }
-          }
-        } catch (mediaError) {
-          console.error('📱 Error validating media:', mediaError)
-          // Continue with other media items
-        }
-      }
-    }
-
     // Validate location if provided
     let locationId: string | null = null
     if (validatedData.location) {
@@ -196,52 +148,111 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       }
     }
 
+    // Validate media IDs if provided
+    const validMediaItems: Array<{ type: 'image' | 'video', id: string, alt?: string }> = []
+    if (validatedData.media && validatedData.media.length > 0) {
+      console.log('📱 Validating media items:', validatedData.media.length)
+      
+      for (const mediaItem of validatedData.media) {
+        try {
+          // Validate that the media ID exists in the database
+          const existingMedia = await payload.findByID({
+            collection: 'media',
+            id: mediaItem.id,
+            depth: 0,
+          })
+
+          if (existingMedia) {
+            validMediaItems.push({
+              type: mediaItem.type,
+              id: mediaItem.id,
+              alt: mediaItem.alt
+            })
+            console.log(`📱 Validated ${mediaItem.type} media:`, mediaItem.id)
+          } else {
+            console.warn('📱 Media not found:', mediaItem.id)
+          }
+        } catch (mediaError) {
+          console.error('📱 Error validating media:', mediaError)
+          // Continue with other media items
+        }
+      }
+    }
+
     // Prepare post data
     const postData: any = {
-      content: validatedData.caption.trim(),
+      content: validatedData.caption.trim(), // Use 'content' to match Post collection
       author: user.id,
-      type: videoId ? 'video' : validatedData.type,
+      type: validatedData.type, // Use the type from request, don't override based on video
       status: 'published',
       visibility: 'public',
     }
 
-    if (imageId) {
-      postData.image = imageId
+    // Add rating for reviews
+    if (validatedData.type === 'review' && validatedData.rating) {
+      postData.rating = validatedData.rating
     }
 
-    if (videoId) {
-      postData.video = videoId
-    }
+    // Handle media assignment based on Post collection structure
+    // First image goes to 'image' field, additional images go to 'photos'
+    // First video goes to 'video' field
+    if (validMediaItems.length > 0) {
+      const images = validMediaItems.filter(m => m.type === 'image')
+      const videos = validMediaItems.filter(m => m.type === 'video')
 
-    if (videoThumbnailId) {
-      postData.videoThumbnail = videoThumbnailId
-    }
+      // Set main image (first image)
+      if (images.length > 0) {
+        postData.image = images[0].id
+        console.log('📱 Setting main image:', images[0].id)
+      }
 
-    if (photoIds.length > 0) {
-      postData.photos = photoIds
+      // Set additional images to photos array (if more than 1 image)
+      if (images.length > 1) {
+        postData.photos = images.slice(1).map(img => img.id)
+        console.log('📱 Setting additional photos:', postData.photos)
+      } else if (images.length === 1) {
+        // If only one image, also add it to photos array for consistency
+        postData.photos = [images[0].id]
+        console.log('📱 Setting single photo to photos array:', [images[0].id])
+      }
+
+      // Set main video (first video)
+      if (videos.length > 0) {
+        postData.video = videos[0].id
+        console.log('📱 Setting main video:', videos[0].id)
+        
+        // Handle video thumbnail if provided
+        if (videos[0].thumbnail) {
+          console.log('📱 Video thumbnail provided:', videos[0].thumbnail)
+          // Note: thumbnail handling could be enhanced to create media record
+        }
+      }
     }
 
     if (locationId) {
       postData.location = locationId
     }
 
-    // Add tags
+    // Add tags - ensure proper format for Post collection
     if (validatedData.tags && validatedData.tags.length > 0) {
-      postData.tags = validatedData.tags.map(tag => ({ tag: tag.trim() }))
+      postData.tags = validatedData.tags.filter(tag => tag.trim().length > 0).map(tag => ({ tag: tag.trim() }))
     }
 
     console.log('📱 Creating post with data:', {
       ...postData,
-      image: imageId ? 'Set' : 'Not set',
-      video: videoId ? 'Set' : 'Not set',
-      photos: `${photoIds.length} photos`,
+      author: user.id,
+      contentLength: postData.content.length,
+      type: postData.type,
+      rating: postData.rating || 'Not set',
+      image: postData.image ? 'Set' : 'Not set',
+      video: postData.video ? 'Set' : 'Not set',
+      photos: postData.photos ? `${postData.photos.length} photos` : 'Not set',
       location: locationId ? 'Set' : 'Not set',
-      tagsCount: validatedData.tags?.length || 0,
+      tagsCount: postData.tags?.length || 0,
       mediaProcessed: {
-        imageId,
-        videoId,
-        photoIds,
-        totalMediaItems: validatedData.media?.length || 0
+        totalMediaItems: validatedData.media?.length || 0,
+        imagesCount: validatedData.media?.filter(m => m.type === 'image').length || 0,
+        videosCount: validatedData.media?.filter(m => m.type === 'video').length || 0
       }
     })
 
@@ -265,15 +276,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
           url: typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage
         } : null
       },
-      media: validatedData.media?.map(m => ({
-        type: m.type,
-        id: m.id,
-        url: m.url || '', // Include URL for display purposes
-        alt: m.alt
-      })) || [],
+      media: validMediaItems.map(m => {
+        // Try to get the actual URL from the created post's media fields
+        let mediaUrl = '';
+        
+        if (m.type === 'image') {
+          if (newPost.image && typeof newPost.image === 'object' && newPost.image.url) {
+            mediaUrl = newPost.image.url;
+          } else if (newPost.photos && Array.isArray(newPost.photos)) {
+            const photo = newPost.photos.find((p: any) => p.id === m.id || p === m.id);
+            if (photo && typeof photo === 'object' && photo.url) {
+              mediaUrl = photo.url;
+            }
+          }
+        } else if (m.type === 'video') {
+          if (newPost.video && typeof newPost.video === 'object' && newPost.video.url) {
+            mediaUrl = newPost.video.url;
+          }
+        }
+        
+        return {
+          type: m.type,
+          id: m.id,
+          url: mediaUrl,
+          alt: m.alt
+        };
+      }),
       location: locationId && newPost.location ? {
-        id: newPost.location.id,
-        name: newPost.location.name
+        id: typeof newPost.location === 'object' ? newPost.location.id : newPost.location,
+        name: typeof newPost.location === 'object' ? newPost.location.name : 'Unknown Location'
       } : undefined,
       type: newPost.type,
       rating: newPost.rating,

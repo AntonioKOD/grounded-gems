@@ -116,6 +116,15 @@ export default function PlannerPage() {
       setNearbyLocationsCount(data.nearbyLocationsFound || 0)
       setUserLocationName(data.userLocation || '')
       
+      // Show enhanced success message based on real locations usage
+      if (data.usedRealLocations && data.nearbyLocationsFound > 0) {
+        toast.success(`🎯 Plan created using ${data.nearbyLocationsFound} verified locations near ${data.userLocation}!`)
+      } else if (data.nearbyLocationsFound > 0) {
+        toast.success(`📍 Found ${data.nearbyLocationsFound} nearby locations - plan customized for ${data.userLocation}`)
+      } else {
+        toast.success("✨ Plan created! Consider adding your location for personalized recommendations.")
+      }
+      
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.")
     } finally {
