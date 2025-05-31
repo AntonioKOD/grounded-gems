@@ -213,6 +213,77 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
     }
   }, [])
 
+  // Handle file uploads with better error handling
+  const handleFileUpload = useCallback(async (file: File, type: 'image' | 'video') => {
+    console.log('📤 Starting file upload:', { name: file.name, type: file.type, size: file.size })
+    
+    // Validate file size before upload
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    const maxSize = type === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE
+    
+    if (file.size > maxSize) {
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2)
+      const maxSizeMB = (maxSize / 1024 / 1024).toFixed(0)
+      toast({
+        title: "File too large",
+        description: `${file.name} is ${sizeMB}MB. Maximum size for ${type}s is ${maxSizeMB}MB.`,
+        variant: "destructive",
+      })
+      return null
+    }
+
+    // Validate file type
+    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
+    const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/avi', 'video/quicktime']
+    const allowedTypes = type === 'video' ? allowedVideoTypes : allowedImageTypes
+    
+    if (!allowedTypes.includes(file.type.toLowerCase())) {
+      toast({
+        title: "Unsupported file format",
+        description: `Please use a supported ${type} format: ${allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')}`,
+        variant: "destructive",
+      })
+      return null
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('alt', `${type} for post`)
+
+    try {
+      console.log('📤 Uploading to /api/upload-media...')
+      const response = await fetch('/api/upload-media', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('📤 Upload failed:', errorData)
+        throw new Error(errorData.error || `Upload failed with status ${response.status}`)
+      }
+
+      const result = await response.json()
+      console.log('📤 Upload successful:', result.id)
+      
+      toast({
+        title: `${type === 'video' ? 'Video' : 'Image'} uploaded successfully`,
+        description: `${file.name} has been uploaded and will be included in your post.`,
+      })
+      
+      return result
+    } catch (error) {
+      console.error('📤 Upload error:', error)
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : `Failed to upload ${file.name}. Please try again.`,
+        variant: "destructive",
+      })
+      return null
+    }
+  }, [toast])
+
   // Handle file uploads
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])

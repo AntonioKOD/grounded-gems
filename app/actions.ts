@@ -1765,18 +1765,21 @@ export async function deleteNotification(notificationId: string): Promise<boolea
 
 export async function createPost(formData: FormData) {
   try {
+    console.log('📝 CreatePost: Starting post creation...')
     const payload = await getPayload({ config })
 
     // Get current user
     const userId = formData.get("userId") as string
     
     if (!userId) {
+      console.error('📝 CreatePost: No user ID provided')
       return {
         success: false,
         message: "User ID is required",
       }
     }
 
+    console.log('📝 CreatePost: Finding user with ID:', userId)
     const user = await payload.findByID({
       collection: "users",
       id: userId,
@@ -1784,6 +1787,7 @@ export async function createPost(formData: FormData) {
     });
 
     if (!user) {
+      console.error('📝 CreatePost: User not found:', userId)
       return {
         success: false,
         message: "User not found",
@@ -1797,6 +1801,14 @@ export async function createPost(formData: FormData) {
     const rating = formData.get("rating") as string
     const locationId = formData.get("locationId") as string
 
+    console.log('📝 CreatePost: Form data extracted:', { 
+      contentLength: content?.length, 
+      title, 
+      type, 
+      rating, 
+      locationId 
+    })
+
     // Get tags array
     const tags: string[] = []
     const tagEntries = formData.getAll("tags[]")
@@ -1808,6 +1820,7 @@ export async function createPost(formData: FormData) {
 
     // Validate required fields
     if (!content?.trim()) {
+      console.error('📝 CreatePost: Content is required')
       return {
         success: false,
         message: "Content is required",
@@ -1818,20 +1831,52 @@ export async function createPost(formData: FormData) {
     const mediaFiles = formData.getAll("media") as File[]
     const videoFiles = formData.getAll("videos") as File[]
     
+    console.log('📝 CreatePost: Media files count:', {
+      images: mediaFiles.length,
+      videos: videoFiles.length
+    })
+    
     let imageId: string | null = null
     let videoId: string | null = null
     let videoThumbnailId: string | null = null
     const photoIds: string[] = []
 
+    // Define file size limits
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB for images
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB for videos
+
     // Process image files
     if (mediaFiles && mediaFiles.length > 0) {
+      console.log('📝 CreatePost: Processing image files...')
       for (const file of mediaFiles) {
         if (file instanceof File && file.size > 0) {
+          console.log(`📝 CreatePost: Processing image - ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+          
+          // Validate file size
+          if (file.size > MAX_IMAGE_SIZE) {
+            console.error(`📝 CreatePost: Image file too large: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+            return {
+              success: false,
+              message: `Image file "${file.name}" is too large. Maximum size is 10MB.`,
+            }
+          }
+
+          // Validate file type
+          const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
+          if (!allowedImageTypes.includes(file.type.toLowerCase())) {
+            console.error(`📝 CreatePost: Invalid image type: ${file.type}`)
+            return {
+              success: false,
+              message: `Unsupported image format: ${file.type}. Please use JPEG, PNG, WebP, GIF, or AVIF.`,
+            }
+          }
+
           try {
             // Convert file to buffer
             const bytes = await file.arrayBuffer()
             const buffer = Buffer.from(bytes)
 
+            console.log(`📝 CreatePost: Uploading image to Payload CMS...`)
             // Create media document in Payload
             const mediaDoc = await payload.create({
               collection: 'media',
@@ -1847,18 +1892,25 @@ export async function createPost(formData: FormData) {
             })
 
             if (mediaDoc?.id) {
+              console.log(`📝 CreatePost: Image uploaded successfully - ID: ${mediaDoc.id}`)
               if (!imageId) {
                 // Set first image as main image
                 imageId = mediaDoc.id
               }
               // Add all images to photos array
               photoIds.push(mediaDoc.id)
+            } else {
+              console.error('📝 CreatePost: Media document creation failed - no ID returned')
+              return {
+                success: false,
+                message: "Failed to upload image. Please try again.",
+              }
             }
           } catch (error) {
-            console.error('Error uploading image:', error)
+            console.error('📝 CreatePost: Error uploading image:', error)
             return {
               success: false,
-              message: "Failed to upload image. Please try again.",
+              message: `Failed to upload image "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
             }
           }
         }
@@ -1867,13 +1919,36 @@ export async function createPost(formData: FormData) {
 
     // Process video files
     if (videoFiles && videoFiles.length > 0) {
+      console.log('📝 CreatePost: Processing video files...')
       for (const file of videoFiles) {
         if (file instanceof File && file.size > 0) {
+          console.log(`📝 CreatePost: Processing video - ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+          
+          // Validate file size
+          if (file.size > MAX_VIDEO_SIZE) {
+            console.error(`📝 CreatePost: Video file too large: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+            return {
+              success: false,
+              message: `Video file "${file.name}" is too large. Maximum size is 50MB.`,
+            }
+          }
+
+          // Validate file type
+          const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/avi', 'video/quicktime']
+          if (!allowedVideoTypes.includes(file.type.toLowerCase())) {
+            console.error(`📝 CreatePost: Invalid video type: ${file.type}`)
+            return {
+              success: false,
+              message: `Unsupported video format: ${file.type}. Please use MP4, WebM, OGG, MOV, or AVI.`,
+            }
+          }
+
           try {
             // Convert file to buffer
             const bytes = await file.arrayBuffer()
             const buffer = Buffer.from(bytes)
 
+            console.log(`📝 CreatePost: Uploading video to Payload CMS...`)
             // Create video media document
             const videoDoc = await payload.create({
               collection: 'media',
@@ -1889,6 +1964,7 @@ export async function createPost(formData: FormData) {
             })
 
             if (videoDoc?.id && !videoId) {
+              console.log(`📝 CreatePost: Video uploaded successfully - ID: ${videoDoc.id}`)
               // Set first video as main video
               videoId = videoDoc.id
               
@@ -1896,12 +1972,18 @@ export async function createPost(formData: FormData) {
               if (imageId) {
                 videoThumbnailId = imageId
               }
+            } else if (!videoDoc?.id) {
+              console.error('📝 CreatePost: Video document creation failed - no ID returned')
+              return {
+                success: false,
+                message: "Failed to upload video. Please try again.",
+              }
             }
           } catch (error) {
-            console.error('Error uploading video:', error)
+            console.error('📝 CreatePost: Error uploading video:', error)
             return {
               success: false,
-              message: "Failed to upload video. Please try again.",
+              message: `Failed to upload video "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`,
             }
           }
         }

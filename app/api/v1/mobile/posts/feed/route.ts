@@ -345,10 +345,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
     return NextResponse.json(response, {
       status: 200,
       headers: {
-        'Cache-Control': feedType === 'personalized' || feedType === 'following' 
-          ? 'private, max-age=60' // 1 minute for personalized feeds
-          : 'public, max-age=300', // 5 minutes for public feeds
+        'Cache-Control': feedType === 'personalized' || feedType === 'following'
+          ? 'private, no-cache, no-store, must-revalidate' // No caching for personalized feeds
+          : sortBy === 'recent' || sortBy === 'createdAt'
+          ? 'public, max-age=30, must-revalidate' // Very short cache for recent posts (30 seconds)
+          : 'public, max-age=120, must-revalidate', // 2 minutes for other feeds
         'X-Content-Type-Options': 'nosniff',
+        'Pragma': 'no-cache',
+        'Expires': '0',
         'Vary': 'Authorization' // Cache varies based on auth
       }
     })

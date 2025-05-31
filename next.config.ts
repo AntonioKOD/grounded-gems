@@ -48,7 +48,7 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     serverActions: {
-      bodySizeLimit: '10mb', // Adjust the body size limit as needed
+      bodySizeLimit: '50mb', // Increased from 10mb to 50mb for video uploads
     },
     // Fix for Next.js App Router production issues
     optimisticClientCache: false,
