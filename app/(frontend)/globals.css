@@ -1018,3 +1018,38 @@ button, .clickable {
   inset: 0;
 }
 
+/* Navbar spacing utilities */
+@layer utilities {
+  .navbar-offset {
+    padding-top: 4rem; /* 64px - navbar height on mobile */
+  }
+  
+  @media (min-width: 1024px) {
+    .navbar-offset {
+      padding-top: 4.5rem; /* 72px - navbar height on desktop */
+    }
+  }
+  
+  /* For full-screen content that needs to account for navbar */
+  .fullscreen-with-navbar {
+    height: calc(100vh - 4rem);
+    min-height: calc(100vh - 4rem);
+  }
+  
+  @media (min-width: 1024px) {
+    .fullscreen-with-navbar {
+      height: calc(100vh - 4.5rem);
+      min-height: calc(100vh - 4.5rem);
+    }
+  }
+  
+  /* Override for pages that need to go full screen (like feed on mobile) */
+  .mobile-fullscreen {
+    @media (max-width: 767px) {
+      height: 100vh !important;
+      min-height: 100vh !important;
+      margin-top: -4rem !important; /* Pull content back up to cover navbar */
+    }
+  }
+}
+

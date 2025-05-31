@@ -64,7 +64,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <body className="overflow-x-hidden">
         <StoreProvider initialUser={initialUser}>
           <NavigationWrapper initialUser={initialUser} />
-          <main className="min-h-screen w-full bg-white">
+          <main className="min-h-screen w-full bg-white pt-16 lg:pt-18">
             {children}
           </main>
           {/* Hide footer on mobile, show on desktop */}

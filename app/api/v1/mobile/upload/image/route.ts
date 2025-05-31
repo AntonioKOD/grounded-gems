@@ -145,16 +145,102 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
           size: rnFile.size
         })
         
-        // For now, return a specific error to help with debugging
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'React Native file format detected',
-            error: 'React Native file objects need special handling',
-            code: 'RN_FILE_FORMAT'
-          },
-          { status: 400 }
-        )
+        // Try to fetch the file from the URI and create a proper Buffer
+        try {
+          console.log('📱 Attempting to fetch React Native file...')
+          const fileResponse = await fetch(rnFile.uri)
+          
+          if (!fileResponse.ok) {
+            throw new Error(`Failed to fetch file from URI: ${fileResponse.status}`)
+          }
+          
+          const arrayBuffer = await fileResponse.arrayBuffer()
+          const buffer = Buffer.from(arrayBuffer)
+          
+          console.log('📱 Successfully converted RN file to buffer, size:', buffer.length)
+          
+          // Create upload data from React Native file object
+          const uploadData = {
+            filename: rnFile.name || `mobile_upload_${Date.now()}.jpg`,
+            mimeType: rnFile.type || 'image/jpeg',
+            data: buffer,
+            alt: alt || undefined,
+            uploadedBy: user.id,
+            uploadSource: 'mobile',
+            folder: folder || 'uploads',
+          }
+
+          console.log('📱 Attempting to upload React Native file to Payload CMS...', {
+            filename: uploadData.filename,
+            mimeType: uploadData.mimeType,
+            bufferSize: uploadData.data.length,
+            uploadedBy: uploadData.uploadedBy,
+            folder: uploadData.folder
+          })
+
+          // Upload to Payload CMS
+          const uploadResult = await payload.create({
+            collection: 'media',
+            data: uploadData,
+          })
+          
+          console.log('📱 React Native file upload successful:', uploadResult.id)
+
+          // Get image dimensions if available
+          let width: number | undefined
+          let height: number | undefined
+
+          try {
+            if (uploadResult.width && uploadResult.height) {
+              width = uploadResult.width
+              height = uploadResult.height
+              console.log('📱 Image dimensions:', width, 'x', height)
+            }
+          } catch (dimensionError) {
+            console.warn('📱 Failed to get image dimensions:', dimensionError)
+          }
+
+          const response: MobileUploadResponse = {
+            success: true,
+            message: 'Image uploaded successfully',
+            data: {
+              url: uploadResult.url || '',
+              id: uploadResult.id,
+              filename: uploadResult.filename || rnFile.name,
+              mimeType: uploadResult.mimeType || rnFile.type,
+              filesize: uploadResult.filesize || buffer.length,
+              width,
+              height,
+              alt: uploadResult.alt,
+            },
+          }
+
+          console.log('📱 RN upload response prepared:', {
+            id: response.data?.id,
+            url: response.data?.url ? 'Present' : 'Missing',
+            filename: response.data?.filename
+          })
+
+          return NextResponse.json(response, {
+            status: 201,
+            headers: {
+              'Cache-Control': 'no-store',
+              'X-Content-Type-Options': 'nosniff',
+            }
+          })
+          
+        } catch (rnError) {
+          console.error('📱 Failed to process React Native file:', rnError)
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Failed to process React Native file',
+              error: 'Unable to fetch and process file from React Native URI',
+              code: 'RN_FILE_PROCESSING_FAILED'
+            },
+            { status: 400 }
+          )
+        }
       }
       
       return NextResponse.json(

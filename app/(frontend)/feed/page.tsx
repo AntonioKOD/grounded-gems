@@ -86,7 +86,7 @@ export default async function FeedPage() {
         <div className="md:hidden fixed inset-0 bg-black" />
 
         {/* Main content */}
-        <div className="relative z-10 md:container md:mx-auto md:px-4 md:py-8">
+        <div className="relative z-10 md:container md:mx-auto md:px-4 md:py-8 mobile-fullscreen">
           <Suspense fallback={<EnhancedFeedSkeleton />}>
             <AddictiveFeedContainer
               feedType="all"
