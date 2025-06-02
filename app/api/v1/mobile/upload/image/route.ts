@@ -32,18 +32,14 @@ const ALLOWED_TYPES = [
 ]
 
 export async function POST(request: NextRequest): Promise<NextResponse<MobileUploadResponse>> {
-  console.log('📱 Mobile upload request started')
-  
   try {
     const payload = await getPayload({ config })
-    console.log('📱 Payload instance obtained')
-
+    
     // Verify authentication
     const authHeader = request.headers.get('Authorization')
-    console.log('📱 Auth header:', authHeader ? 'Present' : 'Missing')
-    
-    if (!authHeader?.startsWith('Bearer ')) {
-      console.log('📱 No valid auth header found')
+    const token = authHeader?.replace('Bearer ', '')
+
+    if (!token) {
       return NextResponse.json(
         {
           success: false,
@@ -55,12 +51,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    console.log('📱 Attempting user authentication...')
     const { user } = await payload.auth({ headers: request.headers })
-    console.log('📱 User auth result:', user ? `User found: ${user.id}` : 'No user found')
-    
     if (!user) {
-      console.log('📱 Authentication failed - invalid token')
       return NextResponse.json(
         {
           success: false,
@@ -72,311 +64,57 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    console.log('📱 User authenticated successfully, parsing form data...')
-    
-    // Parse form data with detailed error handling
-    let formData: FormData
+    console.log('📱 User authenticated successfully for upload:', user.email)
+
+    // Let Payload handle the file upload directly
+    // Add the uploadedBy field to the request for Payload to process
     try {
-      formData = await request.formData()
-      console.log('📱 FormData parsed successfully')
+      console.log('📱 Creating media record via Payload...')
       
-      // Log all form data keys for debugging
-      const keys = Array.from(formData.keys())
-      console.log('📱 FormData keys:', keys)
-      
-      // Log each entry
-      for (const [key, value] of formData.entries()) {
-        console.log(`📱 FormData entry - ${key}:`, {
-          type: typeof value,
-          isFile: value instanceof File,
-          value: value instanceof File ? `File: ${value.name} (${value.size} bytes, ${value.type})` : value
-        })
-      }
-    } catch (formDataError) {
-      console.error('📱 FormData parsing failed:', formDataError)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Failed to parse upload data',
-          error: 'Invalid form data format',
-          code: 'INVALID_FORM_DATA'
-        },
-        { status: 400 }
-      )
-    }
-
-    const imageFile = formData.get('file') as File
-    const folder = formData.get('folder') as string
-    const alt = formData.get('alt') as string
-
-    console.log('📱 Extracted form data:', {
-      imageFile: imageFile ? `${imageFile.name} (${imageFile.size} bytes, ${imageFile.type})` : 'null',
-      folder: folder || 'undefined',
-      alt: alt || 'undefined'
-    })
-
-    // Validate file presence
-    if (!imageFile) {
-      console.log('📱 No image file provided in request')
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'No image file provided',
-          error: 'Image file is required',
-          code: 'NO_FILE'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Check if it's actually a File object
-    if (!(imageFile instanceof File)) {
-      console.log('📱 Image field is not a File object:', typeof imageFile, imageFile)
-      
-      // Handle React Native specific FormData format
-      if (typeof imageFile === 'object' && imageFile !== null && 'uri' in imageFile) {
-        console.log('📱 Detected React Native file object, attempting conversion...')
-        // This is likely a React Native file object with uri, type, name properties
-        const rnFile = imageFile as any
-        console.log('📱 RN file properties:', {
-          uri: rnFile.uri,
-          type: rnFile.type,
-          name: rnFile.name,
-          size: rnFile.size
-        })
-        
-        // Try to fetch the file from the URI and create a proper Buffer
-        try {
-          console.log('📱 Attempting to fetch React Native file...')
-          const fileResponse = await fetch(rnFile.uri)
-          
-          if (!fileResponse.ok) {
-            throw new Error(`Failed to fetch file from URI: ${fileResponse.status}`)
-          }
-          
-          const arrayBuffer = await fileResponse.arrayBuffer()
-          const buffer = Buffer.from(arrayBuffer)
-          
-          console.log('📱 Successfully converted RN file to buffer, size:', buffer.length)
-          
-          // Create upload data from React Native file object
-          const dataForPayloadCreate = {
-            file: {
-              name: rnFile.name || `mobile_upload_${Date.now()}.jpg`,
-              data: buffer,
-              mimetype: rnFile.type || 'image/jpeg',
-              size: buffer.length
-            },
-            alt: alt || undefined,
-            uploadedBy: user.id,
-            uploadSource: 'mobile',
-            folder: folder || 'uploads',
-          };
-
-          console.log('📱 Attempting to upload React Native file to Payload CMS...', {
-            filename: dataForPayloadCreate.file.name,
-            mimeType: dataForPayloadCreate.file.mimetype,
-            bufferSize: dataForPayloadCreate.file.data.length,
-            uploadedBy: dataForPayloadCreate.uploadedBy,
-            folder: dataForPayloadCreate.folder
-          });
-
-          // Upload to Payload CMS
-          const uploadResult = await payload.create({
-            collection: 'media',
-            data: dataForPayloadCreate,
-          });
-          
-          console.log('📱 React Native file upload successful:', uploadResult.id);
-
-          // Get image dimensions if available
-          let width: number | undefined
-          let height: number | undefined
-
-          try {
-            if (uploadResult.width && uploadResult.height) {
-              width = uploadResult.width
-              height = uploadResult.height
-              console.log('📱 Image dimensions:', width, 'x', height)
-            }
-          } catch (dimensionError) {
-            console.warn('📱 Failed to get image dimensions:', dimensionError)
-          }
-
-          const response: MobileUploadResponse = {
-            success: true,
-            message: 'Image uploaded successfully',
-            data: {
-              url: uploadResult.url || '',
-              id: uploadResult.id,
-              filename: uploadResult.filename || dataForPayloadCreate.file.name,
-              mimeType: uploadResult.mimeType || dataForPayloadCreate.file.mimetype,
-              filesize: uploadResult.filesize || dataForPayloadCreate.file.size,
-              width,
-              height,
-              alt: uploadResult.alt,
-            },
-          }
-
-          console.log('📱 RN upload response prepared:', {
-            id: response.data?.id,
-            url: response.data?.url ? 'Present' : 'Missing',
-            filename: response.data?.filename
-          })
-
-          return NextResponse.json(response, {
-            status: 201,
-            headers: {
-              'Cache-Control': 'no-store',
-              'X-Content-Type-Options': 'nosniff',
-            }
-          })
-          
-        } catch (rnError) {
-          console.error('📱 Failed to process React Native file:', rnError)
-          return NextResponse.json(
-            {
-              success: false,
-              message: 'Failed to process React Native file',
-              error: 'Unable to fetch and process file from React Native URI',
-              code: 'RN_FILE_PROCESSING_FAILED'
-            },
-            { status: 400 }
-          )
-        }
-      }
-      
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid file format',
-          error: 'Uploaded item is not a valid file',
-          code: 'INVALID_FILE_OBJECT'
-        },
-        { status: 400 }
-      )
-    }
-
-    console.log('📱 File validation - Type check...')
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(imageFile.type)) {
-      console.log('📱 Invalid file type:', imageFile.type, 'Allowed:', ALLOWED_TYPES)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid file type',
-          error: `Only ${ALLOWED_TYPES.join(', ')} files are allowed`,
-          code: 'INVALID_FILE_TYPE'
-        },
-        { status: 400 }
-      )
-    }
-
-    console.log('📱 File validation - Size check...')
-    // Validate file size
-    if (imageFile.size > MAX_FILE_SIZE) {
-      console.log('📱 File too large:', imageFile.size, 'Max:', MAX_FILE_SIZE)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'File too large',
-          error: `Maximum file size is ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
-          code: 'FILE_TOO_LARGE'
-        },
-        { status: 400 }
-      )
-    }
-
-    console.log('📱 File validation - Filename check...')
-    // Validate filename
-    if (!imageFile.name || imageFile.name.length === 0) {
-      console.log('📱 Invalid filename:', imageFile.name)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid filename',
-          error: 'File must have a valid name',
-          code: 'INVALID_FILENAME'
-        },
-        { status: 400 }
-      )
-    }
-
-    console.log('📱 Converting file to buffer...')
-    // Convert File to Buffer for Payload with error handling
-    let buffer: Buffer
-    try {
-      const arrayBuffer = await imageFile.arrayBuffer()
-      buffer = Buffer.from(arrayBuffer)
-      console.log('📱 Buffer created successfully, size:', buffer.length)
-    } catch (bufferError) {
-      console.error('📱 Buffer conversion failed:', bufferError)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'File processing failed',
-          error: 'Unable to process uploaded file',
-          code: 'FILE_PROCESSING_ERROR'
-        },
-        { status: 500 }
-      )
-    }
-
-    // Prepare upload data for standard file
-    const dataForPayloadCreate = {
-      file: {
-        name: imageFile.name,
-        data: buffer,
-        mimetype: imageFile.type,
-        size: imageFile.size,
-      },
-      alt: alt || undefined,
-      uploadedBy: user.id,
-      uploadSource: 'mobile',
-      folder: folder || 'uploads', // custom metadata
-    };
-
-    console.log('📱 Attempting to upload to Payload CMS...', {
-      filename: dataForPayloadCreate.file.name, 
-      mimeType: dataForPayloadCreate.file.mimetype,
-      size: dataForPayloadCreate.file.size,
-      uploadedBy: dataForPayloadCreate.uploadedBy,
-      folder: dataForPayloadCreate.folder,
-      alt: dataForPayloadCreate.alt
-    });
-
-    // Upload to Payload CMS with detailed error handling
-    let uploadResult;
-    try {
-      console.log('📱 About to call payload.create with dataForPayloadCreate:', {
-        fileInfo: {
-          name: dataForPayloadCreate.file.name,
-          type: dataForPayloadCreate.file.mimetype,
-          size: dataForPayloadCreate.file.size
-        },
-        uploadedBy: dataForPayloadCreate.uploadedBy,
-        folder: dataForPayloadCreate.folder,
-        alt: dataForPayloadCreate.alt
-      });
-      
-      uploadResult = await payload.create({
+      // Create the media record - Payload will handle FormData parsing automatically
+      const uploadResult = await payload.create({
         collection: 'media',
-        data: dataForPayloadCreate,
-      });
-      
-      console.log('📱 Payload upload successful:', {
-        id: uploadResult.id,
-        filename: uploadResult.filename,
-        url: uploadResult.url,
-        mimeType: uploadResult.mimeType,
-        filesize: uploadResult.filesize
-      });
-    } catch (error: any) {
-      console.error('📱 Standard file upload failed. Error Name:', error.name, 'Error Message:', error.message, 'Stack:', error.stack);
-      if (error.data) { // Payload validation errors often have a 'data' property
-        console.error('📱 Payload Error Data:', JSON.stringify(error.data, null, 2));
+        data: {
+          uploadedBy: user.id, // Add the user reference directly
+        },
+        req: request, // Pass the request so Payload can access FormData
+      })
+
+      console.log('📱 Upload successful via Payload:', uploadResult.id)
+
+      // Format response
+      const response: MobileUploadResponse = {
+        success: true,
+        message: 'Image uploaded successfully',
+        data: {
+          id: uploadResult.id,
+          url: uploadResult.url || '',
+          filename: uploadResult.filename || '',
+          mimeType: uploadResult.mimeType || '',
+          filesize: uploadResult.filesize || 0,
+          width: uploadResult.width,
+          height: uploadResult.height,
+          alt: uploadResult.alt,
+        },
       }
-      // Ensure that a response is always returned
+
+      return NextResponse.json(response, {
+        status: 200,
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        }
+      })
+
+    } catch (error: any) {
+      console.error('📱 Payload upload failed:', error.name, error.message)
+      console.error('📱 Payload error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        data: error.data,
+      })
+      
       return NextResponse.json(
         {
           success: false,
@@ -385,114 +123,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
           code: 'PAYLOAD_UPLOAD_FAILED',
         },
         { status: 500 }
-      );
-    }
-
-    if (!uploadResult) {
-      console.log('📱 Upload result is null/undefined')
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Upload failed',
-          error: 'Failed to upload image to server',
-          code: 'UPLOAD_FAILED'
-        },
-        { status: 500 }
       )
     }
 
-    // Get image dimensions if available
-    let width: number | undefined
-    let height: number | undefined
-
-    try {
-      if (uploadResult.width && uploadResult.height) {
-        width = uploadResult.width
-        height = uploadResult.height
-        console.log('📱 Image dimensions:', width, 'x', height)
-      }
-    } catch (dimensionError) {
-      console.warn('📱 Failed to get image dimensions:', dimensionError)
-    }
-
-    // Log upload activity
-    try {
-      console.log(`📱 Mobile image upload complete: ${uploadResult.filename} by user ${user.id}`)
-    } catch (logError) {
-      console.warn('📱 Failed to log upload activity:', logError)
-    }
-
-    const response: MobileUploadResponse = {
-      success: true,
-      message: 'Image uploaded successfully',
-      data: {
-        url: uploadResult.url || '',
-        id: uploadResult.id,
-        filename: uploadResult.filename || dataForPayloadCreate.file.name,
-        mimeType: uploadResult.mimeType || dataForPayloadCreate.file.mimetype,
-        filesize: uploadResult.filesize || dataForPayloadCreate.file.size,
-        width,
-        height,
-        alt: uploadResult.alt,
-      },
-    }
-
-    console.log('📱 Upload response prepared:', {
-      id: response.data?.id,
-      url: response.data?.url ? 'Present' : 'Missing',
-      filename: response.data?.filename
-    })
-
-    return NextResponse.json(response, {
-      status: 201,
-      headers: {
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
-      }
-    })
-
   } catch (error) {
-    console.error('📱 Mobile image upload error (main catch):', error)
+    console.error('📱 Upload route error:', error)
     
-    // Log detailed error information
-    if (error instanceof Error) {
-      console.error('📱 Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
-      })
-    }
-    
-    // Handle specific error types
-    if (error instanceof Error) {
-      if (error.message.includes('413') || error.message.includes('size')) {
-        console.log('📱 File size error detected')
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'File too large',
-            error: 'The uploaded file exceeds the maximum size limit',
-            code: 'FILE_TOO_LARGE'
-          },
-          { status: 413 }
-        )
-      }
-
-      if (error.message.includes('415') || error.message.includes('type')) {
-        console.log('📱 File type error detected')
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Unsupported file type',
-            error: 'The uploaded file type is not supported',
-            code: 'UNSUPPORTED_FILE_TYPE'
-          },
-          { status: 415 }
-        )
-      }
-    }
-    
-    console.log('📱 Returning generic server error')
     return NextResponse.json(
       {
         success: false,
