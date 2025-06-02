@@ -105,7 +105,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    const imageFile = formData.get('image') as File
+    const imageFile = formData.get('file') as File
     const folder = formData.get('folder') as string
     const alt = formData.get('alt') as string
 
@@ -160,31 +160,34 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
           console.log('📱 Successfully converted RN file to buffer, size:', buffer.length)
           
           // Create upload data from React Native file object
-          const uploadData = {
-            filename: rnFile.name || `mobile_upload_${Date.now()}.jpg`,
-            mimeType: rnFile.type || 'image/jpeg',
-            data: buffer,
+          const dataForPayloadCreate = {
+            file: {
+              name: rnFile.name || `mobile_upload_${Date.now()}.jpg`,
+              data: buffer,
+              mimetype: rnFile.type || 'image/jpeg',
+              size: buffer.length
+            },
             alt: alt || undefined,
             uploadedBy: user.id,
             uploadSource: 'mobile',
             folder: folder || 'uploads',
-          }
+          };
 
           console.log('📱 Attempting to upload React Native file to Payload CMS...', {
-            filename: uploadData.filename,
-            mimeType: uploadData.mimeType,
-            bufferSize: uploadData.data.length,
-            uploadedBy: uploadData.uploadedBy,
-            folder: uploadData.folder
-          })
+            filename: dataForPayloadCreate.file.name,
+            mimeType: dataForPayloadCreate.file.mimetype,
+            bufferSize: dataForPayloadCreate.file.data.length,
+            uploadedBy: dataForPayloadCreate.uploadedBy,
+            folder: dataForPayloadCreate.folder
+          });
 
           // Upload to Payload CMS
           const uploadResult = await payload.create({
             collection: 'media',
-            data: uploadData,
-          })
+            data: dataForPayloadCreate,
+          });
           
-          console.log('📱 React Native file upload successful:', uploadResult.id)
+          console.log('📱 React Native file upload successful:', uploadResult.id);
 
           // Get image dimensions if available
           let width: number | undefined
@@ -206,9 +209,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
             data: {
               url: uploadResult.url || '',
               id: uploadResult.id,
-              filename: uploadResult.filename || rnFile.name,
-              mimeType: uploadResult.mimeType || rnFile.type,
-              filesize: uploadResult.filesize || buffer.length,
+              filename: uploadResult.filename || dataForPayloadCreate.file.name,
+              mimeType: uploadResult.mimeType || dataForPayloadCreate.file.mimetype,
+              filesize: uploadResult.filesize || dataForPayloadCreate.file.size,
               width,
               height,
               alt: uploadResult.alt,
@@ -319,43 +322,47 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    // Prepare upload data
-    const uploadData = {
-      filename: imageFile.name,
-      mimeType: imageFile.type,
-      data: buffer,
+    // Prepare upload data for standard file
+    const dataForPayloadCreate = {
+      file: {
+        name: imageFile.name,
+        data: buffer,
+        mimetype: imageFile.type,
+        size: imageFile.size,
+      },
       alt: alt || undefined,
-      // Add user metadata
       uploadedBy: user.id,
       uploadSource: 'mobile',
-      folder: folder || 'uploads',
-    }
+      folder: folder || 'uploads', // custom metadata
+    };
 
     console.log('📱 Attempting to upload to Payload CMS...', {
-      filename: uploadData.filename,
-      mimeType: uploadData.mimeType,
-      bufferSize: uploadData.data.length,
-      uploadedBy: uploadData.uploadedBy,
-      folder: uploadData.folder
-    })
+      filename: dataForPayloadCreate.file.name, 
+      mimeType: dataForPayloadCreate.file.mimetype,
+      size: dataForPayloadCreate.file.size,
+      uploadedBy: dataForPayloadCreate.uploadedBy,
+      folder: dataForPayloadCreate.folder,
+      alt: dataForPayloadCreate.alt
+    });
 
     // Upload to Payload CMS with detailed error handling
-    let uploadResult
+    let uploadResult;
     try {
-      console.log('📱 About to call payload.create with uploadData:', {
-        filename: uploadData.filename,
-        mimeType: uploadData.mimeType,
-        bufferSize: uploadData.data.length,
-        hasBuffer: !!uploadData.data,
-        uploadedBy: uploadData.uploadedBy,
-        folder: uploadData.folder,
-        alt: uploadData.alt
-      })
+      console.log('📱 About to call payload.create with dataForPayloadCreate:', {
+        fileInfo: {
+          name: dataForPayloadCreate.file.name,
+          type: dataForPayloadCreate.file.mimetype,
+          size: dataForPayloadCreate.file.size
+        },
+        uploadedBy: dataForPayloadCreate.uploadedBy,
+        folder: dataForPayloadCreate.folder,
+        alt: dataForPayloadCreate.alt
+      });
       
       uploadResult = await payload.create({
         collection: 'media',
-        data: uploadData,
-      })
+        data: dataForPayloadCreate,
+      });
       
       console.log('📱 Payload upload successful:', {
         id: uploadResult.id,
@@ -363,53 +370,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
         url: uploadResult.url,
         mimeType: uploadResult.mimeType,
         filesize: uploadResult.filesize
-      })
-    } catch (payloadError) {
-      console.error('📱 Payload upload failed:', payloadError)
-      
-      // Log more details about the error
-      console.error('📱 Payload error details:', {
-        name: payloadError instanceof Error ? payloadError.name : 'Unknown',
-        message: payloadError instanceof Error ? payloadError.message : 'Unknown error',
-        stack: payloadError instanceof Error ? payloadError.stack : 'No stack trace',
-        uploadDataSummary: {
-          hasFilename: !!uploadData.filename,
-          hasMimeType: !!uploadData.mimeType,
-          hasData: !!uploadData.data,
-          dataSize: uploadData.data?.length || 0,
-          hasUploadedBy: !!uploadData.uploadedBy
-        }
-      })
-      
-      // Provide more specific error messages based on the error
-      let errorMessage = 'Failed to upload image to server storage'
-      let errorCode = 'PAYLOAD_UPLOAD_FAILED'
-      
-      if (payloadError instanceof Error) {
-        if (payloadError.message.includes('validation')) {
-          errorMessage = 'Upload validation failed - check file format and size'
-          errorCode = 'VALIDATION_FAILED'
-        } else if (payloadError.message.includes('permission')) {
-          errorMessage = 'Insufficient permissions to upload file'
-          errorCode = 'PERMISSION_DENIED'
-        } else if (payloadError.message.includes('storage')) {
-          errorMessage = 'Storage service unavailable'
-          errorCode = 'STORAGE_ERROR'
-        } else if (payloadError.message.includes('network')) {
-          errorMessage = 'Network error during upload'
-          errorCode = 'NETWORK_ERROR'
-        }
+      });
+    } catch (error: any) {
+      console.error('📱 Standard file upload failed. Error Name:', error.name, 'Error Message:', error.message, 'Stack:', error.stack);
+      if (error.data) { // Payload validation errors often have a 'data' property
+        console.error('📱 Payload Error Data:', JSON.stringify(error.data, null, 2));
       }
-      
+      // Ensure that a response is always returned
       return NextResponse.json(
         {
           success: false,
           message: 'Upload failed',
-          error: errorMessage,
-          code: errorCode
+          error: 'Failed to upload image to server storage',
+          code: 'PAYLOAD_UPLOAD_FAILED',
         },
         { status: 500 }
-      )
+      );
     }
 
     if (!uploadResult) {
@@ -452,9 +428,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       data: {
         url: uploadResult.url || '',
         id: uploadResult.id,
-        filename: uploadResult.filename || imageFile.name,
-        mimeType: uploadResult.mimeType || imageFile.type,
-        filesize: uploadResult.filesize || imageFile.size,
+        filename: uploadResult.filename || dataForPayloadCreate.file.name,
+        mimeType: uploadResult.mimeType || dataForPayloadCreate.file.mimetype,
+        filesize: uploadResult.filesize || dataForPayloadCreate.file.size,
         width,
         height,
         alt: uploadResult.alt,

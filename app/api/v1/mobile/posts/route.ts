@@ -273,7 +273,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
         id: user.id,
         name: user.name,
         profileImage: user.profileImage ? {
-          url: typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage
+          url: typeof user.profileImage === 'object' && user.profileImage.url
+            ? user.profileImage.url
+            : typeof user.profileImage === 'string' 
+            ? user.profileImage 
+            : '' // Fallback
         } : null
       },
       media: validMediaItems.map(m => {

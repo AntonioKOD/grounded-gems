@@ -322,9 +322,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileLoca
 
       // Format featured image
       const featuredImage = location.featuredImage ? {
-        url: typeof location.featuredImage === 'object' 
-          ? location.featuredImage.url 
-          : location.featuredImage,
+        url: typeof location.featuredImage === 'object' && location.featuredImage.url
+          ? location.featuredImage.url
+          : typeof location.featuredImage === 'string'
+          ? location.featuredImage
+          : '', // Fallback
         alt: typeof location.featuredImage === 'object' 
           ? location.featuredImage.alt 
           : undefined
@@ -333,7 +335,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileLoca
       // Format gallery
       const gallery = Array.isArray(location.gallery) 
         ? location.gallery.map((item: any) => ({
-            url: typeof item.image === 'object' ? item.image.url : item.image,
+            url: typeof item.image === 'object' && item.image.url
+              ? item.image.url
+              : typeof item.image === 'string'
+              ? item.image
+              : '', // Fallback
             caption: item.caption
           }))
         : []

@@ -117,9 +117,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
           name: result.user.name || '',
           email: result.user.email,
           profileImage: result.user.profileImage ? {
-            url: typeof result.user.profileImage === 'object' 
-              ? result.user.profileImage.url 
-              : result.user.profileImage
+            url: typeof result.user.profileImage === 'object' && result.user.profileImage.url
+              ? result.user.profileImage.url
+              : typeof result.user.profileImage === 'string' 
+              ? result.user.profileImage 
+              : '' // Fallback for unexpected types
           } : null,
           location: result.user.location,
           role: result.user.role || 'user',

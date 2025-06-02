@@ -257,9 +257,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
           ? post.content.substring(0, 150) + '...' 
           : post.content,
         featuredImage: post.featuredImage ? {
-          url: typeof post.featuredImage === 'object' 
+          url: typeof post.featuredImage === 'object' && post.featuredImage.url
             ? post.featuredImage.url 
-            : post.featuredImage
+            : typeof post.featuredImage === 'string'
+            ? post.featuredImage
+            : '' // Fallback
         } : null,
         likeCount: post.likeCount || 0,
         commentCount: post.commentCount || 0,
@@ -279,9 +281,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
           name: targetUser.name || '',
           email: isOwnProfile ? targetUser.email : '', // Only show email for own profile
           profileImage: targetUser.profileImage ? {
-            url: typeof targetUser.profileImage === 'object' 
+            url: typeof targetUser.profileImage === 'object' && targetUser.profileImage.url
               ? targetUser.profileImage.url 
-              : targetUser.profileImage
+              : typeof targetUser.profileImage === 'string'
+              ? targetUser.profileImage
+              : '' // Fallback
           } : null,
           bio: targetUser.bio,
           location: targetUser.location ? {

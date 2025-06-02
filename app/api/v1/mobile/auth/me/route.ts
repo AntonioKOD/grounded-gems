@@ -159,9 +159,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
           name: detailedUser.name || '',
           email: detailedUser.email,
           profileImage: detailedUser.profileImage ? {
-            url: typeof detailedUser.profileImage === 'object' 
-              ? detailedUser.profileImage.url 
-              : detailedUser.profileImage
+            url: typeof detailedUser.profileImage === 'object' && detailedUser.profileImage.url
+              ? detailedUser.profileImage.url
+              : typeof detailedUser.profileImage === 'string' 
+              ? detailedUser.profileImage 
+              : '' // Fallback for unexpected types
           } : null,
           location: detailedUser.location ? {
             coordinates: detailedUser.location.coordinates,

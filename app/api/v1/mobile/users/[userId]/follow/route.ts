@@ -153,9 +153,11 @@ export async function POST(
             followerId: currentUser.id,
             followerName: currentUser.name,
             followerAvatar: currentUser.profileImage ? 
-              (typeof currentUser.profileImage === 'object' 
+              (typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
                 ? currentUser.profileImage.url 
-                : currentUser.profileImage) : null
+                : typeof currentUser.profileImage === 'string'
+                ? currentUser.profileImage
+                : null) : null
           },
           isRead: false,
           createdAt: new Date(),

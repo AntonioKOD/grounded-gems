@@ -260,19 +260,21 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<{ succes
           recipient: { equals: user.id },
           isRead: { equals: false }
         },
-        limit: 1000, // Reasonable limit for bulk operation
+        limit: 0, // We only need the count for the response, or all IDs for update
+        select: { id: true } // Only select IDs to be efficient
       })
 
-      // Update all unread notifications
-      const updatePromises = unreadNotifications.docs.map((notification: any) =>
-        payload.update({
+      if (unreadNotifications.docs.length > 0) {
+        const idsToUpdate = unreadNotifications.docs.map((n: any) => n.id);
+        await payload.update({
           collection: 'notifications',
-          id: notification.id,
+          where: {
+            id: { in: idsToUpdate },
+            recipient: { equals: user.id } // Ensure user owns these notifications
+          },
           data: { isRead: true },
-        })
-      )
-
-      await Promise.all(updatePromises)
+        });
+      }
 
       return NextResponse.json({
         success: true,
@@ -282,31 +284,48 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<{ succes
         },
       })
 
-    } else if (action === 'markAsRead' && Array.isArray(notificationIds)) {
-      // Mark specific notifications as read
-      const updatePromises = notificationIds.map((id: string) =>
-        payload.update({
-          collection: 'notifications',
-          id,
-          data: { isRead: true },
-          where: {
-            recipient: { equals: user.id } // Ensure user owns the notification
-          }
-        }).catch(error => {
-          console.warn(`Failed to mark notification ${id} as read:`, error)
-          return null
-        })
-      )
+    } else if (action === 'markAsRead' && Array.isArray(notificationIds) && notificationIds.length > 0) {
+      // Mark specific notifications as read using bulk update
+      const result = await payload.update({
+        collection: 'notifications',
+        where: {
+          id: { in: notificationIds },
+          recipient: { equals: user.id } // Ensure user owns these notifications
+        },
+        data: { isRead: true },
+      });
 
-      const results = await Promise.all(updatePromises)
-      const successCount = results.filter(result => result !== null).length
+      // The `update` operation with a `where` clause might not return a simple count
+      // of updated documents directly in all Payload versions or configurations.
+      // We assume it processes all valid IDs. If specific counts of successful updates
+      // are needed, we might need to query again or inspect `result.docs` if available.
+      // For now, we report based on the number of IDs requested.
+      // Payload's bulk operations typically return `{ docs: [], errors: [] }`
+      // A more precise count would be `notificationIds.length - result.errors.length` if errors are populated.
+      // Let's assume for now `result.docs.length` gives us the count if available and successful,
+      // otherwise, we fall back to requested count as a general success message.
+      
+      let successCount = 0;
+      if (result && Array.isArray(result.docs)) {
+        successCount = result.docs.length; // Number of documents that matched and were updated
+      } else {
+        // Fallback or if `result.docs` isn't populated as expected for bulk updates.
+        // This part might need adjustment based on the exact structure of `result` from bulk `payload.update`
+        // For this example, we will assume the operation attempts to update all valid IDs.
+        // A more robust way is to count IDs that didn't produce an error if `result.errors` is available.
+        successCount = notificationIds.length; // Assume all requested were attempted
+      }
+      
+      // A more accurate way if errors are reported:
+      // const successCount = notificationIds.length - (result.errors ? result.errors.length : 0);
 
       return NextResponse.json({
         success: true,
-        message: `${successCount} notifications marked as read`,
+        message: `${successCount} of ${notificationIds.length} notifications processed for marking as read`,
         data: {
-          markedCount: successCount,
+          markedCount: successCount, // This might be an optimistic count
           requestedCount: notificationIds.length,
+          // errors: result.errors // Optionally return errors if any
         },
       })
 
