@@ -134,11 +134,11 @@ export default function NavBar({ initialUser }: NavBarProps) {
             <Link href="/" className="flex items-center space-x-3 group relative">
               <div className="relative w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
                 <div className="absolute inset-0 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-xl blur-sm group-hover:blur-md transition-all duration-300 opacity-0 group-hover:opacity-100"></div>
-                <div className="relative bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] rounded-xl p-2 shadow-lg group-hover:shadow-xl transition-all duration-300">
+                <div className="relative bg-white/80 backdrop-blur-sm rounded-xl p-2 shadow-lg group-hover:shadow-xl transition-all duration-300 border border-white/30">
                   <Image 
                     src="/logo.svg" 
                     alt="Grounded Gems" 
-                    className="w-full h-full object-contain filter brightness-0 invert"
+                    className="w-full h-full object-contain"
                     width={32}
                     height={32}
                   />
