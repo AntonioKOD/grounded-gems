@@ -50,3 +50,6 @@ uploads/
 *.log
 logs/
 server.log
+
+# Debug scripts
+debug-image-validation.js
