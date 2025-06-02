@@ -2,20 +2,23 @@
  * Mobile Image Upload API Route
  * 
  * This endpoint handles image uploads from the mobile app directly to Payload CMS.
- * It leverages Payload's built-in upload handling with proper authentication.
+ * Manual file processing to avoid DataView errors in image-size library.
  * 
  * Key features:
- * - Direct integration with Payload CMS media collection
- * - Automatic file validation and processing
+ * - Manual file processing bypassing Payload's automatic handlers
+ * - Comprehensive file validation and error handling
  * - User authentication and authorization
  * - Mobile-optimized response format
  * 
- * Updated: Latest version with improved error handling and Payload integration
+ * Updated: Manual file handling to prevent DataView offset errors
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import fs from 'fs'
+import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
 
 interface MobileUploadResponse {
   success: boolean
@@ -77,6 +80,27 @@ function validateImageBuffer(buffer: Buffer, mimeType: string): boolean {
   }
   
   return true // Allow other types to pass through
+}
+
+// Simple image dimension detection to avoid image-size library
+function getImageDimensions(buffer: Buffer, mimeType: string): { width?: number; height?: number } {
+  try {
+    if (mimeType.includes('png')) {
+      // PNG dimensions are at bytes 16-23
+      if (buffer.length >= 24) {
+        const width = buffer.readUInt32BE(16)
+        const height = buffer.readUInt32BE(20)
+        return { width, height }
+      }
+    } else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) {
+      // For JPEG, we'll skip dimension detection to avoid DataView errors
+      // This prevents the image-size library issues
+      return {}
+    }
+  } catch (error) {
+    console.warn('Could not extract image dimensions:', error)
+  }
+  return {}
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<MobileUploadResponse>> {
@@ -178,10 +202,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    // Validate file content to prevent DataView errors
+    // Validate file content and get buffer
+    let buffer: Buffer
+    let dimensions: { width?: number; height?: number } = {}
+    
     try {
       const arrayBuffer = await file.arrayBuffer()
-      const buffer = Buffer.from(arrayBuffer)
+      buffer = Buffer.from(arrayBuffer)
       
       if (!validateImageBuffer(buffer, file.type)) {
         console.error('📱 Invalid image file signature detected')
@@ -196,7 +223,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
         )
       }
       
-      console.log('📱 File validation passed, buffer size:', buffer.length)
+      // Get dimensions safely without using image-size library
+      dimensions = getImageDimensions(buffer, file.type)
+      
+      console.log('📱 File validation passed:', {
+        bufferSize: buffer.length,
+        dimensions
+      })
     } catch (validationError) {
       console.error('📱 File validation failed:', validationError)
       return NextResponse.json(
@@ -210,38 +243,71 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       )
     }
 
-    // Create the media record via Payload
-    try {
-      console.log('📱 Creating media record via Payload...')
-      
-      // Create a new FormData with validated file and user info
-      const payloadFormData = new FormData()
-      payloadFormData.append('file', file, file.name)
-      
-      // Add metadata
-      const payloadMetadata = formData.get('_payload')
-      if (payloadMetadata) {
-        payloadFormData.append('_payload', payloadMetadata as string)
+    // Generate unique filename
+    const fileExtension = path.extname(file.name) || '.jpg'
+    const uniqueFilename = `${uuidv4()}${fileExtension}`
+    
+    // Get metadata from _payload field
+    let metadata: any = {}
+    const payloadMetadata = formData.get('_payload')
+    if (payloadMetadata) {
+      try {
+        metadata = JSON.parse(payloadMetadata as string)
+      } catch (e) {
+        console.warn('Invalid _payload metadata:', e)
       }
+    }
+
+    // Create media record manually without triggering Payload's file processing
+    try {
+      console.log('📱 Creating media record manually...')
       
-      // Create a new request with the validated FormData
-      const payloadRequest = new Request(request.url, {
-        method: 'POST',
-        headers: {
-          'Authorization': request.headers.get('Authorization') || ''
-        },
-        body: payloadFormData
-      })
-      
+      // Prepare the media data
+      const mediaData = {
+        filename: uniqueFilename,
+        mimeType: file.type,
+        filesize: buffer.length,
+        width: dimensions.width,
+        height: dimensions.height,
+        alt: metadata.alt || file.name,
+        uploadedBy: user.id,
+        uploadSource: 'mobile',
+        folder: metadata.folder || 'uploads',
+        // Skip automatic file processing by not including file data
+        url: `/media/${uniqueFilename}`, // We'll generate the URL
+      }
+
+      // Create the record in the database without file upload
       const uploadResult = await payload.create({
         collection: 'media',
-        data: {
-          uploadedBy: user.id,
-        },
-        req: payloadRequest,
+        data: mediaData,
+        // Don't pass file data to avoid Payload's automatic processing
       })
 
-      console.log('📱 Upload successful via Payload:', uploadResult.id)
+      console.log('📱 Media record created:', uploadResult.id)
+
+      // Now manually save the file to the media directory
+      const mediaDir = path.join(process.cwd(), 'media')
+      
+      // Ensure media directory exists
+      if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir, { recursive: true })
+      }
+      
+      const filePath = path.join(mediaDir, uniqueFilename)
+      fs.writeFileSync(filePath, buffer)
+      
+      console.log('📱 File saved to:', filePath)
+
+      // Update the record with the correct URL after file is saved
+      const finalUrl = `/media/${uniqueFilename}`
+      await payload.update({
+        collection: 'media',
+        id: uploadResult.id,
+        data: {
+          url: finalUrl
+        }
+      })
 
       // Format response
       const response: MobileUploadResponse = {
@@ -249,13 +315,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
         message: 'Image uploaded successfully',
         data: {
           id: uploadResult.id,
-          url: uploadResult.url || '',
-          filename: uploadResult.filename || '',
-          mimeType: uploadResult.mimeType || '',
-          filesize: uploadResult.filesize || 0,
-          width: uploadResult.width,
-          height: uploadResult.height,
-          alt: uploadResult.alt,
+          url: finalUrl,
+          filename: uniqueFilename,
+          mimeType: file.type,
+          filesize: buffer.length,
+          width: dimensions.width,
+          height: dimensions.height,
+          alt: metadata.alt || file.name,
         },
       }
 
@@ -268,34 +334,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       })
 
     } catch (error: any) {
-      console.error('📱 Payload upload failed:', error.name, error.message)
-      console.error('📱 Payload error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-        data: error.data,
-      })
-      
-      // Handle specific DataView errors
-      if (error.message?.includes('Offset is outside the bounds of the DataView') || 
-          error.message?.includes('FileUploadError')) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Image file corrupted',
-            error: 'The uploaded image file appears to be corrupted or incomplete. Please try uploading a different image.',
-            code: 'CORRUPTED_IMAGE_FILE',
-          },
-          { status: 400 }
-        )
-      }
+      console.error('📱 Manual upload failed:', error)
       
       return NextResponse.json(
         {
           success: false,
           message: 'Upload failed',
-          error: 'Failed to upload image to server storage',
-          code: 'PAYLOAD_UPLOAD_FAILED',
+          error: 'Failed to save image to server storage',
+          code: 'MANUAL_UPLOAD_FAILED',
         },
         { status: 500 }
       )
