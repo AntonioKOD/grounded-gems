@@ -3,26 +3,34 @@ import { useState, useEffect } from 'react'
 
 export function useCurrentUser() {
   const [user, setUser] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
     const fetchCurrentUser = async () => {
       setIsLoading(true)
+      setError(null)
+      
       try {
         const response = await fetch('/api/users/me', {
           credentials: 'include',
         })
         
-        if (!response.ok) {
-          throw new Error('Failed to fetch current user')
+        if (response.ok) {
+          const data = await response.json()
+          setUser(data.user)
+        } else if (response.status === 401) {
+          // 401 is expected for unauthenticated users - not an error
+          setUser(null)
+        } else {
+          // Other errors - log but don't show as error to user
+          console.warn(`Unexpected response from /api/users/me: ${response.status}`)
+          setUser(null)
         }
-        
-        const data = await response.json()
-        setUser(data.user)
       } catch (err) {
-        console.error('Error fetching current user:', err)
-        setError(err instanceof Error ? err : new Error('Unknown error'))
+        // Network errors - log but don't show as error to user for auth endpoints
+        console.warn('Error fetching current user (may be expected for unauthenticated users):', err)
+        setUser(null)
       } finally {
         setIsLoading(false)
       }

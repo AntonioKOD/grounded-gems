@@ -7,8 +7,10 @@ import { Layers, Info } from "lucide-react"
 import mapboxgl from "mapbox-gl"
 import "mapbox-gl/dist/mapbox-gl.css"
 
-// Set the access token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "your-access-token-here"
+// Set Mapbox access token
+// HARDCODED TOKEN FOR TESTING - REMOVE BEFORE PRODUCTION  
+mapboxgl.accessToken = "pk.eyJ1IjoiYW50b25pby1rb2RoZWxpIiwiYSI6ImNtYTQ3bTlibTAyYTUyanBzem5qZGV1ZzgifQ.cSUliejFuQnIHZ-DDinPRQ"
+// mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || "your-access-token-here"
 
 interface SimpleMapComponentProps {
   className?: string

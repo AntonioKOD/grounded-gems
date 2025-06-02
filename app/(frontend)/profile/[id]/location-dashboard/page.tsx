@@ -104,9 +104,17 @@ export default function LocationDashboard() {
             loadUserLocations(data.user.id),
             loadDashboardStats(data.user.id)
           ])
-        } else {
+        } else if (response.status === 401) {
+          // User not authenticated
           toast.error('Please log in to view dashboard')
           router.push('/login')
+          return
+        } else {
+          // Other error
+          console.warn('Unexpected response from /api/users/me:', response.status)
+          toast.error('Unable to verify user access')
+          router.push('/login')
+          return
         }
       } catch (error) {
         console.error('Error initializing dashboard:', error)

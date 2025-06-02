@@ -2,16 +2,14 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback, memo } from "react"
-import { Navigation, X, MapPin, Loader2, AlertCircle, Maximize2, Minimize2, Locate, RotateCcw } from "lucide-react"
+import { MapPin, AlertCircle, Maximize2, Minimize2, Locate, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent } from "@/components/ui/card"
-import { toast } from "sonner"
-import { motion, AnimatePresence } from "framer-motion"
-import Image from "next/image"
-import { getCategoryInfo, getCategoryName } from "./category-utils"
+import { motion } from "framer-motion"
+import { getCategoryInfo } from "./category-utils"
+import type { Location } from "./map-data"
 
 // Import Mapbox CSS explicitly
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -22,30 +20,6 @@ declare global {
     mapboxgl: any;
     handleLocationDetailClick?: (locationId: string) => void;
   }
-}
-
-// Enhanced Location interface
-interface Location {
-  id: string
-  name: string
-  latitude: number
-  longitude: number
-  address?: string | { street?: string; city?: string; state?: string; country?: string }
-  averageRating?: number
-  reviewCount?: number
-  categories?: Array<string | { id: string; name: string; color?: string }>
-  image?: string
-  featuredImage?: string | { url: string }
-  imageUrl?: string
-  coordinates?: {
-    latitude: number
-    longitude: number
-  }
-  description?: string
-  shortDescription?: string
-  priceRange?: 'free' | 'budget' | 'moderate' | 'expensive' | 'luxury'
-  isOpen?: boolean
-  distance?: number
 }
 
 interface MapboxMarker {
@@ -64,11 +38,19 @@ interface MarkerCluster {
   center: [number, number]; // [lng, lat]
 }
 
-// Detect mobile device
+// Detect mobile device with more robust detection
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-         window.innerWidth <= 768
+  
+  // Check multiple indicators for mobile
+  const userAgent = navigator.userAgent.toLowerCase()
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(userAgent)
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+  const isSmallScreen = window.innerWidth <= 768
+  const hasCoarsePointer = window.matchMedia('(pointer: coarse)').matches
+  
+  // Multiple checks for better accuracy
+  return isMobileUA || (isTouchDevice && isSmallScreen) || hasCoarsePointer
 }
 
 // Check if coordinates are valid
@@ -126,9 +108,13 @@ interface MapComponentProps {
   onViewDetail?: (location: Location) => void
   isFullscreen?: boolean
   onToggleFullscreen?: () => void
+  showMobilePreview?: boolean // Add prop to track mobile preview state
+  forceRefresh?: number // Add prop to trigger map refresh
+  mapPadding?: { top: number; right: number; bottom: number; left: number } // New prop
+  isDetailModalOpen?: boolean // New prop to indicate if the main detail modal is open
 }
 
-const MapComponent = memo(function MapComponent({
+const MapComponent = memo<MapComponentProps>(function MapComponent({
   locations,
   userLocation,
   center,
@@ -143,10 +129,13 @@ const MapComponent = memo(function MapComponent({
   onViewDetail,
   isFullscreen = false,
   onToggleFullscreen,
+  showMobilePreview = true,
+  forceRefresh,
+  mapPadding = { top: 0, right: 0, bottom: 0, left: 0 }, // Default padding
+  isDetailModalOpen = false, // Default to false
 }: MapComponentProps) {
   
   const mapRef = useRef<any>(null)
-  const mapboxRef = useRef<any>(null)
   const markersRef = useRef<Map<string, MapboxMarker>>(new globalThis.Map())
   const userMarkerRef = useRef<any>(null)
   const radiusCircleRef = useRef<any>(null)
@@ -156,7 +145,6 @@ const MapComponent = memo(function MapComponent({
   
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
-  const [currentStyle, setCurrentStyle] = useState(mapStyle)
   const [isLoading, setIsLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [mapReady, setMapReady] = useState(false)
@@ -164,149 +152,231 @@ const MapComponent = memo(function MapComponent({
 
   // Track mount state for React 18 concurrent rendering safety
   useEffect(() => {
-    isMountedRef.current = true
+    isMountedRef.current = true;
+    // Explicitly set isLoading to true here initially,
+    // to ensure loading UI shows until map attempts to initialize.
+    setIsLoading(true); 
     return () => {
-      isMountedRef.current = false
-    }
-  }, [])
+      isMountedRef.current = false;
+    };
+  }, []);
 
-  // Detect mobile on mount
+  // Handle mobile detection and resize events with debouncing
   useEffect(() => {
-    setIsMobile(isMobileDevice())
+    const initialMobile = isMobileDevice()
+    console.log('📱 Initial mobile detection:', {
+      isMobileDevice: initialMobile,
+      userAgent: navigator.userAgent,
+      innerWidth: window.innerWidth
+    })
+    
+    setIsMobile(initialMobile)
+    
+    let resizeTimeout: NodeJS.Timeout
     
     const handleResize = () => {
-      setIsMobile(isMobileDevice())
-      if (mapRef.current && mapInitializedRef.current) {
-        requestAnimationFrame(() => {
-          mapRef.current?.resize()
-        })
+      // Clear any existing timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
       }
-    }
-    
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  // Detect overlapping markers and create clusters
-  const detectMarkerClusters = useCallback((locations: Location[], zoomLevel: number): MarkerCluster[] => {
-    if (!locations.length) return []
-    
-    // Distance threshold based on zoom level (closer zoom = smaller threshold)
-    const distanceThreshold = Math.max(50, 500 / Math.pow(2, zoomLevel - 10)) // meters
-    const clusters: MarkerCluster[] = []
-    const processed = new Set<string>()
-    
-    locations.forEach((location, index) => {
-      if (processed.has(location.id)) return
       
-      const nearbyLocations = [location]
-      processed.add(location.id)
-      
-      // Find nearby locations
-      locations.forEach((otherLocation, otherIndex) => {
-        if (index === otherIndex || processed.has(otherLocation.id)) return
+      // Debounce the resize handler
+      resizeTimeout = setTimeout(() => {
+        const newMobile = isMobileDevice()
+        const hasChanged = newMobile !== isMobile
         
-        const distance = calculateDistance(
-          location.latitude,
-          location.longitude,
-          otherLocation.latitude,
-          otherLocation.longitude
-        )
-        
-        if (distance <= distanceThreshold) {
-          nearbyLocations.push(otherLocation)
-          processed.add(otherLocation.id)
+        if (hasChanged) {
+          console.log('📱 Mobile detection changed on resize:', {
+            isMobileDevice: newMobile,
+            innerWidth: window.innerWidth,
+            changed: hasChanged
+          })
+          
+          setIsMobile(newMobile)
         }
-      })
-      
-      // Create cluster if multiple locations are close
-      if (nearbyLocations.length > 1) {
-        const centerLat = nearbyLocations.reduce((sum, loc) => sum + loc.latitude, 0) / nearbyLocations.length
-        const centerLng = nearbyLocations.reduce((sum, loc) => sum + loc.longitude, 0) / nearbyLocations.length
         
-        clusters.push({
-          id: `cluster-${centerLat}-${centerLng}`,
-          locations: nearbyLocations,
-          center: [centerLng, centerLat],
-        })
-      } else {
-        // Single location cluster
-        clusters.push({
-          id: `single-${location.id}`,
-          locations: [location],
-          center: [location.longitude, location.latitude],
-        })
-      }
-    })
-    
-    return clusters
-  }, [])
-
-  // Calculate spiderify positions for clustered markers
-  const calculateSpiderPositions = useCallback((
-    cluster: MarkerCluster, 
-    radiusPixels: number = 60
-  ): Array<{ location: Location; position: [number, number] }> => {
-    const { locations, center } = cluster
-    
-    if (locations.length === 1) {
-      return [{ location: locations[0], position: center }]
+        // Resize map if it exists
+        if (mapRef.current && mapInitializedRef.current) {
+          requestAnimationFrame(() => {
+            mapRef.current?.resize()
+          })
+        }
+      }, 100) // Debounce for 100ms
     }
     
-    const positions: Array<{ location: Location; position: [number, number] }> = []
-    const angleStep = (2 * Math.PI) / locations.length
+    window.addEventListener('resize', handleResize, { passive: true })
     
-    // Convert pixel radius to coordinate offset (approximate)
-    const metersPerPixel = 156543.03392 * Math.cos(center[1] * Math.PI / 180) / Math.pow(2, zoom)
-    const radiusMeters = radiusPixels * metersPerPixel
-    
-    locations.forEach((location, index) => {
-      const angle = index * angleStep
-      const offsetLng = (radiusMeters / 111320) * Math.cos(angle) / Math.cos(center[1] * Math.PI / 180)
-      const offsetLat = (radiusMeters / 110540) * Math.sin(angle)
+    return () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [isMobile]) // Add isMobile as dependency to track changes
+
+  // Load Mapbox script
+  const loadMapboxScript = useCallback(() => {
+    return new Promise<void>((resolve, reject) => {
+      if (window.mapboxgl) {
+        console.log('🗺️ Mapbox GL already loaded');
+        resolve();
+        return;
+      }
       
-      positions.push({
-        location,
-        position: [center[0] + offsetLng, center[1] + offsetLat]
-      })
-    })
-    
-    return positions
-  }, [zoom])
+      console.log('🗺️ Loading Mapbox GL script...');
+      const script = document.createElement('script');
+      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js';
+      script.async = true;
+      script.onload = () => {
+        console.log('🗺️ Mapbox GL script loaded successfully');
+        // Wait a brief moment to ensure mapboxgl is truly available on window
+        setTimeout(() => {
+          if (!isMountedRef.current) {
+            console.warn('🗺️ Component unmounted during script load timeout');
+            reject(new Error('Component unmounted during script load'));
+            return;
+          }
+          
+          if (window.mapboxgl) {
+            console.log('🗺️ Mapbox GL available on window object after script load');
+            resolve();
+          } else {
+            console.error('🗺️ Mapbox GL not available on window after script load and timeout');
+            reject(new Error('Mapbox not available after script load'));
+          }
+        }, 50); // Short delay
+      };
+      script.onerror = (error) => {
+        console.error('🗺️ Failed to load Mapbox script:', error);
+        setMapError('Failed to load Mapbox GL script. Check network or ad-blockers.');
+        setIsLoading(false); // Stop loading on script error
+        reject(new Error('Failed to load Mapbox script'));
+      };
+      document.head.appendChild(script);
+      
+      // CSS is now handled by direct import, so no need to load it dynamically here.
+      // if (!document.querySelector('link[href*="mapbox-gl.css"]')) {
+      //   console.log('🗺️ Loading Mapbox GL CSS...');
+      //   const link = document.createElement('link');
+      //   link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css';
+      //   link.rel = 'stylesheet';
+      //   link.onload = () => console.log('🗺️ Mapbox GL CSS loaded successfully');
+      //   link.onerror = () => console.warn('🗺️ Failed to load Mapbox GL CSS');
+      //   document.head.appendChild(link);
+      // }
+    });
+  }, []);
 
   // Initialize map
   useEffect(() => {
-    if (typeof window === 'undefined' || mapInitializedRef.current) return
+    console.log('🔍 Map initialization useEffect triggered with dependencies:', {
+      center,
+      zoom, 
+      mapStyle,
+      hasContainer: !!mapContainerRef.current,
+      isClient: typeof window !== 'undefined',
+      mapInitialized: mapInitializedRef.current,
+      hasMap: !!mapRef.current
+    })
+    
+    // Don't initialize if we're not in browser or if we don't have a container
+    if (typeof window === 'undefined') {
+      console.log('🔍 Skipping map init: not in browser')
+      return
+    }
+    
+    if (!mapContainerRef.current) {
+      console.log('🔍 Skipping map init: no container ref')
+      return
+    }
+    
+    // Reset initialization state if map was previously cleaned up
+    if (!mapRef.current && mapInitializedRef.current) {
+      console.log('🗺️ Resetting map initialization state after cleanup')
+      mapInitializedRef.current = false
+      setMapLoaded(false)
+      setMapReady(false)
+    }
+    
+    // Skip if already initialized and map exists
+    if (mapInitializedRef.current && mapRef.current) {
+      console.log('🗺️ Map already initialized, skipping')
+      return
+    }
     
     console.log('🗺️ Map initialization starting...')
     console.log('🗺️ Container ref available:', !!mapContainerRef.current)
     console.log('🗺️ Mount state:', isMountedRef.current)
+    console.log('🗺️ Previous init state:', mapInitializedRef.current)
     
     const initializeMap = async () => {
-      setIsLoading(true)
-      setMapError(null)
+      // Ensure isLoading is true at the start of any initialization attempt
+      setIsLoading(true);
+      setMapError(null);
+
+      if (!isMountedRef.current) {
+        console.warn('🗺️ Component unmounted before map initialization could start.');
+        setIsLoading(false); // Ensure loading stops if component is already unmounted
+        return;
+      }
+
+      if (!mapContainerRef.current) {
+        console.warn('🗺️ Map container ref not available yet. Will retry if dependencies change or component re-renders.');
+        // setIsLoading(true) is already called, so loading UI persists.
+        return;
+      }
+
+      // Reset initialization state if map was previously cleaned up
+      if (!mapRef.current && mapInitializedRef.current) {
+        console.log('🗺️ Resetting map initialization state after cleanup');
+        mapInitializedRef.current = false;
+        setMapLoaded(false);
+        setMapReady(false);
+      }
+      
+      // Skip if already initialized and map exists
+      if (mapInitializedRef.current && mapRef.current) {
+        console.log('🗺️ Map already initialized and instance exists, ensuring loading is false.');
+        setIsLoading(false); // If map exists, should not be loading.
+        return;
+      }
+      
+      console.log('🗺️ Map initialization starting...');
       
       try {
         // Load Mapbox if not available
         if (!window.mapboxgl) {
-          console.log('🗺️ Loading Mapbox script...')
-          await loadMapboxScript()
+          console.log('🗺️ Mapbox GL not found on window, attempting to load script...');
+          await loadMapboxScript(); // This will reject if script fails to load
         }
         
-        // Check if component is still mounted and container is still available
+        // Double check after script loading attempt
+        if (!window.mapboxgl) {
+          console.error('🗺️ Mapbox GL still not available after attempting to load script.');
+          setMapError('Mapbox GL JS could not be loaded. Please check your internet connection and try again.');
+          setIsLoading(false);
+          return;
+        }
+
         if (!isMountedRef.current || !mapContainerRef.current) {
-          console.warn('🗺️ Component unmounted or container ref is null during initialization')
+          console.warn('🗺️ Component unmounted or container ref became null during pre-init checks.');
+          setIsLoading(false);
+          return;
+        }
+        
+        const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+        if (!accessToken) {
+          console.error('🗺️ Mapbox access token missing!')
+          console.error('🗺️ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here')
+          console.error('🗺️ Add it to your .env.local file')
+          
+          setMapError('Mapbox access token is required. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your .env.local file.')
           setIsLoading(false)
           return
         }
         
-        // Create map
-        const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
-        if (!accessToken) {
-          throw new Error('Mapbox access token is required')
-        }
-        
         console.log('🗺️ Creating map with access token:', accessToken.substring(0, 10) + '...')
+        console.log('🗺️ Map style:', `mapbox://styles/mapbox/${mapStyle}`)
         console.log('🗺️ Container element:', mapContainerRef.current)
         console.log('🗺️ Container dimensions:', {
           width: mapContainerRef.current.clientWidth,
@@ -314,6 +384,21 @@ const MapComponent = memo(function MapComponent({
           offsetWidth: mapContainerRef.current.offsetWidth,
           offsetHeight: mapContainerRef.current.offsetHeight
         })
+        
+        // Ensure container has proper dimensions before creating map
+        if (mapContainerRef.current.clientWidth === 0 || mapContainerRef.current.clientHeight === 0) {
+          console.warn('🗺️ Container has zero dimensions, forcing proper sizing...')
+          mapContainerRef.current.style.width = '100%'
+          mapContainerRef.current.style.height = '100%'
+          
+          // Wait a frame for DOM update
+          await new Promise(resolve => requestAnimationFrame(resolve))
+          
+          console.log('🗺️ Updated container dimensions:', {
+            width: mapContainerRef.current.clientWidth,
+            height: mapContainerRef.current.clientHeight,
+          })
+        }
         
         window.mapboxgl.accessToken = accessToken
         
@@ -328,7 +413,7 @@ const MapComponent = memo(function MapComponent({
         
         const map = new window.mapboxgl.Map({
           container: mapContainerRef.current,
-          style: `mapbox://styles/mapbox/${currentStyle}`,
+          style: `mapbox://styles/mapbox/${mapStyle}`,
           center: [center[0], center[1]], // center is already [lng, lat] format
           zoom: zoom,
           attributionControl: false,
@@ -341,48 +426,91 @@ const MapComponent = memo(function MapComponent({
           touchPitch: false,
           maxTileCacheSize: isMobile ? 50 : 200,
           localIdeographFontFamily: false,
+          // Add performance optimizations
+          preserveDrawingBuffer: false,
+          antialias: !isMobile, // Disable on mobile for better performance
         })
         
-        console.log('🗺️ Map instance created with center:', center)
+        console.log('🗺️ Map instance created with center:', center, 'zoom:', zoom)
         
         mapRef.current = map
         mapInitializedRef.current = true
         
-        // Add map event listeners
+        let styleInitiallyReady = false;
+
+        map.on('styledata', () => {
+          console.log('🗺️ Map style data loaded/changed');
+          if (!isMountedRef.current || !mapRef.current) { // Check mapRef.current too
+            console.warn('🗺️ Component unmounted or map removed during map styledata');
+            return;
+          }
+
+          if (!styleInitiallyReady && mapRef.current.isStyleLoaded()) {
+            styleInitiallyReady = true;
+            console.log('🗺️ Map style is initially ready!');
+            
+            setTimeout(() => {
+              if (mapRef.current && isMountedRef.current) {
+                mapRef.current.resize();
+                console.log('🗺️ Map size recalculated after style ready');
+              }
+            }, 50);
+
+            setMapReady(true);
+            setIsLoading(false); // Key: Stop loading spinner here
+            console.log('🗺️ setIsLoading(false) called from styledata');
+
+            if (userLocation) {
+              addUserLocationMarker(userLocation);
+            }
+            if (searchRadius && userLocation) {
+              addSearchRadius(userLocation, searchRadius);
+            }
+          }
+        });
+        
         map.on('load', () => {
-          console.log('🗺️ Map loaded successfully!')
+          console.log('🗺️ Map fully loaded (all resources)!');
           
-          // Check if component is still mounted
-          if (!isMountedRef.current || !mapContainerRef.current) {
-            console.warn('🗺️ Component unmounted during map load')
-            return
+          if (!isMountedRef.current || !mapRef.current) {
+            console.warn('🗺️ Component unmounted or map removed during map load');
+            return;
           }
           
-          setMapLoaded(true)
-          setIsLoading(false)
-          setMapReady(true)
+          setTimeout(() => {
+            if (mapRef.current && isMountedRef.current) {
+              mapRef.current.resize();
+              console.log('🗺️ Map size recalculated after full load');
+            }
+          }, 100);
           
-          // Add user location if available
-          if (userLocation) {
-            addUserLocationMarker(userLocation)
+          setMapLoaded(true);
+
+          if (isLoading) { // Check component's isLoading state
+             setIsLoading(false);
+             console.warn("🗺️ isLoading was still true at 'load' event, setting to false (fallback).");
+          }
+          if (!mapReady) { // Check component's mapReady state
+            setMapReady(true);
+            console.warn("🗺️ mapReady was still false at 'load' event, setting to true (fallback).");
+            if (userLocation && !userMarkerRef.current) {
+              addUserLocationMarker(userLocation);
+            }
+            if (searchRadius && userLocation && !radiusCircleRef.current) {
+              addSearchRadius(userLocation, searchRadius);
+            }
           }
           
-          // Add search radius if provided
-          if (searchRadius && userLocation) {
-            addSearchRadius(userLocation, searchRadius)
+          // Only show success toast if it hasn't been shown due to an earlier error or different state
+          if (!mapError) {
+            // toast.success('Map loaded successfully!');
           }
-          
-          toast.success('Map loaded successfully!')
-        })
+        });
         
         map.on('error', (e: any) => {
           console.error('🗺️ Map error:', e)
           setMapError('Failed to load map. Please try again.')
           setIsLoading(false)
-        })
-        
-        map.on('styledata', () => {
-          console.log('🗺️ Map style loaded')
         })
         
         map.on('sourcedata', () => {
@@ -424,10 +552,10 @@ const MapComponent = memo(function MapComponent({
         })
         map.addControl(geolocate, 'top-right')
         
-      } catch (error) {
-        console.error('🗺️ Map initialization error:', error)
-        setMapError(error instanceof Error ? error.message : 'Failed to initialize map')
-        setIsLoading(false)
+      } catch (error: any) { // Explicitly type error
+        console.error('🗺️ Map initialization error:', error);
+        setMapError(error.message || 'Failed to initialize map. Please try again.');
+        setIsLoading(false);
       }
     }
     
@@ -436,52 +564,41 @@ const MapComponent = memo(function MapComponent({
     return () => {
       console.log('🗺️ Cleaning up map...')
       if (mapRef.current) {
-        mapRef.current.remove()
+        try {
+          mapRef.current.remove()
+        } catch (error) {
+          console.warn('🗺️ Error removing map:', error)
+        }
         mapRef.current = null
-        mapInitializedRef.current = false
-        setMapReady(false)
       }
+      // Reset initialization flag for next mount
+      mapInitializedRef.current = false
+      setMapLoaded(false)
+      setMapReady(false)
+      setIsLoading(false)
+      setMapError(null)
     }
-  }, [])
+  }, [center, zoom, mapStyle, loadMapboxScript]) // Add dependencies to reinitialize on key changes
 
-  // Load Mapbox script
-  const loadMapboxScript = useCallback(() => {
-    return new Promise<void>((resolve, reject) => {
-      if (window.mapboxgl) {
-        resolve()
-        return
-      }
-      
-      const script = document.createElement('script')
-      script.src = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.js'
-      script.async = true
-      script.onload = () => {
+  // Handle force refresh requests from parent
+  useEffect(() => {
+    if (forceRefresh && mapRef.current && mapReady) {
+      console.log('🗺️ Force refresh requested, calling map.resize()')
+      try {
+        mapRef.current.resize()
+        
+        // Also invalidate size after a short delay to ensure proper rendering
         setTimeout(() => {
-          // Check if component is still mounted before resolving
-          if (!isMountedRef.current) {
-            reject(new Error('Component unmounted during script load'))
-            return
-          }
-          
-          if (window.mapboxgl) {
-            resolve()
-          } else {
-            reject(new Error('Mapbox not available after script load'))
+          if (mapRef.current && isMountedRef.current) {
+            mapRef.current.resize()
+            console.log('🗺️ Map size invalidated after force refresh')
           }
         }, 100)
+      } catch (error) {
+        console.warn('🗺️ Error during force refresh:', error)
       }
-      script.onerror = () => reject(new Error('Failed to load Mapbox script'))
-      document.head.appendChild(script)
-      
-      // Add CSS
-      if (!document.querySelector('link[href*="mapbox-gl.css"]')) {
-        const link = document.createElement('link')
-        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.0.1/mapbox-gl.css'
-        link.rel = 'stylesheet'
-        document.head.appendChild(link)
-      }
-    })
-  }, [])
+    }
+  }, [forceRefresh, mapReady])
 
   // Add user location marker
   const addUserLocationMarker = useCallback((location: [number, number]) => {
@@ -508,8 +625,12 @@ const MapComponent = memo(function MapComponent({
       </div>
     `
     
-    const marker = new window.mapboxgl.Marker(el)
-      .setLngLat([lng, lat]) // Mapbox expects [longitude, latitude]
+    const marker = new window.mapboxgl.Marker({
+      element: el,
+      anchor: 'bottom',
+      offset: [0, 0]
+    })
+      .setLngLat([lng, lat])
       .addTo(mapRef.current)
     
     userMarkerRef.current = marker
@@ -590,9 +711,14 @@ const MapComponent = memo(function MapComponent({
     const markerEl = document.createElement('div')
     markerEl.className = cn(
       'location-marker group cursor-pointer transition-all duration-300 transform-gpu',
-      isSelected ? 'z-50 scale-110' : 'z-40 hover:z-50 hover:scale-105',
+      isSelected ? 'z-50' : 'z-40 hover:z-50',
       'absolute select-none'
     )
+    
+    // Set absolute positioning to prevent movement
+    markerEl.style.position = 'absolute'
+    markerEl.style.transform = 'translate(-50%, -100%)'
+    markerEl.style.transformOrigin = 'center bottom'
     
     // Set custom z-index for better layering
     markerEl.style.zIndex = isSelected ? '60' : isClusterMarker ? '45' : '40'
@@ -601,52 +727,52 @@ const MapComponent = memo(function MapComponent({
     if (isClusterMarker && cluster && cluster.locations.length > 1) {
       markerEl.innerHTML = `
         <div class="relative">
-          <!-- Cluster marker with count using app branding colors -->
-          <div class="w-12 h-12 relative drop-shadow-lg">
-            <div class="w-full h-full bg-gradient-to-br from-[#FF6B6B] to-[#ff5252] border-3 border-white rounded-full flex items-center justify-center shadow-lg">
-              <span class="text-white font-bold text-sm">${cluster.locations.length}</span>
+          <!-- Cluster marker with count using app branding colors (made smaller) -->
+          <div class="w-8 h-8 relative drop-shadow-lg">
+            <div class="w-full h-full bg-primary border-2 border-background rounded-full flex items-center justify-center shadow-lg">
+              <span class="text-primary-foreground font-bold text-xs">${cluster.locations.length}</span>
             </div>
             <!-- Pulse ring for cluster using brand color -->
-            <div class="absolute inset-0 w-12 h-12 bg-[#FF6B6B]/30 rounded-full animate-ping"></div>
+            <div class="absolute inset-0 w-8 h-8 bg-primary/30 rounded-full animate-ping"></div>
           </div>
           
-          <!-- Enhanced cluster preview tooltip - No expand button -->
+          <!-- Enhanced cluster preview tooltip - Desktop hover -->
           <div class="cluster-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''}">
-            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 p-4 w-80 max-w-sm">
+            <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-80 max-w-sm">
               <!-- Preview arrow -->
-              <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-white"></div>
+              <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
               
               <div class="space-y-3">
-                <h3 class="font-semibold text-gray-900 text-base">${cluster.locations.length} Locations Here</h3>
+                <h3 class="font-semibold text-foreground text-base">${cluster.locations.length} Locations Here</h3>
                 
                 <!-- Show all locations as clickable items -->
                 <div class="space-y-2 max-h-48 overflow-y-auto">
                   ${cluster.locations.map(loc => `
-                    <div class="location-item flex items-center gap-3 p-2 bg-gray-50 rounded-lg hover:bg-[#FF6B6B]/10 transition-colors cursor-pointer" data-location-id="${loc.id}">
+                    <div class="location-item flex items-center gap-3 p-2 bg-muted/50 rounded-lg hover:bg-muted/80 transition-colors cursor-pointer" data-location-id="${loc.id}">
                       <img 
                         src="${getLocationImageUrl(loc)}" 
                         alt="${loc.name}"
                         class="w-10 h-10 object-cover rounded-lg"
                       />
                       <div class="flex-1 min-w-0">
-                        <p class="font-medium text-sm text-gray-900 truncate">${loc.name}</p>
+                        <p class="font-medium text-sm text-foreground truncate">${loc.name}</p>
                         ${loc.averageRating ? `
                           <div class="flex items-center gap-1">
                             <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                             </svg>
-                            <span class="text-xs text-gray-600">${loc.averageRating.toFixed(1)}</span>
+                            <span class="text-xs text-muted-foreground">${loc.averageRating.toFixed(1)}</span>
                           </div>
                         ` : ''}
                       </div>
-                      <svg class="w-4 h-4 text-[#FF6B6B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                       </svg>
                     </div>
                   `).join('')}
                 </div>
                 
-                <p class="text-xs text-gray-500 text-center py-2">
+                <p class="text-xs text-muted-foreground text-center py-2">
                   Click on any location above to view details
                 </p>
               </div>
@@ -655,11 +781,11 @@ const MapComponent = memo(function MapComponent({
         </div>
       `
     } else {
-      // Single location marker (enhanced with better tooltip)
+      // Single location marker (made smaller and added preview tooltip)
       markerEl.innerHTML = `
         <div class="relative">
-          <!-- Main marker pin with enhanced styling -->
-          <div class="w-10 h-14 relative drop-shadow-lg">
+          <!-- Main marker pin with enhanced styling (made smaller) -->
+          <div class="w-7 h-10 relative drop-shadow-lg">
             <!-- Pin background with gradient -->
             <svg viewBox="0 0 24 36" class="w-full h-full filter drop-shadow-md">
               <defs>
@@ -675,8 +801,8 @@ const MapComponent = memo(function MapComponent({
             </svg>
             
             <!-- Icon inside pin -->
-            <div class="absolute inset-0 flex items-center justify-center" style="top: -6px;">
-              <svg class="w-5 h-5 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
+            <div class="absolute inset-0 flex items-center justify-center" style="top: -4px;">
+              <svg class="w-4 h-4 text-white drop-shadow-sm" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
               </svg>
             </div>
@@ -687,85 +813,88 @@ const MapComponent = memo(function MapComponent({
           
           <!-- Pulse animation for selected marker -->
           ${isSelected ? `
-            <div class="absolute inset-0 w-10 h-10 rounded-full border-2 border-[#FF6B6B] animate-ping opacity-75" style="top: 2px; left: 0;"></div>
+            <div class="absolute inset-0 w-7 h-7 rounded-full border-2 border-[#FF6B6B] animate-ping opacity-75" style="top: 1px; left: 0;"></div>
           ` : ''}
           
-          <!-- Rating badge -->
+          <!-- Rating badge (made smaller) -->
           ${location.averageRating ? `
-            <div class="absolute -bottom-3 left-1/2 transform -translate-x-1/2 bg-white border-2 border-gray-200 rounded-full px-2 py-1 shadow-lg z-10">
-              <div class="flex items-center gap-1">
-                <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+            <div class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-white border border-gray-200 rounded-full px-1.5 py-0.5 shadow-md z-10">
+              <div class="flex items-center gap-0.5">
+                <svg class="w-2.5 h-2.5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                 </svg>
                 <span class="text-xs font-medium text-gray-700">${location.averageRating.toFixed(1)}</span>
               </div>
             </div>
           ` : ''}
-          
-          <!-- Enhanced preview popup on hover - ALWAYS shown on desktop -->
-          <div class="marker-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''}">
-            <div class="bg-white rounded-xl shadow-2xl border border-gray-200 p-5 w-80 max-w-sm">
+
+          <!-- Single location preview tooltip - Desktop hover -->
+          <div class="location-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''}">
+            <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-72 max-w-sm">
               <!-- Preview arrow -->
-              <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-white"></div>
+              <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
               
-              <!-- Location image with better aspect ratio -->
-              <div class="w-full h-40 bg-gray-200 rounded-xl mb-4 overflow-hidden">
-                <img 
-                  src="${getLocationImageUrl(location)}" 
-                  alt="${location.name}"
-                  class="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                  loading="lazy"
-                />
-              </div>
-              
-              <!-- Location info -->
               <div class="space-y-3">
-                <div>
-                  <h3 class="font-bold text-gray-900 text-lg leading-tight mb-2">${location.name}</h3>
-                  
-                  ${location.shortDescription || location.description ? `
-                    <p class="text-sm text-gray-600 line-clamp-2 leading-relaxed">${(location.shortDescription || location.description || '').substring(0, 120)}${(location.shortDescription || location.description || '').length > 120 ? '...' : ''}</p>
-                  ` : ''}
+                <!-- Location image -->
+                <div class="w-full h-32 rounded-lg overflow-hidden">
+                  <img 
+                    src="${getLocationImageUrl(location)}" 
+                    alt="${location.name}"
+                    class="w-full h-full object-cover"
+                  />
                 </div>
                 
-                <!-- Rating and category row -->
-                <div class="flex items-center justify-between">
+                <!-- Location info -->
+                <div class="space-y-2">
+                  <h3 class="font-semibold text-foreground text-sm">${location.name}</h3>
+                  
+                  ${location.shortDescription || location.description ? `
+                    <p class="text-xs text-muted-foreground line-clamp-2">
+                      ${location.shortDescription || location.description}
+                    </p>
+                  ` : ''}
+                  
+                  <!-- Category badge -->
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full" style="background-color: ${categoryInfo.color}"></div>
+                    <span class="text-xs text-muted-foreground">${categoryInfo.name}</span>
+                  </div>
+                  
+                  <!-- Rating -->
                   ${location.averageRating ? `
-                    <div class="flex items-center gap-2">
-                      <div class="flex items-center gap-1">
-                        <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                        </svg>
-                        <span class="text-sm font-semibold text-gray-800">${location.averageRating.toFixed(1)}</span>
+                    <div class="flex items-center gap-1">
+                      <div class="flex items-center">
+                        ${Array.from({length: 5}, (_, i) => `
+                          <svg class="w-3 h-3 ${i < Math.floor(location.averageRating || 0) ? 'text-yellow-400' : 'text-gray-300'}" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                          </svg>
+                        `).join('')}
                       </div>
-                      ${location.reviewCount ? `<span class="text-xs text-gray-500">(${location.reviewCount} reviews)</span>` : ''}
+                      <span class="text-xs font-medium text-foreground">${location.averageRating.toFixed(1)}</span>
+                      ${location.reviewCount ? `
+                        <span class="text-xs text-muted-foreground">(${location.reviewCount})</span>
+                      ` : ''}
                     </div>
                   ` : ''}
                   
-                  <span class="text-xs px-3 py-1 rounded-full text-white font-medium" style="background-color: ${categoryInfo.color}">
-                    ${getCategoryName(location.categories?.[0])}
-                  </span>
+                  <!-- Address -->
+                  ${location.address ? `
+                    <p class="text-xs text-muted-foreground">
+                      ${typeof location.address === "string" 
+                        ? location.address 
+                        : Object.values(location.address).filter(Boolean).join(", ")
+                      }
+                    </p>
+                  ` : ''}
                 </div>
                 
-                <!-- Price range -->
-                ${location.priceRange ? `
-                  <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/>
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.51-1.31c-.562-.649-1.413-1.076-2.353-1.253V5z" clip-rule="evenodd"/>
-                    </svg>
-                    <span class="text-sm text-gray-700 font-medium capitalize">${location.priceRange}</span>
-                  </div>
-                ` : ''}
-                
-                <!-- Action button - always show View Details -->
-                <div class="pt-2">
-                  <button class="view-details-btn w-full bg-gradient-to-r from-[#FF6B6B] to-[#ff5252] hover:from-[#ff5252] hover:to-[#ff4444] text-white text-sm font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-md">
-                    <svg class="w-4 h-4 mr-2 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                    </svg>
+                <!-- Action buttons -->
+                <div class="grid grid-cols-2 gap-2 pt-2">
+                  <button class="location-preview-btn view-details-btn px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
                     View Details
+                  </button>
+                  <button class="location-preview-btn directions-btn px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium hover:bg-muted/80 transition-colors">
+                    Directions
                   </button>
                 </div>
               </div>
@@ -775,15 +904,23 @@ const MapComponent = memo(function MapComponent({
       `
     }
     
-    // Enhanced event listeners with cluster support
-    let clickTimeout: NodeJS.Timeout
-    let isLongPress = false
+    // Enhanced event listeners for marker interactions
+    let touchStartTime = 0
+    let touchStartPos = { x: 0, y: 0 }
+    let hasMoved = false
     
     // Mouse/touch events for better interaction
     markerEl.addEventListener('mouseenter', (e) => {
       if (!isMobile) {
         e.stopPropagation()
         markerEl.style.zIndex = '65'
+        const preview = markerEl.querySelector('.location-preview, .cluster-preview');
+        if (preview) {
+          // Explicitly show for desktop hover if it was hidden
+          // This might be redundant if CSS handles group-hover correctly but can be a safeguard
+           (preview as HTMLElement).classList.remove('invisible', 'opacity-0');
+           (preview as HTMLElement).classList.add('visible', 'opacity-100');
+        }
       }
     })
     
@@ -791,91 +928,276 @@ const MapComponent = memo(function MapComponent({
       if (!isMobile) {
         e.stopPropagation()
         markerEl.style.zIndex = isSelected ? '60' : isClusterMarker ? '45' : '40'
+         const preview = markerEl.querySelector('.location-preview, .cluster-preview');
+        if (preview) {
+          // Explicitly hide for desktop mouse leave
+           (preview as HTMLElement).classList.add('invisible', 'opacity-0');
+           (preview as HTMLElement).classList.remove('visible', 'opacity-100');
+        }
       }
     })
     
-    // Enhanced click handling with cluster support
-    markerEl.addEventListener('click', (e) => {
-      e.stopPropagation()
-      
-      const target = e.target as HTMLElement
-      
-      // Handle individual location clicks in cluster preview
-      const locationItem = target.closest('.location-item')
-      if (locationItem && cluster) {
-        const locationId = locationItem.getAttribute('data-location-id')
-        const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
-        if (selectedLocation) {
-          onViewDetail?.(selectedLocation)
-          return
-        }
-      }
-      
-      // Handle view details button click
-      if (target.classList.contains('view-details-btn')) {
-        onViewDetail?.(location)
-        return
-      }
-      
-      // Handle directions button click
-      if (target.classList.contains('directions-btn')) {
-        if (location.address) {
-          const address = typeof location.address === "string"
-            ? location.address
-            : Object.values(location.address).filter(Boolean).join(", ")
-          const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
-          window.open(mapsUrl, "_blank")
-        }
-        return
-      }
-      
-      console.log(`Marker clicked for ${location.name} at [${location.longitude}, ${location.latitude}]`)
-      onMarkerClick(location)
-      
-      // Add click animation
-      markerEl.style.transform = 'scale(0.95)'
-      setTimeout(() => {
-        markerEl.style.transform = isSelected ? 'scale(1.1)' : 'scale(1)'
-      }, 150)
-    })
-    
-    // Touch events for mobile
+    // Enhanced touch handling for mobile
     markerEl.addEventListener('touchstart', (e) => {
       if (isMobile) {
         e.stopPropagation()
-        isLongPress = false
-        clickTimeout = setTimeout(() => {
-          isLongPress = true
-          onViewDetail?.(location)
-        }, 500)
+        touchStartTime = Date.now()
+        const touch = e.touches[0]
+        touchStartPos = { x: touch.clientX, y: touch.clientY }
+        hasMoved = false
+        
+        // Visual feedback for touch - use scale without changing position
+        markerEl.style.transform = 'translate(-50%, -100%) scale(1.1)'
+        markerEl.style.transition = 'transform 0.1s ease'
       }
-    })
+    }, { passive: false })
+    
+    markerEl.addEventListener('touchmove', (e) => {
+      if (isMobile) {
+        const touch = e.touches[0]
+        const moveDistance = Math.sqrt(
+          Math.pow(touch.clientX - touchStartPos.x, 2) + 
+          Math.pow(touch.clientY - touchStartPos.y, 2)
+        )
+        
+        // Consider it a move if finger moved more than 10px
+        if (moveDistance > 10) {
+          hasMoved = true
+          // Reset visual feedback if moved
+          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+        }
+      }
+    }, { passive: true })
     
     markerEl.addEventListener('touchend', (e) => {
       if (isMobile) {
+        e.preventDefault()
         e.stopPropagation()
-        clearTimeout(clickTimeout)
         
-        if (!isLongPress) {
+        const touchDuration = Date.now() - touchStartTime
+        
+        // Reset visual feedback
+        setTimeout(() => {
+          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+        }, 100)
+        
+        // Only trigger if it's a tap (not a move) and reasonable duration
+        if (!hasMoved && touchDuration < 1000) {
+          // Handle individual location clicks in cluster preview
+          const locationItem = (e.target as HTMLElement).closest('.location-item')
+          if (locationItem && cluster) {
+            const locationId = locationItem.getAttribute('data-location-id')
+            const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
+            if (selectedLocation) {
+              onViewDetail?.(selectedLocation)
+              return
+            }
+          }
+          
+          // Handle cluster marker tap for mobile
           if (isClusterMarker && cluster && cluster.locations.length > 1) {
-            // For clusters on mobile, just trigger marker click (shows cluster info)
-            onMarkerClick(location)
-          } else {
-            onMarkerClick(location)
+            console.log('🔥 Mobile cluster tapped, firing markerMobilePreview event', {
+              clusterSize: cluster.locations.length,
+              locations: cluster.locations.map(l => l.name)
+            })
+            
+            // Create and dispatch mobile preview event for cluster
+            const clusterPreviewEvent = new CustomEvent('markerMobilePreview', {
+              detail: {
+                location: cluster.locations[0], // Use first location as primary
+                cluster: cluster,
+                isCluster: true,
+                coordinates: { lat: cluster.center[1], lng: cluster.center[0] } // Note: cluster.center is [lng, lat]
+              },
+              bubbles: true
+            })
+            
+            // Dispatch cluster preview event
+            markerEl.dispatchEvent(clusterPreviewEvent)
+            window.dispatchEvent(clusterPreviewEvent)
+            
+            // Trigger vibration for cluster interaction
+            if (navigator.vibrate) {
+              navigator.vibrate([50, 50, 50]) // Triple vibration for cluster
+            }
+            return
+          }
+          
+          console.log('🔥 Mobile marker tapped, firing markerMobilePreview event', {
+            location: location.name,
+            isMobile,
+            isCluster: false,
+            touchDuration,
+            hasMoved
+          })
+          
+          // Create and dispatch mobile preview event for single location
+          const previewEvent = new CustomEvent('markerMobilePreview', {
+            detail: {
+              location: location,
+              cluster: cluster,
+              isCluster: false,
+              coordinates: { lat: location.latitude, lng: location.longitude }
+            },
+            bubbles: true
+          })
+          
+          // Dispatch on both the element and window for broader coverage
+          markerEl.dispatchEvent(previewEvent)
+          window.dispatchEvent(previewEvent)
+          
+          // Also trigger vibration on supported devices for tactile feedback
+          if (navigator.vibrate) {
+            navigator.vibrate(50)
           }
         }
       }
-    })
+    }, { passive: false })
     
     markerEl.addEventListener('touchcancel', () => {
       if (isMobile) {
-        clearTimeout(clickTimeout)
-        isLongPress = false
+        touchStartTime = 0
+        hasMoved = false
+        // Reset visual feedback
+        markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+      }
+    })
+    
+    // Desktop click handling for preview buttons
+    markerEl.addEventListener('click', (e) => {
+      // Only handle desktop clicks if not mobile
+      if (!isMobile) {
+        e.stopPropagation()
+        
+        const target = e.target as HTMLElement
+        
+        // Handle preview button clicks
+        if (target.classList.contains('view-details-btn')) {
+          e.preventDefault()
+          e.stopPropagation()
+          onViewDetail?.(location)
+          return
+        }
+        
+        if (target.classList.contains('directions-btn')) {
+          e.preventDefault()
+          e.stopPropagation()
+          if (location.address) {
+            const address = typeof location.address === "string"
+              ? location.address
+              : Object.values(location.address).filter(Boolean).join(", ")
+            const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+            window.open(mapsUrl, "_blank")
+          }
+          return
+        }
+        
+        // Handle individual location clicks in cluster preview
+        const locationItem = target.closest('.location-item')
+        if (locationItem && cluster) {
+          e.preventDefault()
+          e.stopPropagation()
+          const locationId = locationItem.getAttribute('data-location-id')
+          const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
+          if (selectedLocation) {
+            console.log(`📍 Cluster item clicked: ${selectedLocation.name}`)
+            onViewDetail?.(selectedLocation)
+            return
+          }
+        }
+        
+        // Handle cluster marker click (when clicking the cluster marker itself)
+        if (isClusterMarker && cluster && cluster.locations.length > 1) {
+          console.log(`🎯 Desktop cluster clicked with ${cluster.locations.length} locations`, 
+            cluster.locations.map(l => l.name))
+          
+          // For desktop, just highlight the cluster (the hover tooltip shows the options)
+          // Do not flyTo here to prevent map re-render from view change.
+          // The selection will be handled by onMarkerClick, which updates selectedLocation prop.
+          // if (mapRef.current) {
+          //   mapRef.current.flyTo({
+          //     center: cluster.center,
+          //     zoom: Math.min(mapRef.current.getZoom() + 1, 18), // Zoom in slightly
+          //     duration: 500
+          //   })
+          // }
+          
+          // Call onMarkerClick with the primary location for consistency
+          // This will trigger handleLocationSelect in MapExplorer, which updates selectedLocation
+          onMarkerClick(location) 
+          return
+        }
+        
+        console.log(`Desktop marker clicked for ${location.name} at [${location.longitude}, ${location.latitude}]`)
+        onMarkerClick(location)
+        
+        // Add click animation without changing position
+        markerEl.style.transform = 'translate(-50%, -100%) scale(0.95)'
+        setTimeout(() => {
+          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+        }, 150)
       }
     })
     
     return markerEl
   }, [onMarkerClick, onViewDetail, isMobile])
+
+  // Detect overlapping markers and create clusters
+  const detectMarkerClusters = useCallback((locations: Location[], zoomLevel: number): MarkerCluster[] => {
+    if (!locations.length) return []
+    
+    // More generous distance threshold for clustering - starts larger and scales down with zoom
+    // This ensures 2+ locations cluster together more easily
+    const baseThreshold = 100 // Base distance in meters
+    const zoomFactor = Math.max(0.5, 800 / Math.pow(2, zoomLevel - 8)) // More generous scaling
+    const distanceThreshold = Math.max(baseThreshold, zoomFactor)
+    
+    console.log(`🎯 Clustering with threshold: ${distanceThreshold.toFixed(0)}m at zoom ${zoomLevel}`)
+    
+    const clusters: MarkerCluster[] = []
+    const processed = new Set<string>()
+    
+    locations.forEach((location, index) => {
+      if (processed.has(location.id)) return
+      
+      const nearbyLocations = [location]
+      processed.add(location.id)
+      
+      // Find nearby locations
+      locations.forEach((otherLocation, otherIndex) => {
+        if (index === otherIndex || processed.has(otherLocation.id)) return
+        
+        const distance = calculateDistance(
+          location.latitude,
+          location.longitude,
+          otherLocation.latitude,
+          otherLocation.longitude
+        )
+        
+        if (distance <= distanceThreshold) {
+          nearbyLocations.push(otherLocation)
+          processed.add(otherLocation.id)
+        }
+      })
+      
+      // Always create cluster, even for single locations (for consistency)
+      const centerLat = nearbyLocations.reduce((sum, loc) => sum + loc.latitude, 0) / nearbyLocations.length
+      const centerLng = nearbyLocations.reduce((sum, loc) => sum + loc.longitude, 0) / nearbyLocations.length
+      
+      clusters.push({
+        id: nearbyLocations.length > 1 ? `cluster-${centerLat}-${centerLng}` : `single-${location.id}`,
+        locations: nearbyLocations,
+        center: [centerLng, centerLat],
+      })
+      
+      if (nearbyLocations.length > 1) {
+        console.log(`📍 Created cluster with ${nearbyLocations.length} locations:`, 
+          nearbyLocations.map(l => l.name).join(', '))
+      }
+    })
+    
+    return clusters
+  }, [])
 
   // Update markers when locations change
   useEffect(() => {
@@ -893,7 +1215,7 @@ const MapComponent = memo(function MapComponent({
     setMarkerClusters(clusters)
     
     // Create markers for each cluster
-    clusters.forEach((cluster) => {
+    clusters.forEach((cluster: MarkerCluster) => {
       if (!isMountedRef.current) return // Check again in the loop
       
       if (cluster.locations.length === 1) {
@@ -940,7 +1262,7 @@ const MapComponent = memo(function MapComponent({
       } else {
         // Multiple locations - always create cluster marker (no expansion)
         const primaryLocation = cluster.locations[0]
-        const isSelected = cluster.locations.some(loc => selectedLocation?.id === loc.id)
+        const isSelected = cluster.locations.some((loc: Location) => selectedLocation?.id === loc.id)
         
         console.log(`Creating cluster marker for ${cluster.locations.length} locations at [${cluster.center[0]}, ${cluster.center[1]}]`)
         
@@ -980,7 +1302,7 @@ const MapComponent = memo(function MapComponent({
     
     // Check if clustering changed significantly
     const clusteringChanged = newClusters.length !== markerClusters.length ||
-      newClusters.some((newCluster, index) => {
+      newClusters.some((newCluster: MarkerCluster, index: number) => {
         const oldCluster = markerClusters[index]
         return !oldCluster || newCluster.locations.length !== oldCluster.locations.length
       })
@@ -990,9 +1312,7 @@ const MapComponent = memo(function MapComponent({
     }
   }, [zoom, locations, markerClusters, detectMarkerClusters])
 
-  // Simplified clustering - no expansion functionality needed
-  
-  // Update marker selection states when selected location changes
+  // Update marker selection states and handle mobile preview collisions
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return
     
@@ -1003,15 +1323,29 @@ const MapComponent = memo(function MapComponent({
       
       const markerEl = markerData.element
       
-      if (isSelected) {
-        markerEl.classList.add('selected')
-        markerEl.style.zIndex = '60'
+      if (isDetailModalOpen) { // If main detail modal is open, dim all markers significantly
+        markerEl.style.opacity = '0.1'
+        markerEl.style.pointerEvents = 'none'
+        markerEl.style.zIndex = '10' // Ensure they are behind everything
+      } else if (isMobile && showMobilePreview && !isSelected) {
+        // Handle collision with mobile bottom sheet preview - reduce opacity of non-selected markers
+        markerEl.style.opacity = '0.3'
+        markerEl.style.pointerEvents = 'none' // Disable interactions to prevent interference
+        markerEl.style.zIndex = '20' // Lower z-index when preview is open
       } else {
-        markerEl.classList.remove('selected')
-        markerEl.style.zIndex = markerData.spiderGroup ? '45' : '40'
+        markerEl.style.opacity = '1'
+        markerEl.style.pointerEvents = 'auto'
+        
+        if (isSelected) {
+          markerEl.classList.add('selected')
+          markerEl.style.zIndex = '60'
+        } else {
+          markerEl.classList.remove('selected')
+          markerEl.style.zIndex = markerData.spiderGroup ? '45' : '40'
+        }
       }
     })
-  }, [selectedLocation?.id, mapLoaded, markerClusters])
+  }, [selectedLocation?.id, mapLoaded, markerClusters, isMobile, showMobilePreview, isDetailModalOpen])
 
   // Update map center and zoom
   useEffect(() => {
@@ -1025,6 +1359,27 @@ const MapComponent = memo(function MapComponent({
       duration: 1000
     })
   }, [center, zoom, mapReady])
+
+  // Apply map padding when it changes or map becomes ready
+  useEffect(() => {
+    if (mapRef.current && mapReady && isMountedRef.current) {
+      console.log('🗺️ Applying map padding:', mapPadding);
+      try {
+        mapRef.current.easeTo({
+          padding: mapPadding,
+          duration: 300 // Smooth transition for padding change
+        });
+      } catch (error) {
+        console.warn('🗺️ Error applying map padding:', error);
+        // Fallback to direct set if easeTo fails (e.g. map not fully interactive yet)
+        try {
+          mapRef.current.setPadding(mapPadding);
+        } catch (setPaddingError) {
+          console.error('🗺️ Critical error setting map padding:', setPaddingError);
+        }
+      }
+    }
+  }, [mapPadding, mapReady]);
 
   // Retry map initialization
   const retryMapInit = useCallback(() => {
@@ -1047,95 +1402,90 @@ const MapComponent = memo(function MapComponent({
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            const lat = position.coords.latitude
-            const lng = position.coords.longitude
-            console.log(`Got user location: [${lat}, ${lng}]`)
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            console.log(`Got user location: [${lat}, ${lng}]`);
             
             if (mapRef.current) {
               mapRef.current.flyTo({
                 center: [lng, lat], // Mapbox expects [longitude, latitude]
                 zoom: 15,
                 duration: 2000
-              })
+              });
               
               // Add user location marker if not already added
               if (!userMarkerRef.current) {
-                addUserLocationMarker([lat, lng]) // Pass as [lat, lng] to function
+                addUserLocationMarker([lat, lng]); // Pass as [lat, lng] to function
               }
               
-              toast.success('Found your location!')
+              // toast.success('Found your location!');
             }
           },
           (error) => {
-            console.error('Error getting user location:', error)
-            toast.error('Unable to get your location. Please enable location services.')
+            console.error('Error getting user location:', error);
+            // toast.error('Unable to get your location. Please enable location services.');
           },
           {
             enableHighAccuracy: true,
             timeout: 10000,
             maximumAge: 300000 // 5 minutes
           }
-        )
+        );
       } else {
-        toast.error('Geolocation is not supported by this browser.')
+        // toast.error('Geolocation is not supported by this browser.');
       }
-      return
+      return;
     }
     
     // userLocation is [lat, lng] but Mapbox needs [lng, lat]
-    const lng = userLocation[1]
-    const lat = userLocation[0]
+    const lng = userLocation[1];
+    const lat = userLocation[0];
     
-    console.log(`Flying to user location: [${lng}, ${lat}]`)
+    console.log(`Flying to user location: [${lng}, ${lat}]`);
     
     mapRef.current.flyTo({
       center: [lng, lat], // Mapbox expects [longitude, latitude]
       zoom: 15,
       duration: 2000
-    })
+    });
     
-    toast.success('Showing your location')
-  }, [userLocation, addUserLocationMarker])
-
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className={cn("relative w-full h-full bg-gray-100 flex items-center justify-center", className)}>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-4"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-            className="w-12 h-12 mx-auto rounded-full border-4 border-gray-300 border-t-blue-500"
-          />
-          <div>
-            <h3 className="font-semibold text-gray-900">Loading Map</h3>
-            <p className="text-sm text-gray-600">Setting up your location experience...</p>
-          </div>
-        </motion.div>
-      </div>
-    )
-  }
+    // toast.success('Showing your location');
+  }, [userLocation, addUserLocationMarker]);
 
   // Error state
   if (mapError) {
+    const isTokenError = mapError.includes('access token')
+    
     return (
-      <div className={cn("relative w-full h-full bg-gray-100 flex items-center justify-center", className)}>
+      <div className={cn("relative w-full h-full bg-muted flex items-center justify-center", className)}>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-4 p-6"
+          className="text-center space-y-4 p-6 max-w-md"
         >
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Map Error</h3>
-            <p className="text-sm text-gray-600 mb-4">{mapError}</p>
-            <Button onClick={retryMapInit} className="bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/90">
+            <h3 className="font-semibold text-foreground mb-2">
+              {isTokenError ? 'Mapbox Setup Required' : 'Map Error'}
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">{mapError}</p>
+            
+            {isTokenError && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 text-left">
+                <h4 className="font-medium text-blue-900 mb-2">Quick Setup:</h4>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Go to <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Mapbox Access Tokens</a></li>
+                  <li>Create a new token or copy an existing one</li>
+                  <li>Create a file called <code className="bg-blue-100 px-1 rounded">.env.local</code> in your project root</li>
+                  <li>Add: <code className="bg-blue-100 px-1 rounded">NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_token_here</code></li>
+                  <li>Restart your development server</li>
+                </ol>
+              </div>
+            )}
+            
+            <Button onClick={retryMapInit} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               <RotateCcw className="w-4 h-4 mr-2" />
-              Retry
+              {isTokenError ? 'Check Again' : 'Retry'}
             </Button>
           </div>
         </motion.div>
@@ -1144,17 +1494,26 @@ const MapComponent = memo(function MapComponent({
   }
 
   return (
-    <div className={cn("relative w-full h-full overflow-hidden", className)}>
-      {/* Map container */}
+    <div className={cn("relative w-full h-full overflow-hidden map-wrapper", className)}>
+      {/* Map container with explicit sizing */}
       <div
         ref={mapContainerRef}
-        className="w-full h-full absolute inset-0"
+        className="w-full h-full absolute inset-0 map-container"
         style={{ 
           minHeight: '200px',
           width: '100%',
-          height: '100%'
+          height: '100%',
+          position: 'relative' // Ensure proper positioning for Mapbox
         }}
       />
+
+      {/* Mobile preview collision safe zone */}
+      {isMobile && showMobilePreview && (
+        <div 
+          className="absolute inset-x-0 bottom-0 h-80 bg-gradient-to-t from-black/20 to-transparent pointer-events-none z-25"
+          style={{ zIndex: 25 }}
+        />
+      )}
 
       {/* Map controls */}
       <div className="absolute top-4 left-4 z-10 space-y-2">
@@ -1205,7 +1564,7 @@ const MapComponent = memo(function MapComponent({
       <div className="absolute top-4 right-4 z-10">
         <Badge 
           variant="secondary" 
-          className="bg-white/90 backdrop-blur-sm border shadow-md text-gray-700"
+          className="bg-background/90 backdrop-blur-sm border border-border shadow-md text-foreground"
         >
           <MapPin className="w-3 h-3 mr-1" />
           {locations.length} locations

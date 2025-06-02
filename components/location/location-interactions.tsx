@@ -213,8 +213,12 @@ const LocationInteractions = memo(function LocationInteractions({
 
   // Only load interactions once when component mounts or dependencies change
   useEffect(() => {
-    loadUserInteractions()
-  }, [loadUserInteractions])
+    // Only attempt to load interactions if we have a current user
+    if (currentUserId) {
+      loadUserInteractions()
+    }
+    // If no currentUserId, just continue without loading - don't show loading state
+  }, [loadUserInteractions, currentUserId])
 
   // Event handlers with debouncing
   const handleLike = useCallback(() => {
@@ -298,10 +302,21 @@ const LocationInteractions = memo(function LocationInteractions({
     try {
       // Get current user's email for contact
       const userResponse = await fetch('/api/users/me')
-      const userData = await userResponse.json()
-      const userEmail = userData.user?.email || eventRequest.contactEmail
+      let userEmail = eventRequest.contactEmail
+      let userData = null
+      
+      if (userResponse.ok) {
+        userData = await userResponse.json()
+        userEmail = userData.user?.email || eventRequest.contactEmail
+      } else if (userResponse.status === 401) {
+        // User not authenticated - use provided email or empty
+        userEmail = eventRequest.contactEmail
+      } else {
+        // Other error - use provided email or empty
+        userEmail = eventRequest.contactEmail
+      }
 
-      console.log('User data from API:', { userEmail, accountEmail: userData.user?.email });
+      console.log('User data from API:', { userEmail, accountEmail: userData?.user?.email });
 
       // Basic email validation if provided
       if (eventRequest.contactEmail && eventRequest.contactEmail.trim()) {
@@ -495,12 +510,17 @@ const LocationInteractions = memo(function LocationInteractions({
                 if (!eventRequest.contactEmail) {
                   try {
                     const userResponse = await fetch('/api/users/me')
-                    const userData = await userResponse.json()
-                    if (userData.user?.email) {
-                      setEventRequest(prev => ({ 
-                        ...prev, 
-                        contactEmail: userData.user.email 
-                      }))
+                    if (userResponse.ok) {
+                      const userData = await userResponse.json()
+                      if (userData.user?.email) {
+                        setEventRequest(prev => ({ 
+                          ...prev, 
+                          contactEmail: userData.user.email 
+                        }))
+                      }
+                    } else if (userResponse.status === 401) {
+                      // User not authenticated - skip pre-population
+                      console.log('User not authenticated, skipping email pre-population')
                     }
                   } catch (error) {
                     console.log('Could not fetch user email:', error)

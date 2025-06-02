@@ -49,5 +49,33 @@ export const Media: CollectionConfig = {
       name: 'alt',
       type: 'text',
     },
+    {
+      name: 'uploadedBy',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'uploadSource',
+      type: 'select',
+      options: [
+        { label: 'Web', value: 'web' },
+        { label: 'Mobile', value: 'mobile' },
+        { label: 'Admin', value: 'admin' },
+      ],
+      defaultValue: 'web',
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'folder',
+      type: 'text',
+      admin: {
+        position: 'sidebar',
+      },
+    },
   ],
 }

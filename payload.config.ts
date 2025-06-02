@@ -101,13 +101,16 @@ export default buildConfig({
   // Storage plugins
   plugins: [
     payloadCloudPlugin(),
-    vercelBlobStorage({
-      enabled: true,
-      collections: {
-        [Media.slug]: true,
-      },
-      token: process.env.BLOB_READ_WRITE_TOKEN,
-    }),
+    // Only use Vercel Blob storage in production
+    ...(process.env.NODE_ENV === 'production' ? [
+      vercelBlobStorage({
+        enabled: true,
+        collections: {
+          [Media.slug]: true,
+        },
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      }),
+    ] : []),
   ],
 
   // Collections definition

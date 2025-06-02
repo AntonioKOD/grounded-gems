@@ -4,7 +4,7 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { Bell, Heart, Plus, Search, User, LogOut } from "lucide-react"
+import { Bell, Heart, Plus, Search, User, LogOut, Menu, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -23,7 +23,7 @@ import Image from 'next/image'
 import NotificationCenter from "@/components/notifications/notification-center"
 
 interface NavBarProps {
-  initialUser?: any; // Keep for compatibility but don't use
+  initialUser?: any;
 }
 
 export default function NavBar({ initialUser }: NavBarProps) {
@@ -31,6 +31,18 @@ export default function NavBar({ initialUser }: NavBarProps) {
   const [notificationCount] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  // Handle scroll effect
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 20);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -45,8 +57,7 @@ export default function NavBar({ initialUser }: NavBarProps) {
   useEffect(() => {
     const handleUserUpdate = (event: CustomEvent) => {
       console.log("NavBar: User update detected", event.detail);
-      // The useUser hook will automatically update, but we can force a re-render
-      setImageError(false); // Reset image error state
+      setImageError(false);
     };
 
     window.addEventListener("user-updated", handleUserUpdate as EventListener);
@@ -72,60 +83,36 @@ export default function NavBar({ initialUser }: NavBarProps) {
     await logout()
   };
 
+  const toggleMobileMenu = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
+  };
+
+  // Navigation links data
+  const navLinks = [
+    { href: "/feed", label: "Feed", priority: 1 },
+    { href: "/events", label: "Events", priority: 2 },
+    { href: "/map", label: "Explore", priority: 3 },
+  ];
+
   // Show loading state during authentication check
   if (!isHydrated) {
     return (
       <nav className={cn(
-        "fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm transition-all duration-300 border-b border-gray-100 shadow-sm"
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        "bg-white/80 backdrop-blur-xl border-b border-white/20",
+        "shadow-lg shadow-black/5"
       )}>
-        <div className="container mx-auto px-4 lg:px-6">
-          <div className="flex items-center justify-between h-16 lg:h-18">
-            {/* Logo */}
-            <Link href="/" className="flex items-center space-x-3 group">
-              <div className="w-10 h-10 lg:w-11 lg:h-11 flex items-center justify-center transition-transform group-hover:scale-105">
-                <Image 
-                  src="/logo.svg" 
-                  alt="Grounded Gems" 
-                  className="w-full h-full object-contain"
-                  width={44}
-                  height={44}
-                />
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent">
-                  Grounded Gems
-                </span>
-              </div>
-            </Link>
-
-            {/* Navigation Links - Zipf's Law: Most used features first */}
-            <div className="hidden lg:flex items-center space-x-6">
-              <Link 
-                href="/map"
-                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-              >
-                Explore
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-              </Link>
-              <Link 
-                href="/feed"
-                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-              >
-                Feed
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-              </Link>
-              <Link 
-                href="/events"
-                className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-              >
-                Events
-                <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-              </Link>
+        <div className="container mx-auto px-4 lg:px-8">
+          <div className="flex items-center justify-between h-16 lg:h-20">
+            {/* Logo Skeleton */}
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse"></div>
+              <div className="hidden sm:block w-40 h-6 bg-gradient-to-r from-gray-200 to-gray-300 rounded-lg animate-pulse"></div>
             </div>
 
             {/* Right Section - Loading skeleton */}
             <div className="flex items-center space-x-3">
-              <div className="h-9 w-9 lg:h-10 lg:w-10 rounded-full bg-gray-200 animate-pulse"></div>
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 animate-pulse"></div>
             </div>
           </div>
         </div>
@@ -134,153 +121,217 @@ export default function NavBar({ initialUser }: NavBarProps) {
   }
 
   return (
-    <nav className={cn(
-      "fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm transition-all duration-300 border-b border-gray-100 shadow-sm"
-    )}>
-      <div className="container mx-auto px-4 lg:px-6">
-        <div className="flex items-center justify-between h-16 lg:h-18">
-          {/* Logo */}
-          <Link href="/" className="flex items-center space-x-3 group">
-            <div className="w-10 h-10 lg:w-11 lg:h-11 flex items-center justify-center transition-transform group-hover:scale-105">
-              <Image 
-                src="/logo.svg" 
-                alt="Grounded Gems" 
-                className="w-full h-full object-contain"
-                width={44}
-                height={44}
-              />
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent">
-                Grounded Gems
-              </span>
-            </div>
-          </Link>
-
-          {/* Navigation Links */}
-          <div className="hidden lg:flex items-center space-x-8">
-            <Link 
-              href="/feed"
-              className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-            >
-              Feed
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-            </Link>
-            <Link 
-              href="/events"
-              className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-            >
-              Events
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-            </Link>
-            <Link 
-              href="/map"
-              className="relative text-gray-700 hover:text-[#FF6B6B] transition-colors font-medium text-sm lg:text-base group"
-            >
-              Explore
-              <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-full"></span>
-            </Link>
-          </div>
-
-          {/* Right Section */}
-          <div className="flex items-center space-x-3">
-          {!isAuthenticated ? (
-            // Not authenticated: show login/signup buttons
-            <div className="flex items-center space-x-3">
-              <Link href="/login">
-                <Button variant="ghost" className="text-gray-700 hover:text-[#FF6B6B] hover:bg-gray-50 transition-all font-medium">
-                  Log in
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button className="bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 text-white font-medium px-6 shadow-md hover:shadow-lg transition-all">
-                  Sign up
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            // Client-side authenticated: render authenticated user UI
-            <>
-              {/* Add Location Button */}
-              <Link href="/add-location">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden lg:flex items-center space-x-2 text-gray-700 hover:text-[#4ECDC4] hover:bg-[#4ECDC4]/10 transition-all font-medium px-4"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Location</span>
-                </Button>
-              </Link>
-
-              {/* Notifications Button */}
-              <div className="relative">
-                {user?.id && (
-                  <NotificationCenter userId={user.id} />
-                )}
+    <>
+      <nav className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        scrolled 
+          ? "bg-white/95 backdrop-blur-xl border-b border-white/20 shadow-lg shadow-black/5" 
+          : "bg-white/80 backdrop-blur-md border-b border-white/10"
+      )}>
+        <div className="container mx-auto px-4 lg:px-8">
+          <div className="flex items-center justify-between h-16 lg:h-20">
+            {/* Logo */}
+            <Link href="/" className="flex items-center space-x-3 group relative">
+              <div className="relative w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
+                <div className="absolute inset-0 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-xl blur-sm group-hover:blur-md transition-all duration-300 opacity-0 group-hover:opacity-100"></div>
+                <div className="relative bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] rounded-xl p-2 shadow-lg group-hover:shadow-xl transition-all duration-300">
+                  <Image 
+                    src="/logo.svg" 
+                    alt="Grounded Gems" 
+                    className="w-full h-full object-contain filter brightness-0 invert"
+                    width={32}
+                    height={32}
+                  />
+                </div>
               </div>
+              <div className="hidden sm:block">
+                <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-[#FF6B6B] via-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent transition-all duration-300 group-hover:bg-gradient-to-r group-hover:from-[#4ECDC4] group-hover:to-[#FF6B6B]">
+                  Grounded Gems
+                </span>
+              </div>
+            </Link>
 
-              {/* User Menu */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="relative h-9 w-9 lg:h-10 lg:w-10 rounded-full p-0 overflow-hidden ring-2 ring-transparent hover:ring-[#4ECDC4]/30 transition-all"
-                  >
-                    {user?.profileImage?.url && !imageError ? (
-                      <Image
-                        src={user.profileImage.url} 
-                        alt={user.profileImage?.alt || user.name || 'User avatar'}
-                        width={40}
-                        height={40}
-                        className="h-full w-full rounded-full object-cover"
-                        onError={() => setImageError(true)}
-                      />
-                    ) : (
-                      <div className="h-full w-full rounded-full bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] flex items-center justify-center text-white text-sm lg:text-base font-semibold">
-                        {getInitials(user)}
-                      </div>
+            {/* Desktop Navigation Links */}
+            <div className="hidden lg:flex items-center space-x-1">
+              {navLinks.map(({ href, label }, index) => (
+                <Link 
+                  key={href}
+                  href={href}
+                  className="relative group px-4 py-2 rounded-full transition-all duration-300 hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10"
+                >
+                  <span className="relative text-gray-700 hover:text-transparent hover:bg-gradient-to-r hover:from-[#FF6B6B] hover:to-[#4ECDC4] hover:bg-clip-text transition-all duration-300 font-medium text-sm lg:text-base">
+                    {label}
+                  </span>
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-0 h-0.5 bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] transition-all duration-300 group-hover:w-8 rounded-full"></div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Right Section */}
+            <div className="flex items-center space-x-2 lg:space-x-3">
+              {!isAuthenticated ? (
+                // Not authenticated: show login/signup buttons
+                <div className="flex items-center space-x-2 lg:space-x-3">
+                  <Link href="/login">
+                    <Button 
+                      variant="ghost" 
+                      className="text-gray-700 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/10 transition-all duration-300 font-medium rounded-full px-4 lg:px-6"
+                    >
+                      Log in
+                    </Button>
+                  </Link>
+                  <Link href="/signup">
+                    <Button className="relative bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 text-white font-medium px-4 lg:px-6 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group">
+                      <span className="relative z-10">Sign up</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#4ECDC4] to-[#FF6B6B] opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                // Authenticated: render authenticated user UI
+                <>
+                  {/* Add Location Button */}
+                  <Link href="/add-location">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="hidden lg:flex items-center space-x-2 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#4ECDC4] hover:to-[#4ECDC4]/80 transition-all duration-300 font-medium px-4 rounded-full shadow-sm hover:shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Location</span>
+                    </Button>
+                  </Link>
+
+                  {/* Notifications Button */}
+                  <div className="relative">
+                    {user?.id && (
+                      <NotificationCenter userId={user.id} />
                     )}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 mt-2 shadow-lg border-0 bg-white/95 backdrop-blur-sm" forceMount>
-                  <DropdownMenuLabel className="font-normal p-4">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-semibold leading-none text-gray-900">
-                        {user?.name || 'User'}
-                      </p>
-                      <p className="text-xs leading-none text-gray-500">
-                        {user?.email || ''}
-                      </p>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator className="bg-gray-100" />
-                  <DropdownMenuGroup className="p-1">
-                    <DropdownMenuItem asChild className="cursor-pointer rounded-md">
-                      <Link href={`/profile/${user?.id}`} className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gray-50 transition-colors">
-                        <User className="mr-3 h-4 w-4" />
-                        <span className="font-medium">Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="cursor-pointer rounded-md">
-                      <Link href="/saved" className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gray-50 transition-colors">
-                        <Heart className="mr-3 h-4 w-4" />
-                        <span className="font-medium">Saved</span>
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator className="bg-gray-100" />
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer rounded-md p-3 m-1 text-gray-700 hover:text-red-600 hover:bg-red-50 transition-colors">
-                    <LogOut className="mr-3 h-4 w-4" />
-                    <span className="font-medium">Log out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
-          )}
+                  </div>
+
+                  {/* User Menu */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="relative h-10 w-10 lg:h-11 lg:w-11 rounded-full p-0 overflow-hidden ring-2 ring-transparent hover:ring-[#4ECDC4]/40 transition-all duration-300 shadow-md hover:shadow-lg"
+                      >
+                        {user?.profileImage?.url && !imageError ? (
+                          <Image
+                            src={user.profileImage.url} 
+                            alt={user.profileImage?.alt || user.name || 'User avatar'}
+                            width={44}
+                            height={44}
+                            className="h-full w-full rounded-full object-cover"
+                            onError={() => setImageError(true)}
+                          />
+                        ) : (
+                          <div className="h-full w-full rounded-full bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] flex items-center justify-center text-white text-sm lg:text-base font-bold shadow-inner">
+                            {getInitials(user)}
+                          </div>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent 
+                      align="end" 
+                      className="w-64 mt-2 shadow-2xl border-0 bg-white/95 backdrop-blur-xl rounded-2xl overflow-hidden" 
+                      forceMount
+                    >
+                      <DropdownMenuLabel className="font-normal p-4 bg-gradient-to-r from-[#FF6B6B]/5 to-[#4ECDC4]/5">
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-semibold leading-none text-gray-900">
+                            {user?.name || 'User'}
+                          </p>
+                          <p className="text-xs leading-none text-gray-500">
+                            {user?.email || ''}
+                          </p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator className="bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+                      <DropdownMenuGroup className="p-2">
+                        <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+                          <Link href={`/profile/${user?.id}`} className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl">
+                            <User className="mr-3 h-4 w-4" />
+                            <span className="font-medium">Profile</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+                          <Link href="/saved" className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl">
+                            <Heart className="mr-3 h-4 w-4" />
+                            <span className="font-medium">Saved</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator className="bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+                      <DropdownMenuItem 
+                        onClick={handleLogout} 
+                        className="cursor-pointer rounded-xl p-3 m-2 text-gray-700 hover:text-red-600 hover:bg-red-50 transition-all duration-300"
+                      >
+                        <LogOut className="mr-3 h-4 w-4" />
+                        <span className="font-medium">Log out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              )}
+
+              {/* Mobile Menu Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="lg:hidden p-2 text-gray-700 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/10 rounded-full transition-all duration-300"
+                onClick={toggleMobileMenu}
+              >
+                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile Menu Overlay */}
+      <div className={cn(
+        "fixed inset-0 z-40 lg:hidden transition-all duration-300",
+        isMobileMenuOpen 
+          ? "opacity-100 pointer-events-auto" 
+          : "opacity-0 pointer-events-none"
+      )}>
+        <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={toggleMobileMenu}></div>
+        <div className={cn(
+          "absolute top-16 left-4 right-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 transition-all duration-300 overflow-hidden",
+          isMobileMenuOpen 
+            ? "opacity-100 translate-y-0 scale-100" 
+            : "opacity-0 -translate-y-4 scale-95"
+        )}>
+          <div className="p-6 space-y-4">
+            {navLinks.map(({ href, label }) => (
+              <Link 
+                key={href}
+                href={href}
+                className="block w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#FF6B6B] hover:to-[#4ECDC4] transition-all duration-300 rounded-xl font-medium"
+                onClick={toggleMobileMenu}
+              >
+                {label}
+              </Link>
+            ))}
+            
+            {isAuthenticated && (
+              <>
+                <div className="border-t border-gray-200 pt-4">
+                  <Link 
+                    href="/add-location"
+                    className="flex items-center w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#4ECDC4] hover:to-[#4ECDC4]/80 transition-all duration-300 rounded-xl font-medium"
+                    onClick={toggleMobileMenu}
+                  >
+                    <Plus className="w-4 h-4 mr-3" />
+                    Add Location
+                  </Link>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
-    </nav>
+    </>
   )
 }

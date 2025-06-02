@@ -112,6 +112,21 @@ const mapEventTypeToFormValue = (eventType: string): "workshop" | "concert" | "m
   return mapping[eventType]
 }
 
+// Helper function to map form event types to event request types
+const mapFormEventTypeToRequestType = (formEventType: string): string => {
+  const mapping: { [key: string]: string } = {
+    'workshop': 'workshop',
+    'concert': 'other',
+    'meetup': 'business_meeting',
+    'webinar': 'other',
+    'sports_matchmaking': 'other',
+    'sports_tournament': 'other',
+    'social_event': 'private_party',
+    'other_event': 'other'
+  }
+  return mapping[formEventType] || 'other'
+}
+
 // Helper function to check if location requires reservations
 const locationRequiresReservation = (location: LocationWithCategories | undefined): boolean => {
   if (!location || !location.categories) return false
@@ -186,7 +201,7 @@ export default function CreateEventForm() {
 
   // Watch location to show reservation notice
   const watchLocation = form.watch("location")
-  const selectedLocationData = locations.find(loc => loc.id === watchLocation)
+  const selectedLocationData = locations?.find(loc => loc.id === watchLocation)
   const requiresReservation = locationRequiresReservation(selectedLocationData)
 
   // Fetch current user and handle URL parameters from approved event requests or public space redirects
@@ -273,16 +288,21 @@ export default function CreateEventForm() {
     const fetchLocations = async () => {
       setIsLoadingLocations(true)
       try {
-        const response = await fetch("/api/locations")
+        const response = await fetch("/api/locations/all")
         if (response.ok) {
           const data = await response.json()
-          setLocations(data.locations)
+          // Ensure locations is always an array, fallback to empty array if data.locations is undefined
+          setLocations(Array.isArray(data.locations) ? data.locations : [])
         } else {
           toast.error("Failed to load locations")
+          // Set to empty array on error to maintain array type
+          setLocations([])
         }
       } catch (error) {
         console.error("Error fetching locations:", error)
         toast.error("Failed to load locations")
+        // Set to empty array on error to maintain array type
+        setLocations([])
       } finally {
         setIsLoadingLocations(false)
       }
@@ -353,11 +373,30 @@ export default function CreateEventForm() {
       return
     }
 
+    // More robust check for locations array
+    if (isLoadingLocations) {
+      toast.error("Location data is still loading. Please wait a moment and try again.")
+      return
+    }
+
+    if (!Array.isArray(locations)) {
+      console.error('Locations data is not an array. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
+      toast.error("Location data is corrupted. Please refresh the page or try again later.")
+      return
+    }
+
+    if (locations.length === 0) {
+      console.error('No locations available. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
+      toast.error("No locations are available. Please create a location first or contact an administrator.")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
       // Get the selected location details
-      const selectedLocationData = locations.find(loc => loc.id === data.location)
+      console.log('Attempting to find location. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
+      const selectedLocationData = locations?.find(loc => loc.id === data.location)
       
       // Check if this location requires reservations
       const requiresReservation = locationRequiresReservation(selectedLocationData)
@@ -367,7 +406,7 @@ export default function CreateEventForm() {
         const eventRequestData = {
           eventTitle: data.name,
           eventDescription: data.description || '',
-          eventType: data.eventType || 'other',
+          eventType: mapFormEventTypeToRequestType(data.eventType || 'other_event'),
           locationId: data.location,
           requestedDate: format(data.startDate, "yyyy-MM-dd"),
           requestedTime: data.startTime || '09:00',

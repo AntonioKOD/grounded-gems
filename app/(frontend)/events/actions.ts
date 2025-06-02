@@ -443,7 +443,10 @@ export async function getNearbyEventsAction({
     const payload = await getPayload({config})
 
     // Build the query conditions
-    const where: any = { status: { equals: "published" } }
+    const where: any = { 
+      status: { equals: "published" },
+      startDate: { greater_than_equal: new Date().toISOString() } 
+    }
 
     // Add category filter if provided
     if (category) {
@@ -894,18 +897,44 @@ export async function getUserEventsByCategory(userId: string) {
     .join('; ')
   try {
     const payload = await getPayload({ config })
+    const currentDate = new Date().toISOString()
 
     // Alternative approach to fetch events created by the user
     let createdEvents: Record<string, any>[] = []
     try {
-      // First get all events
+      // First get all future events (events that haven't ended yet)
       const { docs: allEvents } = await payload.find({
         collection: "events",
+        where: {
+          or: [
+            // Events with endDate in the future
+            {
+              endDate: {
+                greater_than_equal: currentDate
+              }
+            },
+            // Events without endDate but startDate in the future
+            {
+              and: [
+                {
+                  endDate: {
+                    exists: false
+                  }
+                },
+                {
+                  startDate: {
+                    greater_than_equal: currentDate
+                  }
+                }
+              ]
+            }
+          ]
+        },
         limit: 100, // Adjust as needed
         depth: 1,
       })
 
-      // Then filter them on the client side
+      // Then filter them by user on the client side
       createdEvents = allEvents.filter((event) => {
         // Check different possible creator fields
         return (
@@ -929,14 +958,25 @@ export async function getUserEventsByCategory(userId: string) {
       depth: 2, // Load event data
     })
 
-    // Extract the events from the RSVPs and filter out any that might be null
+    // Extract the events from the RSVPs and filter out any that might be null or past events
     const joinedEvents = userRsvps
       .map((rsvp) =>
         typeof rsvp.event === "string"
           ? null // Skip if event is just an ID string
           : rsvp.event,
       )
-      .filter((event) => event !== null)
+      .filter((event) => {
+        if (!event) return false
+        
+        // Filter out past events
+        const eventEndDate = event.endDate || event.startDate
+        if (eventEndDate) {
+          const eventDate = new Date(eventEndDate)
+          return eventDate >= new Date()
+        }
+        
+        return true // Include event if no date can be determined
+      })
 
     return {
       success: true,

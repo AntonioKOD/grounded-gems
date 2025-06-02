@@ -342,26 +342,71 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     // Upload to Payload CMS with detailed error handling
     let uploadResult
     try {
+      console.log('📱 About to call payload.create with uploadData:', {
+        filename: uploadData.filename,
+        mimeType: uploadData.mimeType,
+        bufferSize: uploadData.data.length,
+        hasBuffer: !!uploadData.data,
+        uploadedBy: uploadData.uploadedBy,
+        folder: uploadData.folder,
+        alt: uploadData.alt
+      })
+      
       uploadResult = await payload.create({
         collection: 'media',
         data: uploadData,
       })
-      console.log('📱 Payload upload successful:', uploadResult.id)
+      
+      console.log('📱 Payload upload successful:', {
+        id: uploadResult.id,
+        filename: uploadResult.filename,
+        url: uploadResult.url,
+        mimeType: uploadResult.mimeType,
+        filesize: uploadResult.filesize
+      })
     } catch (payloadError) {
       console.error('📱 Payload upload failed:', payloadError)
       
       // Log more details about the error
       console.error('📱 Payload error details:', {
+        name: payloadError instanceof Error ? payloadError.name : 'Unknown',
         message: payloadError instanceof Error ? payloadError.message : 'Unknown error',
-        stack: payloadError instanceof Error ? payloadError.stack : 'No stack trace'
+        stack: payloadError instanceof Error ? payloadError.stack : 'No stack trace',
+        uploadDataSummary: {
+          hasFilename: !!uploadData.filename,
+          hasMimeType: !!uploadData.mimeType,
+          hasData: !!uploadData.data,
+          dataSize: uploadData.data?.length || 0,
+          hasUploadedBy: !!uploadData.uploadedBy
+        }
       })
+      
+      // Provide more specific error messages based on the error
+      let errorMessage = 'Failed to upload image to server storage'
+      let errorCode = 'PAYLOAD_UPLOAD_FAILED'
+      
+      if (payloadError instanceof Error) {
+        if (payloadError.message.includes('validation')) {
+          errorMessage = 'Upload validation failed - check file format and size'
+          errorCode = 'VALIDATION_FAILED'
+        } else if (payloadError.message.includes('permission')) {
+          errorMessage = 'Insufficient permissions to upload file'
+          errorCode = 'PERMISSION_DENIED'
+        } else if (payloadError.message.includes('storage')) {
+          errorMessage = 'Storage service unavailable'
+          errorCode = 'STORAGE_ERROR'
+        } else if (payloadError.message.includes('network')) {
+          errorMessage = 'Network error during upload'
+          errorCode = 'NETWORK_ERROR'
+        }
+      }
       
       return NextResponse.json(
         {
           success: false,
           message: 'Upload failed',
-          error: 'Failed to upload image to server storage',
-          code: 'PAYLOAD_UPLOAD_FAILED'
+          error: errorMessage,
+          code: errorCode
         },
         { status: 500 }
       )

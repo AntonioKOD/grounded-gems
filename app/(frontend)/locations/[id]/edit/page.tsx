@@ -71,33 +71,41 @@ export default function EditLocationPage() {
       try {
         // Load current user first
         const userResponse = await fetch('/api/users/me')
-        if (!userResponse.ok) {
+        if (userResponse.ok) {
+          const userData = await userResponse.json()
+          setCurrentUser(userData.user)
+
+          // Load location data
+          const locationResponse = await fetch(`/api/locations/${locationId}`)
+          if (!locationResponse.ok) {
+            toast.error('Failed to load location data')
+            router.push('/map')
+            return
+          }
+
+          const locationData = await locationResponse.json()
+          
+          // Check if user owns this location
+          if (locationData.location.createdBy !== userData.user.id) {
+            toast.error('You can only edit your own locations')
+            router.push(`/profile/${userData.user.id}/location-dashboard`)
+            return
+          }
+
+          // Set location data for editing
+          setLocation(locationData.location)
+        } else if (userResponse.status === 401) {
+          // User not authenticated
           toast.error('Please log in to edit locations')
           router.push('/login')
           return
-        }
-        
-        const userData = await userResponse.json()
-        setCurrentUser(userData.user)
-
-        // Load location data
-        const locationResponse = await fetch(`/api/locations/${locationId}`)
-        if (!locationResponse.ok) {
-          toast.error('Failed to load location data')
-          router.push('/map')
+        } else {
+          // Other error
+          console.warn('Unexpected response from /api/users/me:', userResponse.status)
+          toast.error('Unable to verify user access')
+          router.push('/login')
           return
         }
-
-        const locationData = await locationResponse.json()
-        
-        // Check if user owns this location
-        if (locationData.location.createdBy !== userData.user.id) {
-          toast.error('You can only edit your own locations')
-          router.push(`/profile/${userData.user.id}/location-dashboard`)
-          return
-        }
-
-        setLocation(locationData.location)
       } catch (error) {
         console.error('Error loading location:', error)
         toast.error('Failed to load location data')
