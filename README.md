@@ -100,4 +100,31 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 **Grounded Gems** - *Discover Hidden Treasures* 💎
 
+## Recent Updates
+
+### Mobile API Enhancements (Latest)
+- ✅ Fixed image upload integration with Payload CMS
+- ✅ Improved mobile app authentication with JWT token format
+- ✅ Enhanced post creation with proper media handling
+- ✅ Optimized API endpoints for React Native compatibility
+- ✅ Added comprehensive error handling and logging
+
+### Mobile App Features
+- 📱 Post creation with image/video uploads
+- 🗺️ Location discovery and mapping
+- 👥 User authentication and profiles
+- 📰 Personalized feed with real-time updates
+- 💾 Offline caching and sync capabilities
+
+## API Documentation
+
+### Mobile Endpoints
+- `POST /api/v1/mobile/auth/login` - User authentication
+- `POST /api/v1/mobile/auth/register` - User registration
+- `GET /api/v1/mobile/auth/me` - Get current user
+- `POST /api/v1/mobile/upload/image` - Upload images
+- `POST /api/v1/mobile/posts` - Create posts
+- `GET /api/v1/mobile/posts/feed` - Get personalized feed
+- `GET /api/v1/mobile/locations` - Search locations
+
 

@@ -1,3 +1,18 @@
+/**
+ * Mobile Image Upload API Route
+ * 
+ * This endpoint handles image uploads from the mobile app directly to Payload CMS.
+ * It leverages Payload's built-in upload handling with proper authentication.
+ * 
+ * Key features:
+ * - Direct integration with Payload CMS media collection
+ * - Automatic file validation and processing
+ * - User authentication and authorization
+ * - Mobile-optimized response format
+ * 
+ * Updated: Latest version with improved error handling and Payload integration
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
