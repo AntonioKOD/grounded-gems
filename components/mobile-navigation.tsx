@@ -1,193 +1,112 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { LayoutList, Calendar, Plus, MapPin, User } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { LayoutList, Calendar, Plus, MapPin, Users } from "lucide-react"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import EnhancedPostForm from "@/components/post/enhanced-post-form"
 import type { UserData } from "@/lib/features/user/userSlice"
-import Image from "next/image"
-import FloatingSearchWrapper from './ui/floating-search-wrapper'
 
 interface MobileNavigationProps {
   initialUser: UserData | null;
 }
 
 export default function MobileNavigation({ initialUser }: MobileNavigationProps) {
-  const [isHydrated, setIsHydrated] = useState(false)
-  const [open, setOpen] = useState(false)
   const router = useRouter()
 
-  useEffect(() => {
-    setIsHydrated(true)
-  }, [])
-
-  const getInitials = (userData: UserData | null) => {
-    if (!userData?.name) return 'U';
-    return userData.name
-      .split(' ')
-      .map(word => word.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  const handlePostCreated = () => {
-    setOpen(false)
-    // Trigger feed refresh via custom event
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('postCreated'))
-      // Also trigger a general refresh event
-      window.dispatchEvent(new CustomEvent('refreshFeed'))
+  // Handle add post action - stable function
+  const handleAddPost = () => {
+    if (initialUser) {
+      router.push('/post/create')
+    } else {
+      router.push('/login?redirect=/post/create')
     }
   }
 
-  // Get navigation items - always start with unauthenticated state to avoid hydration mismatch
-  const getNavItems = () => {
-    const user = initialUser
-    const isAuthenticated = isHydrated && !!user
-
-    return [
-      {
-        href: "/feed",
-        icon: LayoutList,
-        label: "Local Buzz",
-        isCenter: false,
-      },
-      {
-        href: "/map",
-        icon: MapPin,
-        label: "Explore",
-        isCenter: false,
-      },
-      {
-        href: "#",
-        icon: Plus,
-        label: "Add",
-        isCenter: true,
-        onClick: () => {
-          if (!isAuthenticated) {
-            router.push("/login")
-            return
-          }
-          setOpen(true)
-          if (navigator.vibrate) {
-            navigator.vibrate(50)
-          }
-        }
-      },
-      {
-        href: "/events",
-        icon: Calendar,
-        label: "Events", 
-        isCenter: false,
-      },
-      {
-        href: isAuthenticated ? `/profile/${user?.id}` : "/login",
-        icon: Users,
-        label: "Profile",
-        isCenter: false,
-        isProfile: true,
-        hasProfileImage: isAuthenticated && (user?.profileImage?.url || user?.avatar),
-        profileImageUrl: user?.profileImage?.url || user?.avatar,
-        profileImageAlt: user?.profileImage?.alt || user?.name || 'User avatar',
-        userInitials: isAuthenticated ? getInitials(user) : null,
-      },
-    ]
+  // Handle profile action - stable function  
+  const handleProfile = () => {
+    if (initialUser) {
+      router.push(`/profile/${initialUser.id}`)
+    } else {
+      router.push('/login?redirect=/profile')
+    }
   }
 
-  const navItems = getNavItems()
+  // Static navigation structure - no dependencies
+  const navItems = [
+    {
+      id: "feed",
+      href: "/feed", 
+      icon: LayoutList,
+      label: "Local Buzz"
+    },
+    {
+      id: "map",
+      href: "/map",
+      icon: MapPin,
+      label: "Explore"
+    },
+    {
+      id: "add",
+      icon: Plus,
+      label: "Add",
+      onClick: handleAddPost
+    },
+    {
+      id: "events", 
+      href: "/events",
+      icon: Calendar,
+      label: "Events"
+    },
+    {
+      id: "profile",
+      icon: User,
+      label: "Profile",
+      onClick: handleProfile
+    }
+  ];
 
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden">
         <div className="safe-area-bottom">
           <div className="flex items-center justify-around h-16 px-2">
-            {navItems.map((item, index) => {
+            {navItems.map((item) => {
               const Icon = item.icon
               
-              if (item.isCenter) {
+              // Handle click-based navigation
+              if (item.onClick) {
                 return (
-                  <Sheet key={index} open={open} onOpenChange={setOpen}>
-                    <SheetTrigger asChild>
-                      <button
-                        onClick={item.onClick}
-                        className="flex flex-col items-center justify-center bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white rounded-full w-12 h-12 mx-2 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
-                      >
-                        <Icon className="h-6 w-6" />
-                      </button>
-                    </SheetTrigger>
-                    
-                    <SheetContent side="bottom" className="h-[95vh] rounded-t-xl p-0">
-                      <div className="flex flex-col h-full">
-                        <SheetHeader className="text-left p-4 pb-0 flex-shrink-0">
-                          <SheetTitle>Create post</SheetTitle>
-                        </SheetHeader>
-                        
-                        <div className="flex-1 p-4 pt-2">
-                          <EnhancedPostForm
-                            user={{
-                              id: initialUser?.id || "",
-                              name: initialUser?.name || "",
-                              avatar: initialUser?.profileImage?.url || initialUser?.avatar,
-                            }}
-                            onCancel={() => setOpen(false)}
-                            onPostCreated={handlePostCreated}
-                          />
-                        </div>
-                      </div>
-                    </SheetContent>
-                  </Sheet>
-                )
-              }
-              
-              // Handle profile navigation - use Link component for proper navigation
-              if ('isProfile' in item && item.isProfile) {
-                const profileItem = item as typeof item & {
-                  hasProfileImage?: boolean
-                  profileImageUrl?: string
-                  profileImageAlt?: string
-                }
-                
-                return (
-                  <Link
-                    key={index}
-                    href={item.href}
-                    className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
+                  <button
+                    key={item.id}
+                    onClick={item.onClick}
+                    className="flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105"
                   >
-                    {item.label === "Profile" && profileItem.hasProfileImage ? (
-                      <>
-                        <Image
-                          unoptimized
-                          width={20}
-                          height={20}
-                          src={profileItem.profileImageUrl || ''} 
-                          alt={profileItem.profileImageAlt || 'Profile'}
-                          className="h-5 w-5 rounded-full object-cover border border-gray-300 mb-0.5"
-                          onError={(e) => {
-                            // Fallback to icon if image fails to load
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = 'none';
-                            const fallback = target.nextElementSibling as HTMLElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
-                        />
-                        <Icon className="h-5 w-5 mb-0.5 hidden" />
-                      </>
+                    {item.id === 'add' ? (
+                      <div className="w-12 h-12 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] rounded-full flex items-center justify-center mb-1 shadow-lg hover:shadow-xl transition-all duration-200 relative">
+                        <Icon className="h-6 w-6 text-white" />
+                        <div className="absolute inset-0 rounded-full bg-white/20 animate-pulse"></div>
+                      </div>
+                    ) : item.id === 'profile' ? (
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1 transition-all duration-200 bg-gray-100 text-gray-600 hover:bg-gray-200">
+                        <Icon className="h-5 w-5" />
+                      </div>
                     ) : (
                       <Icon className="h-5 w-5 mb-0.5" />
                     )}
-                    <span className="text-xs font-medium">{item.label}</span>
-                  </Link>
+                    <span className={`text-xs font-medium ${
+                      item.id === 'add' ? 'text-[#FF6B6B] font-semibold' : ''
+                    }`}>
+                      {item.label}
+                    </span>
+                  </button>
                 )
               }
               
+              // Handle link-based navigation
               return (
                 <Link
-                  key={index}
-                  href={item.href}
-                  className={`flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105`}
+                  key={item.id}
+                  href={item.href!}
+                  className="flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105"
                 >
                   <Icon className="h-5 w-5 mb-0.5" />
                   <span className="text-xs font-medium">{item.label}</span>
@@ -195,10 +114,6 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
               )
             })}
           </div>
-        </div>
-        {/* Floating search button, absolutely positioned above nav */}
-        <div className="absolute -top-24 right-4 z-60">
-          <FloatingSearchWrapper />
         </div>
       </nav>
     </>

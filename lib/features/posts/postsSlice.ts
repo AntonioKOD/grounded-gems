@@ -59,9 +59,7 @@ export const likePostAsync = createAsyncThunk(
     { rejectWithValue, dispatch }
   ) => {
     try {
-      // Perform optimistic update first
-      dispatch(toggleLikeOptimistic({ postId: params.postId, isLiked: params.shouldLike }))
-      
+      // Don't do optimistic update - let server response handle the state
       const response = await fetch('/api/posts/like', {
         method: 'POST',
         headers: {
@@ -87,8 +85,6 @@ export const likePostAsync = createAsyncThunk(
       return { ...params, likeCount: result.data?.likeCount }
     } catch (error) {
       console.error('Error liking post:', error)
-      // Revert optimistic update on error
-      dispatch(toggleLikeOptimistic({ postId: params.postId, isLiked: !params.shouldLike }))
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to like post')
     }
   }

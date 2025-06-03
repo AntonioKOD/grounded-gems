@@ -2,21 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
+import { createPost } from '@/app/actions'
 
-// Request body validation schema
+// Input validation schema for mobile post creation
 const createPostSchema = z.object({
-  caption: z.string().min(1, 'Caption is required').max(2000, 'Caption too long'),
+  content: z.string().min(1, 'Content is required').max(500, 'Content cannot exceed 500 characters'),
+  title: z.string().optional(),
   type: z.enum(['post', 'review', 'recommendation']).default('post'),
   rating: z.number().min(1).max(5).optional(),
-  location: z.string().optional(), // Location ID
-  tags: z.array(z.string()).optional(),
-  media: z.array(z.object({
-    type: z.enum(['image', 'video']),
-    id: z.string(), // Changed from url to id - media ID from upload API
-    url: z.string().optional(), // Keep URL for backward compatibility
-    thumbnail: z.string().optional(),
-    alt: z.string().optional()
-  })).optional(),
+  locationId: z.string().optional(),
+  locationName: z.string().optional(),
+  tags: z.array(z.string()).optional().default([]),
 })
 
 interface MobileCreatePostResponse {
@@ -24,7 +20,7 @@ interface MobileCreatePostResponse {
   message: string
   data?: {
     id: string
-    caption: string
+    content: string
     author: {
       id: string
       name: string
@@ -52,13 +48,201 @@ interface MobileCreatePostResponse {
   code?: string
 }
 
+export async function GET(request: NextRequest): Promise<NextResponse<any>> {
+  try {
+    const payload = await getPayload({ config })
+    const { searchParams } = new URL(request.url)
+    
+    console.log('📱 Mobile posts feed request received')
+    
+    // Optional authentication for personalized feed
+    let currentUser = null
+    try {
+      const authHeader = request.headers.get('Authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const { user } = await payload.auth({ headers: request.headers })
+        currentUser = user
+        console.log('📱 Authenticated user:', user?.email)
+      }
+    } catch (authError) {
+      console.log('📱 No authenticated user for posts feed request')
+    }
+
+    // Get query parameters
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50)
+    const category = searchParams.get('category') || undefined
+    const sortBy = searchParams.get('sortBy') || 'createdAt'
+
+    console.log('📱 Query parameters:', { page, limit, category, sortBy })
+
+    // Build query
+    let whereClause: any = {
+      status: { equals: 'published' }
+    }
+
+    if (category) {
+      whereClause['tags.tag'] = { contains: category }
+    }
+
+    console.log('📱 Where clause:', whereClause)
+
+    // Build sort string properly for Payload
+    let sortString: string = '-createdAt' // Default: newest first
+    if (sortBy === 'createdAt') {
+      sortString = '-createdAt'
+    } else if (sortBy === 'updatedAt') {
+      sortString = '-updatedAt'
+    } else {
+      sortString = '-createdAt' // fallback
+    }
+
+    console.log('📱 Sort string:', sortString)
+
+    // Fetch posts
+    console.log('📱 Fetching posts from database...')
+    const postsResult = await payload.find({
+      collection: 'posts',
+      where: whereClause,
+      sort: sortString,
+      page,
+      limit,
+      depth: 2,
+    })
+
+    console.log('📱 Posts found:', postsResult.totalDocs)
+
+    // Format posts for mobile
+    const formattedPosts = postsResult.docs.map((post: any) => {
+      console.log('📱 Formatting post:', post.id)
+      return {
+        id: post.id,
+        content: post.content,
+        title: post.title,
+        author: {
+          id: post.author?.id || '',
+          name: post.author?.name || 'Unknown User',
+          profileImage: post.author?.profileImage ? {
+            url: typeof post.author.profileImage === 'object' && post.author.profileImage.url
+              ? post.author.profileImage.url
+              : typeof post.author.profileImage === 'string'
+              ? post.author.profileImage
+              : ''
+          } : null,
+        },
+        media: [
+          // Images
+          ...(post.image ? [{
+            type: 'image' as const,
+            url: typeof post.image === 'object' && post.image.url 
+              ? post.image.url 
+              : typeof post.image === 'string'
+              ? post.image
+              : '',
+            alt: typeof post.image === 'object' ? post.image.alt : undefined
+          }] : []),
+          // Additional photos
+          ...(Array.isArray(post.photos) ? post.photos.map((photo: any) => ({
+            type: 'image' as const,
+            url: typeof photo === 'object' && photo.url 
+              ? photo.url 
+              : typeof photo === 'string'
+              ? photo
+              : '',
+            alt: typeof photo === 'object' ? photo.alt : undefined
+          })) : []),
+          // Videos
+          ...(post.video ? [{
+            type: 'video' as const,
+            url: typeof post.video === 'object' && post.video.url 
+              ? post.video.url 
+              : typeof post.video === 'string'
+              ? post.video
+              : '',
+            thumbnail: post.videoThumbnail && typeof post.videoThumbnail === 'object' && post.videoThumbnail.url
+              ? post.videoThumbnail.url
+              : undefined
+          }] : [])
+        ],
+        location: post.location ? {
+          id: typeof post.location === 'object' ? post.location.id : post.location,
+          name: typeof post.location === 'object' ? post.location.name : 'Unknown Location'
+        } : undefined,
+        type: post.type,
+        rating: post.rating,
+        tags: Array.isArray(post.tags) 
+          ? post.tags.map((tag: any) => typeof tag === 'object' ? tag.tag : tag)
+          : [],
+        engagement: {
+          likeCount: post.likeCount || 0,
+          commentCount: post.commentCount || 0,
+          shareCount: post.shareCount || 0,
+          saveCount: post.saveCount || 0,
+          isLiked: false, // TODO: Check if current user liked
+          isSaved: false, // TODO: Check if current user saved
+        },
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+      }
+    })
+
+    const totalPages = Math.ceil(postsResult.totalDocs / limit)
+
+    console.log('📱 Sending response with', formattedPosts.length, 'posts')
+
+    return NextResponse.json({
+      success: true,
+      message: 'Posts retrieved successfully',
+      data: {
+        posts: formattedPosts,
+        pagination: {
+          page,
+          limit,
+          total: postsResult.totalDocs,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+        meta: {
+          feedType: category ? 'category' : 'all',
+          appliedFilters: {
+            category,
+            sortBy,
+          },
+        },
+      },
+    }, {
+      status: 200,
+      headers: {
+        'Cache-Control': currentUser 
+          ? 'private, max-age=300' // 5 minutes for authenticated users
+          : 'public, max-age=600', // 10 minutes for public
+        'X-Content-Type-Options': 'nosniff',
+        'Vary': 'Authorization'
+      }
+    })
+
+  } catch (error) {
+    console.error('📱 Mobile posts feed error:', error)
+    
+    return NextResponse.json({
+      success: false,
+      message: 'Internal server error',
+      error: `Posts feed service unavailable: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      code: 'SERVER_ERROR'
+    }, { status: 500 })
+  }
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse<MobileCreatePostResponse>> {
   try {
     const payload = await getPayload({ config })
-
+    
     // Verify authentication
     const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const token = authHeader?.replace('Bearer ', '').replace('JWT ', '')
+
+    if (!token) {
       return NextResponse.json(
         {
           success: false,
@@ -83,244 +267,261 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       )
     }
 
-    // Parse and validate request body
-    let body
+    console.log('📱 Mobile post creation - User authenticated:', user.email)
+
+    // Parse form data for file uploads and post data
+    let formData: FormData
     try {
-      body = await request.json()
+      formData = await request.formData()
+      console.log('📱 Mobile post creation - FormData parsed successfully')
+      
+      // Debug: Log all FormData entries
+      console.log('📱 Mobile post creation - FormData entries:')
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}: File(name="${value.name}", size=${value.size}, type="${value.type}")`)
+        } else {
+          console.log(`  ${key}: ${value}`)
+        }
+      }
     } catch (error) {
+      console.error('📱 Mobile post creation - Failed to parse FormData:', error)
       return NextResponse.json(
         {
           success: false,
-          message: 'Invalid JSON',
-          error: 'Request body must be valid JSON',
-          code: 'INVALID_JSON'
+          message: 'Invalid form data',
+          error: 'Failed to parse request data',
+          code: 'INVALID_FORM_DATA'
         },
         { status: 400 }
       )
     }
 
-    console.log('📱 Mobile post creation request:', {
-      userId: user.id,
-      userEmail: user.email,
-      bodyKeys: Object.keys(body),
-      captionLength: body.caption?.length,
-      mediaCount: body.media?.length || 0,
-      hasLocation: !!body.location,
-      hasRating: !!body.rating,
-      tagsCount: body.tags?.length || 0
-    })
-
-    // Validate request data
-    let validatedData
-    try {
-      validatedData = createPostSchema.parse(body)
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const firstError = error.errors[0]
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Validation failed',
-            error: firstError.message,
-            code: 'VALIDATION_ERROR'
-          },
-          { status: 400 }
-        )
-      }
-      throw error
+    // Extract post data from FormData
+    const postData = {
+      content: formData.get('content') as string,
+      title: formData.get('title') as string || undefined,
+      type: (formData.get('type') as string) || 'post',
+      rating: formData.get('rating') ? parseInt(formData.get('rating') as string, 10) : undefined,
+      locationId: formData.get('locationId') as string || undefined,
+      locationName: formData.get('locationName') as string || undefined,
+      tags: formData.getAll('tags[]') as string[] || formData.getAll('tags') as string[] || [],
     }
 
-    // Validate location if provided
-    let locationId: string | null = null
-    if (validatedData.location) {
-      try {
-        const location = await payload.findByID({
-          collection: 'locations',
-          id: validatedData.location,
-          depth: 0,
-        })
-        if (location) {
-          locationId = validatedData.location
-        }
-      } catch (locationError) {
-        console.warn('📱 Location not found:', validatedData.location)
-        // Continue without location
-      }
-    }
-
-    // Validate media IDs if provided
-    const validMediaItems: Array<{ type: 'image' | 'video', id: string, alt?: string }> = []
-    if (validatedData.media && validatedData.media.length > 0) {
-      console.log('📱 Validating media items:', validatedData.media.length)
-      
-      for (const mediaItem of validatedData.media) {
-        try {
-          // Validate that the media ID exists in the database
-          const existingMedia = await payload.findByID({
-            collection: 'media',
-            id: mediaItem.id,
-            depth: 0,
-          })
-
-          if (existingMedia) {
-            validMediaItems.push({
-              type: mediaItem.type,
-              id: mediaItem.id,
-              alt: mediaItem.alt
-            })
-            console.log(`📱 Validated ${mediaItem.type} media:`, mediaItem.id)
-          } else {
-            console.warn('📱 Media not found:', mediaItem.id)
-          }
-        } catch (mediaError) {
-          console.error('📱 Error validating media:', mediaError)
-          // Continue with other media items
-        }
-      }
-    }
-
-    // Prepare post data
-    const postData: any = {
-      content: validatedData.caption.trim(), // Use 'content' to match Post collection
-      author: user.id,
-      type: validatedData.type, // Use the type from request, don't override based on video
-      status: 'published',
-      visibility: 'public',
-    }
-
-    // Add rating for reviews
-    if (validatedData.type === 'review' && validatedData.rating) {
-      postData.rating = validatedData.rating
-    }
-
-    // Handle media assignment based on Post collection structure
-    // First image goes to 'image' field, additional images go to 'photos'
-    // First video goes to 'video' field
-    if (validMediaItems.length > 0) {
-      const images = validMediaItems.filter(m => m.type === 'image')
-      const videos = validMediaItems.filter(m => m.type === 'video')
-
-      // Set main image (first image)
-      if (images.length > 0) {
-        postData.image = images[0].id
-        console.log('📱 Setting main image:', images[0].id)
-      }
-
-      // Set additional images to photos array (if more than 1 image)
-      if (images.length > 1) {
-        postData.photos = images.slice(1).map(img => img.id)
-        console.log('📱 Setting additional photos:', postData.photos)
-      } else if (images.length === 1) {
-        // If only one image, also add it to photos array for consistency
-        postData.photos = [images[0].id]
-        console.log('📱 Setting single photo to photos array:', [images[0].id])
-      }
-
-      // Set main video (first video)
-      if (videos.length > 0) {
-        postData.video = videos[0].id
-        console.log('📱 Setting main video:', videos[0].id)
-        
-        // Handle video thumbnail if provided
-        if (videos[0].thumbnail) {
-          console.log('📱 Video thumbnail provided:', videos[0].thumbnail)
-          // Note: thumbnail handling could be enhanced to create media record
-        }
-      }
-    }
-
-    if (locationId) {
-      postData.location = locationId
-    }
-
-    // Add tags - ensure proper format for Post collection
-    if (validatedData.tags && validatedData.tags.length > 0) {
-      postData.tags = validatedData.tags.filter(tag => tag.trim().length > 0).map(tag => ({ tag: tag.trim() }))
-    }
-
-    console.log('📱 Creating post with data:', {
-      ...postData,
-      author: user.id,
-      contentLength: postData.content.length,
+    console.log('📱 Mobile post creation - Extracted post data:', {
+      contentLength: postData.content?.length || 0,
       type: postData.type,
-      rating: postData.rating || 'Not set',
-      image: postData.image ? 'Set' : 'Not set',
-      video: postData.video ? 'Set' : 'Not set',
-      photos: postData.photos ? `${postData.photos.length} photos` : 'Not set',
-      location: locationId ? 'Set' : 'Not set',
-      tagsCount: postData.tags?.length || 0,
-      mediaProcessed: {
-        totalMediaItems: validatedData.media?.length || 0,
-        imagesCount: validatedData.media?.filter(m => m.type === 'image').length || 0,
-        videosCount: validatedData.media?.filter(m => m.type === 'video').length || 0
+      hasTitle: !!postData.title,
+      hasLocation: !!(postData.locationId || postData.locationName),
+      tagsCount: postData.tags.length,
+      hasRating: !!postData.rating
+    })
+
+    // Validate post data (excluding files for now)
+    const validationResult = createPostSchema.safeParse(postData)
+    if (!validationResult.success) {
+      console.error('📱 Mobile post creation - Validation failed:', validationResult.error.errors)
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Validation failed',
+          error: validationResult.error.errors[0].message,
+          code: 'VALIDATION_ERROR'
+        },
+        { status: 400 }
+      )
+    }
+
+    // Create new FormData for the createPost function
+    const createPostFormData = new FormData()
+    createPostFormData.append('userId', user.id)
+    createPostFormData.append('content', validationResult.data.content)
+    createPostFormData.append('type', validationResult.data.type)
+
+    if (validationResult.data.title) {
+      createPostFormData.append('title', validationResult.data.title)
+    }
+
+    if (validationResult.data.rating) {
+      createPostFormData.append('rating', validationResult.data.rating.toString())
+    }
+
+    if (validationResult.data.locationId) {
+      createPostFormData.append('locationId', validationResult.data.locationId)
+    }
+
+    if (validationResult.data.locationName) {
+      createPostFormData.append('locationName', validationResult.data.locationName)
+    }
+
+    // Add tags
+    validationResult.data.tags.forEach(tag => {
+      createPostFormData.append('tags[]', tag)
+    })
+
+    // Handle media files - support both 'media' and 'image'/'video' field names
+    const mediaFiles = formData.getAll('media') as File[]
+    const imageFiles = formData.getAll('image') as File[]
+    const videoFiles = formData.getAll('video') as File[]
+    const allFiles = [...mediaFiles, ...imageFiles, ...videoFiles]
+
+    console.log('📱 Mobile post creation - Media files detected:', {
+      mediaFiles: mediaFiles.length,
+      imageFiles: imageFiles.length,
+      videoFiles: videoFiles.length,
+      totalFiles: allFiles.length
+    })
+
+    // Add all media files to the createPost FormData
+    allFiles.forEach(file => {
+      if (file instanceof File && file.size > 0) {
+        if (file.type.startsWith('image/')) {
+          createPostFormData.append('media', file)
+          console.log(`📱 Adding image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+        } else if (file.type.startsWith('video/')) {
+          createPostFormData.append('videos', file)
+          console.log(`📱 Adding video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+        }
       }
     })
 
-    // Create the post
-    const newPost = await payload.create({
-      collection: 'posts',
-      data: postData,
-      depth: 2, // Include related data
+    // Additional files from specific fields
+    const specificImageFiles = formData.getAll('images') as File[]
+    const specificVideoFiles = formData.getAll('videos') as File[]
+
+    specificImageFiles.forEach(file => {
+      if (file instanceof File && file.size > 0) {
+        createPostFormData.append('media', file)
+        console.log(`📱 Adding specific image: ${file.name}`)
+      }
     })
 
-    console.log('📱 Post created successfully:', newPost.id)
+    specificVideoFiles.forEach(file => {
+      if (file instanceof File && file.size > 0) {
+        createPostFormData.append('videos', file)
+        console.log(`📱 Adding specific video: ${file.name}`)
+      }
+    })
 
-    // Format response data
-    const responseData = {
-      id: newPost.id,
-      caption: newPost.content,
-      author: {
-        id: user.id,
-        name: user.name,
-        profileImage: user.profileImage ? {
-          url: typeof user.profileImage === 'object' && user.profileImage.url
-            ? user.profileImage.url
-            : typeof user.profileImage === 'string' 
-            ? user.profileImage 
-            : '' // Fallback
-        } : null
-      },
-      media: validMediaItems.map(m => {
-        // Try to get the actual URL from the created post's media fields
-        let mediaUrl = '';
-        
-        if (m.type === 'image') {
-          if (newPost.image && typeof newPost.image === 'object' && newPost.image.url) {
-            mediaUrl = newPost.image.url;
-          } else if (newPost.photos && Array.isArray(newPost.photos)) {
-            const photo = newPost.photos.find((p: any) => p.id === m.id || p === m.id);
-            if (photo && typeof photo === 'object' && photo.url) {
-              mediaUrl = photo.url;
-            }
-          }
-        } else if (m.type === 'video') {
-          if (newPost.video && typeof newPost.video === 'object' && newPost.video.url) {
-            mediaUrl = newPost.video.url;
-          }
-        }
-        
-        return {
-          type: m.type,
-          id: m.id,
-          url: mediaUrl,
-          alt: m.alt
-        };
-      }),
-      location: locationId && newPost.location ? {
-        id: typeof newPost.location === 'object' ? newPost.location.id : newPost.location,
-        name: typeof newPost.location === 'object' ? newPost.location.name : 'Unknown Location'
-      } : undefined,
-      type: newPost.type,
-      rating: newPost.rating,
-      tags: validatedData.tags || [],
-      createdAt: newPost.createdAt,
-      updatedAt: newPost.updatedAt,
+    // Call our fixed createPost function
+    console.log('📱 Mobile post creation - Calling createPost function...')
+    const result = await createPost(createPostFormData)
+
+    console.log('📱 Mobile post creation - createPost result:', {
+      success: result.success,
+      message: result.message,
+      postId: result.postId
+    })
+
+    if (!result.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: result.message,
+          error: result.message,
+          code: 'POST_CREATION_FAILED'
+        },
+        { status: 400 }
+      )
     }
 
+    // Fetch the created post with full details for mobile response
+    let createdPost: any = null
+    if (result.postId) {
+      try {
+        createdPost = await payload.findByID({
+          collection: 'posts',
+          id: result.postId,
+          depth: 2,
+        })
+      } catch (fetchError) {
+        console.warn('📱 Could not fetch created post details:', fetchError)
+      }
+    }
+
+    // Format response for mobile consumption
     const response: MobileCreatePostResponse = {
       success: true,
       message: 'Post created successfully',
-      data: responseData,
+      data: createdPost ? {
+        id: createdPost.id,
+        content: createdPost.content,
+        author: {
+          id: createdPost.author?.id || user.id,
+          name: createdPost.author?.name || user.name || 'Unknown User',
+          profileImage: createdPost.author?.profileImage ? {
+            url: typeof createdPost.author.profileImage === 'object' && createdPost.author.profileImage.url
+              ? createdPost.author.profileImage.url
+              : typeof createdPost.author.profileImage === 'string'
+              ? createdPost.author.profileImage
+              : '' // Fallback
+          } : null,
+        },
+        media: [
+          // Images
+          ...(createdPost.image ? [{
+            type: 'image' as const,
+            url: typeof createdPost.image === 'object' && createdPost.image.url 
+              ? createdPost.image.url 
+              : typeof createdPost.image === 'string'
+              ? createdPost.image
+              : '',
+            alt: typeof createdPost.image === 'object' ? createdPost.image.alt : undefined
+          }] : []),
+          // Additional photos
+          ...(Array.isArray(createdPost.photos) ? createdPost.photos.map((photo: any) => ({
+            type: 'image' as const,
+            url: typeof photo === 'object' && photo.url 
+              ? photo.url 
+              : typeof photo === 'string'
+              ? photo
+              : '',
+            alt: typeof photo === 'object' ? photo.alt : undefined
+          })) : []),
+          // Videos
+          ...(createdPost.video ? [{
+            type: 'video' as const,
+            url: typeof createdPost.video === 'object' && createdPost.video.url 
+              ? createdPost.video.url 
+              : typeof createdPost.video === 'string'
+              ? createdPost.video
+              : '',
+            thumbnail: createdPost.videoThumbnail && typeof createdPost.videoThumbnail === 'object' && createdPost.videoThumbnail.url
+              ? createdPost.videoThumbnail.url
+              : undefined
+          }] : [])
+        ],
+        location: createdPost.location ? {
+          id: typeof createdPost.location === 'object' ? createdPost.location.id : createdPost.location,
+          name: typeof createdPost.location === 'object' ? createdPost.location.name : 'Unknown Location'
+        } : undefined,
+        type: createdPost.type,
+        rating: createdPost.rating,
+        tags: Array.isArray(createdPost.tags) 
+          ? createdPost.tags.map((tag: any) => typeof tag === 'object' ? tag.tag : tag)
+          : [],
+        createdAt: createdPost.createdAt,
+        updatedAt: createdPost.updatedAt,
+      } : {
+        id: result.postId || '',
+        content: validationResult.data.content,
+        author: {
+          id: user.id,
+          name: user.name || 'Unknown User',
+          profileImage: user.profileImage ? {
+            url: typeof user.profileImage === 'object' && user.profileImage.url
+              ? user.profileImage.url
+              : typeof user.profileImage === 'string'
+              ? user.profileImage
+              : ''
+          } : null,
+        },
+        type: validationResult.data.type,
+        rating: validationResult.data.rating,
+        tags: validationResult.data.tags,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
     }
 
     return NextResponse.json(response, {
@@ -352,7 +553,7 @@ export async function OPTIONS() {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
     },

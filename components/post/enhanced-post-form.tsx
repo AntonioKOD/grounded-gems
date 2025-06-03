@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
-import { Camera, ImageIcon, MapPin, Send, X, Loader2, Video, FileText, Plus, Star, Hash, Tag, Folder, Target, Globe, ArrowLeft, ArrowRight, Check, Upload, Smartphone } from "lucide-react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
+import { Camera, ImageIcon, MapPin, Send, X, Loader2, Video, FileText, Plus, Star, Hash, Tag, Folder, Target, Globe, ArrowLeft, ArrowRight, Check, Upload, Smartphone, AlertCircle, CheckCircle } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createPost } from "@/app/actions"
 import { useLocationSearch, type LocationResult } from "@/hooks/useLocationSearch"
 import Image from "next/image"
@@ -30,6 +31,7 @@ interface EnhancedPostFormProps {
   }
   onPostCreated?: () => void
   onCancel?: () => void
+  onClose?: () => void
   className?: string
 }
 
@@ -38,13 +40,12 @@ const STEPS = [
   { id: 2, title: "Caption", description: "Write your story", icon: FileText },
   { id: 3, title: "Details", description: "Add location & tags", icon: Tag },
   { id: 4, title: "Share", description: "Review and publish", icon: Send }
-]
+] as const
 
-// Detect if device is mobile - enhanced detection
+// Enhanced mobile detection - memoized
 const isMobile = () => {
   if (typeof window === 'undefined') return false
   
-  // Check for touch capability and screen size
   const hasTouchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0
   const isMobileWidth = window.innerWidth <= 768
   const isMobileUserAgent = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
@@ -52,11 +53,42 @@ const isMobile = () => {
   return (hasTouchScreen && isMobileWidth) || isMobileUserAgent
 }
 
-export function EnhancedPostForm({ user, onPostCreated, onCancel, className = "" }: EnhancedPostFormProps) {
+// Form validation - memoized
+const validateStep = (step: number, data: {
+  selectedFiles: File[]
+  selectedVideos: File[]
+  content: string
+  title: string
+  type: string
+  rating: number
+}) => {
+  const errors: string[] = []
+  
+  switch (step) {
+    case 1:
+      if (data.selectedFiles.length === 0 && data.selectedVideos.length === 0) {
+        errors.push("Please add at least one photo or video")
+      }
+      break
+    case 2:
+      if (!data.content || data.content.trim().length === 0) {
+        errors.push("Please write a caption")
+      }
+      if (data.content && data.content.length > 500) {
+        errors.push("Caption cannot exceed 500 characters")
+      }
+      break
+  }
+  
+  return errors
+}
+
+export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, className = "" }: EnhancedPostFormProps) {
   // Step management
   const [currentStep, setCurrentStep] = useState(1)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
   const [isMobileDevice, setIsMobileDevice] = useState(false)
+  const [errors, setErrors] = useState<string[]>([])
 
   // Basic form state
   const [title, setTitle] = useState("")
@@ -71,11 +103,10 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [videoPreviewUrls, setVideoPreviewUrls] = useState<string[]>([])
   const [isDragging, setIsDragging] = useState(false)
+  const [mediaUploadProgress, setMediaUploadProgress] = useState<number>(0)
 
-  // Location state
-  const [selectedLocation, setSelectedLocation] = useState<LocationResult | null>(null)
-  const [locationQuery, setLocationQuery] = useState("")
-  const [showLocationSearch, setShowLocationSearch] = useState(false)
+  // Location state (simplified - removing problematic location search hook)
+  const [locationName, setLocationName] = useState("")
 
   // Tags state
   const [tags, setTags] = useState<string[]>([])
@@ -86,308 +117,277 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
   const videoInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Location search hook
-  const {
-    locations,
-    isLoading: isSearchingLocations,
-    error: locationError,
-    hasSearched,
-    searchLocations,
-    searchNearMe,
-    clearSearch
-  } = useLocationSearch()
-
-  // Mobile camera state
+  // Camera state
   const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
 
-  // Detect mobile device on mount
+  // Detect mobile device on mount only
   useEffect(() => {
     setIsMobileDevice(isMobile())
-    
-    // Auto-open camera on mobile immediately
-    if (isMobile() && currentStep === 1) {
-      setIsCameraLoading(true)
-      // Use a shorter delay and ensure it triggers
-      const timer = setTimeout(() => {
-        if (cameraInputRef.current) {
-          // Trigger camera directly
-          cameraInputRef.current.click()
-          // Reset loading after attempt
-          setTimeout(() => setIsCameraLoading(false), 1000)
-        }
-      }, 100) // Reduced delay
-      
-      return () => clearTimeout(timer)
-    }
   }, [])
 
-  // Additional effect to handle step changes on mobile
-  useEffect(() => {
-    if (isMobileDevice && currentStep === 1 && cameraInputRef.current) {
-      setIsCameraLoading(true)
-      // Auto-trigger camera when returning to step 1 on mobile
-      const timer = setTimeout(() => {
-        cameraInputRef.current?.click()
-        setTimeout(() => setIsCameraLoading(false), 1000)
-      }, 200)
-      
-      return () => clearTimeout(timer)
-    }
-  }, [currentStep, isMobileDevice])
+  // Memoized validation data
+  const validationData = useMemo(() => ({
+    selectedFiles,
+    selectedVideos,
+    content,
+    title,
+    type,
+    rating
+  }), [selectedFiles, selectedVideos, content, title, type, rating])
 
-  // Handle camera capture (mobile-first) with better mobile handling
-  const handleCameraCapture = useCallback(() => {
-    if (cameraInputRef.current) {
-      setIsCameraLoading(true)
-      cameraInputRef.current.click()
+  // Validate current step - properly memoized
+  const isStepValid = useMemo(() => {
+    const stepErrors = validateStep(currentStep, validationData)
+    setErrors(stepErrors)
+    return stepErrors.length === 0
+  }, [currentStep, validationData])
+
+  // Navigation functions with proper dependencies
+  const goToNextStep = useCallback(() => {
+    if (currentStep < STEPS.length && isStepValid) {
+      setCompletedSteps(prev => [...prev, currentStep])
+      setCurrentStep(prev => prev + 1)
+      setErrors([])
       
-      // Reset loading state after attempt
-      setTimeout(() => setIsCameraLoading(false), 1000)
-      
-      // Add haptic feedback for mobile
+      // Add haptic feedback
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
-    }
-  }, [])
-
-  // Check if current step is valid
-  const isStepValid = useCallback((step: number) => {
-    switch (step) {
-      case 1: // Media upload
-        return selectedFiles.length > 0 || selectedVideos.length > 0
-      case 2: // Caption
-        return content.trim().length > 0
-      case 3: // Details (optional)
-        return true
-      case 4: // Review
-        return true
-      default:
-        return false
-    }
-  }, [selectedFiles.length, selectedVideos.length, content])
-
-  // Navigation functions
-  const goToNextStep = useCallback(() => {
-    if (currentStep < STEPS.length && isStepValid(currentStep)) {
-      setCompletedSteps(prev => [...prev, currentStep])
-      setCurrentStep(prev => prev + 1)
     }
   }, [currentStep, isStepValid])
 
   const goToPreviousStep = useCallback(() => {
     if (currentStep > 1) {
       setCurrentStep(prev => prev - 1)
+      setErrors([])
     }
   }, [currentStep])
 
-  // Handle drag and drop
+  // Enhanced camera capture with better error handling
+  const handleCameraCapture = useCallback(async () => {
+    if (!cameraInputRef.current) return
+    
+    setIsCameraLoading(true)
+    setCameraError(null)
+    
+    try {
+      // Check if camera is available
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Request camera permission first
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true })
+        // Stop the stream immediately - we just wanted to check permission
+        stream.getTracks().forEach(track => track.stop())
+      }
+      
+      // Trigger file input
+      cameraInputRef.current.click()
+      
+      // Add haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(100)
+      }
+      
+    } catch (error) {
+      console.error('Camera access error:', error)
+      setCameraError("Camera access denied. Please use gallery instead.")
+      toast.error("Camera access denied. Please use gallery instead.")
+    } finally {
+      setTimeout(() => setIsCameraLoading(false), 1000)
+    }
+  }, [])
+
+  // Enhanced drag and drop with better feedback
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragging(true)
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setIsDragging(false)
+    e.stopPropagation()
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragging(false)
     
     const files = Array.from(e.dataTransfer.files)
     const imageFiles = files.filter(file => file.type.startsWith('image/'))
     const videoFiles = files.filter(file => file.type.startsWith('video/'))
     
-    if (imageFiles.length > 0) {
-      setSelectedFiles(prev => [...prev, ...imageFiles])
-      const newPreviewUrls = imageFiles.map(file => URL.createObjectURL(file))
-      setPreviewUrls(prev => [...prev, ...newPreviewUrls])
-    }
-    
-    if (videoFiles.length > 0) {
-      setSelectedVideos(prev => [...prev, ...videoFiles])
-      const newPreviewUrls = videoFiles.map(file => URL.createObjectURL(file))
-      setVideoPreviewUrls(prev => [...prev, ...newPreviewUrls])
+    if (imageFiles.length > 0 || videoFiles.length > 0) {
+      processFiles([...imageFiles, ...videoFiles])
+      toast.success(`Added ${imageFiles.length + videoFiles.length} file(s)`)
+    } else {
+      toast.error("Please drop image or video files only")
     }
   }, [])
 
-  // Handle file uploads with better error handling
-  const handleFileUpload = useCallback(async (file: File, type: 'image' | 'video') => {
-    console.log('📤 Starting file upload:', { name: file.name, type: file.type, size: file.size })
-    
-    // Validate file size before upload
+  // Process files with validation and progress - removed auto-advancing logic
+  const processFiles = useCallback(async (files: File[]) => {
+    const MAX_FILES = 10
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
-    const maxSize = type === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE
     
-    if (file.size > maxSize) {
-      const sizeMB = (file.size / 1024 / 1024).toFixed(2)
-      const maxSizeMB = (maxSize / 1024 / 1024).toFixed(0)
-      toast({
-        title: "File too large",
-        description: `${file.name} is ${sizeMB}MB. Maximum size for ${type}s is ${maxSizeMB}MB.`,
-        variant: "destructive",
-      })
-      return null
+    const currentFileCount = selectedFiles.length + selectedVideos.length
+    if (currentFileCount + files.length > MAX_FILES) {
+      toast.error(`Maximum ${MAX_FILES} files allowed`)
+      return
     }
-
-    // Validate file type
-    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/avif']
-    const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/avi', 'video/quicktime']
-    const allowedTypes = type === 'video' ? allowedVideoTypes : allowedImageTypes
     
-    if (!allowedTypes.includes(file.type.toLowerCase())) {
-      toast({
-        title: "Unsupported file format",
-        description: `Please use a supported ${type} format: ${allowedTypes.map(t => t.split('/')[1].toUpperCase()).join(', ')}`,
-        variant: "destructive",
-      })
-      return null
-    }
-
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('alt', `${type} for post`)
-
-    try {
-      console.log('📤 Uploading to /api/upload-media...')
-      const response = await fetch('/api/upload-media', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('📤 Upload failed:', errorData)
-        throw new Error(errorData.error || `Upload failed with status ${response.status}`)
+    const validFiles: File[] = []
+    const validImages: File[] = []
+    const validVideos: File[] = []
+    
+    for (const file of files) {
+      // Validate file type
+      if (file.type.startsWith('image/')) {
+        if (file.size > MAX_IMAGE_SIZE) {
+          toast.error(`${file.name} is too large. Max size: 10MB`)
+          continue
+        }
+        if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'].includes(file.type.toLowerCase())) {
+          toast.error(`${file.name} is not a supported image format`)
+          continue
+        }
+        validImages.push(file)
+        validFiles.push(file)
+      } else if (file.type.startsWith('video/')) {
+        if (file.size > MAX_VIDEO_SIZE) {
+          toast.error(`${file.name} is too large. Max size: 50MB`)
+          continue
+        }
+        if (!['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/quicktime'].includes(file.type.toLowerCase())) {
+          toast.error(`${file.name} is not a supported video format`)
+          continue
+        }
+        validVideos.push(file)
+        validFiles.push(file)
       }
-
-      const result = await response.json()
-      console.log('📤 Upload successful:', result.id)
-      
-      toast({
-        title: `${type === 'video' ? 'Video' : 'Image'} uploaded successfully`,
-        description: `${file.name} has been uploaded and will be included in your post.`,
-      })
-      
-      return result
-    } catch (error) {
-      console.error('📤 Upload error:', error)
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : `Failed to upload ${file.name}. Please try again.`,
-        variant: "destructive",
-      })
-      return null
     }
-  }, [toast])
+    
+    if (validFiles.length === 0) return
+    
+    // Add files and create previews
+    setSelectedFiles(prev => [...prev, ...validImages])
+    setSelectedVideos(prev => [...prev, ...validVideos])
+    
+    // Create preview URLs
+    const imagePreviewUrls = validImages.map(file => URL.createObjectURL(file))
+    const videoPreviewUrls = validVideos.map(file => URL.createObjectURL(file))
+    
+    setPreviewUrls(prev => [...prev, ...imagePreviewUrls])
+    setVideoPreviewUrls(prev => [...prev, ...videoPreviewUrls])
+  }, [selectedFiles.length, selectedVideos.length])
 
-  // Handle file uploads
+  // Enhanced file change handlers
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    const imageFiles = files.filter(file => file.type.startsWith('image/'))
-    
-    if (imageFiles.length > 0) {
-      setSelectedFiles(prev => [...prev, ...imageFiles])
-      const newPreviewUrls = imageFiles.map(file => URL.createObjectURL(file))
-      setPreviewUrls(prev => [...prev, ...newPreviewUrls])
-      
-      // Auto-advance to next step on mobile after capture
-      if (isMobileDevice && currentStep === 1) {
-        setTimeout(() => goToNextStep(), 500)
-      }
+    if (files.length > 0) {
+      processFiles(files)
     }
-  }, [isMobileDevice, currentStep, goToNextStep])
+    // Reset input to allow same file selection
+    e.target.value = ''
+  }, [processFiles])
 
   const handleVideoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    const videoFiles = files.filter(file => file.type.startsWith('video/'))
-    
-    if (videoFiles.length > 0) {
-      setSelectedVideos(prev => [...prev, ...videoFiles])
-      const newPreviewUrls = videoFiles.map(file => URL.createObjectURL(file))
-      setVideoPreviewUrls(prev => [...prev, ...newPreviewUrls])
-      
-      // Auto-advance to next step on mobile after capture
-      if (isMobileDevice && currentStep === 1) {
-        setTimeout(() => goToNextStep(), 500)
-      }
+    if (files.length > 0) {
+      processFiles(files)
     }
-  }, [isMobileDevice, currentStep, goToNextStep])
+    // Reset input to allow same file selection
+    e.target.value = ''
+  }, [processFiles])
 
-  // Remove media functions
-  const removeFile = useCallback((index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
-    setPreviewUrls(prev => {
-      URL.revokeObjectURL(prev[index])
-      return prev.filter((_, i) => i !== index)
-    })
-  }, [])
-
-  const removeVideo = useCallback((index: number) => {
-    setSelectedVideos(prev => prev.filter((_, i) => i !== index))
-    setVideoPreviewUrls(prev => {
-      URL.revokeObjectURL(prev[index])
-      return prev.filter((_, i) => i !== index)
-    })
-  }, [])
-
-  // Location functions
-  const handleLocationSearch = useCallback(async (query: string) => {
-    setLocationQuery(query)
-    if (query.length >= 2) {
-      setShowLocationSearch(true)
-      await searchLocations(query)
+  // Remove media with confirmation
+  const removeFile = useCallback((index: number, type: 'image' | 'video') => {
+    if (type === 'image') {
+      setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+      setPreviewUrls(prev => {
+        URL.revokeObjectURL(prev[index])
+        return prev.filter((_, i) => i !== index)
+      })
     } else {
-      clearSearch()
-      setShowLocationSearch(false)
+      setSelectedVideos(prev => prev.filter((_, i) => i !== index))
+      setVideoPreviewUrls(prev => {
+        URL.revokeObjectURL(prev[index])
+        return prev.filter((_, i) => i !== index)
+      })
     }
-  }, [searchLocations, clearSearch])
+    
+    // Add haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate(30)
+    }
+  }, [])
 
-  const handleNearbySearch = useCallback(async () => {
-    setShowLocationSearch(true)
-    await searchNearMe()
-  }, [searchNearMe])
-
-  const handleLocationSelect = useCallback((location: LocationResult) => {
-    setSelectedLocation(location)
-    setLocationQuery(location.name)
-    setShowLocationSearch(false)
-    clearSearch()
-  }, [clearSearch])
-
-  const handleClearLocation = useCallback(() => {
-    setSelectedLocation(null)
-    setLocationQuery("")
-    clearSearch()
-  }, [clearSearch])
-
-  // Tag functions
+  // Enhanced tag functions
   const handleTagInput = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()
-      const tag = currentTag.trim()
-      if (tag && !tags.includes(tag)) {
-        setTags(prev => [...prev, tag])
-        setCurrentTag("")
+      const tag = currentTag.trim().toLowerCase()
+      
+      if (!tag) return
+      
+      if (tag.length < 2) {
+        toast.error("Tags must be at least 2 characters long")
+        return
+      }
+      
+      if (tag.length > 20) {
+        toast.error("Tags cannot exceed 20 characters")
+        return
+      }
+      
+      if (tags.length >= 10) {
+        toast.error("Maximum 10 tags allowed")
+        return
+      }
+      
+      if (tags.includes(tag)) {
+        toast.error("Tag already added")
+        return
+      }
+      
+      setTags(prev => [...prev, tag])
+      setCurrentTag("")
+      
+      // Add haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(30)
       }
     }
   }, [currentTag, tags])
 
   const removeTag = useCallback((tag: string) => {
     setTags(prev => prev.filter(t => t !== tag))
+    
+    // Add haptic feedback
+    if (navigator.vibrate) {
+      navigator.vibrate(30)
+    }
   }, [])
 
-  // Form submission
+  // Enhanced form submission
   const handleSubmit = useCallback(async () => {
-    if (!isStepValid(1) || !isStepValid(2)) {
-      toast.error("Please complete all required steps")
-      return
+    // Final validation
+    for (let step = 1; step <= 2; step++) { // Only validate required steps
+      const stepErrors = validateStep(step, validationData)
+      if (stepErrors.length > 0) {
+        toast.error(`Please complete step ${step}`)
+        setCurrentStep(step)
+        return
+      }
     }
 
     setIsSubmitting(true)
+    setMediaUploadProgress(0)
 
     try {
       const formData = new FormData()
@@ -397,16 +397,25 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
       
       if (title.trim()) formData.append("title", title.trim())
       if (type === "review" && rating > 0) formData.append("rating", rating.toString())
-      if (selectedLocation) formData.append("locationId", selectedLocation.id)
+      if (locationName.trim()) formData.append("locationName", locationName.trim())
       
       tags.forEach(tag => formData.append("tags[]", tag))
-      selectedFiles.forEach(file => formData.append(`media`, file))
-      selectedVideos.forEach(file => formData.append(`videos`, file))
+      
+      // Add media files
+      selectedFiles.forEach((file, index) => {
+        formData.append(`media`, file)
+        setMediaUploadProgress((index + 1) / (selectedFiles.length + selectedVideos.length) * 50)
+      })
+      
+      selectedVideos.forEach((file, index) => {
+        formData.append(`videos`, file)
+        setMediaUploadProgress(50 + ((index + 1) / selectedVideos.length) * 50)
+      })
 
       const result = await createPost(formData)
 
       if (result.success) {
-        toast.success("Posted! 🎉")
+        toast.success("Post shared successfully!")
         
         // Reset form
         setCurrentStep(1)
@@ -415,13 +424,18 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
         setContent("")
         setType("post")
         setRating(0)
-        setSelectedLocation(null)
-        setLocationQuery("")
+        setLocationName("")
         setTags([])
         setSelectedFiles([])
         setSelectedVideos([])
         setPreviewUrls([])
         setVideoPreviewUrls([])
+        setErrors([])
+        
+        // Add success haptic feedback
+        if (navigator.vibrate) {
+          navigator.vibrate([100, 50, 100])
+        }
         
         onPostCreated?.()
       } else {
@@ -430,10 +444,16 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
     } catch (error) {
       console.error("Error creating post:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create post")
+      
+      // Add error haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200])
+      }
     } finally {
       setIsSubmitting(false)
+      setMediaUploadProgress(0)
     }
-  }, [isStepValid, user.id, content, type, title, rating, selectedLocation, tags, selectedFiles, selectedVideos, onPostCreated])
+  }, [validationData, user.id, content, type, title, rating, locationName, tags, selectedFiles, selectedVideos, onPostCreated])
 
   // Cleanup
   useEffect(() => {
@@ -443,25 +463,76 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
     }
   }, [previewUrls, videoPreviewUrls])
 
-  const progress = ((completedSteps.length + (isStepValid(currentStep) ? 1 : 0)) / STEPS.length) * 100
+  // Memoized progress calculation
+  const progress = useMemo(() => {
+    return ((completedSteps.length + (isStepValid ? 1 : 0)) / STEPS.length) * 100
+  }, [completedSteps.length, isStepValid])
 
-  // Mobile-first capture step
-  const renderCaptureStep = () => (
+  // Get user initials - memoized
+  const userInitials = useMemo(() => {
+    return user.name.substring(0, 2).toUpperCase()
+  }, [user.name])
+
+  // Mobile-first capture step with enhanced UX - memoized
+  const renderCaptureStep = useCallback(() => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
       className="flex flex-col h-full"
     >
-      {/* Mobile-first camera interface */}
+      {/* Error alerts */}
+      <AnimatePresence>
+        {errors.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4"
+          >
+            <Alert className="border-red-200 bg-red-50">
+              <AlertCircle className="h-4 w-4 text-red-600" />
+              <AlertDescription className="text-red-800">
+                {errors.map((error, index) => (
+                  <div key={index}>{error}</div>
+                ))}
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+        
+        {cameraError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4"
+          >
+            <Alert className="border-yellow-200 bg-yellow-50">
+              <AlertCircle className="h-4 w-4 text-yellow-600" />
+              <AlertDescription className="text-yellow-800">
+                {cameraError}
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Content */}
       <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-4">
         {(previewUrls.length > 0 || videoPreviewUrls.length > 0) ? (
-          // Show previews
+          // Show previews with enhanced mobile grid
           <div className="w-full space-y-4">
-            <h2 className="text-xl font-bold text-center" style={{ color: 'var(--color-text)' }}>
-              Your Capture
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900">
+                Your Media ({selectedFiles.length + selectedVideos.length} files)
+              </h2>
+              <p className="text-gray-600 text-sm">
+                {selectedFiles.length + selectedVideos.length < 10 ? 'Tap + to add more' : 'Maximum files reached'}
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {previewUrls.map((url, index) => (
                 <motion.div
                   key={`image-${index}`}
@@ -472,13 +543,18 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
                   <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
                   <button
                     type="button"
-                    onClick={() => removeFile(index)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeFile(index, 'image')}
+                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
+                    style={{ minHeight: '44px', minWidth: '44px' }}
                   >
                     <X className="h-4 w-4" />
                   </button>
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                    IMG
+                  </div>
                 </motion.div>
               ))}
+              
               {videoPreviewUrls.map((url, index) => (
                 <motion.div
                   key={`video-${index}`}
@@ -486,26 +562,47 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
                   animate={{ opacity: 1, scale: 1 }}
                   className="relative aspect-square rounded-2xl overflow-hidden group"
                 >
-                  <video src={url} className="w-full h-full object-cover" controls />
+                  <video src={url} className="w-full h-full object-cover" muted playsInline />
                   <button
                     type="button"
-                    onClick={() => removeVideo(index)}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => removeFile(index, 'video')}
+                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
+                    style={{ minHeight: '44px', minWidth: '44px' }}
                   >
                     <X className="h-4 w-4" />
                   </button>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <Video className="h-8 w-8 text-white" />
+                  </div>
+                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                    VID
+                  </div>
                 </motion.div>
               ))}
+              
+              {/* Add more button */}
+              {selectedFiles.length + selectedVideos.length < 10 && (
+                <motion.button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
+                  style={{ minHeight: '44px' }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Plus className="h-8 w-8 text-gray-400" />
+                  <span className="text-xs text-gray-500 mt-1">Add</span>
+                </motion.button>
+              )}
             </div>
           </div>
         ) : (
-          // Show capture interface
+          // Show capture interface with improved mobile UX
           <div className="w-full text-center space-y-6">
             <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
+              animate={{ scale: isCameraLoading ? [1, 1.1, 1] : [1, 1.05, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
-              className="mx-auto w-32 h-32 rounded-full flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }}
+              className="mx-auto w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center"
             >
               {isCameraLoading ? (
                 <motion.div
@@ -519,100 +616,103 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
             </motion.div>
             
             <div>
-              <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
+              <h2 className="text-2xl font-bold mb-2 text-gray-900">
                 {isCameraLoading 
                   ? "Opening Camera..." 
                   : isMobileDevice 
-                    ? "Camera Ready!" 
+                    ? "Add Your Photos & Videos" 
                     : "Add Your Media"
                 }
               </h2>
               <p className="text-gray-600">
                 {isCameraLoading 
-                  ? "Please allow camera permissions" 
+                  ? "Please allow camera permissions when prompted" 
                   : isMobileDevice 
-                    ? "Camera should open automatically or tap below" 
+                    ? "Take photos/videos or choose from gallery" 
                     : "Upload photos and videos to share"
                 }
               </p>
             </div>
 
-            {/* Mobile-first action buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-sm mx-auto">
+            {/* Mobile-optimized action buttons */}
+            <div className="flex flex-col gap-3 w-full max-w-sm mx-auto">
+              {/* Camera Button - Primary on mobile */}
               <Button
                 type="button"
                 onClick={handleCameraCapture}
-                className={`flex-1 ${isMobileDevice ? 'h-16' : 'h-14'} text-lg font-semibold rounded-full ${
-                  isMobileDevice ? 'animate-pulse' : ''
-                }`}
-                style={{ 
-                  background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
-                  color: 'white'
-                }}
+                disabled={isCameraLoading}
+                className="h-14 text-lg font-semibold rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
               >
-                <Camera className={`${isMobileDevice ? 'h-8 w-8' : 'h-6 w-6'} mr-3`} />
-                {isMobileDevice ? "📸 Open Camera" : "Take Photo"}
+                {isCameraLoading ? (
+                  <Loader2 className="h-6 w-6 animate-spin mr-3" />
+                ) : (
+                  <Camera className="h-6 w-6 mr-3" />
+                )}
+                {isCameraLoading ? "Opening Camera..." : "Take Photo/Video"}
               </Button>
-              
+
+              {/* Gallery Button */}
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className={`flex-1 ${isMobileDevice ? 'h-16' : 'h-14'} text-lg font-semibold rounded-full border-2`}
-                style={{ 
-                  borderColor: 'var(--color-primary)',
-                  color: 'var(--color-primary)'
-                }}
+                className="h-14 text-lg font-semibold rounded-2xl border-2 border-gray-300 hover:border-gray-400"
               >
-                <ImageIcon className={`${isMobileDevice ? 'h-8 w-8' : 'h-6 w-6'} mr-3`} />
-                {isMobileDevice ? "📱 Gallery" : "Gallery"}
+                <ImageIcon className="h-6 w-6 mr-3" />
+                Choose from Gallery
+              </Button>
+
+              {/* Video Button */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => videoInputRef.current?.click()}
+                className="h-14 text-lg font-semibold rounded-2xl border-2 border-gray-300 hover:border-gray-400"
+              >
+                <Video className="h-6 w-6 mr-3" />
+                Choose Videos
               </Button>
             </div>
 
+            {/* Desktop drag and drop area */}
             {!isMobileDevice && (
               <div
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                className={`mt-6 border-2 border-dashed rounded-2xl p-8 transition-all ${
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
                   isDragging 
-                    ? 'border-blue-500 bg-blue-50' 
+                    ? 'border-blue-500 bg-blue-50 scale-105' 
                     : 'border-gray-300 hover:border-gray-400'
                 }`}
               >
-                <Upload className="h-8 w-8 mx-auto mb-2 text-gray-400" />
-                <p className="text-gray-500 text-sm">Or drag and drop files here</p>
+                <div className="space-y-2">
+                  <div className="text-gray-400">
+                    <ImageIcon className="h-8 w-8 mx-auto" />
+                  </div>
+                  <p className="text-sm text-gray-500 font-medium">
+                    {isDragging ? 'Drop your files here!' : 'Drag & drop photos/videos here'}
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    Or use the buttons above • Max 10 files, 10MB each
+                  </p>
+                </div>
               </div>
-            )}
-
-            {/* Mobile instruction text */}
-            {isMobileDevice && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 1 }}
-                className="mt-4 p-3 bg-blue-50 rounded-2xl border border-blue-200"
-              >
-                <p className="text-blue-700 text-sm">
-                  📋 <strong>Tip:</strong> Allow camera permissions when prompted for the best experience!
-                </p>
-              </motion.div>
             )}
           </div>
         )}
       </div>
 
-      {/* Hidden inputs with enhanced mobile camera support */}
+      {/* Hidden inputs with enhanced mobile attributes */}
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*,video/*"
-        capture="environment" // Use back camera by default
-        multiple={false} // Single capture for mobile simplicity
+        capture="environment"
+        multiple={false}
         onChange={handleFileChange}
         className="hidden"
-        // Additional mobile attributes
-        style={{ display: 'none' }}
+        aria-label="Capture photo or video"
       />
       <input
         ref={fileInputRef}
@@ -621,21 +721,22 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
         multiple
         onChange={handleFileChange}
         className="hidden"
+        aria-label="Choose photos from gallery"
       />
       <input
         ref={videoInputRef}
         type="file"
         accept="video/*"
-        capture={isMobileDevice ? "environment" : undefined} // Only use capture on mobile
         multiple
         onChange={handleVideoChange}
         className="hidden"
+        aria-label="Choose videos from gallery"
       />
     </motion.div>
-  )
+  ), [errors, cameraError, previewUrls, videoPreviewUrls, selectedFiles.length, selectedVideos.length, isCameraLoading, isMobileDevice, handleCameraCapture, removeFile, isDragging, handleDragOver, handleDragLeave, handleDrop, handleFileChange, handleVideoChange])
 
-  // Caption step
-  const renderCaptionStep = () => (
+  // Caption step - memoized
+  const renderCaptionStep = useCallback(() => (
     <motion.div
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
@@ -643,7 +744,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
       className="space-y-6 p-4"
     >
       <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
+        <h2 className="text-2xl font-bold mb-2 text-gray-900">
           Tell Your Story
         </h2>
         <p className="text-gray-600">Add a caption that brings your content to life</p>
@@ -651,7 +752,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
 
       {/* Post type selection */}
       <div className="space-y-3">
-        <Label className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        <Label className="text-sm font-medium text-gray-900">
           Post Type
         </Label>
         <div className="grid grid-cols-3 gap-2">
@@ -667,15 +768,9 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
               onClick={() => setType(value)}
               className={`h-12 rounded-2xl transition-all ${
                 type === value
-                  ? 'text-white'
-                  : 'border-2'
+                  ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700'
+                  : 'border-2 border-blue-500 text-blue-600 hover:bg-blue-50'
               }`}
-              style={type === value ? {
-                background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))'
-              } : {
-                borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)'
-              }}
             >
               <Icon className="h-5 w-5 mr-2" />
               {label}
@@ -686,7 +781,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
 
       {/* Content textarea */}
       <div className="space-y-2">
-        <Label htmlFor="content" className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        <Label htmlFor="content" className="text-sm font-medium text-gray-900">
           Caption *
         </Label>
         <div className="relative">
@@ -694,12 +789,8 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
             id="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="What's happening? Share your thoughts... ✨"
-            className="min-h-[120px] text-base p-4 rounded-2xl border-2 resize-none"
-            style={{
-              borderColor: content ? 'var(--color-secondary)' : 'var(--color-border)',
-              color: 'var(--color-text)'
-            }}
+            placeholder="What's happening? Share your thoughts..."
+            className="min-h-[120px] text-base p-4 rounded-2xl border-2 resize-none text-gray-900 border-gray-300 focus:border-blue-500 focus:ring-blue-500"
             maxLength={500}
           />
           <div className="absolute bottom-3 right-3 text-xs text-gray-400">
@@ -711,7 +802,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
       {/* Rating for reviews */}
       {type === "review" && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+          <Label className="text-sm font-medium text-gray-900">
             Rating
           </Label>
           <div className="flex items-center gap-1">
@@ -731,10 +822,10 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
         </div>
       )}
     </motion.div>
-  )
+  ), [type, content, rating])
 
-  // Details step
-  const renderDetailsStep = () => (
+  // Details step - memoized
+  const renderDetailsStep = useCallback(() => (
     <motion.div
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
@@ -742,7 +833,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
       className="space-y-6 p-4"
     >
       <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
+        <h2 className="text-2xl font-bold mb-2 text-gray-900">
           Add Details
         </h2>
         <p className="text-gray-600">Help people discover your content</p>
@@ -750,7 +841,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
 
       {/* Location search */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        <Label className="text-sm font-medium text-gray-900">
           Location
         </Label>
         <div className="relative">
@@ -758,67 +849,19 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
             <div className="flex-1 relative">
               <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-500" />
               <Input
-                value={locationQuery}
-                onChange={(e) => handleLocationSearch(e.target.value)}
+                value={locationName}
+                onChange={(e) => setLocationName(e.target.value)}
                 placeholder="Add location..."
-                className="pl-12 h-12 rounded-2xl border-2"
-                style={{
-                  borderColor: selectedLocation ? 'var(--color-secondary)' : 'var(--color-border)',
-                  color: 'var(--color-text)'
-                }}
+                className="pl-12 h-12 rounded-2xl border-2 border-gray-300 focus:border-blue-500 text-gray-900"
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleNearbySearch}
-              className="h-12 px-4 rounded-2xl border-2"
-              style={{
-                borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)'
-              }}
-            >
-              <Target className="h-5 w-5" />
-            </Button>
           </div>
-
-          {/* Location results */}
-          <AnimatePresence>
-            {showLocationSearch && locations.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="absolute top-full left-0 right-0 z-50 mt-1 bg-white rounded-2xl shadow-lg border border-gray-200 max-h-60 overflow-y-auto"
-              >
-                {locations.map((location) => (
-                  <button
-                    key={location.id}
-                    type="button"
-                    onClick={() => handleLocationSelect(location)}
-                    className="w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors flex items-center gap-3"
-                  >
-                    <div className="h-8 w-8 rounded-full flex items-center justify-center"
-                         style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }}>
-                      <MapPin className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium" style={{ color: 'var(--color-text)' }}>
-                        {location.name}
-                      </p>
-                      <p className="text-sm text-gray-500">{location.address}</p>
-                    </div>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
       </div>
 
       {/* Tags */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        <Label className="text-sm font-medium text-gray-900">
           Tags
         </Label>
         <div className="space-y-2">
@@ -829,11 +872,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
               onChange={(e) => setCurrentTag(e.target.value)}
               onKeyDown={handleTagInput}
               placeholder="Add tags..."
-              className="pl-12 h-12 rounded-2xl border-2"
-              style={{
-                borderColor: tags.length > 0 ? 'var(--color-secondary)' : 'var(--color-border)',
-                color: 'var(--color-text)'
-              }}
+              className="pl-12 h-12 rounded-2xl border-2 border-gray-300 focus:border-blue-500 text-gray-900"
             />
           </div>
           {tags.length > 0 && (
@@ -841,11 +880,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
               {tags.map((tag) => (
                 <Badge
                   key={tag}
-                  className="px-3 py-1 text-sm rounded-full"
-                  style={{
-                    backgroundColor: 'var(--color-accent)',
-                    color: 'var(--color-text)'
-                  }}
+                  className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-800"
                 >
                   #{tag}
                   <button
@@ -862,10 +897,10 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
         </div>
       </div>
     </motion.div>
-  )
+  ), [locationName, currentTag, tags, handleTagInput, removeTag])
 
-  // Review step
-  const renderReviewStep = () => (
+  // Review step - memoized
+  const renderReviewStep = useCallback(() => (
     <motion.div
       initial={{ opacity: 0, x: 50 }}
       animate={{ opacity: 1, x: 0 }}
@@ -873,34 +908,34 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
       className="space-y-6 p-4"
     >
       <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
+        <h2 className="text-2xl font-bold mb-2 text-gray-900">
           Ready to Share?
         </h2>
         <p className="text-gray-600">Review your post before publishing</p>
       </div>
 
       {/* Post preview */}
-      <Card className="border-2 rounded-2xl overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+      <Card className="border-2 rounded-2xl overflow-hidden border-gray-200">
         <CardContent className="p-4">
           {/* Author info */}
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-10 w-10">
               <AvatarImage src={user.profileImage?.url || user.avatar} alt={user.name} />
-              <AvatarFallback style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                {user.name.substring(0, 2).toUpperCase()}
+              <AvatarFallback className="bg-blue-500 text-white">
+                {userInitials}
               </AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-semibold" style={{ color: 'var(--color-text)' }}>{user.name}</p>
+              <p className="font-semibold text-gray-900">{user.name}</p>
               <p className="text-sm text-gray-500">
                 {type.charAt(0).toUpperCase() + type.slice(1)}
-                {selectedLocation && ` • ${selectedLocation.name}`}
+                {locationName && ` • ${locationName}`}
               </p>
             </div>
           </div>
 
           {/* Content */}
-          <p className="mb-4 whitespace-pre-wrap" style={{ color: 'var(--color-text)' }}>
+          <p className="mb-4 whitespace-pre-wrap text-gray-900">
             {content}
           </p>
 
@@ -927,7 +962,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
           {tags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {tags.map((tag) => (
-                <span key={tag} className="text-sm" style={{ color: 'var(--color-primary)' }}>
+                <span key={tag} className="text-sm text-blue-600">
                   #{tag}
                 </span>
               ))}
@@ -936,7 +971,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
         </CardContent>
       </Card>
     </motion.div>
-  )
+  ), [user.profileImage?.url, user.avatar, user.name, userInitials, type, locationName, content, previewUrls, videoPreviewUrls, tags])
 
   return (
     <div className={`w-full h-full flex flex-col bg-white ${className}`}>
@@ -946,17 +981,17 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
               <AvatarImage src={user.profileImage?.url || user.avatar} alt={user.name} />
-              <AvatarFallback style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                {user.name.substring(0, 2).toUpperCase()}
+              <AvatarFallback className="bg-blue-500 text-white">
+                {userInitials}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="font-semibold" style={{ color: 'var(--color-text)' }}>{user.name}</h3>
+              <h3 className="font-semibold text-gray-900">{user.name}</h3>
               <p className="text-sm text-gray-500">Create new post</p>
             </div>
           </div>
-          {onCancel && (
-            <Button variant="ghost" size="sm" onClick={onCancel}>
+          {onClose && (
+            <Button variant="ghost" size="sm" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -987,16 +1022,11 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
                   step.id === currentStep
-                    ? 'text-white'
+                    ? 'text-white bg-gradient-to-br from-blue-500 to-purple-600'
                     : step.id < currentStep || completedSteps.includes(step.id)
-                    ? 'text-white'
-                    : 'text-gray-400'
+                    ? 'text-white bg-gradient-to-br from-blue-500 to-purple-600'
+                    : 'text-gray-400 bg-gray-200'
                 }`}
-                style={
-                  step.id === currentStep || step.id < currentStep || completedSteps.includes(step.id)
-                    ? { background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }
-                    : { backgroundColor: '#e5e7eb' }
-                }
               >
                 {step.id < currentStep || completedSteps.includes(step.id) ? (
                   <Check className="h-4 w-4" />
@@ -1025,16 +1055,11 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
                   step.id === currentStep
-                    ? 'text-white'
+                    ? 'text-white bg-gradient-to-br from-blue-500 to-purple-600'
                     : step.id < currentStep || completedSteps.includes(step.id)
-                    ? 'text-white'
-                    : 'text-gray-400'
+                    ? 'text-white bg-gradient-to-br from-blue-500 to-purple-600'
+                    : 'text-gray-400 bg-gray-200'
                 }`}
-                style={
-                  step.id === currentStep || step.id < currentStep || completedSteps.includes(step.id)
-                    ? { background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }
-                    : { backgroundColor: '#e5e7eb' }
-                }
               >
                 {step.id < currentStep || completedSteps.includes(step.id) ? (
                   <Check className="h-5 w-5" />
@@ -1043,7 +1068,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
                 )}
               </div>
               <div>
-                <p className="font-medium text-sm" style={{ color: 'var(--color-text)' }}>
+                <p className="font-medium text-sm text-gray-900">
                   {step.title}
                 </p>
                 <p className="text-xs text-gray-500">{step.description}</p>
@@ -1071,44 +1096,41 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, className = ""
             variant="outline"
             onClick={goToPreviousStep}
             disabled={currentStep === 1}
-            className="flex items-center gap-2 h-12 px-6 rounded-2xl border-2"
-            style={{
-              borderColor: 'var(--color-border)',
-              color: 'var(--color-text)'
-            }}
+            className="flex items-center gap-2 h-10 px-4 rounded-2xl border-2 border-gray-300 text-gray-700 hover:border-gray-400 flex-shrink-0"
+            style={{ minWidth: '80px' }}
           >
-            <ArrowLeft className="h-5 w-5" />
-            Back
+            <ArrowLeft className="h-4 w-4" />
+            {isMobileDevice ? "Back" : "Back"}
           </Button>
 
           {currentStep < STEPS.length ? (
             <Button
               type="button"
               onClick={goToNextStep}
-              disabled={!isStepValid(currentStep)}
-              className="flex-1 h-12 text-lg font-semibold rounded-2xl text-white"
-              style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }}
+              disabled={!isStepValid}
+              className="flex-1 h-10 text-base font-semibold rounded-2xl text-white bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 min-w-0"
+              style={{ minWidth: '100px' }}
             >
-              Next
-              <ArrowRight className="h-5 w-5 ml-2" />
+              {isMobileDevice ? "Next" : "Next"}
+              <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
             <Button
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="flex-1 h-12 text-lg font-semibold rounded-2xl text-white"
-              style={{ background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))' }}
+              className="flex-1 h-10 text-base font-semibold rounded-2xl text-white bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 min-w-0"
+              style={{ minWidth: '100px' }}
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Sharing...
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  {isMobileDevice ? "Sharing..." : "Sharing..."}
                 </>
               ) : (
                 <>
-                  <Send className="h-5 w-5 mr-2" />
-                  Share Post
+                  <Send className="h-4 w-4 mr-2" />
+                  {isMobileDevice ? "Share" : "Share Post"}
                 </>
               )}
             </Button>

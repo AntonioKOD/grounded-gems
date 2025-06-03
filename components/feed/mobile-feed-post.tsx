@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, memo, useCallback, useEffect } from "react"
+import { useState, memo, useCallback, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -20,6 +20,7 @@ import {
   MapPin,
   ArrowUp,
   X,
+  Maximize,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -88,6 +89,14 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const [showCommentDialog, setShowCommentDialog] = useState(false)
   const [showMoreActions, setShowMoreActions] = useState(false)
   
+  // Video player state
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [isVideoMuted, setIsVideoMuted] = useState(true)
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [videoDuration, setVideoDuration] = useState(0)
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
   // Get author profile image URL with robust fallbacks
   const getAuthorProfileImageUrl = () => {
     // Match the exact priority from the web app's EnhancedFeedPost component
@@ -341,6 +350,64 @@ const MobileFeedPost = memo(function MobileFeedPost({
     const index = post.id.charCodeAt(0) % gradients.length
     return gradients[index]
   }
+
+  // Video player controls
+  const handleVideoPlay = useCallback(() => {
+    if (videoRef.current) {
+      if (isVideoPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsVideoPlaying(!isVideoPlaying)
+    }
+  }, [isVideoPlaying])
+
+  const handleVideoMute = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isVideoMuted
+      setIsVideoMuted(!isVideoMuted)
+    }
+  }, [isVideoMuted])
+
+  const handleVideoTimeUpdate = useCallback(() => {
+    if (videoRef.current) {
+      const progress = (videoRef.current.currentTime / videoRef.current.duration) * 100
+      setVideoProgress(progress)
+    }
+  }, [])
+
+  const handleVideoLoadedMetadata = useCallback(() => {
+    if (videoRef.current) {
+      setVideoDuration(videoRef.current.duration)
+    }
+  }, [])
+
+  // Auto-play video when in view
+  useEffect(() => {
+    const video = videoRef.current
+    if (video && hasVideo) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              video.play().catch(() => {
+                // Auto-play failed, user interaction required
+              })
+              setIsVideoPlaying(true)
+            } else {
+              video.pause()
+              setIsVideoPlaying(false)
+            }
+          })
+        },
+        { threshold: 0.7 }
+      )
+
+      observer.observe(video)
+      return () => observer.disconnect()
+    }
+  }, [hasVideo])
 
   return (
     <>
@@ -860,6 +927,173 @@ const MobileFeedPost = memo(function MobileFeedPost({
               }}
             />
           ))}
+        </div>
+
+        {/* Media content with enhanced video support */}
+        <div className="relative">
+          {/* Images */}
+          {hasImage && mediaUrls.length > 0 && (
+            <div className="relative mb-4">
+              <div 
+                className="relative w-full rounded-2xl overflow-hidden"
+                style={{ aspectRatio: '16/10' }}
+              >
+                <Image
+                  src={mediaUrls[currentImageIndex] || '/placeholder-image.jpg'}
+                  alt={`Post media ${currentImageIndex + 1}`}
+                  fill
+                  className="object-cover"
+                  priority={priority === 0}
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  onError={(e) => {
+                    console.error('Image load error:', e)
+                    e.currentTarget.src = '/placeholder-image.jpg'
+                  }}
+                />
+                
+                {/* Multiple images indicator */}
+                {mediaUrls.length > 1 && (
+                  <div className="absolute top-3 right-3">
+                    <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                      {currentImageIndex + 1}/{mediaUrls.length}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Navigation dots for multiple images */}
+                {mediaUrls.length > 1 && (
+                  <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1">
+                    {mediaUrls.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Videos */}
+          {hasVideo && videoUrls.length > 0 && (
+            <div className="relative mb-4">
+              <div 
+                className="relative w-full rounded-2xl overflow-hidden bg-black"
+                style={{ aspectRatio: '16/10' }}
+              >
+                <video
+                  ref={videoRef}
+                  src={videoUrls[currentVideoIndex]}
+                  className="w-full h-full object-cover"
+                  loop
+                  muted={isVideoMuted}
+                  playsInline
+                  preload="metadata"
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onLoadedMetadata={handleVideoLoadedMetadata}
+                  onPlay={() => setIsVideoPlaying(true)}
+                  onPause={() => setIsVideoPlaying(false)}
+                  onClick={handleVideoPlay}
+                />
+                
+                {/* Video controls overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent">
+                  {/* Play/Pause button */}
+                  <button
+                    onClick={handleVideoPlay}
+                    className="absolute inset-0 flex items-center justify-center group"
+                  >
+                    <AnimatePresence>
+                      {!isVideoPlaying && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          exit={{ scale: 0 }}
+                          className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-active:scale-95 transition-transform"
+                        >
+                          <Play className="h-8 w-8 text-gray-900 ml-1" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </button>
+                  
+                  {/* Video controls */}
+                  <div className="absolute top-3 right-3 flex gap-2">
+                    <button
+                      onClick={handleVideoMute}
+                      className="w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center"
+                    >
+                      {isVideoMuted ? (
+                        <VolumeX className="h-4 w-4" />
+                      ) : (
+                        <Volume2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <div className="w-full bg-white/30 rounded-full h-1">
+                      <div 
+                        className="bg-white rounded-full h-1 transition-all duration-100"
+                        style={{ width: `${videoProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Multiple videos indicator */}
+                  {videoUrls.length > 1 && (
+                    <div className="absolute top-3 left-3">
+                      <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                        {currentVideoIndex + 1}/{videoUrls.length}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Navigation dots for multiple videos */}
+                {videoUrls.length > 1 && (
+                  <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-1">
+                    {videoUrls.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentVideoIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-all ${
+                          index === currentVideoIndex ? 'bg-white' : 'bg-white/50'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Mixed media (both images and videos) */}
+          {hasImage && hasVideo && (
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => setCurrentImageIndex(0)}
+                className={`px-3 py-1 rounded-full text-xs transition-all ${
+                  currentImageIndex >= 0 ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                Photos ({mediaUrls.length})
+              </button>
+              <button
+                onClick={() => setCurrentVideoIndex(0)}
+                className={`px-3 py-1 rounded-full text-xs transition-all ${
+                  currentVideoIndex >= 0 ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                Videos ({videoUrls.length})
+              </button>
+            </div>
+          )}
         </div>
       </motion.div>
 

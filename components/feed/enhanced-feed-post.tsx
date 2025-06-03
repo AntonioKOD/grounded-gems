@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, memo, useCallback, useEffect } from "react"
+import { useState, memo, useCallback, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -15,6 +15,7 @@ import {
   X,
   MoreHorizontal,
   Loader2,
+  Pause,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -95,6 +96,13 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
 
     return () => observer.disconnect()
   }, [post.id])
+
+  // Video player state
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [isVideoMuted, setIsVideoMuted] = useState(true)
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Handle like action with haptics and animations
   const handleLike = useCallback(async (e: React.MouseEvent) => {
@@ -211,6 +219,58 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     setShowCommentDialog(true)
   }, [])
 
+  // Video player controls
+  const handleVideoPlay = useCallback(() => {
+    if (videoRef.current) {
+      if (isVideoPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsVideoPlaying(!isVideoPlaying)
+    }
+  }, [isVideoPlaying])
+
+  const handleVideoMute = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isVideoMuted
+      setIsVideoMuted(!isVideoMuted)
+    }
+  }, [isVideoMuted])
+
+  const handleVideoTimeUpdate = useCallback(() => {
+    if (videoRef.current) {
+      const progress = (videoRef.current.currentTime / videoRef.current.duration) * 100
+      setVideoProgress(progress)
+    }
+  }, [])
+
+  // Auto-play video when in view
+  useEffect(() => {
+    const video = videoRef.current
+    if (video && post.video) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              video.play().catch(() => {
+                // Auto-play failed, user interaction required
+              })
+              setIsVideoPlaying(true)
+            } else {
+              video.pause()
+              setIsVideoPlaying(false)
+            }
+          })
+        },
+        { threshold: 0.7 }
+      )
+
+      observer.observe(video)
+      return () => observer.disconnect()
+    }
+  }, [post.video])
+
   // Get initials for avatar fallback
   const getInitials = (name: string) => {
     return name
@@ -238,51 +298,121 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       >
         {/* Main Media - Reduced height to make room for caption */}
         <div className="absolute inset-0 w-full" style={{ height: 'calc(100% - 120px)' }}>
-          {post.video && !imageError ? (
-            <VideoPlayer
-              src={post.video}
-              thumbnail={post.videoThumbnail || post.image || undefined}
-              autoPlay={isVisible}
-              muted={true}
-              loop={true}
-              controls={false}
-              aspectRatio="9/16"
-              className="w-full h-full object-cover"
-              onPlay={() => console.log('Video started playing')}
-              showProgress={false}
-              showPlayButton={false}
-            />
-          ) : post.image && !imageError ? (
-            <div className="relative w-full h-full bg-black">
-              <Image
-                src={post.image}
-                alt={post.content?.slice(0, 100) || "Post image"}
-                fill
-                className={`object-cover transition-opacity duration-500 ${
-                  isLoadingImage ? 'opacity-0' : 'opacity-100'
-                }`}
-                onLoad={() => setIsLoadingImage(false)}
-                onError={() => {
-                  setImageError(true)
-                  setIsLoadingImage(false)
-                }}
-                priority={priority < 3}
-                sizes="100vw"
-              />
-              
-              {/* Loading state */}
-              {isLoadingImage && (
-                <div className="absolute inset-0 bg-gray-900 flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-white/60" />
+          {/* Enhanced Media Display */}
+          {(post.video || post.image) && (
+            <div className="relative mb-4">
+              {/* Video Content */}
+              {post.video && (
+                <div className="relative w-full rounded-2xl overflow-hidden bg-black mb-4">
+                  <video
+                    ref={videoRef}
+                    src={post.video}
+                    className="w-full h-auto object-cover"
+                    loop
+                    muted={isVideoMuted}
+                    playsInline
+                    preload="metadata"
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onPlay={() => setIsVideoPlaying(true)}
+                    onPause={() => setIsVideoPlaying(false)}
+                    onClick={handleVideoPlay}
+                    style={{ aspectRatio: '16/10' }}
+                  />
+                  
+                  {/* Video controls overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent">
+                    {/* Play/Pause button */}
+                    <button
+                      onClick={handleVideoPlay}
+                      className="absolute inset-0 flex items-center justify-center group"
+                    >
+                      <AnimatePresence>
+                        {!isVideoPlaying && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0 }}
+                            className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-active:scale-95 transition-transform"
+                          >
+                            <Play className="h-8 w-8 text-gray-900 ml-1" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </button>
+                    
+                    {/* Video controls */}
+                    <div className="absolute top-3 right-3 flex gap-2">
+                      <button
+                        onClick={handleVideoMute}
+                        className="w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center"
+                      >
+                        {isVideoMuted ? (
+                          <VolumeX className="h-4 w-4" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <div className="w-full bg-white/30 rounded-full h-1">
+                        <div 
+                          className="bg-white rounded-full h-1 transition-all duration-100"
+                          style={{ width: `${videoProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
-              <div className="text-center text-white/60">
-                <Image className="h-16 w-16 mx-auto mb-4 opacity-50" />
-                <p className="text-lg">No media available</p>
-              </div>
+
+              {/* Image Content */}
+              {post.image && (
+                <div className="relative">
+                  <Image
+                    src={post.image}
+                    alt={post.content?.slice(0, 100) || "Post image"}
+                    width={600}
+                    height={400}
+                    className="w-full h-auto object-cover rounded-2xl"
+                    priority={priority < 3}
+                    onError={(e) => {
+                      console.error('Image load error:', e)
+                      e.currentTarget.src = '/placeholder-image.jpg'
+                    }}
+                  />
+                  
+                  {/* Multiple images indicator */}
+                  {post.image && (
+                    <div className="absolute top-3 right-3">
+                      <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                        {currentMediaIndex + 1}/{post.image.length}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Navigation arrows for multiple images */}
+                  {post.image && (
+                    <>
+                      <button
+                        onClick={() => setCurrentMediaIndex(Math.max(0, currentMediaIndex - 1))}
+                        disabled={currentMediaIndex === 0}
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center disabled:opacity-50"
+                      >
+                        ←
+                      </button>
+                      <button
+                        onClick={() => setCurrentMediaIndex(Math.min(post.image.length - 1, currentMediaIndex + 1))}
+                        disabled={currentMediaIndex === post.image.length - 1}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center disabled:opacity-50"
+                      >
+                        →
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

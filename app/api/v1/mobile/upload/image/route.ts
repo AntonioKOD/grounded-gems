@@ -194,6 +194,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     try {
       formData = await request.formData()
       console.log('📱 FormData parsed successfully')
+      
+      // Debug: Log all FormData entries
+      console.log('📱 FormData entries:')
+      for (const [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(`  ${key}: File(name="${value.name}", size=${value.size}, type="${value.type}")`)
+        } else {
+          console.log(`  ${key}: ${value}`)
+        }
+      }
     } catch (error) {
       console.error('📱 Failed to parse FormData:', error)
       return NextResponse.json(
@@ -224,8 +234,38 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     console.log('📱 File received:', {
       name: file.name,
       size: file.size,
-      type: file.type
+      type: file.type,
+      lastModified: file.lastModified ? new Date(file.lastModified).toISOString() : 'unknown'
     })
+
+    // ENHANCED: Check for empty file early with detailed error
+    if (file.size === 0) {
+      console.error('📱 Empty file detected:', {
+        fileName: file.name,
+        fileType: file.type,
+        lastModified: file.lastModified,
+        formDataKeys: Array.from(formData.keys())
+      })
+      
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Empty file received',
+          error: 'The uploaded file is empty (0 bytes). This can happen if:\n' +
+                 '• The image failed to load properly in the mobile app\n' +
+                 '• There was an issue accessing the camera/photo library\n' +
+                 '• The file was corrupted during selection\n' +
+                 'Please try selecting the image again or choose a different image.',
+          code: 'EMPTY_FILE',
+          debugInfo: {
+            fileName: file.name,
+            receivedType: file.type,
+            platform: 'mobile'
+          }
+        },
+        { status: 400 }
+      )
+    }
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
@@ -235,6 +275,31 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
           message: 'File too large',
           error: `File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB`,
           code: 'FILE_TOO_LARGE'
+        },
+        { status: 400 }
+      )
+    }
+
+    // ENHANCED: Check for suspiciously small files
+    if (file.size < 100) {
+      console.warn('📱 Suspiciously small file:', {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type
+      })
+      
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'File too small',
+          error: `The uploaded file is only ${file.size} bytes, which is too small to be a valid image. ` +
+                 'Please ensure you selected a complete image file.',
+          code: 'FILE_TOO_SMALL',
+          debugInfo: {
+            fileName: file.name,
+            fileSize: file.size,
+            minimumExpected: 100
+          }
         },
         { status: 400 }
       )
@@ -258,14 +323,41 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     let dimensions: { width?: number; height?: number } = {}
     
     try {
+      console.log('📱 Reading file buffer...')
       const arrayBuffer = await file.arrayBuffer()
       buffer = Buffer.from(arrayBuffer)
       
       console.log('📱 File buffer created:', {
         size: buffer.length,
         type: file.type,
-        strictValidationDisabled: DISABLE_STRICT_VALIDATION
+        strictValidationDisabled: DISABLE_STRICT_VALIDATION,
+        bufferMatchesFileSize: buffer.length === file.size
       })
+
+      // ENHANCED: Double-check buffer isn't empty
+      if (buffer.length === 0) {
+        console.error('📱 Buffer is empty despite file.size being non-zero:', {
+          fileSize: file.size,
+          bufferLength: buffer.length,
+          fileName: file.name
+        })
+        
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'File content is empty',
+            error: 'The file appears to have content but the data could not be read. ' +
+                   'This might be a permissions issue or the file may be corrupted.',
+            code: 'EMPTY_BUFFER',
+            debugInfo: {
+              reportedFileSize: file.size,
+              actualBufferSize: buffer.length,
+              fileName: file.name
+            }
+          },
+          { status: 400 }
+        )
+      }
       
       if (DISABLE_STRICT_VALIDATION) {
         console.log('⚠️ Strict image validation is DISABLED via environment variable')

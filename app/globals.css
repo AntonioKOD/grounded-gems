@@ -180,6 +180,43 @@
   overflow: hidden;
 }
 
+/* Instagram-style feed optimizations */
+.mobile-instagram-feed {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar on mobile for cleaner look */
+@media (max-width: 768px) {
+  .mobile-instagram-feed::-webkit-scrollbar {
+    display: none;
+  }
+  .mobile-instagram-feed {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Optimize images for Instagram-style layout */
+.instagram-post-image {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+
+/* Scrollbar hide utility class */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Enhanced mobile styles */
 @media (max-width: 767px) {
   /* Prevent zoom on form inputs */
@@ -1380,5 +1417,110 @@
   
   .cluster-preview {
     display: none !important;
+  }
+}
+
+/* Mobile-specific optimizations for the feed */
+@media (max-width: 768px) {
+  .mobile-feed-container {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile browsers */
+    overflow: hidden;
+  }
+  
+  .mobile-post {
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  
+  /* Improve touch targets on mobile */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Safe area handling */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  /* Improve video performance on mobile */
+  video {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Smooth scrolling for mobile feed */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+}
+
+/* Hide scrollbars but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* TikTok/Reels-style feed optimizations */
+@media (max-width: 768px) {
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    scroll-snap-type: y mandatory;
+    overscroll-behavior: contain;
+  }
+  
+  .mobile-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Snap scrolling for posts */
+  .snap-start {
+    scroll-snap-align: start;
+  }
+  
+  .snap-always {
+    scroll-snap-stop: always;
+  }
+  
+  /* Full viewport posts */
+  .h-screen {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile browsers */
+  }
+  
+  /* Ensure proper touch targets */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Better video performance */
+  video {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
+  }
+  
+  /* Optimize images */
+  img {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Prevent overscroll on the main container */
+  .overflow-hidden {
+    overscroll-behavior: contain;
   }
 } 

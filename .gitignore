@@ -53,3 +53,4 @@ server.log
 
 # Debug scripts
 debug-image-validation.js
+debug-mobile-upload.js

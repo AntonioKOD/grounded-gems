@@ -1800,15 +1800,20 @@ export async function createPost(formData: FormData) {
     const type = (formData.get("type") as "post" | "review" | "recommendation") || "post"
     const rating = formData.get("rating") as string
     const locationId = formData.get("locationId") as string
+    const locationName = formData.get("locationName") as string
 
     console.log('📝 CreatePost: Form data extracted:', { 
       contentLength: content?.length, 
       title, 
       type, 
       rating, 
-      locationId 
+      locationId,
+      locationName
     })
 
+    // Debug: Log all form data keys
+    console.log('📝 CreatePost: All FormData keys:', Array.from(formData.keys()))
+    
     // Get tags array
     const tags: string[] = []
     const tagEntries = formData.getAll("tags[]")
@@ -1827,13 +1832,38 @@ export async function createPost(formData: FormData) {
       }
     }
 
-    // Handle multiple media uploads
+    // Handle multiple media uploads - get all file fields
     const mediaFiles = formData.getAll("media") as File[]
     const videoFiles = formData.getAll("videos") as File[]
     
+    // Also check legacy field names for backward compatibility
+    const legacyImageFiles = formData.getAll("image") as File[]
+    const legacyVideoFiles = formData.getAll("video") as File[]
+    
+    // Combine files from all possible field names
+    const allImageFiles = [...mediaFiles, ...legacyImageFiles].filter(file => 
+      file instanceof File && file.size > 0 && file.type.startsWith('image/')
+    )
+    const allVideoFiles = [...videoFiles, ...legacyVideoFiles].filter(file => 
+      file instanceof File && file.size > 0 && file.type.startsWith('video/')
+    )
+    
     console.log('📝 CreatePost: Media files count:', {
-      images: mediaFiles.length,
-      videos: videoFiles.length
+      mediaField: mediaFiles.length,
+      videosField: videoFiles.length,
+      legacyImageField: legacyImageFiles.length,
+      legacyVideoField: legacyVideoFiles.length,
+      totalImages: allImageFiles.length,
+      totalVideos: allVideoFiles.length
+    })
+    
+    // Debug: Log file details
+    allImageFiles.forEach((file, index) => {
+      console.log(`📝 CreatePost: Image ${index + 1}: ${file.name} (${file.type}, ${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    })
+    
+    allVideoFiles.forEach((file, index) => {
+      console.log(`📝 CreatePost: Video ${index + 1}: ${file.name} (${file.type}, ${(file.size / 1024 / 1024).toFixed(2)}MB)`)
     })
     
     let imageId: string | null = null
@@ -1846,9 +1876,9 @@ export async function createPost(formData: FormData) {
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB for videos
 
     // Process image files
-    if (mediaFiles && mediaFiles.length > 0) {
+    if (allImageFiles && allImageFiles.length > 0) {
       console.log('📝 CreatePost: Processing image files...')
-      for (const file of mediaFiles) {
+      for (const file of allImageFiles) {
         if (file instanceof File && file.size > 0) {
           console.log(`📝 CreatePost: Processing image - ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
           
@@ -1882,6 +1912,8 @@ export async function createPost(formData: FormData) {
               collection: 'media',
               data: {
                 alt: `Image for ${title || 'post'} by ${user.name}`,
+                uploadedBy: user.id,
+                uploadSource: 'web',
               },
               file: {
                 data: buffer,
@@ -1918,9 +1950,9 @@ export async function createPost(formData: FormData) {
     }
 
     // Process video files
-    if (videoFiles && videoFiles.length > 0) {
+    if (allVideoFiles && allVideoFiles.length > 0) {
       console.log('📝 CreatePost: Processing video files...')
-      for (const file of videoFiles) {
+      for (const file of allVideoFiles) {
         if (file instanceof File && file.size > 0) {
           console.log(`📝 CreatePost: Processing video - ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
           
@@ -1954,6 +1986,8 @@ export async function createPost(formData: FormData) {
               collection: 'media',
               data: {
                 alt: `Video for ${title || 'post'} by ${user.name}`,
+                uploadedBy: user.id,
+                uploadSource: 'web',
               },
               file: {
                 data: buffer,
@@ -1990,7 +2024,7 @@ export async function createPost(formData: FormData) {
       }
     }
 
-    // Handle location creation if locationId is provided
+    // Handle location creation if locationName or locationId is provided
     let locationRelationId: string | null = null
     if (locationId) {
       try {
@@ -2008,13 +2042,36 @@ export async function createPost(formData: FormData) {
         console.error('Error finding location:', error)
         // Continue without location if not found
       }
+    } else if (locationName?.trim()) {
+      try {
+        // Search for existing location by name
+        const existingLocation = await payload.find({
+          collection: 'locations',
+          where: {
+            name: {
+              like: locationName.trim()
+            }
+          },
+          limit: 1,
+        })
+        
+        if (existingLocation.docs.length > 0) {
+          locationRelationId = existingLocation.docs[0].id
+          console.log('📝 CreatePost: Found existing location:', locationRelationId)
+        } else {
+          console.log('📝 CreatePost: Location not found, continuing without location')
+        }
+      } catch (error) {
+        console.error('Error searching for location:', error)
+        // Continue without location if search fails
+      }
     }
 
     // Create post data
     const postData: any = {
       content: content.trim(),
       author: user.id,
-      type: videoId ? "video" : type, // Set type to 'video' if video is uploaded
+      type: type, // Use the original type from form instead of overriding to 'video'
       status: "published",
     }
 
@@ -4837,6 +4894,30 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         image: post.image?.url || post.featuredImage?.url || undefined,
         video: post.video?.url || undefined,
         videoThumbnail: post.videoThumbnail?.url || post.image?.url || undefined,
+        photos: (() => {
+          // Handle photos array
+          if (Array.isArray(post.photos)) {
+            return post.photos.map((photo: any) => {
+              if (typeof photo === 'object' && photo?.url) {
+                return photo.url;
+              } else if (typeof photo === 'string') {
+                return photo;
+              }
+              return null;
+            }).filter(Boolean);
+          } else if (Array.isArray(post.gallery)) {
+            // Also check for gallery field as fallback
+            return post.gallery.map((item: any) => {
+              if (typeof item === 'object' && item?.image?.url) {
+                return item.image.url;
+              } else if (typeof item === 'object' && item?.url) {
+                return item.url;
+              }
+              return null;
+            }).filter(Boolean);
+          }
+          return undefined;
+        })(),
         likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
         commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
         shareCount: post.shares || 0,

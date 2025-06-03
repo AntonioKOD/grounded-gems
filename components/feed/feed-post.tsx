@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, memo, useCallback, useEffect } from "react"
+import { useState, memo, useCallback, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -19,8 +19,13 @@ import {
   ImageIcon,
   Flag,
   X,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
 } from "lucide-react"
 import { toast } from "sonner"
+import { motion, AnimatePresence } from "framer-motion"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -92,6 +97,13 @@ export const FeedPost = memo(function FeedPost({
   // Determine if content should be truncated
   const isLongContent = post.content.length > 280
   const displayContent = isLongContent && !expanded ? `${post.content.substring(0, 280)}...` : post.content
+
+  // Video player state
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false)
+  const [isVideoMuted, setIsVideoMuted] = useState(true)
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {
@@ -218,6 +230,58 @@ export const FeedPost = memo(function FeedPost({
       .substring(0, 2)
   }
 
+  // Video player controls
+  const handleVideoPlay = useCallback(() => {
+    if (videoRef.current) {
+      if (isVideoPlaying) {
+        videoRef.current.pause()
+      } else {
+        videoRef.current.play()
+      }
+      setIsVideoPlaying(!isVideoPlaying)
+    }
+  }, [isVideoPlaying])
+
+  const handleVideoMute = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isVideoMuted
+      setIsVideoMuted(!isVideoMuted)
+    }
+  }, [isVideoMuted])
+
+  const handleVideoTimeUpdate = useCallback(() => {
+    if (videoRef.current) {
+      const progress = (videoRef.current.currentTime / videoRef.current.duration) * 100
+      setVideoProgress(progress)
+    }
+  }, [])
+
+  // Auto-play video when in view
+  useEffect(() => {
+    const video = videoRef.current
+    if (video && post.video) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              video.play().catch(() => {
+                // Auto-play failed, user interaction required
+              })
+              setIsVideoPlaying(true)
+            } else {
+              video.pause()
+              setIsVideoPlaying(false)
+            }
+          })
+        },
+        { threshold: 0.7 }
+      )
+
+      observer.observe(video)
+      return () => observer.disconnect()
+    }
+  }, [post.video])
+
   return (
     <>
       <Card className={`overflow-hidden bg-white hover:shadow-xl transition-all duration-300 border-0 shadow-lg ${className}`}>
@@ -330,43 +394,89 @@ export const FeedPost = memo(function FeedPost({
             )}
           </div>
 
-          {/* Post Media */}
-          {(post.video || post.image) && !imageError && (
-            <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gray-100 mb-6 shadow-sm">
-              {post.video ? (
-                <VideoPlayer
-                  src={post.video}
-                  thumbnail={post.videoThumbnail || post.image}
-                  aspectRatio="4/3"
-                  className="w-full h-full"
-                  onViewStart={() => {
-                    // Track video view start
-                  }}
-                  onViewComplete={() => {
-                    // Track video view completion
-                  }}
-                />
-              ) : post.image ? (
-                <Image
-                  src={post.image}
-                  alt={post.title || "Post image"}
-                  fill
-                  className="object-cover transition-opacity duration-500 hover:scale-105 transition-transform"
-                  loading="lazy"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  onLoadingComplete={() => setIsLoadingImage(false)}
-                  onError={() => {
-                    setIsLoadingImage(false)
-                    setImageError(true)
-                  }}
-                />
-              ) : null}
-              {isLoadingImage && !post.video && (
-                <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-                  <div className="relative w-8 h-8">
-                    <div className="absolute inset-0 border-2 border-gray-200 rounded-full animate-ping" />
-                    <div className="absolute inset-0 border-2 border-[#FF6B6B] rounded-full animate-pulse" />
+          {/* Media Display with Video Support */}
+          {(post.image || post.video) && (
+            <div className="mb-4">
+              {/* Video Content */}
+              {post.video && (
+                <div className="relative w-full rounded-2xl overflow-hidden bg-black">
+                  <video
+                    ref={videoRef}
+                    src={post.video}
+                    className="w-full h-auto object-cover"
+                    loop
+                    muted={isVideoMuted}
+                    playsInline
+                    preload="metadata"
+                    onTimeUpdate={handleVideoTimeUpdate}
+                    onPlay={() => setIsVideoPlaying(true)}
+                    onPause={() => setIsVideoPlaying(false)}
+                    onClick={handleVideoPlay}
+                    style={{ aspectRatio: '16/10' }}
+                  />
+                  
+                  {/* Video controls overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent">
+                    {/* Play/Pause button */}
+                    <button
+                      onClick={handleVideoPlay}
+                      className="absolute inset-0 flex items-center justify-center group"
+                    >
+                      <AnimatePresence>
+                        {!isVideoPlaying && (
+                          <motion.div
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0 }}
+                            className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-active:scale-95 transition-transform"
+                          >
+                            <Play className="h-8 w-8 text-gray-900 ml-1" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </button>
+                    
+                    {/* Video controls */}
+                    <div className="absolute top-3 right-3 flex gap-2">
+                      <button
+                        onClick={handleVideoMute}
+                        className="w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center"
+                      >
+                        {isVideoMuted ? (
+                          <VolumeX className="h-4 w-4" />
+                        ) : (
+                          <Volume2 className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <div className="w-full bg-white/30 rounded-full h-1">
+                        <div 
+                          className="bg-white rounded-full h-1 transition-all duration-100"
+                          style={{ width: `${videoProgress}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
+                </div>
+              )}
+
+              {/* Image Content */}
+              {post.image && !post.video && (
+                <div className="relative">
+                  <Image
+                    src={post.image}
+                    alt={post.content || "Post image"}
+                    width={600}
+                    height={400}
+                    className="w-full h-auto object-cover rounded-2xl"
+                    onError={(e) => {
+                      console.error('Image load error:', e)
+                      e.currentTarget.src = '/placeholder-image.jpg'
+                    }}
+                  />
                 </div>
               )}
             </div>
