@@ -110,101 +110,104 @@ const nextConfig: NextConfig = {
           : 'http://localhost:3000'
     ),
   },
-  async headers() {
-    return [
-      {
-        source: '/manifest.json',
-        headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/manifest+json',
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
-          },
-        ],
-      },
-      {
-        source: '/sw.js',
-        headers: [
-          {
-            key: 'Content-Type',
-            value: 'application/javascript',
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-        ],
-      },
-      {
-        source: '/api/:path*',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-store, max-age=0',
-          },
-          // CORS headers for mobile app support
-          {
-            key: 'Access-Control-Allow-Origin',
-            value: process.env.NODE_ENV === 'development' ? '*' : 'https://groundedgems.com',
-          },
-          {
-            key: 'Access-Control-Allow-Methods',
-            value: 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-          },
-          {
-            key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization, X-Requested-With',
-          },
-          {
-            key: 'Access-Control-Allow-Credentials',
-            value: 'true',
-          },
-          {
-            key: 'Access-Control-Max-Age',
-            value: '86400', // 24 hours
-          },
-        ],
-      },
-      // Add headers to prevent authentication caching issues
-      {
-        source: '/api/users/me',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          },
-          {
-            key: 'Pragma',
-            value: 'no-cache',
-          },
-          {
-            key: 'Expires',
-            value: '0',
-          },
-        ],
-      },
-      {
-        source: '/api/users/login',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          },
-          {
-            key: 'Pragma',
-            value: 'no-cache',
-          },
-          {
-            key: 'Expires',
-            value: '0',
-          },
-        ],
-      },
-    ];
-  },
+  // Only add headers for web builds as they're not supported with export
+  ...(!isMobileBuild && {
+    async headers() {
+      return [
+        {
+          source: '/manifest.json',
+          headers: [
+            {
+              key: 'Content-Type',
+              value: 'application/manifest+json',
+            },
+            {
+              key: 'Cache-Control',
+              value: 'public, max-age=31536000, immutable',
+            },
+          ],
+        },
+        {
+          source: '/sw.js',
+          headers: [
+            {
+              key: 'Content-Type',
+              value: 'application/javascript',
+            },
+            {
+              key: 'Cache-Control',
+              value: 'public, max-age=0, must-revalidate',
+            },
+          ],
+        },
+        {
+          source: '/api/:path*',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'no-store, max-age=0',
+            },
+            // CORS headers for mobile app support
+            {
+              key: 'Access-Control-Allow-Origin',
+              value: process.env.NODE_ENV === 'development' ? '*' : 'https://groundedgems.com',
+            },
+            {
+              key: 'Access-Control-Allow-Methods',
+              value: 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            },
+            {
+              key: 'Access-Control-Allow-Headers',
+              value: 'Content-Type, Authorization, X-Requested-With',
+            },
+            {
+              key: 'Access-Control-Allow-Credentials',
+              value: 'true',
+            },
+            {
+              key: 'Access-Control-Max-Age',
+              value: '86400', // 24 hours
+            },
+          ],
+        },
+        // Add headers to prevent authentication caching issues
+        {
+          source: '/api/users/me',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            },
+            {
+              key: 'Pragma',
+              value: 'no-cache',
+            },
+            {
+              key: 'Expires',
+              value: '0',
+            },
+          ],
+        },
+        {
+          source: '/api/users/login',
+          headers: [
+            {
+              key: 'Cache-Control',
+              value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            },
+            {
+              key: 'Pragma',
+              value: 'no-cache',
+            },
+            {
+              key: 'Expires',
+              value: '0',
+            },
+          ],
+        },
+      ];
+    }
+  })
 };
 
 export default withPayload(nextConfig);

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   // Fast token check without try-catch overhead
   const token = request.cookies.get('payload-token')?.value

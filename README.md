@@ -151,4 +151,177 @@ This approach prevents the corruption from reaching the problematic image-size l
 - `GET /api/v1/mobile/posts/feed` - Get personalized feed
 - `GET /api/v1/mobile/locations` - Search locations
 
+## Mobile App Development
+
+This project supports mobile app development using **Capacitor**, which allows you to build native iOS and Android apps from the same codebase.
+
+### Prerequisites
+
+- **iOS Development:** Xcode (macOS only)
+- **Android Development:** Android Studio
+- **Node.js** (v18+)
+
+### Mobile Development Setup
+
+1. **Install Capacitor dependencies** (already included in package.json):
+   ```bash
+   npm install
+   ```
+
+2. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+
+3. **Sync Capacitor and open mobile app:**
+   ```bash
+   # For iOS
+   npm run dev:mobile
+   
+   # For Android
+   npm run dev:mobile:android
+   ```
+
+### Mobile Development Scripts
+
+- `npm run dev:mobile` - Sync and open iOS project in Xcode
+- `npm run dev:mobile:android` - Sync and open Android project in Android Studio
+- `npm run sync:mobile` - Sync web assets to native projects
+- `npm run add:ios` - Add iOS platform
+- `npm run add:android` - Add Android platform
+- `npm run open:ios` - Open iOS project in Xcode
+- `npm run open:android` - Open Android project in Android Studio
+- `npm run build:mobile` - Build for mobile static export
+
+### Mobile Features
+
+The app includes native mobile features through Capacitor plugins:
+
+- **📱 Camera & Photo Library** - Take photos or select from gallery
+- **📍 Geolocation** - Get user's current location
+- **🔗 Share** - Native sharing functionality
+- **📳 Haptics** - Vibration feedback
+- **🍞 Toast Notifications** - Native toast messages
+- **🌐 In-App Browser** - Open links in native browser
+- **⌨️ Keyboard** - Handle keyboard appearance
+- **📱 Status Bar** - Control status bar appearance
+- **🚀 Splash Screen** - Native splash screen
+
+### Using Mobile Features in Code
+
+Use the `useMobile` hook to access native features:
+
+```tsx
+import { useMobile } from '@/hooks/use-mobile'
+
+export function MyComponent() {
+  const { isMobile, platform, features, actions } = useMobile()
+  
+  const handleTakePhoto = async () => {
+    if (features.camera) {
+      try {
+        const photo = await actions.takePicture()
+        console.log('Photo taken:', photo)
+      } catch (error) {
+        console.error('Error taking photo:', error)
+      }
+    }
+  }
+  
+  const handleGetLocation = async () => {
+    if (features.geolocation) {
+      try {
+        const position = await actions.getCurrentPosition()
+        console.log('Location:', position)
+      } catch (error) {
+        console.error('Error getting location:', error)
+      }
+    }
+  }
+  
+  const handleShare = async () => {
+    await actions.shareContent(
+      'Check out Grounded Gems!',
+      'Discover hidden local treasures',
+      'https://groundedgems.com'
+    )
+  }
+  
+  return (
+    <div>
+      {isMobile && <p>Running on {platform}</p>}
+      <button onClick={handleTakePhoto}>Take Photo</button>
+      <button onClick={handleGetLocation}>Get Location</button>
+      <button onClick={handleShare}>Share App</button>
+    </div>
+  )
+}
+```
+
+### Mobile Configuration
+
+The mobile app configuration is in `capacitor.config.ts`:
+
+- **Development:** Points to `http://localhost:3000` for live reloading
+- **Production:** Will be configured to use your deployed web app
+- **Plugins:** Camera, geolocation, haptics, sharing, etc.
+
+### Building for Production
+
+For production mobile builds:
+
+1. **Build the web app:**
+   ```bash
+   npm run build:mobile
+   ```
+
+2. **Update Capacitor config** to point to your production URL
+3. **Sync and build native apps:**
+   ```bash
+   npm run sync:mobile
+   ```
+
+### Development Workflow
+
+1. **Start the web development server:** `npm run dev`
+2. **Make changes to your React components**
+3. **The mobile app automatically refreshes** (connected to localhost:3000)
+4. **Test native features** using device simulators or real devices
+5. **Use browser dev tools** for debugging (enable in mobile simulators)
+
+### Troubleshooting
+
+- **Xcode build errors:** Make sure you have the latest Xcode and iOS SDK
+- **Android build errors:** Ensure Android Studio and SDK are properly installed
+- **Network issues:** Make sure your mobile device/simulator can reach `localhost:3000`
+- **Plugin errors:** Check that required permissions are granted in device settings
+
+## Project Structure
+
+```
+sacavia/
+├── app/                     # Next.js App Router
+├── components/              # React components
+├── lib/                     # Utilities and configurations
+├── hooks/                   # Custom React hooks
+├── types/                   # TypeScript type definitions
+├── public/                  # Static assets
+├── ios/                     # Native iOS project (generated)
+├── android/                 # Native Android project (generated)
+├── capacitor.config.ts      # Capacitor configuration
+└── next.config.ts          # Next.js configuration
+```
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test on both web and mobile
+5. Submit a pull request
+
+## License
+
+[MIT License](LICENSE)
+
 

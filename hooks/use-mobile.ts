@@ -1,4 +1,19 @@
 import * as React from "react"
+import { useEffect, useState } from 'react'
+import { 
+  isNative, 
+  getPlatform, 
+  canUseCamera, 
+  canUseGeolocation, 
+  canUseHaptics,
+  takePicture,
+  pickImage,
+  getCurrentPosition,
+  shareContent,
+  showToast,
+  vibrate,
+  openUrl
+} from '@/lib/capacitor-utils'
 
 const MOBILE_BREAKPOINT = 768
 const TABLET_BREAKPOINT = 1024
@@ -176,4 +191,52 @@ export function useViewport() {
   }, [])
 
   return viewport
+}
+
+export function useMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+  const [platform, setPlatform] = useState<string>('')
+  const [isReady, setIsReady] = useState(false)
+
+  useEffect(() => {
+    // Check if we're running in a native environment
+    const checkMobile = () => {
+      const mobile = isNative()
+      const currentPlatform = getPlatform()
+      
+      setIsMobile(mobile)
+      setPlatform(currentPlatform)
+      setIsReady(true)
+    }
+
+    // Wait for capacitor to be ready
+    if (typeof window !== 'undefined') {
+      if (window.Capacitor) {
+        checkMobile()
+      } else {
+        // Not a native app, still set as ready
+        setIsReady(true)
+      }
+    }
+  }, [])
+
+  return {
+    isMobile,
+    platform,
+    isReady,
+    features: {
+      camera: canUseCamera(),
+      geolocation: canUseGeolocation(),
+      haptics: canUseHaptics(),
+    },
+    actions: {
+      takePicture,
+      pickImage,
+      getCurrentPosition,
+      shareContent,
+      showToast,
+      vibrate,
+      openUrl,
+    }
+  }
 }

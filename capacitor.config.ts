@@ -9,8 +9,8 @@ const config: CapacitorConfig = {
     iosScheme: 'https',
     hostname: 'groundedgems.com',
     // For development, you can uncomment the following:
-    // url: 'http://localhost:3000',
-    // cleartext: true
+    url: 'http://localhost:3000',
+    cleartext: true
   },
   plugins: {
     SplashScreen: {

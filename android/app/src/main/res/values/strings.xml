@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Grounded Gems</string>
+    <string name="title_activity_main">Grounded Gems</string>
+    <string name="package_name">com.groundedgems.app</string>
+    <string name="custom_url_scheme">com.groundedgems.app</string>
+</resources>

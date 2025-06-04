@@ -10,7 +10,8 @@ import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
 import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, initializeLikedPosts, initializeSavedPosts, initializeLikedComments, selectFeedPosts, selectFeedState } from "@/lib/features/feed/feedSlice"
+import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, selectFeedPosts, selectFeedState } from "@/lib/features/feed/feedSlice"
+import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
 import { fetchUser } from "@/lib/features/user/userSlice"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
 import FeedErrorState from "./feed-error-state"
@@ -21,6 +22,7 @@ import TopicFilters from "./topic-filters"
 import FeedTransition from "./feed-transition"
 import CollapsiblePostForm from "../post/collapsible-post-form"
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface MobileFeedContainerProps {
   userId?: string
@@ -54,6 +56,9 @@ export default function MobileFeedContainer({
   } = useAppSelector((state) => state.feed)
   
   const { user, isLoading: isUserLoading, isAuthenticated } = useAppSelector((state) => state.user)
+
+  // Mobile integration
+  const { isMobile, platform, features, actions } = useMobile()
 
   const [pullToRefreshDelta, setPullToRefreshDelta] = useState<number>(0)
   const [isPullingToRefresh, setIsPullingToRefresh] = useState<boolean>(false)
@@ -389,7 +394,10 @@ export default function MobileFeedContainer({
       force: true 
     }))
     
-    if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
+    // Use native haptic feedback on mobile, fallback to web vibration
+    if (isMobile && features.haptics) {
+      actions.vibrate()
+    } else if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(30)
     }
   }
