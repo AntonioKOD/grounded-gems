@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Sparkles, ImageIcon } from 'lucide-react'
@@ -51,7 +51,49 @@ export default function OptimizedImage({
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
-  const [imageUrl, setImageUrl] = useState(src)
+  const [actualSrc, setActualSrc] = useState(src)
+
+  // Check if URL is likely broken and set error state immediately
+  const isKnownBrokenUrl = useMemo(() => {
+    if (!src) return true
+    // Known broken URL patterns
+    const brokenPatterns = [
+      'groundedgems.com/api/media/file/',
+      'localhost:3001/', // Development backend that might be down
+    ]
+    return brokenPatterns.some(pattern => src.includes(pattern))
+  }, [src])
+
+  // Set error state immediately for known broken URLs
+  useEffect(() => {
+    if (isKnownBrokenUrl) {
+      console.warn('OptimizedImage: Known broken URL detected, using fallback:', src)
+      setHasError(true)
+      setIsLoading(false)
+      setActualSrc('/placeholder-image.svg')
+      return
+    }
+    
+    // Reset states when src changes to a potentially valid URL
+    setHasError(false)
+    setIsLoading(true)
+    setActualSrc(src)
+  }, [src, isKnownBrokenUrl])
+
+  // Add timeout for stuck loading states
+  useEffect(() => {
+    if (!isLoading || hasError) return
+
+    const timeout = setTimeout(() => {
+      console.warn('OptimizedImage: Loading timeout, switching to fallback:', src)
+      setHasError(true)
+      setIsLoading(false)
+      setActualSrc('/placeholder-image.svg')
+      onError?.()
+    }, 5000) // 5 second timeout (reduced from 10 seconds)
+
+    return () => clearTimeout(timeout)
+  }, [isLoading, hasError, src, onError])
 
   // Get aspect ratio classes
   const getAspectRatioClass = () => {
@@ -71,16 +113,31 @@ export default function OptimizedImage({
 
   // Handle image load
   const handleLoad = useCallback(() => {
-    setIsLoading(false)
-    onLoad?.()
-  }, [onLoad])
+    if (!hasError) { // Only set loading to false if we don't already have an error
+      setIsLoading(false)
+      onLoad?.()
+    }
+  }, [onLoad, hasError])
 
-  // Handle image error with fallback
+  // Handle image error with robust fallback
   const handleError = useCallback(() => {
+    console.warn('OptimizedImage failed to load:', actualSrc)
     setHasError(true)
     setIsLoading(false)
+    
+    // If this isn't already the fallback, try switching to fallback
+    if (actualSrc !== '/placeholder-image.svg') {
+      console.log('OptimizedImage: Switching to fallback image')
+      setActualSrc('/placeholder-image.svg')
+    }
+    
     onError?.()
-  }, [onError])
+  }, [onError, actualSrc])
+
+  // Check if URL is likely broken (contains groundedgems.com but might be 404)
+  const isPotentiallyBrokenUrl = useMemo(() => {
+    return src.includes('groundedgems.com/api/media/file/')
+  }, [src])
 
   // Generate optimized image URL for different services
   const getOptimizedImageUrl = useCallback((url: string, targetWidth?: number, targetHeight?: number) => {
@@ -148,13 +205,12 @@ export default function OptimizedImage({
 
   return (
     <div className={containerClasses}>
-      {/* Error state */}
-      {hasError ? (
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 flex items-center justify-center">
-          <div className="text-center text-white p-4">
-            <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-80" />
-            <p className="text-sm font-medium">Image not available</p>
-            <p className="text-xs opacity-75 mt-1">Using fallback display</p>
+      {/* Error state with improved UI */}
+      {hasError && actualSrc === '/placeholder-image.svg' ? (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 flex items-center justify-center">
+          <div className="text-center text-gray-600 p-4">
+            <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-60" />
+            <p className="text-xs font-medium">Image unavailable</p>
           </div>
         </div>
       ) : (
@@ -162,14 +218,17 @@ export default function OptimizedImage({
           {/* Loading state */}
           {isLoading && showLoadingAnimation && (
             <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center z-10">
-              <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 border-t-primary rounded-full animate-spin" />
+              <div className="text-center">
+                <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 border-t-primary rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-gray-500 mt-2">Loading...</p>
+              </div>
             </div>
           )}
 
           {/* Main Image */}
           {fill ? (
             <Image
-              src={src}
+              src={actualSrc}
               alt={alt}
               fill
               className={imageClasses}
@@ -181,10 +240,11 @@ export default function OptimizedImage({
               onLoad={handleLoad}
               onError={handleError}
               objectFit="cover"
+              unoptimized={unoptimized || isKnownBrokenUrl}
             />
           ) : (
             <Image
-              src={src}
+              src={actualSrc}
               alt={alt}
               width={dimensions.width}
               height={dimensions.height}
@@ -197,6 +257,7 @@ export default function OptimizedImage({
               onLoad={handleLoad}
               onError={handleError}
               objectFit="cover"
+              unoptimized={unoptimized || isKnownBrokenUrl}
             />
           )}
 

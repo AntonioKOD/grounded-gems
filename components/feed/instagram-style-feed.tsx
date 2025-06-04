@@ -67,18 +67,145 @@ export default function ModernDiscoveryFeed({
   variant = 'mobile',
   showHeader = true
 }: ModernDiscoveryFeedProps) {
-  // State
-  const [posts, setPosts] = useState<Post[]>(initialPosts)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [page, setPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('all')
-  const [currentUser, setCurrentUser] = useState<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   
   // Redux dispatch
   const dispatch = useAppDispatch()
+
+  // Helper function to normalize post data - convert complex media objects to simple URLs
+  const normalizePost = useCallback((post: any): Post => {
+    // Helper function to check if URL is broken and provide fallback
+    const getWorkingImageUrl = (url: string | null): string | null => {
+      if (!url) return null
+      
+      // Check if URL is from known broken sources
+      const brokenPatterns = [
+        'groundedgems.com/api/media/file/',
+        'localhost:3001/',
+      ]
+      
+      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
+      
+      if (isBroken) {
+        console.log('🔧 Replacing broken image URL with placeholder:', url)
+        return '/placeholder-image.svg'
+      }
+      
+      return url
+    }
+
+    const getWorkingVideoUrl = (url: string | null): string | null => {
+      if (!url) return null
+      
+      // Check if URL is from known broken sources
+      const brokenPatterns = [
+        'groundedgems.com/api/media/file/',
+        'localhost:3001/',
+      ]
+      
+      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
+      
+      if (isBroken) {
+        console.log('🔧 Detected broken video URL, will show error state:', url)
+        return url // Let the VideoPlayer handle the error state
+      }
+      
+      return url
+    }
+
+    // Handle image field - can be string, object, or boolean
+    const normalizedImage = (() => {
+      if (!post.image) return null
+      if (typeof post.image === 'string' && post.image.trim() !== '') {
+        return getWorkingImageUrl(post.image.trim())
+      }
+      if (typeof post.image === 'object' && post.image !== null) {
+        // Handle PayloadMediaObject
+        if (post.image.sizes?.card?.url) return getWorkingImageUrl(post.image.sizes.card.url)
+        if (post.image.url) return getWorkingImageUrl(post.image.url)
+      }
+      if (post.image === true && post.rawData?.image) {
+        return getWorkingImageUrl(post.rawData.image)
+      }
+      // Fallback to other image fields
+      const fallbackUrl = post.featuredImage?.url || post.image?.url || null
+      return getWorkingImageUrl(fallbackUrl)
+    })()
+
+    // Handle video field - can be string, object, or boolean  
+    const normalizedVideo = (() => {
+      if (!post.video) return null
+      if (typeof post.video === 'string' && post.video.trim() !== '') {
+        return getWorkingVideoUrl(post.video.trim())
+      }
+      if (typeof post.video === 'object' && post.video !== null) {
+        // Handle PayloadMediaObject
+        if (post.video.url) return getWorkingVideoUrl(post.video.url)
+      }
+      if (post.video === true && post.rawData?.video) {
+        return getWorkingVideoUrl(post.rawData.video)
+      }
+      return null
+    })()
+
+    // Handle photos array
+    const normalizedPhotos = (() => {
+      if (!Array.isArray(post.photos)) return []
+      return post.photos
+        .map((photo: any) => {
+          if (typeof photo === 'string' && photo.trim() !== '') return getWorkingImageUrl(photo.trim())
+          if (typeof photo === 'object' && photo !== null) {
+            if (photo.sizes?.card?.url) return getWorkingImageUrl(photo.sizes.card.url)
+            if (photo.url) return getWorkingImageUrl(photo.url)
+          }
+          return null
+        })
+        .filter(Boolean)
+    })()
+
+    // Handle video thumbnail
+    const normalizedVideoThumbnail = (() => {
+      if (post.videoThumbnail) {
+        if (typeof post.videoThumbnail === 'string') return getWorkingImageUrl(post.videoThumbnail)
+        if (typeof post.videoThumbnail === 'object' && post.videoThumbnail?.url) {
+          return getWorkingImageUrl(post.videoThumbnail.url)
+        }
+      }
+      // Fallback to image if video exists
+      if (normalizedVideo && normalizedImage) return normalizedImage
+      return null
+    })()
+
+    return {
+      ...post,
+      image: normalizedImage,
+      video: normalizedVideo,
+      photos: normalizedPhotos,
+      videoThumbnail: normalizedVideoThumbnail,
+      // Ensure required fields are present
+      likeCount: post.likeCount || post.likes?.length || 0,
+      commentCount: post.commentCount || post.comments?.length || 0,
+      shareCount: post.shareCount || 0,
+      saveCount: post.saveCount || 0,
+      isLiked: post.isLiked || false,
+      isSaved: post.isSaved || false,
+    }
+  }, [])
+
+  // Initialize with normalized posts
+  useEffect(() => {
+    if (initialPosts.length > 0) {
+      const normalizedInitialPosts = initialPosts.map(post => normalizePost(post))
+      setPosts(normalizedInitialPosts)
+    }
+  }, [initialPosts, normalizePost])
 
   // Categories - removed trending and improved styling
   const categories = [
@@ -150,12 +277,7 @@ export default function ModernDiscoveryFeed({
       const data = await response.json()
 
       if (data.success && Array.isArray(data.posts)) {
-        const newPosts = data.posts.map((post: any) => ({
-          ...post,
-          tags: Array.isArray(post.tags) 
-            ? post.tags.map((tag: any) => typeof tag === 'object' ? tag.tag : tag)
-            : []
-        }))
+        const newPosts = data.posts.map((post: any) => normalizePost(post))
 
         if (isRefresh || pageNum === 1) {
           setPosts(newPosts)
@@ -237,10 +359,13 @@ export default function ModernDiscoveryFeed({
       const data = await response.json()
       
       if (data.posts && Array.isArray(data.posts)) {
+        // Normalize posts before processing
+        const normalizedPosts = data.posts.map((post: any) => normalizePost(post))
+        
         // Deduplicate posts
         setPosts(prev => {
           const existingIds = new Set(prev.map(p => p.id))
-          const uniqueNewPosts = data.posts.filter((post: Post) => !existingIds.has(post.id))
+          const uniqueNewPosts = normalizedPosts.filter((post: Post) => !existingIds.has(post.id))
           return [...prev, ...uniqueNewPosts]
         })
         
@@ -255,7 +380,7 @@ export default function ModernDiscoveryFeed({
     } finally {
       setIsLoading(false)
     }
-  }, [isLoading, hasMore, page, feedType, sortBy, selectedCategory, currentUser?.id])
+  }, [isLoading, hasMore, page, feedType, sortBy, selectedCategory, currentUser?.id, normalizePost])
 
   // Refresh posts
   const refreshPosts = async () => {
@@ -280,7 +405,9 @@ export default function ModernDiscoveryFeed({
       const data = await response.json()
       
       if (data.posts && Array.isArray(data.posts)) {
-        setPosts(data.posts)
+        // Normalize posts before setting them
+        const normalizedPosts = data.posts.map((post: any) => normalizePost(post))
+        setPosts(normalizedPosts)
         setHasMore(data.hasMore ?? false)
       }
     } catch (error) {

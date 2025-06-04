@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useState, useCallback, useEffect } from 'react'
+import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { 
@@ -120,22 +120,58 @@ const SocialMediaPost = memo(function SocialMediaPost({
   isActive = false
 }: SocialMediaPostProps) {
   const dispatch = useAppDispatch()
-  const { 
-    likedPosts, 
-    savedPosts, 
-    loadingLikes, 
-    loadingSaves, 
-    loadingShares 
-  } = useAppSelector((state) => state.posts)
-
-  // Local state for interactions and media
+  
+  // Redux state
+  const { likedPosts, savedPosts, loadingLikes, loadingSaves } = useAppSelector((state) => state.posts)
+  
+  // Local state
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
-  const [isImageLoading, setIsImageLoading] = useState(true)
-  const [imageError, setImageError] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [showFullContent, setShowFullContent] = useState(false)
-  const [isVideoPlaying, setIsVideoPlaying] = useState(isActive)
-  const [isMuted, setIsMuted] = useState(true)
-  const [showCommentsModal, setShowCommentsModal] = useState(false)
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false)
+  const [isImageLoaded, setIsImageLoaded] = useState(false)
+  const [hasError, setHasError] = useState(false)
+  const [isSharing, setIsSharing] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  console.log(`🎯 Post ${post.id} media status:`, {
+    image: post.image,
+    video: post.video,
+    photos: post.photos,
+    videoThumbnail: post.videoThumbnail
+  })
+
+  // Determine if post has media and create media items
+  const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
+  
+  const mediaItems = useMemo(() => {
+    const items: Array<{ type: 'image' | 'video'; url: string }> = []
+    
+    // Add main image
+    if (post.image && typeof post.image === 'string') {
+      items.push({ type: 'image', url: post.image })
+    }
+    
+    // Add main video
+    if (post.video && typeof post.video === 'string') {
+      items.push({ type: 'video', url: post.video })
+    }
+    
+    // Add photos
+    if (Array.isArray(post.photos)) {
+      post.photos.forEach(photo => {
+        if (typeof photo === 'string') {
+          items.push({ type: 'image', url: photo })
+        }
+      })
+    }
+    
+    return items
+  }, [post.image, post.video, post.photos])
+
+  console.log(`📱 Post ${post.id}: ${mediaItems.length} media items processed:`, mediaItems)
+
+  const currentMedia = mediaItems[currentMediaIndex]
 
   // Check interaction states with improved fallback logic
   const isLiked = (() => {
@@ -158,155 +194,6 @@ const SocialMediaPost = memo(function SocialMediaPost({
   
   const isLiking = loadingLikes.includes(post.id)
   const isSaving = loadingSaves.includes(post.id)
-  const isSharing = loadingShares.includes(post.id)
-
-  // Media handling - improved to properly handle photos array and URL formatting
-  const getValidMediaUrl = (url?: string, isVideo = false) => {
-    if (!url) return null;
-    if (url.startsWith('http') || url.startsWith('https')) {
-      return url;
-    }
-    if (url.startsWith('data:')) {
-      return url;
-    }
-    if (url.startsWith('/')) {
-      return url;
-    }
-    if (url.match(/^[a-f0-9]{24}$/i)) {
-      return `/api/media/${url}`;
-    }
-    if (url.includes('/media/')) {
-      return url;
-    }
-    return `/${url.replace(/^\/+/, '')}`;
-  };
-
-  const extractUrlFromMediaField = (fieldValue: string | PayloadMediaObject | boolean | undefined, isVideo = false): string | undefined => {
-    if (typeof fieldValue === 'string') {
-      return fieldValue;
-    }
-    if (typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue)) {
-      const mediaObj = fieldValue as PayloadMediaObject;
-      if (!isVideo && mediaObj.sizes?.card?.url) {
-        return mediaObj.sizes.card.url;
-      }
-      if (mediaObj.url) {
-        return mediaObj.url;
-      }
-    }
-    return undefined;
-  };
-
-  // Helper functions to get actual media URLs
-  const getActualImageUrl = (): string | undefined => {
-    let url = extractUrlFromMediaField(post.image);
-    if (url) return url;
-
-    // Fallback to rawData if post.image was true or not a usable object/string
-    if (post.image === true && typeof post.rawData?.image === 'string' && post.rawData.image) {
-      return post.rawData.image;
-    }
-    return undefined;
-  };
-
-  const getActualVideoUrl = (): string | undefined => {
-    let url = extractUrlFromMediaField(post.video, true);
-    if (url) return url;
-
-    if (post.video === true && typeof post.rawData?.video === 'string' && post.rawData.video) {
-      return post.rawData.video;
-    }
-    return undefined;
-  };
-
-  const getActualPhotos = (): string[] => {
-    const photoUrls: string[] = [];
-    if (Array.isArray(post.photos)) {
-      for (const photoItem of post.photos) {
-        const url = extractUrlFromMediaField(photoItem);
-        if (url) {
-          photoUrls.push(url);
-        }
-      }
-    }
-    if (photoUrls.length > 0) return photoUrls;
-
-    // Fallback to rawData.photos if post.photos was empty or didn't yield URLs
-    if (Array.isArray(post.rawData?.photos)) {
-      const rawPhotoUrls = post.rawData.photos.filter(p => typeof p === 'string' && p) as string[];
-      if (rawPhotoUrls.length > 0) return rawPhotoUrls;
-    }
-    return [];
-  };
-
-  const actualImageUrl = getActualImageUrl();
-  const actualVideoUrl = getActualVideoUrl();
-  const actualPhotosArray = getActualPhotos();
-
-  const hasMedia = !!(actualImageUrl || actualVideoUrl || (actualPhotosArray && actualPhotosArray.length > 0));
-  
-  console.log(`🎯 Post ${post.id} hasMedia:`, hasMedia, {
-    actualImageUrl,
-    actualVideoUrl,
-    actualPhotosCount: actualPhotosArray.length,
-    originalPostImage: post.image, // Log original values for comparison
-    originalPostVideo: post.video,
-    originalPostPhotos: post.photos,
-    rawData: post.rawData
-  });
-  
-  // Build media items array with proper URL handling
-  const mediaItems = [
-    // Handle photos array first
-    ...(actualPhotosArray.length > 0
-      ? actualPhotosArray
-          .map(photoUrl => {
-            const validUrl = getValidMediaUrl(photoUrl);
-            return { 
-              type: 'image' as const, 
-              url: validUrl || '/placeholder-image.svg'
-            };
-          })
-      : []
-    ),
-    // Add single image if not already in photos and if actualImageUrl exists
-    ...(actualImageUrl && !actualPhotosArray.includes(actualImageUrl) // Avoid duplicates if primary image is also in photos array
-      ? [{
-          type: 'image' as const, 
-          url: getValidMediaUrl(actualImageUrl) || '/placeholder-image.svg'
-        }]
-      : []
-    ),
-    // Add video if actualVideoUrl exists
-    ...(actualVideoUrl 
-      ? [{ 
-          type: 'video' as const, 
-          url: getValidMediaUrl(actualVideoUrl, true) || '', 
-          thumbnail: getValidMediaUrl(post.videoThumbnail || (typeof post.image === 'object' ? (post.image as PayloadMediaObject).sizes?.thumbnail?.url || (post.image as PayloadMediaObject).url : actualImageUrl)) || '/placeholder-image.svg'
-        }] 
-      : []
-    )
-  ].filter(item => (item.type === 'image' && item.url) || item.type === 'video');
-
-  // Log media processing result for debugging
-  if (mediaItems.length > 0) {
-    console.log(`📱 Post ${post.id}: ${mediaItems.length} media items processed:`, 
-      mediaItems.map(item => `${item.type}: ${item.url}`))
-  } else {
-    console.log(`📱 Post ${post.id}: No media items found`)
-  }
-
-  const currentMedia = mediaItems[currentMediaIndex]
-  // console.log(`📺 Post ${post.id} currentMedia:`, currentMedia, 'index:', currentMediaIndex) // Removed for cleaner logs
-
-  // Auto-play video when post becomes active
-  useEffect(() => {
-    if (isActive && currentMedia?.type === 'video') {
-      setIsVideoPlaying(true)
-    } else {
-      setIsVideoPlaying(false)
-    }
-  }, [isActive, currentMedia?.type])
 
   // User profile helpers
   const getAuthorProfileImageUrl = () => {
@@ -382,6 +269,8 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const handleShare = useCallback(async () => {
     if (isSharing) return
     
+    setIsSharing(true)
+    
     try {
       if (navigator.share) {
         await navigator.share({
@@ -402,21 +291,25 @@ const SocialMediaPost = memo(function SocialMediaPost({
       }
     } catch (error) {
       console.error('Error sharing post:', error)
+      if (error instanceof Error && error.name !== 'AbortError') {
+        toast.error('Failed to share post')
+      }
+    } finally {
+      setIsSharing(false)
     }
   }, [dispatch, post, user, isSharing])
 
   // Handle comment button click
   const handleComment = useCallback(() => {
-    setShowCommentsModal(true)
+    setShowComments(true)
   }, [])
 
-  // Media navigation
+  // Navigation functions - work with currentMediaIndex
   const nextMedia = () => {
-    setCurrentMediaIndex(prev => (prev + 1) % mediaItems.length)
+    setCurrentMediaIndex((prev) => (prev + 1) % mediaItems.length)
   }
-
   const prevMedia = () => {
-    setCurrentMediaIndex(prev => (prev - 1 + mediaItems.length) % mediaItems.length)
+    setCurrentMediaIndex((prev) => (prev - 1 + mediaItems.length) % mediaItems.length)
   }
 
   // Use the post's like count directly - server handles all counting
@@ -425,9 +318,9 @@ const SocialMediaPost = memo(function SocialMediaPost({
   // Get container height for different variants
   const getContainerHeight = () => {
     if (variant === 'mobile') {
-      return 'h-screen' // Full screen for mobile for better experience
+      return 'h-screen'
     } else {
-      return 'h-auto min-h-[500px]' // Auto height for desktop/grid
+      return 'h-96 md:h-[500px]'
     }
   }
 
@@ -442,61 +335,56 @@ const SocialMediaPost = memo(function SocialMediaPost({
         className
       )}
     >
-      {/* Background Media Container */}
-      <div className="absolute inset-0">
-        {hasMedia && currentMedia ? (
-          <div className="relative w-full h-full">
+      {/* Media Section */}
+      {hasMedia && currentMedia ? (
+        <div className="relative w-full h-full">
+          {/* Media Content */}
+          <div className="relative w-full h-full overflow-hidden">
             {currentMedia.type === 'image' ? (
               <OptimizedImage
                 src={currentMedia.url}
-                alt={post.title || post.content || "Post image"}
+                alt={post.title || post.content}
                 fill
-                sizes="100vw"
-                priority={currentMediaIndex === 0}
                 quality={90}
+                priority={isActive}
+                className="object-cover"
                 onLoad={() => {
-                  setIsImageLoading(false)
-                  if (imageError) setImageError(false);
+                  setIsImageLoaded(true)
+                  if (hasError) setHasError(false)
                 }}
-                onError={(e) => {
-                  setIsImageLoading(false)
-                  setImageError(true);
+                onError={() => {
+                  setIsImageLoaded(false)
+                  setHasError(true)
                 }}
               />
-            ) : currentMedia.type === 'video' ? (
+            ) : (
               <VideoPlayer
                 src={currentMedia.url}
-                thumbnail={currentMedia.thumbnail}
-                className="w-full h-full object-cover"
-                autoPlay={isVideoPlaying}
-                muted={isMuted}
+                thumbnail={post.videoThumbnail}
+                autoPlay={isActive}
+                muted={true}
                 loop={true}
-                controls={false}
-                showProgress={false}
-                showPlayButton={false}
-                onPlay={() => setIsVideoPlaying(true)}
-                onPause={() => setIsVideoPlaying(false)}
+                aspectRatio="9/16"
+                className="w-full h-full"
+                onPlay={() => setIsVideoLoaded(true)}
                 onError={() => {
                   console.warn('Video failed to load:', currentMedia.url)
-                  setImageError(true);
+                  setHasError(true)
                 }}
               />
-            ) : null}
-            
-            {/* Gradient overlay for better text readability */}
-            <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/80" />
+            )}
           </div>
-        ) : (
-          // Fallback gradient background for text-only posts
-          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center">
-            <div className="text-center text-white p-8">
-              <div className="text-6xl mb-4">📝</div>
-              <p className="text-lg font-medium opacity-90">Text Post</p>
-              <p className="text-sm opacity-70 mt-1">Sharing thoughts and ideas</p>
-            </div>
+        </div>
+      ) : (
+        // Fallback gradient background for text-only posts
+        <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center">
+          <div className="text-center text-white p-8">
+            <div className="text-6xl mb-4">📝</div>
+            <p className="text-lg font-medium opacity-90">Text Post</p>
+            <p className="text-sm opacity-70 mt-1">Sharing thoughts and ideas</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Media Navigation Indicators */}
       {mediaItems.length > 1 && (
@@ -522,18 +410,10 @@ const SocialMediaPost = memo(function SocialMediaPost({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsVideoPlaying(!isVideoPlaying)}
+            onClick={() => setIsVideoLoaded(!isVideoLoaded)}
             className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2 md:p-3 h-8 w-8 md:h-10 md:w-10"
           >
-            {isVideoPlaying ? <Pause className="h-3 w-3 md:h-4 md:w-4" /> : <Play className="h-3 w-3 md:h-4 md:w-4" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsMuted(!isMuted)}
-            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2 md:p-3 h-8 w-8 md:h-10 md:w-10"
-          >
-            {isMuted ? <VolumeX className="h-3 w-3 md:h-4 md:w-4" /> : <Volume2 className="h-3 w-3 md:h-4 md:w-4" />}
+            {isVideoLoaded ? <Pause className="h-3 w-3 md:h-4 md:w-4" /> : <Play className="h-3 w-3 md:h-4 md:w-4" />}
           </Button>
         </div>
       )}
@@ -585,7 +465,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
           className="flex flex-col items-center gap-1"
         >
           <div className="w-11 h-11 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-all backdrop-blur-sm shadow-lg border border-white/20 hover:border-white/40">
-            <Share2 className="h-5 w-5 md:h-6 md:w-6 text-white" />
+            <Share2 className={cn("h-5 w-5 md:h-6 md:w-6 text-white", isSharing && "animate-pulse")} />
           </div>
           <span className="text-xs text-white/90 font-medium drop-shadow-lg min-w-[20px] text-center">
             {post.shareCount > 0 ? post.shareCount.toLocaleString() : ''}
@@ -702,7 +582,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
       </div>
 
       {/* Loading States */}
-      {isImageLoading && hasMedia && (
+      {isImageLoaded && hasMedia && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
           <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
         </div>
@@ -710,8 +590,8 @@ const SocialMediaPost = memo(function SocialMediaPost({
 
       {/* Comments Modal */}
       <CommentsModal
-        isOpen={showCommentsModal}
-        onClose={() => setShowCommentsModal(false)}
+        isOpen={showComments}
+        onClose={() => setShowComments(false)}
         postId={post.id}
         user={user}
         commentCount={post.commentCount}

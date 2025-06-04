@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useRef, useEffect, useState, useCallback } from "react"
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -133,10 +133,11 @@ export default function VideoPlayer({
   }, [viewCompleted, onEnded, onViewComplete])
 
   const handleError = useCallback(() => {
+    console.warn('VideoPlayer failed to load:', src)
     setHasError(true)
     setIsLoading(false)
     onError?.()
-  }, [onError])
+  }, [onError, src])
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current
@@ -211,6 +212,45 @@ export default function VideoPlayer({
   const handleMouseLeave = useCallback(() => {
     setShowControls(false)
   }, [])
+
+  // Check if video URL is likely broken and set error state immediately
+  const isKnownBrokenUrl = useMemo(() => {
+    if (!src) return true
+    // Known broken URL patterns
+    const brokenPatterns = [
+      'groundedgems.com/api/media/file/',
+      'localhost:3001/', // Development backend that might be down
+    ]
+    return brokenPatterns.some(pattern => src.includes(pattern))
+  }, [src])
+
+  // Set error state immediately for known broken URLs
+  useEffect(() => {
+    if (isKnownBrokenUrl) {
+      console.warn('VideoPlayer: Known broken URL detected:', src)
+      setHasError(true)
+      setIsLoading(false)
+      return
+    }
+    
+    // Reset states when src changes to a potentially valid URL
+    setHasError(false)
+    setIsLoading(true)
+  }, [src, isKnownBrokenUrl])
+
+  // Add timeout for stuck loading states
+  useEffect(() => {
+    if (!isLoading || hasError) return
+
+    const timeout = setTimeout(() => {
+      console.warn('VideoPlayer: Loading timeout, setting error state:', src)
+      setHasError(true)
+      setIsLoading(false)
+      onError?.()
+    }, 8000) // 8 second timeout for videos
+
+    return () => clearTimeout(timeout)
+  }, [isLoading, hasError, src, onError])
 
   return (
     <div

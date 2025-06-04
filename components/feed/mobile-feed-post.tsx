@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, memo, useCallback, useEffect, useRef } from "react"
+import { useState, memo, useCallback, useEffect, useRef, useMemo } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -66,7 +66,41 @@ const MobileFeedPost = memo(function MobileFeedPost({
   className = "" 
 }: MobileFeedPostProps) {
   const dispatch = useAppDispatch()
-  const { savedPosts, loadingSaves, likedPosts, loadingLikes } = useAppSelector((state) => state.posts)
+  const { likedPosts, savedPosts, loadingLikes, loadingSaves } = useAppSelector((state) => state.posts)
+  
+  const [showComments, setShowComments] = useState(false)
+  const [showFullContent, setShowFullContent] = useState(false)
+  const [hasError, setHasError] = useState(false)
+
+  // Use normalized URLs directly from post
+  const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
+  
+  const mediaItems = useMemo(() => {
+    const items: Array<{ type: 'image' | 'video'; url: string }> = []
+    
+    // Add main image
+    if (post.image && typeof post.image === 'string') {
+      items.push({ type: 'image', url: post.image })
+    }
+    
+    // Add main video
+    if (post.video && typeof post.video === 'string') {
+      items.push({ type: 'video', url: post.video })
+    }
+    
+    // Add photos
+    if (Array.isArray(post.photos)) {
+      post.photos.forEach(photo => {
+        if (typeof photo === 'string') {
+          items.push({ type: 'image', url: photo })
+        }
+      })
+    }
+    
+    return items
+  }, [post.image, post.video, post.photos])
+
+  console.log(`📱 Mobile Post ${post.id}: ${mediaItems.length} media items:`, mediaItems)
   
   // Use Redux state as single source of truth
   const isLiked = likedPosts.includes(post.id)
@@ -386,7 +420,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
   // Auto-play video when in view
   useEffect(() => {
     const video = videoRef.current
-    if (video && hasVideo) {
+    if (video && hasMedia) {
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -407,7 +441,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
-  }, [hasVideo])
+  }, [hasMedia])
 
   return (
     <>
@@ -932,18 +966,18 @@ const MobileFeedPost = memo(function MobileFeedPost({
         {/* Media content with enhanced video support */}
         <div className="relative">
           {/* Images */}
-          {hasImage && mediaUrls.length > 0 && (
+          {hasMedia && mediaItems.length > 0 && (
             <div className="relative mb-4">
               <div 
                 className="relative w-full rounded-2xl overflow-hidden"
                 style={{ aspectRatio: '16/10' }}
               >
                 <Image
-                  src={mediaUrls[currentImageIndex] || '/placeholder-image.jpg'}
-                  alt={`Post media ${currentImageIndex + 1}`}
+                  src={mediaItems[currentVideoIndex]?.url || '/placeholder-image.jpg'}
+                  alt={`Post media ${currentVideoIndex + 1}`}
                   fill
                   className="object-cover"
-                  priority={priority === 0}
+                  priority={currentVideoIndex === 0}
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   onError={(e) => {
                     console.error('Image load error:', e)
@@ -952,23 +986,23 @@ const MobileFeedPost = memo(function MobileFeedPost({
                 />
                 
                 {/* Multiple images indicator */}
-                {mediaUrls.length > 1 && (
+                {mediaItems.length > 1 && (
                   <div className="absolute top-3 right-3">
                     <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                      {currentImageIndex + 1}/{mediaUrls.length}
+                      {currentVideoIndex + 1}/{mediaItems.length}
                     </div>
                   </div>
                 )}
                 
                 {/* Navigation dots for multiple images */}
-                {mediaUrls.length > 1 && (
+                {mediaItems.length > 1 && (
                   <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1">
-                    {mediaUrls.map((_, index) => (
+                    {mediaItems.map((_, index) => (
                       <button
                         key={index}
-                        onClick={() => setCurrentImageIndex(index)}
+                        onClick={() => setCurrentVideoIndex(index)}
                         className={`w-2 h-2 rounded-full transition-all ${
-                          index === currentImageIndex ? 'bg-white' : 'bg-white/50'
+                          index === currentVideoIndex ? 'bg-white' : 'bg-white/50'
                         }`}
                       />
                     ))}
@@ -979,7 +1013,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
           )}
 
           {/* Videos */}
-          {hasVideo && videoUrls.length > 0 && (
+          {post.video && (
             <div className="relative mb-4">
               <div 
                 className="relative w-full rounded-2xl overflow-hidden bg-black"
@@ -987,7 +1021,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
               >
                 <video
                   ref={videoRef}
-                  src={videoUrls[currentVideoIndex]}
+                  src={post.video}
                   className="w-full h-full object-cover"
                   loop
                   muted={isVideoMuted}
@@ -1044,53 +1078,21 @@ const MobileFeedPost = memo(function MobileFeedPost({
                       />
                     </div>
                   </div>
-                  
-                  {/* Multiple videos indicator */}
-                  {videoUrls.length > 1 && (
-                    <div className="absolute top-3 left-3">
-                      <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                        {currentVideoIndex + 1}/{videoUrls.length}
-                      </div>
-                    </div>
-                  )}
                 </div>
-                
-                {/* Navigation dots for multiple videos */}
-                {videoUrls.length > 1 && (
-                  <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-1">
-                    {videoUrls.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentVideoIndex(index)}
-                        className={`w-2 h-2 rounded-full transition-all ${
-                          index === currentVideoIndex ? 'bg-white' : 'bg-white/50'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
           )}
 
           {/* Mixed media (both images and videos) */}
-          {hasImage && hasVideo && (
+          {hasMedia && (
             <div className="flex gap-2 mb-2">
-              <button
-                onClick={() => setCurrentImageIndex(0)}
-                className={`px-3 py-1 rounded-full text-xs transition-all ${
-                  currentImageIndex >= 0 ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                Photos ({mediaUrls.length})
-              </button>
               <button
                 onClick={() => setCurrentVideoIndex(0)}
                 className={`px-3 py-1 rounded-full text-xs transition-all ${
                   currentVideoIndex >= 0 ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600'
                 }`}
               >
-                Videos ({videoUrls.length})
+                Videos ({mediaItems.length})
               </button>
             </div>
           )}

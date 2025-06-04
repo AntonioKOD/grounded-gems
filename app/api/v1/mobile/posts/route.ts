@@ -298,112 +298,125 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
     }
 
     // Extract post data from FormData
-    const postData = {
-      content: formData.get('content') as string,
-      title: formData.get('title') as string || undefined,
-      type: (formData.get('type') as string) || 'post',
-      rating: formData.get('rating') ? parseInt(formData.get('rating') as string, 10) : undefined,
-      locationId: formData.get('locationId') as string || undefined,
-      locationName: formData.get('locationName') as string || undefined,
-      tags: formData.getAll('tags[]') as string[] || formData.getAll('tags') as string[] || [],
-    }
+    const content = formData.get('content') as string
+    const title = formData.get('title') as string || undefined
+    const type = (formData.get('type') as string) || 'post'
+    const rating = formData.get('rating') ? parseInt(formData.get('rating') as string, 10) : undefined
+    const locationId = formData.get('locationId') as string || undefined
+    const locationName = formData.get('locationName') as string || undefined
+    
+    // Handle tags - support both 'tags[]' and 'tags' formats
+    const tagsArray = formData.getAll('tags[]') as string[]
+    const tagsAlternative = formData.getAll('tags') as string[]
+    const tags = [...tagsArray, ...tagsAlternative].filter(tag => tag && tag.trim())
 
     console.log('📱 Mobile post creation - Extracted post data:', {
-      contentLength: postData.content?.length || 0,
-      type: postData.type,
-      hasTitle: !!postData.title,
-      hasLocation: !!(postData.locationId || postData.locationName),
-      tagsCount: postData.tags.length,
-      hasRating: !!postData.rating
+      contentLength: content?.length || 0,
+      type,
+      hasTitle: !!title,
+      hasLocation: !!(locationId || locationName),
+      tagsCount: tags.length,
+      hasRating: !!rating
     })
 
-    // Validate post data (excluding files for now)
-    const validationResult = createPostSchema.safeParse(postData)
-    if (!validationResult.success) {
-      console.error('📱 Mobile post creation - Validation failed:', validationResult.error.errors)
+    // Validate required fields
+    if (!content?.trim()) {
+      console.error('📱 Mobile post creation - Content is required')
       return NextResponse.json(
         {
           success: false,
-          message: 'Validation failed',
-          error: validationResult.error.errors[0].message,
-          code: 'VALIDATION_ERROR'
+          message: 'Content is required',
+          error: 'Post content cannot be empty',
+          code: 'CONTENT_REQUIRED'
         },
         { status: 400 }
       )
     }
 
-    // Create new FormData for the createPost function
+    // Create a new FormData for the createPost function - EXACTLY like the web app
     const createPostFormData = new FormData()
     createPostFormData.append('userId', user.id)
-    createPostFormData.append('content', validationResult.data.content)
-    createPostFormData.append('type', validationResult.data.type)
+    createPostFormData.append('content', content.trim())
+    createPostFormData.append('type', type)
 
-    if (validationResult.data.title) {
-      createPostFormData.append('title', validationResult.data.title)
+    if (title) {
+      createPostFormData.append('title', title)
     }
 
-    if (validationResult.data.rating) {
-      createPostFormData.append('rating', validationResult.data.rating.toString())
+    if (rating) {
+      createPostFormData.append('rating', rating.toString())
     }
 
-    if (validationResult.data.locationId) {
-      createPostFormData.append('locationId', validationResult.data.locationId)
+    if (locationId) {
+      createPostFormData.append('locationId', locationId)
     }
 
-    if (validationResult.data.locationName) {
-      createPostFormData.append('locationName', validationResult.data.locationName)
+    if (locationName) {
+      createPostFormData.append('locationName', locationName)
     }
 
-    // Add tags
-    validationResult.data.tags.forEach(tag => {
-      createPostFormData.append('tags[]', tag)
+    // Add tags exactly like the web app
+    tags.forEach(tag => {
+      createPostFormData.append('tags[]', tag.trim())
     })
 
-    // Handle media files - support both 'media' and 'image'/'video' field names
-    const mediaFiles = formData.getAll('media') as File[]
-    const imageFiles = formData.getAll('image') as File[]
-    const videoFiles = formData.getAll('video') as File[]
-    const allFiles = [...mediaFiles, ...imageFiles, ...videoFiles]
-
-    console.log('📱 Mobile post creation - Media files detected:', {
-      mediaFiles: mediaFiles.length,
-      imageFiles: imageFiles.length,
-      videoFiles: videoFiles.length,
-      totalFiles: allFiles.length
-    })
-
-    // Add all media files to the createPost FormData
-    allFiles.forEach(file => {
-      if (file instanceof File && file.size > 0) {
-        if (file.type.startsWith('image/')) {
-          createPostFormData.append('media', file)
-          console.log(`📱 Adding image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
-        } else if (file.type.startsWith('video/')) {
-          createPostFormData.append('videos', file)
-          console.log(`📱 Adding video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    // Handle media files - support all possible field names and process them exactly like the web app
+    const mediaFields = ['media', 'image', 'images']
+    const videoFields = ['videos', 'video']
+    
+    let totalFiles = 0
+    
+    // Process image/media files
+    for (const fieldName of mediaFields) {
+      const files = formData.getAll(fieldName) as File[]
+      for (const file of files) {
+        if (file instanceof File && file.size > 0) {
+          console.log(`📱 Processing ${fieldName} file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`)
+          
+          // Validate file type
+          if (file.type.startsWith('image/')) {
+            createPostFormData.append('media', file) // Use 'media' field exactly like web app
+            totalFiles++
+            console.log(`📱 Added image to createPost FormData: ${file.name}`)
+          } else {
+            console.warn(`📱 Skipping non-image file in ${fieldName}: ${file.name} (${file.type})`)
+          }
         }
       }
-    })
+    }
 
-    // Additional files from specific fields
-    const specificImageFiles = formData.getAll('images') as File[]
-    const specificVideoFiles = formData.getAll('videos') as File[]
-
-    specificImageFiles.forEach(file => {
-      if (file instanceof File && file.size > 0) {
-        createPostFormData.append('media', file)
-        console.log(`📱 Adding specific image: ${file.name}`)
+    // Process video files
+    for (const fieldName of videoFields) {
+      const files = formData.getAll(fieldName) as File[]
+      for (const file of files) {
+        if (file instanceof File && file.size > 0) {
+          console.log(`📱 Processing ${fieldName} file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`)
+          
+          // Validate file type
+          if (file.type.startsWith('video/')) {
+            createPostFormData.append('videos', file) // Use 'videos' field exactly like web app
+            totalFiles++
+            console.log(`📱 Added video to createPost FormData: ${file.name}`)
+          } else {
+            console.warn(`📱 Skipping non-video file in ${fieldName}: ${file.name} (${file.type})`)
+          }
+        }
       }
-    })
+    }
 
-    specificVideoFiles.forEach(file => {
-      if (file instanceof File && file.size > 0) {
-        createPostFormData.append('videos', file)
-        console.log(`📱 Adding specific video: ${file.name}`)
+    console.log(`📱 Mobile post creation - Total files processed: ${totalFiles}`)
+
+    // Debug: Log createPost FormData
+    console.log('📱 CreatePost FormData entries:')
+    for (const [key, value] of createPostFormData.entries()) {
+      if (value instanceof File) {
+        console.log(`  ${key}: File(name="${value.name}", size=${value.size}, type="${value.type}")`)
+      } else {
+        console.log(`  ${key}: ${value}`)
       }
-    })
+    }
 
-    // Call our fixed createPost function
+    // Call the createPost function EXACTLY like the web app does
     console.log('📱 Mobile post creation - Calling createPost function...')
     const result = await createPost(createPostFormData)
 
@@ -417,8 +430,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
       return NextResponse.json(
         {
           success: false,
-          message: result.message,
-          error: result.message,
+          message: result.message || 'Post creation failed',
+          error: result.message || 'Post creation failed',
           code: 'POST_CREATION_FAILED'
         },
         { status: 400 }
@@ -434,103 +447,89 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileCre
           id: result.postId,
           depth: 2,
         })
+        console.log('📱 Mobile post creation - Created post fetched successfully')
       } catch (fetchError) {
-        console.warn('📱 Could not fetch created post details:', fetchError)
+        console.warn('📱 Mobile post creation - Failed to fetch created post details:', fetchError)
       }
     }
 
-    // Format response for mobile consumption
-    const response: MobileCreatePostResponse = {
-      success: true,
-      message: 'Post created successfully',
-      data: createdPost ? {
-        id: createdPost.id,
-        content: createdPost.content,
-        author: {
-          id: createdPost.author?.id || user.id,
-          name: createdPost.author?.name || user.name || 'Unknown User',
-          profileImage: createdPost.author?.profileImage ? {
-            url: typeof createdPost.author.profileImage === 'object' && createdPost.author.profileImage.url
-              ? createdPost.author.profileImage.url
-              : typeof createdPost.author.profileImage === 'string'
-              ? createdPost.author.profileImage
-              : '' // Fallback
-          } : null,
-        },
-        media: [
-          // Images
-          ...(createdPost.image ? [{
+    // Format response for mobile
+    const responseData = {
+      id: result.postId || createdPost?.id,
+      content: createdPost?.content || content,
+      author: {
+        id: user.id,
+        name: user.name || '',
+        profileImage: user.profileImage ? {
+          url: typeof user.profileImage === 'object' && user.profileImage.url
+            ? user.profileImage.url
+            : typeof user.profileImage === 'string'
+            ? user.profileImage
+            : ''
+        } : null
+      },
+      media: createdPost?.featuredImage || createdPost?.photos ? 
+        [
+          ...(createdPost.featuredImage ? [{
             type: 'image' as const,
-            url: typeof createdPost.image === 'object' && createdPost.image.url 
-              ? createdPost.image.url 
-              : typeof createdPost.image === 'string'
-              ? createdPost.image
+            url: typeof createdPost.featuredImage === 'object' && createdPost.featuredImage.url
+              ? createdPost.featuredImage.url
+              : typeof createdPost.featuredImage === 'string'
+              ? createdPost.featuredImage
               : '',
-            alt: typeof createdPost.image === 'object' ? createdPost.image.alt : undefined
+            alt: typeof createdPost.featuredImage === 'object' 
+              ? createdPost.featuredImage.alt 
+              : undefined
           }] : []),
-          // Additional photos
           ...(Array.isArray(createdPost.photos) ? createdPost.photos.map((photo: any) => ({
             type: 'image' as const,
-            url: typeof photo === 'object' && photo.url 
-              ? photo.url 
+            url: typeof photo === 'object' && photo.url
+              ? photo.url
               : typeof photo === 'string'
               ? photo
               : '',
             alt: typeof photo === 'object' ? photo.alt : undefined
           })) : []),
-          // Videos
           ...(createdPost.video ? [{
             type: 'video' as const,
-            url: typeof createdPost.video === 'object' && createdPost.video.url 
-              ? createdPost.video.url 
+            url: typeof createdPost.video === 'object' && createdPost.video.url
+              ? createdPost.video.url
               : typeof createdPost.video === 'string'
               ? createdPost.video
               : '',
-            thumbnail: createdPost.videoThumbnail && typeof createdPost.videoThumbnail === 'object' && createdPost.videoThumbnail.url
-              ? createdPost.videoThumbnail.url
-              : undefined
+            thumbnail: createdPost.videoThumbnail ? 
+              (typeof createdPost.videoThumbnail === 'object' && createdPost.videoThumbnail.url
+                ? createdPost.videoThumbnail.url
+                : typeof createdPost.videoThumbnail === 'string'
+                ? createdPost.videoThumbnail
+                : '') : undefined
           }] : [])
-        ],
-        location: createdPost.location ? {
-          id: typeof createdPost.location === 'object' ? createdPost.location.id : createdPost.location,
-          name: typeof createdPost.location === 'object' ? createdPost.location.name : 'Unknown Location'
-        } : undefined,
-        type: createdPost.type,
-        rating: createdPost.rating,
-        tags: Array.isArray(createdPost.tags) 
-          ? createdPost.tags.map((tag: any) => typeof tag === 'object' ? tag.tag : tag)
-          : [],
-        createdAt: createdPost.createdAt,
-        updatedAt: createdPost.updatedAt,
-      } : {
-        id: result.postId || '',
-        content: validationResult.data.content,
-        author: {
-          id: user.id,
-          name: user.name || 'Unknown User',
-          profileImage: user.profileImage ? {
-            url: typeof user.profileImage === 'object' && user.profileImage.url
-              ? user.profileImage.url
-              : typeof user.profileImage === 'string'
-              ? user.profileImage
-              : ''
-          } : null,
-        },
-        type: validationResult.data.type,
-        rating: validationResult.data.rating,
-        tags: validationResult.data.tags,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
+        ] : undefined,
+      location: createdPost?.location ? {
+        id: typeof createdPost.location === 'object' ? createdPost.location.id : createdPost.location,
+        name: typeof createdPost.location === 'object' ? createdPost.location.name : locationName || ''
+      } : undefined,
+      type: createdPost?.type || type,
+      rating: createdPost?.rating || rating,
+      tags: Array.isArray(createdPost?.tags) ? createdPost.tags : tags,
+      createdAt: createdPost?.createdAt || new Date().toISOString(),
+      updatedAt: createdPost?.updatedAt || new Date().toISOString()
     }
 
-    return NextResponse.json(response, {
-      status: 201,
-      headers: {
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Post created successfully',
+        data: responseData
+      },
+      { 
+        status: 201,
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        }
       }
-    })
+    )
 
   } catch (error) {
     console.error('📱 Mobile post creation error:', error)

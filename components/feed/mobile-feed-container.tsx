@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList } from 'lucide-react'
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
+import { useRouter } from "next/navigation"
 
 import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
@@ -36,10 +37,11 @@ export default function MobileFeedContainer({
   sortBy = "recent",
 }: MobileFeedContainerProps) {
   const dispatch = useAppDispatch()
+  const router = useRouter()
   
   // Get state from Redux store
   const { 
-    posts, 
+    posts: reduxPosts, 
     isLoading: loading, 
     isLoadingMore: loadingMore, 
     isRefreshing: refreshing, 
@@ -60,6 +62,135 @@ export default function MobileFeedContainer({
   const scrollPosition = useRef<number>(0)
   const observer = useRef<IntersectionObserver | null>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Helper function to normalize post data - convert complex media objects to simple URLs
+  const normalizePost = useCallback((post: any): Post => {
+    // Helper function to check if URL is broken and provide fallback
+    const getWorkingImageUrl = (url: string | null): string | null => {
+      if (!url) return null
+      
+      // Check if URL is from known broken sources
+      const brokenPatterns = [
+        'groundedgems.com/api/media/file/',
+        'localhost:3001/',
+      ]
+      
+      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
+      
+      if (isBroken) {
+        console.log('📱 Replacing broken image URL with placeholder:', url)
+        return '/placeholder-image.svg'
+      }
+      
+      return url
+    }
+
+    const getWorkingVideoUrl = (url: string | null): string | null => {
+      if (!url) return null
+      
+      // Check if URL is from known broken sources
+      const brokenPatterns = [
+        'groundedgems.com/api/media/file/',
+        'localhost:3001/',
+      ]
+      
+      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
+      
+      if (isBroken) {
+        console.log('📱 Detected broken video URL, will show error state:', url)
+        return url // Let the VideoPlayer handle the error state
+      }
+      
+      return url
+    }
+
+    // Handle image field - can be string, object, or boolean
+    const normalizedImage = (() => {
+      if (!post.image) return null
+      if (typeof post.image === 'string' && post.image.trim() !== '') {
+        return getWorkingImageUrl(post.image.trim())
+      }
+      if (typeof post.image === 'object' && post.image !== null) {
+        // Handle PayloadMediaObject
+        if (post.image.sizes?.card?.url) return getWorkingImageUrl(post.image.sizes.card.url)
+        if (post.image.url) return getWorkingImageUrl(post.image.url)
+      }
+      if (post.image === true && post.rawData?.image) {
+        return getWorkingImageUrl(post.rawData.image)
+      }
+      // Fallback to other image fields
+      const fallbackUrl = post.featuredImage?.url || post.image?.url || null
+      return getWorkingImageUrl(fallbackUrl)
+    })()
+
+    // Handle video field - can be string, object, or boolean  
+    const normalizedVideo = (() => {
+      if (!post.video) return null
+      if (typeof post.video === 'string' && post.video.trim() !== '') {
+        return getWorkingVideoUrl(post.video.trim())
+      }
+      if (typeof post.video === 'object' && post.video !== null) {
+        // Handle PayloadMediaObject
+        if (post.video.url) return getWorkingVideoUrl(post.video.url)
+      }
+      if (post.video === true && post.rawData?.video) {
+        return getWorkingVideoUrl(post.rawData.video)
+      }
+      return null
+    })()
+
+    // Handle photos array
+    const normalizedPhotos = (() => {
+      if (!Array.isArray(post.photos)) return []
+      return post.photos
+        .map((photo: any) => {
+          if (typeof photo === 'string' && photo.trim() !== '') return getWorkingImageUrl(photo.trim())
+          if (typeof photo === 'object' && photo !== null) {
+            if (photo.sizes?.card?.url) return getWorkingImageUrl(photo.sizes.card.url)
+            if (photo.url) return getWorkingImageUrl(photo.url)
+          }
+          return null
+        })
+        .filter(Boolean)
+    })()
+
+    // Handle video thumbnail
+    const normalizedVideoThumbnail = (() => {
+      if (post.videoThumbnail) {
+        if (typeof post.videoThumbnail === 'string') return getWorkingImageUrl(post.videoThumbnail)
+        if (typeof post.videoThumbnail === 'object' && post.videoThumbnail?.url) {
+          return getWorkingImageUrl(post.videoThumbnail.url)
+        }
+      }
+      // Fallback to image if video exists
+      if (normalizedVideo && normalizedImage) return normalizedImage
+      return null
+    })()
+
+    return {
+      ...post,
+      image: normalizedImage,
+      video: normalizedVideo,
+      photos: normalizedPhotos,
+      videoThumbnail: normalizedVideoThumbnail,
+      // Ensure required fields are present
+      likeCount: post.likeCount || post.likes?.length || 0,
+      commentCount: post.commentCount || post.comments?.length || 0,
+      shareCount: post.shareCount || 0,
+      saveCount: post.saveCount || 0,
+      isLiked: post.isLiked || false,
+      isSaved: post.isSaved || false,
+    }
+  }, [])
+
+  // Initialize with normalized posts
+  const [normalizedPosts, setNormalizedPosts] = useState<Post[]>([])
+  useEffect(() => {
+    if (initialPosts.length > 0) {
+      const normalizedInitialPosts = initialPosts.map(post => normalizePost(post))
+      setNormalizedPosts(normalizedInitialPosts)
+    }
+  }, [initialPosts, normalizePost])
 
   // Note: User data is already initialized in StoreProvider from server-side data
   // No need to fetch user data on mount as it causes unnecessary refetching
@@ -184,38 +315,53 @@ export default function MobileFeedContainer({
     }
   }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id, isUserLoading])
 
-  // Refresh posts
+  // Refresh posts with pull-to-refresh
   const refreshPosts = async () => {
-    if (loading || refreshing) return
-    
-    // Only use vibration on client-side after hydration
-    if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(50)
-    }
-    
     try {
-      await dispatch(fetchFeedPosts({ 
-        feedType, 
-        sortBy, 
-        userId,
-        category: activeCategory !== "all" ? activeCategory : undefined,
-        currentUserId: user?.id,
-        force: true 
-      })).unwrap()
-      toast.success("Feed refreshed")
+      setIsRefreshing(true)
+      console.log('Refreshing posts...')
+      
+      const response = await dispatch(
+        fetchFeedPosts({
+          feedType,
+          sortBy,
+          page: 1,
+          category: activeCategory !== 'all' ? activeCategory : undefined
+        })
+      ).unwrap()
+
+      // Normalize posts before setting them
+      if (response.posts) {
+        const normalizedPosts = response.posts.map((post: any) => normalizePost(post))
+        setNormalizedPosts(normalizedPosts)
+      }
+
+      console.log('Posts refreshed successfully')
+      toast.success('Feed refreshed!')
     } catch (error) {
-      toast.error("Error refreshing posts")
+      console.error('Error refreshing posts:', error)
+      toast.error('Failed to refresh feed')
+    } finally {
+      setIsRefreshing(false)
+      setLastRefresh(Date.now())
     }
   }
 
-  // Load more posts
+  // Load more posts for infinite scroll  
   const handleLoadMore = async () => {
-    if (loadingMore || !hasMore || loading) return
-    
+    if (loading || loadingMore || !hasMore) return
+
     try {
-      await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
+      const response = await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
+      
+      // Normalize new posts before adding them
+      if (response.posts) {
+        const normalizedNewPosts = response.posts.map((post: any) => normalizePost(post))
+        setNormalizedPosts(prev => [...prev, ...normalizedNewPosts])
+      }
     } catch (error) {
-      toast.error("Error loading more posts")
+      console.error('Error loading more posts:', error)
+      toast.error('Failed to load more posts')
     }
   }
 
@@ -343,7 +489,7 @@ export default function MobileFeedContainer({
 
   // Debug posts data
   console.log('MobileFeedContainer render:', {
-    postsCount: posts.length,
+    postsCount: reduxPosts.length,
     loading,
     error,
     hasMore,
@@ -420,18 +566,18 @@ export default function MobileFeedContainer({
             paddingBottom: 0
           }}
         >
-          {loading && posts.length === 0 ? (
+          {loading && reduxPosts.length === 0 ? (
             <MobileFeedSkeleton />
           ) : (
             <>
-              {posts.length === 0 ? (
+              {reduxPosts.length === 0 ? (
                 <FeedErrorState
                   message={error || "No posts found. Try a different category or check back later."}
                   onRetry={() => refreshPosts()}
                 />
               ) : (
                 <div className="space-y-0 pb-16">
-                  {posts
+                  {reduxPosts
                     // Deduplicate posts by ID to prevent duplicate keys
                     .filter((post, index, array) => {
                       const firstIndex = array.findIndex(p => p.id === post.id)
@@ -444,7 +590,7 @@ export default function MobileFeedContainer({
                     .map((post, index) => (
                     <div
                       key={`${post.id}-${index}`}
-                      ref={index === posts.length - 1 ? lastPostElementRef : null}
+                      ref={index === reduxPosts.length - 1 ? lastPostElementRef : null}
                       className="snap-start w-full flex items-center justify-center relative"
                       style={{
                         height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
