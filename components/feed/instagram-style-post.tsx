@@ -21,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import OptimizedImage from '@/components/ui/optimized-image'
 import VideoPlayer from './video-player'
+import CommentsModal from './comments-modal'
 import { useAppDispatch, useAppSelector } from '@/lib/hooks'
 import { likePostAsync, savePostAsync, sharePostAsync } from '@/lib/features/posts/postsSlice'
 import { toast } from 'sonner'
@@ -100,20 +101,42 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const [showFullContent, setShowFullContent] = useState(false)
   const [isVideoPlaying, setIsVideoPlaying] = useState(isActive)
   const [isMuted, setIsMuted] = useState(true)
+  const [showCommentsModal, setShowCommentsModal] = useState(false)
 
-  // Check interaction states
-  const isLiked = likedPosts.includes(post.id)
-  const isSaved = savedPosts.includes(post.id)
+  // Check interaction states with improved fallback logic
+  const isLiked = (() => {
+    // Priority 1: If post has explicit state from server and it's not undefined
+    if (post.isLiked !== undefined && post.isLiked !== null) {
+      return post.isLiked
+    }
+    // Priority 2: Check Redux state (user's interaction history)
+    return likedPosts.includes(post.id)
+  })()
+  
+  const isSaved = (() => {
+    // Priority 1: If post has explicit state from server and it's not undefined
+    if (post.isSaved !== undefined && post.isSaved !== null) {
+      return post.isSaved
+    }
+    // Priority 2: Check Redux state (user's interaction history)
+    return savedPosts.includes(post.id)
+  })()
+  
   const isLiking = loadingLikes.includes(post.id)
   const isSaving = loadingSaves.includes(post.id)
   const isSharing = loadingShares.includes(post.id)
 
   // Media handling - improved to properly handle photos array and URL formatting
-  const getValidMediaUrl = (url?: string) => {
+  const getValidMediaUrl = (url?: string, isVideo = false) => {
     if (!url) return null
     
-    // Handle absolute URLs (external CDNs, etc.)
-    if (url.startsWith('http') || url.startsWith('data:')) {
+    // Handle absolute URLs (external CDNs, etc.) - let them try to load and fail gracefully
+    if (url.startsWith('http') || url.startsWith('https')) {
+      return url
+    }
+    
+    // Handle data URLs
+    if (url.startsWith('data:')) {
       return url
     }
     
@@ -122,12 +145,12 @@ const SocialMediaPost = memo(function SocialMediaPost({
       return url
     }
     
-    // Handle media IDs - route through our media API
+    // Handle media IDs - route through our media API only for local files
     if (url.match(/^[a-f0-9]{24}$/i)) {
       return `/api/media/${url}`
     }
     
-    // Handle Payload media format
+    // Handle Payload media format - keep as-is
     if (url.includes('/media/')) {
       return url
     }
@@ -137,6 +160,12 @@ const SocialMediaPost = memo(function SocialMediaPost({
   }
 
   const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
+  console.log(`🎯 Post ${post.id} hasMedia:`, hasMedia, {
+    image: !!post.image,
+    video: !!post.video,
+    photos: !!(post.photos && post.photos.length > 0),
+    rawData: { image: post.image, video: post.video, photos: post.photos }
+  })
   
   // Build media items array with proper URL handling
   const mediaItems = [
@@ -146,10 +175,9 @@ const SocialMediaPost = memo(function SocialMediaPost({
           .filter(photo => photo && typeof photo === 'string') // Only valid photo URLs
           .map(photo => {
             const url = getValidMediaUrl(photo)
-            console.log('Processing photo:', photo, 'transformed to:', url)
             return { 
               type: 'image' as const, 
-              url: url || '/placeholder.svg'
+              url: url || '/placeholder-image.svg'
             }
           })
       : []
@@ -160,8 +188,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
           type: 'image' as const, 
           url: (() => {
             const url = getValidMediaUrl(post.image)
-            console.log('Processing single image:', post.image, 'transformed to:', url)
-            return url || '/placeholder.svg'
+            return url || '/placeholder-image.svg'
           })()
         }] 
       : []
@@ -171,23 +198,25 @@ const SocialMediaPost = memo(function SocialMediaPost({
       ? [{ 
           type: 'video' as const, 
           url: (() => {
-            const url = getValidMediaUrl(post.video)
-            console.log('Processing video:', post.video, 'transformed to:', url)
+            const url = getValidMediaUrl(post.video, true)
             return url || ''
           })(), 
-          thumbnail: getValidMediaUrl(post.videoThumbnail || post.image) || '/placeholder.svg'
+          thumbnail: getValidMediaUrl(post.videoThumbnail || post.image) || '/placeholder-image.svg'
         }] 
       : []
     )
   ].filter(item => item.url) // Remove any items without valid URLs
 
-  console.log('Post media items:', mediaItems, 'from post:', { 
-    image: post.image, 
-    video: post.video, 
-    photos: post.photos 
-  })
+  // Log media processing result for debugging
+  if (mediaItems.length > 0) {
+    console.log(`📱 Post ${post.id}: ${mediaItems.length} media items processed:`, 
+      mediaItems.map(item => `${item.type}: ${item.url}`))
+  } else {
+    console.log(`📱 Post ${post.id}: No media items found`)
+  }
 
   const currentMedia = mediaItems[currentMediaIndex]
+  console.log(`📺 Post ${post.id} currentMedia:`, currentMedia, 'index:', currentMediaIndex)
 
   // Auto-play video when post becomes active
   useEffect(() => {
@@ -221,11 +250,11 @@ const SocialMediaPost = memo(function SocialMediaPost({
       })).unwrap()
       
       // Update the post with the latest server data if onPostUpdated is available
-      if (onPostUpdated && result.likeCount !== undefined) {
+      if (onPostUpdated) {
         onPostUpdated({
           ...post,
           isLiked: !isLiked,
-          likeCount: result.likeCount
+          likeCount: result.likeCount !== undefined ? result.likeCount : (isLiked ? post.likeCount - 1 : post.likeCount + 1)
         })
       }
 
@@ -243,17 +272,20 @@ const SocialMediaPost = memo(function SocialMediaPost({
     if (!user || isSaving) return
     
     try {
-      await dispatch(savePostAsync({
+      const result = await dispatch(savePostAsync({
         postId: post.id,
         shouldSave: !isSaved,
         userId: user.id
       })).unwrap()
       
-      onPostUpdated?.({
-        ...post,
-        isSaved: !isSaved,
-        saveCount: isSaved ? post.saveCount - 1 : post.saveCount + 1
-      })
+      // Update the post with the latest server data if onPostUpdated is available
+      if (onPostUpdated) {
+        onPostUpdated({
+          ...post,
+          isSaved: !isSaved,
+          saveCount: result.saveCount !== undefined ? result.saveCount : (isSaved ? post.saveCount - 1 : post.saveCount + 1)
+        })
+      }
 
       if (navigator.vibrate) {
         navigator.vibrate(30)
@@ -292,6 +324,11 @@ const SocialMediaPost = memo(function SocialMediaPost({
     }
   }, [dispatch, post, user, isSharing])
 
+  // Handle comment button click
+  const handleComment = useCallback(() => {
+    setShowCommentsModal(true)
+  }, [])
+
   // Media navigation
   const nextMedia = () => {
     setCurrentMediaIndex(prev => (prev + 1) % mediaItems.length)
@@ -329,36 +366,22 @@ const SocialMediaPost = memo(function SocialMediaPost({
         {hasMedia && currentMedia ? (
           <div className="relative w-full h-full">
             {currentMedia.type === 'image' ? (
-              <>
-                <OptimizedImage
-                  src={currentMedia.url}
-                  alt={post.title || post.content || "Post image"}
-                  fill
-                  className="object-cover"
-                  sizes="100vw"
-                  priority={currentMediaIndex === 0}
-                  quality={90}
-                  onLoad={() => {
-                    setIsImageLoading(false)
-                    setImageError(false)
-                  }}
-                  onError={(e) => {
-                    console.log('Image failed to load:', currentMedia.url)
-                    setIsImageLoading(false)
-                    setImageError(true)
-                  }}
-                />
-                {/* Fallback for failed images */}
-                {imageError && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center">
-                    <div className="text-center text-white p-6">
-                      <div className="text-6xl mb-4">📷</div>
-                      <p className="text-lg font-medium">Image not available</p>
-                      <p className="text-sm opacity-75 mt-1">Showing text content instead</p>
-                    </div>
-                  </div>
-                )}
-              </>
+              <OptimizedImage
+                src={currentMedia.url}
+                alt={post.title || post.content || "Post image"}
+                fill
+                sizes="100vw"
+                priority={currentMediaIndex === 0}
+                quality={90}
+                onLoad={() => {
+                  setIsImageLoading(false)
+                  if (imageError) setImageError(false);
+                }}
+                onError={(e) => {
+                  setIsImageLoading(false)
+                  setImageError(true);
+                }}
+              />
             ) : currentMedia.type === 'video' ? (
               <VideoPlayer
                 src={currentMedia.url}
@@ -373,8 +396,8 @@ const SocialMediaPost = memo(function SocialMediaPost({
                 onPlay={() => setIsVideoPlaying(true)}
                 onPause={() => setIsVideoPlaying(false)}
                 onError={() => {
-                  console.log('Video failed to load:', currentMedia.url)
-                  setImageError(true)
+                  console.warn('Video failed to load:', currentMedia.url)
+                  setImageError(true);
                 }}
               />
             ) : null}
@@ -384,7 +407,13 @@ const SocialMediaPost = memo(function SocialMediaPost({
           </div>
         ) : (
           // Fallback gradient background for text-only posts
-          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600" />
+          <div className="w-full h-full bg-gradient-to-br from-purple-600 via-pink-600 to-red-600 flex items-center justify-center">
+            <div className="text-center text-white p-8">
+              <div className="text-6xl mb-4">📝</div>
+              <p className="text-lg font-medium opacity-90">Text Post</p>
+              <p className="text-sm opacity-70 mt-1">Sharing thoughts and ideas</p>
+            </div>
+          </div>
         )}
       </div>
 
@@ -455,6 +484,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
         <motion.button
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
+          onClick={handleComment}
           className="flex flex-col items-center gap-1"
         >
           <div className="w-11 h-11 md:w-12 md:h-12 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center transition-all backdrop-blur-sm shadow-lg border border-white/20 hover:border-white/40">
@@ -597,15 +627,14 @@ const SocialMediaPost = memo(function SocialMediaPost({
         </div>
       )}
 
-      {/* Error State for Images */}
-      {imageError && hasMedia && (
-        <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
-          <div className="text-center text-white">
-            <div className="w-8 h-8 md:w-12 md:h-12 border-2 border-white/20 rounded-full mx-auto mb-2" />
-            <p className="text-xs md:text-sm">Image failed to load</p>
-          </div>
-        </div>
-      )}
+      {/* Comments Modal */}
+      <CommentsModal
+        isOpen={showCommentsModal}
+        onClose={() => setShowCommentsModal(false)}
+        postId={post.id}
+        user={user}
+        commentCount={post.commentCount}
+      />
     </motion.div>
   )
 })

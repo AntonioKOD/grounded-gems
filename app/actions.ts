@@ -1258,7 +1258,7 @@ export async function getFeedPosts(feedType: string, sortBy: string, page: numbe
         sort,
         limit: pageSize,
         page: page,
-        depth: 1, // Load author and other relations
+        depth: 2, // Load author and other relations with deeper nesting
       })
       
       posts = result.docs || []

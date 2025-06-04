@@ -77,12 +77,7 @@ export default function OptimizedImage({
     setHasError(true)
     setIsLoading(false)
     onError?.()
-    
-    // Try fallback URL or placeholder
-    if (!imageUrl.includes('placeholder')) {
-      setImageUrl('/api/placeholder/400/400')
-    }
-  }, [onError, imageUrl])
+  }, [onError])
 
   // Generate optimized image URL for different services
   const getOptimizedImageUrl = useCallback((url: string, targetWidth?: number, targetHeight?: number) => {
@@ -147,16 +142,16 @@ export default function OptimizedImage({
   }
 
   const dimensions = getDimensions()
-  const optimizedUrl = getOptimizedImageUrl(imageUrl, dimensions.width, dimensions.height)
 
   return (
     <div className={containerClasses}>
       {/* Error state */}
       {hasError ? (
-        <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-          <div className="text-center text-gray-400">
-            <ImageIcon className="h-8 w-8 mx-auto mb-2" />
-            <p className="text-sm">Image unavailable</p>
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 flex items-center justify-center">
+          <div className="text-center text-white p-4">
+            <ImageIcon className="h-12 w-12 mx-auto mb-3 opacity-80" />
+            <p className="text-sm font-medium">Image not available</p>
+            <p className="text-xs opacity-75 mt-1">Using fallback display</p>
           </div>
         </div>
       ) : (
@@ -177,7 +172,7 @@ export default function OptimizedImage({
           {/* Main Image */}
           {fill ? (
             <Image
-              src={optimizedUrl}
+              src={src}
               alt={alt}
               fill
               className={imageClasses}
@@ -191,7 +186,7 @@ export default function OptimizedImage({
             />
           ) : (
             <Image
-              src={optimizedUrl}
+              src={src}
               alt={alt}
               width={dimensions.width}
               height={dimensions.height}

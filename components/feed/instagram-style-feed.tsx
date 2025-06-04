@@ -6,6 +6,8 @@ import { RefreshCw, Clock, Bookmark, Sparkles, MapPin, Grid3X3, List } from 'luc
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { useAppDispatch } from '@/lib/hooks'
+import { initializeLikedPosts, initializeSavedPosts } from '@/lib/features/posts/postsSlice'
 
 // Components
 import SocialMediaPost from './instagram-style-post'
@@ -74,6 +76,9 @@ export default function ModernDiscoveryFeed({
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [currentUser, setCurrentUser] = useState<any>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  
+  // Redux dispatch
+  const dispatch = useAppDispatch()
 
   // Categories - removed trending and improved styling
   const categories = [
@@ -82,17 +87,40 @@ export default function ModernDiscoveryFeed({
     { id: 'nearby', name: 'Near Me', icon: MapPin },
   ]
 
-  // Fetch current user
+  // Fetch current user and initialize Redux state
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
+        console.log('Fetching current user for feed...')
         const response = await fetch('/api/users/me', {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' }
         })
         const data = await response.json()
+        
+        console.log('User API response:', data)
+        
         if (data?.user) {
           setCurrentUser(data.user)
+          
+          // Initialize Redux state with user's interaction data
+          if (data.user.likedPosts && Array.isArray(data.user.likedPosts)) {
+            const likedPostIds = data.user.likedPosts.map((post: any) => 
+              typeof post === 'string' ? post : post.id || post._id
+            ).filter(Boolean)
+            dispatch(initializeLikedPosts(likedPostIds))
+            console.log('Initialized liked posts in Redux:', likedPostIds)
+          }
+          
+          if (data.user.savedPosts && Array.isArray(data.user.savedPosts)) {
+            const savedPostIds = data.user.savedPosts.map((post: any) => 
+              typeof post === 'string' ? post : post.id || post._id
+            ).filter(Boolean)
+            dispatch(initializeSavedPosts(savedPostIds))
+            console.log('Initialized saved posts in Redux:', savedPostIds)
+          }
+        } else {
+          console.log('No user data found or user not authenticated')
         }
       } catch (error) {
         console.error('Error fetching current user:', error)
@@ -100,7 +128,7 @@ export default function ModernDiscoveryFeed({
     }
 
     fetchCurrentUser()
-  }, [])
+  }, [dispatch])
 
   // Load posts from API
   const loadPosts = useCallback(async (pageNum = 1, category = selectedCategory, isRefresh = false) => {
@@ -159,7 +187,13 @@ export default function ModernDiscoveryFeed({
 
   // Initial load and reload when user is established
   useEffect(() => {
-    if (posts.length === 0 || (currentUser?.id && !posts.some(p => p.isLiked !== undefined))) {
+    // Load posts initially if none exist
+    if (posts.length === 0) {
+      loadPosts(1, selectedCategory, true)
+    }
+    // Reload posts when user is established to get proper like/save states
+    else if (currentUser?.id && posts.some(p => p.isLiked === undefined || p.isSaved === undefined)) {
+      console.log('Reloading posts with user context:', currentUser.id)
       loadPosts(1, selectedCategory, true)
     }
   }, [loadPosts, selectedCategory, currentUser?.id])
@@ -188,7 +222,15 @@ export default function ModernDiscoveryFeed({
     setIsLoading(true)
     try {
       const nextPage = page + 1
-      const response = await fetch(`/api/feed?page=${nextPage}&feedType=${feedType}&sortBy=${sortBy}${selectedCategory !== 'all' ? `&category=${selectedCategory}` : ''}`)
+      const params = new URLSearchParams({
+        page: nextPage.toString(),
+        feedType,
+        sortBy,
+        ...(currentUser?.id && { currentUserId: currentUser.id }),
+        ...(selectedCategory !== 'all' && { category: selectedCategory })
+      })
+      
+      const response = await fetch(`/api/feed?${params}`)
       
       if (!response.ok) throw new Error('Failed to fetch posts')
       
@@ -213,7 +255,7 @@ export default function ModernDiscoveryFeed({
     } finally {
       setIsLoading(false)
     }
-  }, [isLoading, hasMore, page, feedType, sortBy, selectedCategory])
+  }, [isLoading, hasMore, page, feedType, sortBy, selectedCategory, currentUser?.id])
 
   // Refresh posts
   const refreshPosts = async () => {
@@ -223,7 +265,15 @@ export default function ModernDiscoveryFeed({
     setHasMore(true)
     
     try {
-      const response = await fetch(`/api/feed?page=1&feedType=${feedType}&sortBy=${sortBy}${selectedCategory !== 'all' ? `&category=${selectedCategory}` : ''}`)
+      const params = new URLSearchParams({
+        page: '1',
+        feedType,
+        sortBy,
+        ...(currentUser?.id && { currentUserId: currentUser.id }),
+        ...(selectedCategory !== 'all' && { category: selectedCategory })
+      })
+      
+      const response = await fetch(`/api/feed?${params}`)
       
       if (!response.ok) throw new Error('Failed to refresh posts')
       

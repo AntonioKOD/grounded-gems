@@ -17,6 +17,7 @@ interface VideoPlayerProps {
   onPlay?: () => void
   onPause?: () => void
   onEnded?: () => void
+  onError?: () => void
   onTimeUpdate?: (currentTime: number, duration: number) => void
   onViewStart?: () => void
   onViewComplete?: () => void
@@ -37,6 +38,7 @@ export default function VideoPlayer({
   onPlay,
   onPause,
   onEnded,
+  onError,
   onTimeUpdate,
   onViewStart,
   onViewComplete,
@@ -59,6 +61,7 @@ export default function VideoPlayer({
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false)
   const [viewCompleted, setViewCompleted] = useState(false)
   const [isInView, setIsInView] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
   // Intersection Observer for autoplay when in view
   useEffect(() => {
@@ -128,6 +131,12 @@ export default function VideoPlayer({
     }
     onEnded?.()
   }, [viewCompleted, onEnded, onViewComplete])
+
+  const handleError = useCallback(() => {
+    setHasError(true)
+    setIsLoading(false)
+    onError?.()
+  }, [onError])
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current
@@ -226,12 +235,24 @@ export default function VideoPlayer({
         onPause={handlePause}
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
+        onError={handleError}
       />
 
       {/* Loading indicator */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50">
           <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+
+      {/* Error state */}
+      {hasError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-red-600 via-purple-600 to-pink-600">
+          <div className="text-center text-white p-6">
+            <div className="text-6xl mb-4">🎬</div>
+            <p className="text-lg font-medium">Video not available</p>
+            <p className="text-sm opacity-75 mt-1">Content shows below</p>
+          </div>
         </div>
       )}
 

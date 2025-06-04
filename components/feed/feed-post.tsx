@@ -23,6 +23,11 @@ import {
   Pause,
   Volume2,
   VolumeX,
+  ExternalLink,
+  SkipForward,
+  SkipBack,
+  Calendar,
+  Clock,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -51,6 +56,7 @@ import VideoPlayer from "./video-player"
 import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
+import CommentsModal from './comments-modal'
 
 interface FeedPostProps {
   post: Post
@@ -74,6 +80,7 @@ export const FeedPost = memo(function FeedPost({
   const [isLoadingImage, setIsLoadingImage] = useState(true)
   const [imageError, setImageError] = useState(false)
   const [showCommentDialog, setShowCommentDialog] = useState(false)
+  const [showCommentsModal, setShowCommentsModal] = useState(false)
 
   // Get current state from Redux
   const isLiked = likedPosts.includes(post.id)
@@ -210,9 +217,8 @@ export const FeedPost = memo(function FeedPost({
   }, [isSaved, post, user, dispatch, saveCount, onPostUpdated])
 
   // Handle comment action
-  const handleComment = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    setShowCommentDialog(true)
+  const handleComment = useCallback(() => {
+    setShowCommentsModal(true)
   }, [])
 
   // Handle report action
@@ -512,27 +518,16 @@ export const FeedPost = memo(function FeedPost({
                 </Tooltip>
               </TooltipProvider>
 
-              {/* Comment Button */}
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      className="group flex items-center gap-3 hover:bg-white rounded-full px-3 py-2 transition-all"
-                      onClick={handleComment}
-                    >
-                      <div className="p-2 rounded-full group-hover:bg-blue-50 transition-all transform group-active:scale-90">
-                        <MessageCircle className="h-5 w-5 text-gray-600 group-hover:text-blue-600" />
-                      </div>
-                      <span className="text-sm font-semibold text-gray-600 group-hover:text-blue-600">
-                        {post.commentCount || 0}
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Comment on this post</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {/* Comments Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleComment}
+                className="flex items-center gap-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-full px-4 py-2 font-medium"
+              >
+                <MessageCircle className="h-5 w-5" />
+                <span>{post.commentCount || 0}</span>
+              </Button>
 
               {/* Share Button */}
               <TooltipProvider>
@@ -613,6 +608,15 @@ export const FeedPost = memo(function FeedPost({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Comments Modal */}
+      <CommentsModal
+        isOpen={showCommentsModal}
+        onClose={() => setShowCommentsModal(false)}
+        postId={post.id}
+        user={user}
+        commentCount={post.commentCount}
+      />
     </>
   )
 })

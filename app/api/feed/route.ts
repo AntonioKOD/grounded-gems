@@ -47,6 +47,11 @@ export async function GET(request: NextRequest) {
         console.log('Fetching recent feed with userId:', validCurrentUserId)
         posts = await getLatestFeed(validCurrentUserId, page, 10)
         break
+      case 'nearby':
+        // For 'nearby', use general feed (same as 'all') but prioritize location-based posts
+        console.log('Fetching nearby feed with userId:', validCurrentUserId)
+        posts = await getFeedPosts(feedType, sortBy, page, undefined, validCurrentUserId)
+        break
       case 'bookmarks':
         if (validCurrentUserId) {
           console.log('Fetching bookmarks feed for userId:', validCurrentUserId)
