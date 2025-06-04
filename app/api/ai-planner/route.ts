@@ -129,6 +129,37 @@ export async function POST(req: NextRequest) {
     const season = getSeason(now)
     
     // Enhanced prompt with real location data and better context
+    let planningInstructions = `
+PLANNING INSTRUCTIONS:
+1. CREATE A SPECIFIC, ACTIONABLE PLAN.
+2. IF VERIFIED LOCATIONS ARE PROVIDED, YOU MUST PRIORITIZE AND INTEGRATE THEM. Clearly label these as "(Verified Grounded Gems Location)".
+3. If creating a step for a type of place not in the verified list, clearly label it as "(Find a local spot for this)".
+4. CONSIDER timing, travel between locations, and realistic scheduling.
+5. INCLUDE specific addresses (if known from verified locations), estimated costs (general terms like $, $$, $$$), and timing for each step.
+6. REFERENCE verified locations by their EXACT NAMES as listed.
+7. If combining multiple verified locations, ensure they're logically sequenced.
+8. Consider current time of day and day of week for business hours if suggesting types of places.
+9. Add insider tips and specific recommendations when available, especially for verified locations.
+`
+    let stepCountGuidance = "Aim for 4-6 detailed steps."
+
+    if (nearbyLocations.length > 0) {
+      planningInstructions += `
+10. You have ${nearbyLocations.length} real verified locations nearby. Your plan MUST use at least ${Math.min(nearbyLocations.length, 2)} of these. Make the plan feel like a local insider's recommendation, focusing on these verified spots.`
+      if (nearbyLocations.length <= 2) {
+        stepCountGuidance = "Aim for 2-3 detailed steps, focusing on the provided verified locations."
+      } else if (nearbyLocations.length <= 4) {
+        stepCountGuidance = "Aim for 3-5 detailed steps, integrating several of the provided verified locations."
+      }
+      planningInstructions += `\n11. For each step involving a verified location, state its name exactly as provided and append "(Verified Grounded Gems Location)".`
+    } else {
+      planningInstructions += `
+10. No verified locations found nearby. Create a general plan with location types and suggestions (e.g., "a cozy cafe", "a lively park"). Clearly label these as "(Find a local spot for this)".`
+      stepCountGuidance = "Aim for 3-5 general steps, suggesting types of places."
+    }
+    planningInstructions += `\n12. ${stepCountGuidance}`
+
+
     const basePrompt = `You are Gem Journey, an expert local experience planner who creates amazing, actionable hangout plans using real, verified locations.
 
 USER REQUEST: "${input}"
@@ -139,29 +170,14 @@ SEASON: ${season}
 USER PREFERENCES: ${userPreferences}
 ${locationContext}
 
-PLANNING INSTRUCTIONS:
-1. CREATE A SPECIFIC, ACTIONABLE PLAN using the nearby verified locations listed above
-2. PRIORITIZE locations that match the hangout type (${context}) and user request
-3. CONSIDER timing, travel between locations, and realistic scheduling
-4. INCLUDE specific addresses, estimated costs, and timing for each step
-5. REFERENCE locations by their EXACT NAMES as listed above
-6. If combining multiple locations, ensure they're logically sequenced by proximity
-7. Consider current time of day and day of week for business hours
-8. Add insider tips and specific recommendations when available
-
-${nearbyLocations.length > 0 ? 
-  `Since you have ${nearbyLocations.length} real verified locations nearby, create a plan that uses at least 2-3 of these actual places. Make it feel like a local insider's recommendation.` 
-  : 
-  `No verified locations found nearby. Create a general plan with location types and suggestions, but be clear these need to be researched locally.`}
+${planningInstructions}
 
 Respond in the following JSON format:
 {
-  "title": "Engaging, specific plan title that includes location/area",
-  "summary": "Brief, exciting description that mentions real places if used",
+  "title": "Engaging, specific plan title (include general area if no specific locations used, or a key location if used)",
+  "summary": "Brief, exciting description (mention real places if used, otherwise general theme)",
   "steps": [
-    "Step 1: [Time] - [Specific action] at [Specific location with address] - [Brief description/tip]",
-    "Step 2: [Time] - [Next action] at [Next location] - [Description]",
-    "Continue with 4-6 detailed steps..."
+    "Step 1: [Time (e.g., 7:00 PM)] - [Specific action] at [Specific location name or type of place] [Label: (Verified Grounded Gems Location) or (Find a local spot for this)] - [Brief description/tip, address if verified, cost estimate like $, $$, $$$]"
   ],
   "context": "${context}",
   "usedRealLocations": ${usedRealLocations},
@@ -203,28 +219,59 @@ Respond in the following JSON format:
       // Try to parse JSON from the AI response
       const jsonStart = planRaw.indexOf('{')
       const jsonEnd = planRaw.lastIndexOf('}') + 1
+      if (jsonStart === -1 || jsonEnd === -1 || jsonStart > jsonEnd) {
+        throw new Error("Valid JSON structure not found in AI response.");
+      }
       plan = JSON.parse(planRaw.slice(jsonStart, jsonEnd))
       
       // Add metadata about the planning session
       plan.coordinates = coordinates
       plan.nearbyLocationsCount = nearbyLocations.length
       plan.generatedAt = new Date().toISOString()
-      plan.usedRealLocations = usedRealLocations
+      // Ensure these are consistent with what AI might have overridden if it didn't follow instructions
+      plan.usedRealLocations = usedRealLocations 
       plan.locationIds = referencedLocationIds
+      plan.userLocation = userLocation
       
     } catch (e) {
       console.error('Error parsing AI response:', e)
       console.log('Raw AI response:', planRaw)
-      // Fallback: return as plain text if parsing fails
+      
+      // Enhanced fallback parsing
+      const extractedTitle = planRaw.match(/title["']?\s*:\s*["']([^"']+)["']/i)?.[1] || 'Custom Hangout Plan';
+      const extractedSummary = planRaw.match(/summary["']?\s*:\s*["']([^"']+)["']/i)?.[1] || planRaw.split('\n').find(line => line.trim().length > 20 && !line.toLowerCase().includes("step")) || 'Here is a plan based on your request.';
+      
+      const stepsArray: string[] = [];
+      const stepRegex = /step\s*\d+\s*[:\-]\s*(.*)/gi;
+      let match;
+      while ((match = stepRegex.exec(planRaw)) !== null) {
+        stepsArray.push(match[1].trim());
+      }
+      if (stepsArray.length === 0) {
+        // Simpler fallback if regex fails
+        planRaw.split('\n').forEach(line => {
+          if (line.trim().match(/^(\d+\.|-|Step\s*\d+:)/i) && line.trim().length > 10) {
+            stepsArray.push(line.trim().replace(/^(\d+\.|-|Step\s*\d+:)\s*/i, ''));
+          }
+        });
+      }
+      if (stepsArray.length === 0 && planRaw.length > 0) { // Absolute last resort for steps
+          stepsArray.push("The AI tried to generate a plan, but there was an issue formatting it. The raw response was: " + planRaw.substring(0, 200) + "...");
+      }
+
+
       plan = { 
-        title: 'Custom Hangout Plan', 
-        summary: planRaw, 
-        steps: planRaw.split('\n').filter(step => step.trim().length > 0).map(step => step.trim()), 
+        title: extractedTitle, 
+        summary: extractedSummary, 
+        steps: stepsArray.length > 0 ? stepsArray : ['Could not extract detailed steps. Please try rephrasing your request.'], 
         context,
-        usedRealLocations: false,
+        usedRealLocations: false, // Assume false if parsing failed
         locationIds: [],
         coordinates,
-        generatedAt: new Date().toISOString()
+        generatedAt: new Date().toISOString(),
+        userLocation,
+        nearbyLocationsCount: nearbyLocations.length,
+        parseError: true, // Indicate that this is a fallback
       }
     }
     
@@ -238,7 +285,18 @@ Respond in the following JSON format:
   } catch (err: any) {
     console.error('AI Planner error:', err)
     return NextResponse.json({ 
-      error: 'Failed to generate plan: ' + (err?.message || 'Unknown error') 
+      error: 'Failed to generate plan: ' + (err?.message || 'Unknown error'),
+      plan: { // Provide a minimal fallback plan structure on catastrophic error
+        title: "Plan Generation Error",
+        summary: "We encountered an issue while trying to generate your plan. Please try again shortly.",
+        steps: ["Try rephrasing your request or check back later."],
+        context: "error",
+        usedRealLocations: false,
+        locationIds: [],
+        generatedAt: new Date().toISOString(),
+        userLocation: "N/A",
+        nearbyLocationsCount: 0,
+      }
     }, { status: 500 })
   }
 }
