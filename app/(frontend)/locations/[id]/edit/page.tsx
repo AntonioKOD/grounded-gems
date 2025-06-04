@@ -85,8 +85,13 @@ export default function EditLocationPage() {
 
           const locationData = await locationResponse.json()
           
+          // Extract creator ID properly (handle both string and populated object)
+          const locationCreatedBy = typeof locationData.location.createdBy === 'string' 
+            ? locationData.location.createdBy 
+            : locationData.location.createdBy?.id || locationData.location.createdBy;
+          
           // Check if user owns this location
-          if (locationData.location.createdBy !== userData.user.id) {
+          if (locationCreatedBy !== userData.user.id) {
             toast.error('You can only edit your own locations')
             router.push(`/profile/${userData.user.id}/location-dashboard`)
             return

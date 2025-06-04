@@ -2,7 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useRef } from "react"
+import { createPortal } from "react-dom"
+import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import {
   X,
@@ -17,19 +19,37 @@ import {
   MessageSquare,
   Navigation,
   ThumbsUp,
+  ThumbsDown,
   MessageCircle,
   CalendarDays,
   Ticket,
   Users,
+  Bookmark,
+  Share2,
+  Plus,
+  Loader2,
+  Crown,
+  Target,
+  Calendar,
+  AlertTriangle,
+  Check,
+  ExternalLink,
+  Edit3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { Location, Media } from "./map-data"
+import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import type { Location, Media as ImportedMedia } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
 import LocationDetailMobile from "./location-detail-mobile"
 
@@ -40,13 +60,38 @@ interface User {
   email?: string
 }
 
-// Review interface  
+// Enhanced Review interface
 interface Review {
+  id: string
   title: string
   content: string
   rating: number
-  author?: string
-  createdAt?: string
+  author?: { 
+    id: string
+    name?: string
+    profileImage?: { url: string }
+  } | string
+  visitDate?: string | Date
+  createdAt: string | Date
+  pros?: Array<{ pro: string }>
+  cons?: Array<{ con: string }>
+  tips?: string
+  helpfulCount?: number
+  unhelpfulCount?: number
+  usersWhoMarkedHelpful?: string[]
+  usersWhoMarkedUnhelpful?: string[]
+}
+
+// Bucket list interface
+interface BucketList {
+  id: string
+  name: string
+  description?: string
+  type: 'personal' | 'shared' | 'ai-generated'
+  stats: {
+    totalItems: number
+    completedItems: number
+  }
 }
 
 // Location detail props
@@ -67,7 +112,10 @@ const useResponsive = () => {
 
   useEffect(() => {
     const checkDevice = () => {
-      setIsMobile(window.innerWidth < 768)
+      const width = window.innerWidth
+      const isMobileDevice = width < 768
+      console.log('🔴 RESPONSIVE: Window width:', width, 'isMobile:', isMobileDevice)
+      setIsMobile(isMobileDevice)
     }
 
     checkDevice()
@@ -78,773 +126,1682 @@ const useResponsive = () => {
   return { isMobile }
 }
 
-// Desktop version of the location detail component
-function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProps) {
-  const [user, setUser] = useState<User | null>(null)
-  const [userLoaded, setUserLoaded] = useState(false)
-  const [interactionCounts, setInteractionCounts] = useState({
-    likes: 0,
-    saves: 0,
-    visits: 0,
-    shares: 0,
-  })
-  const [userInteractions, setUserInteractions] = useState({
-    hasLiked: false,
-    hasSaved: false,
-    hasVisited: false,
-    hasShared: false,
-  })
-  const [reviews, setReviews] = useState<Review[]>([])
-  const [loadingReviews, setLoadingReviews] = useState(false)
-  const [specials, setSpecials] = useState<any[]>([])
-  const [loadingSpecials, setLoadingSpecials] = useState(false)
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+function AddToBucketListModal({
+  isOpen,
+  onClose,
+  location,
+  userBucketLists,
+  onSuccess,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  location: Location | null
+  userBucketLists: BucketList[]
+  onSuccess: () => void
+}) {
+  const [selectedListId, setSelectedListId] = useState<string>('')
+  const [goal, setGoal] = useState('')
+  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
+  const [isAdding, setIsAdding] = useState(false)
 
-  // Fetch current user
-  const fetchCurrentUser = async () => {
+  console.log('🔴 MODAL: AddToBucketListModal rendered with props:', {
+    isOpen,
+    location: location?.name,
+    userBucketListsCount: userBucketLists.length,
+    userBucketLists
+  })
+
+  // Reset form when modal opens
+  useEffect(() => {
+    console.log('🔴 MODAL: useEffect triggered, isOpen:', isOpen)
+    if (isOpen) {
+      setSelectedListId('')
+      setGoal('')
+      setPriority('medium')
+      setIsAdding(false)
+    }
+  }, [isOpen])
+
+  console.log('🔴 MODAL: About to render portal, isOpen:', isOpen)
+
+  if (!isOpen) {
+    console.log('🔴 MODAL: Not rendering because isOpen is false')
+    return null
+  }
+
+  console.log('🔴 MODAL: Rendering portal with document.body')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    console.log('Bucket list form submission started')
+    console.log('Selected list ID:', selectedListId)
+    console.log('Location:', location)
+    console.log('Goal:', goal)
+    console.log('Priority:', priority)
+    console.log('Available bucket lists:', userBucketLists)
+    
+    if (!selectedListId || !location) {
+      toast.error('Please select a bucket list')
+      return
+    }
+
+    setIsAdding(true)
     try {
-      const response = await fetch("/api/users/me", {
-        method: "GET",
-        credentials: "include",
+      const requestBody = {
+        location: location.id,
+        goal: goal.trim() || `Visit ${location.name}`,
+        priority,
+        status: 'not_started'
+      }
+      
+      console.log('Sending request to:', `/api/bucket-lists/${selectedListId}/items`)
+      console.log('Request body:', requestBody)
+      
+      const response = await fetch(`/api/bucket-lists/${selectedListId}/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(requestBody),
+      })
+
+      console.log('Response status:', response.status)
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to add to bucket list')
+      }
+
+      toast.success(`Added "${location.name}" to your bucket list!`)
+      onSuccess()
+      onClose()
+    } catch (error) {
+      console.error('Error adding to bucket list:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to add to bucket list')
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Responsive Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100000] flex items-center justify-center p-4"
+            onClick={onClose}
+            style={{ zIndex: 100000 }}
+          >
+            {/* Responsive Modal Container */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto border border-[#4ecdc4]/20 bucket-list-modal"
+              style={{ zIndex: 100001 }}
+              onClick={(e) => e.stopPropagation()} // Prevent backdrop click when clicking inside modal
+            >
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-[#ff6b6b]">
+                    <Crown className="h-5 w-5 text-[#ffe66d]" />
+                    <h2 className="text-lg font-semibold">Add to Bucket List</h2>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="hover:bg-gray-100 text-gray-600 rounded-full h-8 w-8"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {location && (
+                  <p className="text-sm text-gray-600 mb-6">
+                    Adding "{location.name}" to your bucket list
+                  </p>
+                )}
+
+                {userBucketLists.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Crown className="h-16 w-16 mx-auto text-[#ff6b6b]/50 mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Bucket Lists Yet</h3>
+                    <p className="text-gray-600 mb-6">Create your first bucket list to start collecting amazing places!</p>
+                    <Button
+                      onClick={() => {
+                        onClose()
+                        window.open('/bucket-list', '_blank')
+                      }}
+                      className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Your First Bucket List
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Bucket List Selection */}
+                    <div>
+                      <Label htmlFor="bucket-list" className="text-gray-700 font-medium mb-2 block">
+                        Choose Bucket List ({userBucketLists.length} available)
+                      </Label>
+                      <Select value={selectedListId} onValueChange={setSelectedListId}>
+                        <SelectTrigger className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 h-12 rounded-xl">
+                          <SelectValue placeholder="Select a bucket list..." />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-60 z-[100002]" style={{ zIndex: 100002 }}>
+                          {userBucketLists.map((list) => (
+                            <SelectItem key={list.id} value={list.id} className="py-3">
+                              <div className="flex items-center gap-3 w-full">
+                                <Target className="h-4 w-4 text-[#4ecdc4] flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-gray-900">{list.name}</div>
+                                  <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
+                                    <span>{list.stats.completedItems}/{list.stats.totalItems} completed</span>
+                                    {list.type && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="capitalize">{list.type}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-xs text-[#4ecdc4] font-medium">
+                                  {Math.round((list.stats.completedItems / list.stats.totalItems) * 100) || 0}%
+                                </div>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Goal Input */}
+                    <div>
+                      <Label htmlFor="goal" className="text-gray-700 font-medium mb-2 block">
+                        Personal Goal (Optional)
+                      </Label>
+                      <Textarea
+                        id="goal"
+                        value={goal}
+                        onChange={(e) => setGoal(e.target.value)}
+                        placeholder={`e.g., Try their famous burger, Visit during sunset, Take photos with friends`}
+                        rows={3}
+                        className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 rounded-xl resize-none"
+                      />
+                    </div>
+
+                    {/* Priority Selection */}
+                    <div>
+                      <Label htmlFor="priority" className="text-gray-700 font-medium mb-2 block">
+                        Priority Level
+                      </Label>
+                      <Select value={priority} onValueChange={(value: 'low' | 'medium' | 'high') => setPriority(value)}>
+                        <SelectTrigger className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 h-12 rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-[100002]" style={{ zIndex: 100002 }}>
+                          <SelectItem value="low" className="py-3">
+                            <span className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                              <div>
+                                <div className="font-medium">Low Priority</div>
+                                <div className="text-xs text-gray-500">Visit when convenient</div>
+                              </div>
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="medium" className="py-3">
+                            <span className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full bg-[#ffe66d]"></div>
+                              <div>
+                                <div className="font-medium">Medium Priority</div>
+                                <div className="text-xs text-gray-500">Plan to visit soon</div>
+                              </div>
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="high" className="py-3">
+                            <span className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full bg-[#ff6b6b]"></div>
+                              <div>
+                                <div className="font-medium">High Priority</div>
+                                <div className="text-xs text-gray-500">Must visit ASAP!</div>
+                              </div>
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-4">
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={onClose} 
+                        disabled={isAdding}
+                        className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 h-12 rounded-xl font-medium"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={isAdding || !selectedListId}
+                        className="flex-1 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200 h-12 rounded-xl font-medium"
+                      >
+                        {isAdding ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add to List
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
+  )
+}
+
+// Write Review Modal Component for Desktop
+function WriteReviewModal({
+  isOpen,
+  onClose,
+  location,
+  currentUser,
+  onSuccess,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  location: Location | null
+  currentUser: User | null
+  onSuccess: () => void
+}) {
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    rating: 5,
+    visitDate: new Date().toISOString().split('T')[0],
+    pros: [''],
+    cons: [''],
+    tips: ''
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({
+        title: '',
+        content: '',
+        rating: 5,
+        visitDate: new Date().toISOString().split('T')[0],
+        pros: [''],
+        cons: [''],
+        tips: ''
+      })
+    }
+  }, [isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!currentUser || !location) {
+      toast.error('You must be logged in to write a review')
+      return
+    }
+
+    if (!formData.title.trim() || !formData.content.trim()) {
+      toast.error('Please fill in the title and review content')
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const reviewData = {
+        title: formData.title.trim(),
+        content: formData.content.trim(),
+        rating: formData.rating,
+        locationId: location.id,
+        authorId: currentUser.id,
+        visitDate: formData.visitDate,
+        pros: formData.pros.filter(p => p.trim()).map(p => p.trim()),
+        cons: formData.cons.filter(c => c.trim()).map(c => c.trim()),
+        tips: formData.tips.trim()
+      }
+
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(reviewData)
       })
 
       if (response.ok) {
-        const userData = await response.json()
-        setUser(userData.user)
+        toast.success('Review submitted successfully!')
+        onSuccess()
+        onClose()
       } else {
-        setUser(null)
+        const error = await response.json()
+        toast.error(error.error || 'Failed to submit review')
       }
     } catch (error) {
-      console.error("Error fetching current user:", error)
-      setUser(null)
+      console.error('Error submitting review:', error)
+      toast.error('Failed to submit review')
     } finally {
-      setUserLoaded(true)
+      setIsSubmitting(false)
     }
   }
 
-  // Load interaction counts
-  const loadInteractionCounts = async () => {
-    if (!location) return
-
-    try {
-      const [countsResponse, userInteractionsResponse] = await Promise.all([
-        fetch(`/api/locations/${location.id}/interactions`),
-        user ? fetch(`/api/locations/${location.id}/user-interactions?userId=${user.id}`) : Promise.resolve(null)
-      ])
-
-      if (countsResponse.ok) {
-        const countsData = await countsResponse.json()
-        setInteractionCounts(countsData)
-      }
-
-      if (userInteractionsResponse?.ok) {
-        const userInteractionsData = await userInteractionsResponse.json()
-        setUserInteractions(userInteractionsData)
-      }
-    } catch (error) {
-      console.error("Error loading interaction data:", error)
-    }
+  const updateProsOrCons = (type: 'pros' | 'cons', index: number, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [type]: prev[type].map((item, i) => i === index ? value : item)
+    }))
   }
 
-  // Fetch reviews
-  const fetchReviews = async () => {
-    if (!location) return
-    
-    setLoadingReviews(true)
-    try {
-      const response = await fetch(`/api/locations/${location.id}/reviews`)
-      if (response.ok) {
-        const data = await response.json()
-        setReviews(data.reviews || [])
-      }
-    } catch (error) {
-      console.error("Error fetching reviews:", error)
-    } finally {
-      setLoadingReviews(false)
-    }
+  const addProsOrCons = (type: 'pros' | 'cons') => {
+    setFormData(prev => ({
+      ...prev,
+      [type]: [...prev[type], '']
+    }))
   }
 
-  // Fetch specials
-  const fetchSpecials = async () => {
-    if (!location) return
-    
-    setLoadingSpecials(true)
-    try {
-      const response = await fetch(`/api/locations/${location.id}/specials`)
-      if (response.ok) {
-        const data = await response.json()
-        setSpecials(data.specials || [])
-      }
-    } catch (error) {
-      console.error("Error fetching specials:", error)
-    } finally {
-      setLoadingSpecials(false)
-    }
+  const removeProsOrCons = (type: 'pros' | 'cons', index: number) => {
+    setFormData(prev => ({
+      ...prev,
+      [type]: prev[type].filter((_, i) => i !== index)
+    }))
   }
+
+  if (!isOpen) return null
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100000] flex items-center justify-center p-4"
+            onClick={onClose}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto border border-gray-200 write-review-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-5 w-5 text-[#ff6b6b]" />
+                    <h2 className="text-xl font-semibold text-gray-900">Write a Review</h2>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onClose}
+                    className="hover:bg-gray-100 text-gray-600 rounded-full h-8 w-8"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                {location && (
+                  <div className="bg-gray-50 rounded-lg p-3 mb-6">
+                    <p className="text-sm text-gray-600">
+                      Writing review for <span className="font-medium text-gray-900">{location.name}</span>
+                    </p>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Left Column */}
+                    <div className="space-y-6">
+                      {/* Rating */}
+                      <div>
+                        <Label className="text-gray-700 font-medium mb-3 block">
+                          Overall Rating
+                        </Label>
+                        <div className="flex items-center space-x-1">
+                          {Array.from({ length: 5 }, (_, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, rating: i + 1 }))}
+                              className="focus:outline-none"
+                            >
+                              <Star
+                                className={`h-8 w-8 transition-colors ${
+                                  i < formData.rating
+                                    ? "text-[#ffe66d] fill-current"
+                                    : "text-gray-300 hover:text-[#ffe66d]"
+                                }`}
+                              />
+                            </button>
+                          ))}
+                          <span className="ml-2 text-sm text-gray-600">
+                            ({formData.rating} star{formData.rating !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Visit Date */}
+                      <div>
+                        <Label htmlFor="visitDate" className="text-gray-700 font-medium mb-2 block">
+                          Visit Date
+                        </Label>
+                        <Input
+                          type="date"
+                          id="visitDate"
+                          value={formData.visitDate}
+                          onChange={(e) => setFormData(prev => ({ ...prev, visitDate: e.target.value }))}
+                          className="w-full"
+                        />
+                      </div>
+
+                      {/* Title */}
+                      <div>
+                        <Label htmlFor="title" className="text-gray-700 font-medium mb-2 block">
+                          Review Title <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          type="text"
+                          id="title"
+                          value={formData.title}
+                          onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                          placeholder="Summarize your experience..."
+                          className="w-full"
+                          required
+                        />
+                      </div>
+
+                      {/* Content */}
+                      <div>
+                        <Label htmlFor="content" className="text-gray-700 font-medium mb-2 block">
+                          Your Review <span className="text-red-500">*</span>
+                        </Label>
+                        <Textarea
+                          id="content"
+                          value={formData.content}
+                          onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                          placeholder="Share your detailed experience..."
+                          rows={6}
+                          className="w-full resize-none"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right Column */}
+                    <div className="space-y-6">
+                      {/* Pros */}
+                      <div>
+                        <Label className="text-gray-700 font-medium mb-2 block">
+                          What did you like? (Optional)
+                        </Label>
+                        {formData.pros.map((pro, index) => (
+                          <div key={index} className="flex items-center space-x-2 mb-2">
+                            <Input
+                              type="text"
+                              value={pro}
+                              onChange={(e) => updateProsOrCons('pros', index, e.target.value)}
+                              placeholder="Something you enjoyed..."
+                              className="flex-1"
+                            />
+                            {formData.pros.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeProsOrCons('pros', index)}
+                                className="text-red-500 hover:text-red-600"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addProsOrCons('pros')}
+                          className="text-green-600 border-green-200 hover:bg-green-50"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Pro
+                        </Button>
+                      </div>
+
+                      {/* Cons */}
+                      <div>
+                        <Label className="text-gray-700 font-medium mb-2 block">
+                          What could be improved? (Optional)
+                        </Label>
+                        {formData.cons.map((con, index) => (
+                          <div key={index} className="flex items-center space-x-2 mb-2">
+                            <Input
+                              type="text"
+                              value={con}
+                              onChange={(e) => updateProsOrCons('cons', index, e.target.value)}
+                              placeholder="Something that could be better..."
+                              className="flex-1"
+                            />
+                            {formData.cons.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeProsOrCons('cons', index)}
+                                className="text-red-500 hover:text-red-600"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addProsOrCons('cons')}
+                          className="text-red-600 border-red-200 hover:bg-red-50"
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Con
+                        </Button>
+                      </div>
+
+                      {/* Tips */}
+                      <div>
+                        <Label htmlFor="tips" className="text-gray-700 font-medium mb-2 block">
+                          Insider Tips (Optional)
+                        </Label>
+                        <Textarea
+                          id="tips"
+                          value={formData.tips}
+                          onChange={(e) => setFormData(prev => ({ ...prev, tips: e.target.value }))}
+                          placeholder="Any tips for future visitors..."
+                          rows={3}
+                          className="w-full resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Submit Buttons */}
+                  <div className="flex gap-3 pt-6 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={onClose}
+                      disabled={isSubmitting}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="flex-1 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <MessageSquare className="h-4 w-4 mr-2" />
+                          Submit Review
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
+  )
+}
+
+// Desktop version of the location detail component
+function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProps) {
+  const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [isLiked, setIsLiked] = useState(false)
+  const [isSaved, setIsSaved] = useState(false)
+  const [likesCount, setLikesCount] = useState(0)
+  const [savesCount, setSavesCount] = useState(0)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
+  const [helpfulStates, setHelpfulStates] = useState<Record<string, { isHelpful: boolean | null, helpfulCount: number, unhelpfulCount: number }>>({})
+  const [activeTab, setActiveTab] = useState("about")
+  const [specials, setSpecials] = useState<any[]>([])
+  const [specialsLoading, setSpecialsLoading] = useState(false)
+  const [interactionCounts, setInteractionCounts] = useState({
+    likes: 0,
+    saves: 0
+  })
+  const [userBucketLists, setUserBucketLists] = useState<BucketList[]>([])
+  const [isBucketModalOpen, setIsBucketModalOpen] = useState(false)
+  const [isLoadingBucketLists, setIsLoadingBucketLists] = useState(false)
+
+  console.log('🔴 DESKTOP: LocationDetailDesktop rendered:', {
+    locationName: location?.name,
+    isOpen,
+    currentUser: currentUser?.id,
+    userBucketListsCount: userBucketLists.length,
+    isBucketModalOpen,
+    isLoadingBucketLists
+  })
+
+  // Add this to the window for debugging
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugModal = {
+        isBucketModalOpen,
+        setIsBucketModalOpen,
+        userBucketLists,
+        currentUser,
+        location: location?.name
+      }
+    }
+  }, [isBucketModalOpen, userBucketLists, currentUser, location])
 
   useEffect(() => {
     if (isOpen && location) {
       fetchCurrentUser()
+      fetchReviews()
+      fetchSpecials()
+      loadInteractionCounts()
     }
   }, [isOpen, location])
 
+  // Fetch bucket lists when user is available
   useEffect(() => {
-    if (location && userLoaded) {
-      loadInteractionCounts()
-      fetchReviews()
-      fetchSpecials()
+    if (currentUser) {
+      fetchUserBucketLists()
     }
-  }, [location, userLoaded, user])
+  }, [currentUser])
 
-  // Get gallery images
-  const imagesMemo = useMemo(() => {
-    if (!location) return []
-
-    const images: string[] = []
-
-    // Add featured image first
-    if (location.featuredImage) {
-      if (typeof location.featuredImage === "string") {
-        images.push(location.featuredImage)
-      } else if (location.featuredImage.url) {
-        images.push(location.featuredImage.url)
+  // Initialize helpful states when reviews change
+  useEffect(() => {
+    const states: Record<string, { isHelpful: boolean | null, helpfulCount: number, unhelpfulCount: number }> = {}
+    reviews.forEach(review => {
+      const userMarkedHelpful = currentUser && review.usersWhoMarkedHelpful?.includes(currentUser.id)
+      const userMarkedUnhelpful = currentUser && review.usersWhoMarkedUnhelpful?.includes(currentUser.id)
+      
+      states[review.id] = {
+        isHelpful: userMarkedHelpful ? true : userMarkedUnhelpful ? false : null,
+        helpfulCount: review.helpfulCount || 0,
+        unhelpfulCount: review.unhelpfulCount || 0
       }
-    }
+    })
+    setHelpfulStates(states)
+  }, [reviews, currentUser])
 
-    // Add gallery images
-    if (location.gallery && Array.isArray(location.gallery)) {
-      location.gallery.forEach((item: { image: Media; caption?: string }) => {
-        if (item.image && item.image.url) {
-          images.push(item.image.url)
-        }
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch('/api/users/me', {
+        credentials: 'include'
       })
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Current user fetched:', data.user)
+        setCurrentUser(data.user)
+      } else {
+        console.log('No authenticated user found')
+      }
+    } catch (error) {
+      console.error('Error fetching current user:', error)
+    }
+  }
+
+  const fetchUserBucketLists = async () => {
+    if (!currentUser) {
+      console.log('No current user for fetching bucket lists')
+      return
+    }
+    
+    setIsLoadingBucketLists(true)
+    console.log('Fetching bucket lists for user:', currentUser.id)
+    try {
+      const response = await fetch(`/api/bucket-lists?userId=${currentUser.id}`, {
+        credentials: 'include'
+      })
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Fetched bucket lists:', data.bucketLists?.length || 0, 'lists')
+        console.log('Bucket lists data:', data.bucketLists)
+        setUserBucketLists(data.bucketLists || [])
+      } else {
+        console.error('Failed to fetch bucket lists:', response.status, response.statusText)
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Error response:', errorData)
+        toast.error('Failed to load your bucket lists')
+      }
+    } catch (error) {
+      console.error('Error fetching bucket lists:', error)
+      toast.error('Failed to load your bucket lists')
+    } finally {
+      setIsLoadingBucketLists(false)
+    }
+  }
+
+  const loadInteractionCounts = async () => {
+    if (!location) return
+    
+    try {
+      // Mock data for now - replace with actual API call
+      setInteractionCounts({
+        likes: Math.floor(Math.random() * 100) + 10,
+        saves: Math.floor(Math.random() * 50) + 5
+      })
+    } catch (error) {
+      console.error('Error loading interaction counts:', error)
+    }
+  }
+
+  const fetchReviews = async () => {
+    if (!location) return
+    
+    setReviewsLoading(true)
+    try {
+      const response = await fetch(`/api/reviews?locationId=${location.id}&limit=10&page=1`)
+      if (response.ok) {
+        const data = await response.json()
+        setReviews(data.reviews || [])
+      } else {
+        console.error('Failed to fetch reviews:', response.status)
+      }
+    } catch (error) {
+      console.error('Error fetching reviews:', error)
+    } finally {
+      setReviewsLoading(false)
+    }
+  }
+
+  const fetchSpecials = async () => {
+    if (!location) return
+    
+    setSpecialsLoading(true)
+    try {
+      // Mock data for now - replace with actual API call
+      setSpecials([])
+    } catch (error) {
+      console.error('Error fetching specials:', error)
+    } finally {
+      setSpecialsLoading(false)
+    }
+  }
+
+  const handleHelpfulClick = async (reviewId: string, helpful: boolean) => {
+    if (!currentUser) {
+      toast.error('Please log in to rate reviews')
+      return
     }
 
-    // Fallback
-    if (images.length === 0) {
-      images.push("/placeholder.svg")
+    try {
+      const response = await fetch(`/api/reviews/${reviewId}/helpful`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: currentUser.id,
+          helpful
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setHelpfulStates(prev => ({
+          ...prev,
+          [reviewId]: {
+            isHelpful: helpful,
+            helpfulCount: data.helpfulCount,
+            unhelpfulCount: data.unhelpfulCount
+          }
+        }))
+        toast.success(data.message)
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to rate review')
+      }
+    } catch (error) {
+      console.error('Error rating review:', error)
+      toast.error('Failed to rate review')
     }
+  }
 
-    return images
-  }, [location])
+  const formatDate = (dateString: string | Date) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
 
-  // Image navigation
+  const getAuthorName = (author: Review['author']): string => {
+    if (typeof author === 'string') return 'Anonymous'
+    return author?.name || 'Anonymous'
+  }
+
+  const getAuthorImage = (author: Review['author']): string => {
+    if (typeof author === 'string') return '/placeholder.svg'
+    return author?.profileImage?.url || '/placeholder.svg'
+  }
+
+  const handleWriteReview = () => {
+    if (!currentUser) {
+      toast.error('Please log in to write a review')
+      return
+    }
+    setIsWriteReviewModalOpen(true)
+  }
+
   const nextImage = () => {
-    setCurrentImageIndex((prevIndex) => 
-      prevIndex === imagesMemo.length - 1 ? 0 : prevIndex + 1
-    )
+    if (location?.gallery && location.gallery.length > 0) {
+      setCurrentImageIndex((prev) => (prev + 1) % location.gallery!.length)
+    }
   }
 
   const prevImage = () => {
-    setCurrentImageIndex((prevIndex) => 
-      prevIndex === 0 ? imagesMemo.length - 1 : prevIndex - 1
-    )
+    if (location?.gallery && location.gallery.length > 0) {
+      setCurrentImageIndex((prev) => (prev - 1 + location.gallery!.length) % location.gallery!.length)
+    }
   }
 
-  // Format address for display
   const formatAddress = (address: any): string => {
-    if (typeof address === "string") return address
-    if (!address) return ""
-    
-    return [
-      address.street,
-      address.city,
-      address.state,
-      address.zip,
-      address.country
-    ].filter(Boolean).join(", ")
+    if (typeof address === 'string') {
+      return address
+    } else if (typeof address === 'object' && address !== null) {
+      const parts = [address.street, address.city, address.state, address.zip].filter(Boolean)
+      return parts.join(', ')
+    }
+    return 'Address not available'
   }
 
-  // Format price range
   const formatPriceRange = (priceRange?: string): string => {
-    const ranges = {
-      free: "Free",
-      budget: "$",
-      moderate: "$$",
-      expensive: "$$$",
-      luxury: "$$$$"
+    const ranges: Record<string, string> = {
+      free: 'Free',
+      budget: '$',
+      moderate: '$$',
+      expensive: '$$$',
+      luxury: '$$$$'
     }
-    return ranges[priceRange as keyof typeof ranges] || "Price not available"
+    return ranges[priceRange || ''] || 'Price not listed'
   }
 
-  // Business status logic
   const getBusinessStatus = () => {
-    if (!location?.businessHours || location.businessHours.length === 0) {
-      return { status: "Unknown", color: "text-muted-foreground" }
-    }
+    if (!location?.businessHours) return { status: 'Unknown', color: 'text-gray-500' }
 
     const now = new Date()
-    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
-    const currentTime = now.getHours() * 60 + now.getMinutes()
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' })
+    const currentTime = now.toTimeString().slice(0, 5)
 
-    const todayHours = location.businessHours.find(
-      (hours) => hours.day?.toLowerCase() === currentDay
-    )
+    const todayHours = location.businessHours.find(h => h.day === currentDay)
+    if (!todayHours) return { status: 'Unknown', color: 'text-gray-500' }
 
-    if (!todayHours || todayHours.closed) {
-      return { status: "Closed", color: "text-red-600" }
+    if (todayHours.closed) return { status: 'Closed', color: 'text-red-500' }
+
+    const [openHour, openMin] = (todayHours.open || '').split(':').map(Number)
+    const [closeHour, closeMin] = (todayHours.close || '').split(':').map(Number)
+    const [currentHour, currentMin] = currentTime.split(':').map(Number)
+
+    const openTime = openHour * 60 + openMin
+    const closeTime = closeHour * 60 + closeMin
+    const currentTimeMin = currentHour * 60 + currentMin
+
+    if (currentTimeMin >= openTime && currentTimeMin <= closeTime) {
+      return { status: 'Open', color: 'text-green-500' }
+    } else {
+      return { status: 'Closed', color: 'text-red-500' }
     }
-
-    if (todayHours.open && todayHours.close) {
-      const [openHour, openMinute] = todayHours.open.split(":").map(Number)
-      const [closeHour, closeMinute] = todayHours.close.split(":").map(Number)
-      const openTime = openHour * 60 + openMinute
-      const closeTime = closeHour * 60 + closeMinute
-
-      if (currentTime >= openTime && currentTime <= closeTime) {
-        return { status: "Open", color: "text-green-600" }
-      }
-    }
-
-    return { status: "Closed", color: "text-red-600" }
   }
 
-  // Get image URL
   const getImageUrl = (loc: Location): string => {
-    if (typeof loc.featuredImage === "string") {
+    if (typeof loc.featuredImage === 'string') {
       return loc.featuredImage
     } else if (loc.featuredImage?.url) {
       return loc.featuredImage.url
     } else if (loc.imageUrl) {
       return loc.imageUrl
     }
-    return "/placeholder.svg"
+    return '/placeholder.svg'
   }
 
-  // Handle like
   const handleLike = async () => {
-    if (!user || !location) return
-
+    if (!location || !currentUser) return
+    
     try {
-      const response = await fetch(`/api/locations/${location.id}/like`, {
-        method: "POST",
-        credentials: "include",
+      const response = await fetch(`/api/locations/${location.id}/interactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: 'like' }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setUserInteractions(prev => ({ ...prev, hasLiked: data.liked }))
-        setInteractionCounts(prev => ({ 
-          ...prev, 
-          likes: data.liked ? prev.likes + 1 : prev.likes - 1 
-        }))
+        setIsLiked(!isLiked)
+        setLikesCount(prev => isLiked ? prev - 1 : prev + 1)
+        toast.success(isLiked ? 'Removed from likes' : 'Added to likes!')
       }
     } catch (error) {
-      console.error("Error liking location:", error)
+      console.error('Error handling like:', error)
+      toast.error('Failed to update like status')
     }
   }
 
-  // Handle save
   const handleSave = async () => {
-    if (!user || !location) return
-
+    if (!location || !currentUser) return
+    
     try {
-      const response = await fetch(`/api/locations/${location.id}/save`, {
-        method: "POST",
-        credentials: "include",
+      const response = await fetch(`/api/locations/${location.id}/interactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: 'save' }),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        setUserInteractions(prev => ({ ...prev, hasSaved: data.saved }))
-        setInteractionCounts(prev => ({ 
-          ...prev, 
-          saves: data.saved ? prev.saves + 1 : prev.saves - 1 
-        }))
+        setIsSaved(!isSaved)
+        setSavesCount(prev => isSaved ? prev - 1 : prev + 1)
+        toast.success(isSaved ? 'Removed from saved' : 'Saved!')
       }
     } catch (error) {
-      console.error("Error saving location:", error)
+      console.error('Error handling save:', error)
+      toast.error('Failed to update save status')
     }
   }
 
-  const businessStatus = getBusinessStatus()
-  const categoryColor = getCategoryColor(location?.categories)
+  const handleAddToBucketList = () => {
+    console.log('🔴 DESKTOP: Add to bucket list clicked')
+    console.log('🔴 DESKTOP: Current user:', currentUser)
+    console.log('🔴 DESKTOP: User bucket lists count:', userBucketLists.length)
+    console.log('🔴 DESKTOP: User bucket lists:', userBucketLists)
+    console.log('🔴 DESKTOP: Is loading bucket lists:', isLoadingBucketLists)
+    console.log('🔴 DESKTOP: Is bucket modal open BEFORE:', isBucketModalOpen)
+    
+    if (!currentUser) {
+      console.log('🔴 DESKTOP: No user - showing error')
+      toast.error('Please log in to add to bucket list')
+      return
+    }
+    
+    if (isLoadingBucketLists) {
+      console.log('🔴 DESKTOP: Still loading bucket lists')
+      toast.info('Loading your bucket lists...')
+      return
+    }
+    
+    if (userBucketLists.length === 0) {
+      console.log('🔴 DESKTOP: No bucket lists - showing create option')
+      // Show a helpful message and open create bucket list modal instead
+      toast((t) => (
+        <div className="flex flex-col gap-2">
+          <p>You don't have any bucket lists yet!</p>
+          <Button
+            size="sm"
+            onClick={() => {
+              toast.dismiss(t.id)
+              // Navigate to bucket list page to create one
+              window.open('/bucket-list', '_blank')
+            }}
+            className="bg-[#ff6b6b] hover:bg-[#ff5555] text-white"
+          >
+            Create Your First Bucket List
+          </Button>
+        </div>
+      ), {
+        duration: 5000,
+        style: {
+          background: 'white',
+          color: 'black',
+          border: '1px solid #4ecdc4',
+        }
+      })
+      return
+    }
+    
+    console.log('🔴 DESKTOP: Opening bucket list modal')
+    setIsBucketModalOpen(true)
+    console.log('🔴 DESKTOP: Modal state set to true, isBucketModalOpen AFTER:', true)
+    
+    // Force re-render by logging after state change
+    setTimeout(() => {
+      console.log('🔴 DESKTOP: Modal state after timeout:', isBucketModalOpen)
+    }, 100)
+  }
+
+  const handleDirections = () => {
+    if (location?.address) {
+      const address = formatAddress(location.address)
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+      window.open(mapsUrl, '_blank')
+    }
+  }
+
+  const handleShare = () => {
+    if (navigator.share && location) {
+      navigator.share({
+        title: location.name,
+        text: location.shortDescription || location.description || `Check out ${location.name}`,
+        url: window.location.href,
+      })
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(window.location.href)
+      toast.success('Link copied to clipboard!')
+    }
+  }
 
   if (!location) return null
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden">
-        <DialogTitle className="sr-only">{location.name}</DialogTitle>
-        <ScrollArea className="h-full max-h-[90vh]">
-          <div className="relative">
-            {/* Header with image */}
-            <div className="relative h-64 bg-gradient-to-br from-muted to-muted/80">
-              <Image
-                src={imagesMemo[currentImageIndex] || getImageUrl(location)}
-                alt={location.name}
-                fill
-                className="object-cover"
-              />
-              <div className="absolute inset-0 bg-black/40" />
-              
-              {/* Image navigation */}
-              {imagesMemo.length > 1 && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white"
-                    onClick={prevImage}
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white"
-                    onClick={nextImage}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                </>
-              )}
-              
-              {/* Close button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="absolute top-4 right-4 bg-black/20 hover:bg-black/40 text-white"
-              >
-                <X className="h-5 w-5" />
-              </Button>
+  const categoryInfo = {
+    color: getCategoryColor(location.categories?.[0]),
+    name: getCategoryName(location.categories?.[0])
+  }
 
-              {/* Header content */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h2 className="text-2xl font-bold text-white">{location.name}</h2>
-                      {location.isVerified && (
-                        <Badge variant="secondary" className="bg-primary/20 text-primary-foreground">
-                          Verified
-                        </Badge>
-                      )}
-                      {location.isFeatured && (
-                        <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-200">
-                          Featured
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-4 text-white/90">
-                      <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full"
-                          style={{ backgroundColor: categoryColor }}
-                        />
-                        <span className="text-sm">{getCategoryName(location.categories)}</span>
-                      </div>
-                      
-                      {location.averageRating && (
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                          <span className="text-sm font-medium">{location.averageRating.toFixed(1)}</span>
-                          {location.reviewCount && (
-                            <span className="text-sm text-white/70">({location.reviewCount})</span>
-                          )}
-                        </div>
-                      )}
-                      
-                      {location.priceRange && (
-                        <span className="text-sm">{formatPriceRange(location.priceRange)}</span>
-                      )}
-                    </div>
+  const businessStatus = getBusinessStatus()
+  const galleryImages = location.gallery?.map(g => 
+    typeof g.image === 'string' ? g.image : g.image?.url || ''
+  ).filter(Boolean) || [getImageUrl(location)]
+
+  return createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
+            onClick={onClose}
+          />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed inset-4 md:inset-8 lg:inset-12 bg-white rounded-2xl shadow-2xl z-[9999] overflow-hidden flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-[#fdecd7] to-white">
+              <div className="flex items-center gap-3">
+                <Badge
+                  variant="outline"
+                  className="text-white border-0 px-3 py-1 font-medium"
+                  style={{ backgroundColor: getCategoryColor(location.categories?.[0]) }}
+                >
+                  {getCategoryName(location.categories?.[0])}
+                </Badge>
+                {location.isVerified && (
+                  <span className="text-sm bg-[#4ecdc4]/10 text-[#4ecdc4] px-3 py-1 rounded-full font-medium">
+                    ✓ Verified
+                  </span>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleShare}
+                  className="hover:bg-[#4ecdc4]/10 text-[#4ecdc4]"
+                >
+                  <Share2 className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="hover:bg-gray-100 text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-2 h-full">
+                {/* Left Side - Image Gallery */}
+                <div className="relative bg-gray-100">
+                  <div className="absolute inset-0">
+                    <Image
+                      src={galleryImages[currentImageIndex] || getImageUrl(location)}
+                      alt={location.name}
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                   
-                  {/* Action buttons */}
-                  <div className="flex gap-2">
+                  {/* Gallery Navigation */}
+                  {galleryImages.length > 1 && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={prevImage}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white/90 text-gray-900"
+                      >
+                        <ChevronLeft className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={nextImage}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white/90 text-gray-900"
+                      >
+                        <ChevronRight className="h-5 w-5" />
+                      </Button>
+                      
+                      {/* Image Indicator */}
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
+                        {currentImageIndex + 1} / {galleryImages.length}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Floating Action Buttons */}
+                  <div className="absolute top-4 right-4 flex flex-col gap-2">
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleLike}
                       className={cn(
-                        "bg-black/20 hover:bg-black/40 text-white",
-                        userInteractions.hasLiked && "text-red-400"
+                        "bg-white/80 hover:bg-white/90 backdrop-blur-sm",
+                        isLiked && "text-red-500 bg-red-50/80"
                       )}
                     >
-                      <Heart className={cn("h-5 w-5", userInteractions.hasLiked && "fill-current")} />
+                      <Heart className={cn("h-5 w-5", isLiked && "fill-current")} />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleSave}
-                      className="bg-black/20 hover:bg-black/40 text-white"
+                      className={cn(
+                        "bg-white/80 hover:bg-white/90 backdrop-blur-sm",
+                        isSaved && "text-blue-500 bg-blue-50/80"
+                      )}
                     >
-                      <Users className="h-5 w-5" />
+                      <Bookmark className={cn("h-5 w-5", isSaved && "fill-current")} />
                     </Button>
+                  </div>
+                </div>
+
+                {/* Right Side - Details */}
+                <div className="flex flex-col overflow-hidden">
+                  {/* Quick Info */}
+                  <div className="p-6 border-b border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-4">
+                        {location.averageRating && (
+                          <div className="flex items-center gap-1">
+                            <Star className="h-5 w-5 text-yellow-400 fill-current" />
+                            <span className="font-semibold">{location.averageRating.toFixed(1)}</span>
+                            {location.reviewCount && (
+                              <span className="text-gray-500">({location.reviewCount} reviews)</span>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm font-medium">Price:</span>
+                          <span className="text-sm">{formatPriceRange(location.priceRange)}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span className={cn("text-sm font-medium", businessStatus.color)}>
+                          {businessStatus.status}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Interaction Stats */}
+                    <div className="flex items-center gap-6 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <Heart className="h-4 w-4" />
+                        {likesCount} likes
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Bookmark className="h-4 w-4" />
+                        {savesCount} saves
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Contact & Address */}
+                  <div className="p-6 border-b border-gray-200 space-y-4">
+                    {location.address && (
+                      <div className="flex items-start gap-3">
+                        <MapPin className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                        <span className="text-gray-700">{formatAddress(location.address)}</span>
+                      </div>
+                    )}
+
+                    {location.contactInfo?.phone && (
+                      <div className="flex items-center gap-3">
+                        <Phone className="h-5 w-5 text-gray-500" />
+                        <a 
+                          href={`tel:${location.contactInfo.phone}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {location.contactInfo.phone}
+                        </a>
+                      </div>
+                    )}
+
+                    {location.contactInfo?.website && (
+                      <div className="flex items-center gap-3">
+                        <Globe className="h-5 w-5 text-gray-500" />
+                        <a 
+                          href={location.contactInfo.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          Visit Website
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={handleDirections}
+                        className="flex-1"
+                        variant="outline"
+                      >
+                        <Navigation className="h-4 w-4 mr-2" />
+                        Directions
+                      </Button>
+                      <Button
+                        onClick={handleWriteReview}
+                        className="flex-1 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0"
+                      >
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Write Review
+                      </Button>
+                      <Button
+                        onClick={handleAddToBucketList}
+                        className="flex-1 bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFEB3B] hover:to-[#FF7043] text-gray-800 border-0"
+                      >
+                        <Crown className="h-4 w-4 mr-2" />
+                        Add to List
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Tabs Section */}
+                  <div className="flex-1 overflow-hidden">
+                    <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+                      <TabsList className="grid w-full grid-cols-3 mx-6 mt-4">
+                        <TabsTrigger value="about">About</TabsTrigger>
+                        <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
+                        <TabsTrigger value="specials">Specials</TabsTrigger>
+                      </TabsList>
+                      
+                      <div className="flex-1 overflow-y-auto px-6 pb-6">
+                        <TabsContent value="about" className="space-y-4 mt-4">
+                          {location.description && (
+                            <div>
+                              <h3 className="font-semibold mb-2">Description</h3>
+                              <p className="text-gray-700 leading-relaxed">{location.description}</p>
+                            </div>
+                          )}
+
+                          {location.insiderTips && (
+                            <div>
+                              <h3 className="font-semibold mb-2 flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                Insider Tips
+                              </h3>
+                              <p className="text-gray-700 bg-amber-50 p-3 rounded-lg">{location.insiderTips}</p>
+                            </div>
+                          )}
+
+                          {location.businessHours && location.businessHours.length > 0 && (
+                            <div>
+                              <h3 className="font-semibold mb-2">Hours</h3>
+                              <div className="space-y-1">
+                                {location.businessHours.map((hours, index) => (
+                                  <div key={index} className="flex justify-between text-sm">
+                                    <span>{hours.day}</span>
+                                    <span>
+                                      {hours.closed ? 'Closed' : `${hours.open} - ${hours.close}`}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        <TabsContent value="reviews" className="space-y-4 mt-4">
+                          {/* Reviews Header */}
+                          <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              Reviews ({reviews.length})
+                            </h3>
+                            <Button
+                              onClick={handleWriteReview}
+                              size="sm"
+                              className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0"
+                            >
+                              <Edit3 className="h-4 w-4 mr-2" />
+                              Write Review
+                            </Button>
+                          </div>
+
+                          {reviewsLoading ? (
+                            <div className="text-center py-8">
+                              <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                              <p className="text-gray-500 mt-2">Loading reviews...</p>
+                            </div>
+                          ) : reviews.length > 0 ? (
+                            <div className="space-y-4">
+                              {reviews.map((review, index) => {
+                                const helpfulState = helpfulStates[review.id]
+                                return (
+                                  <Card key={index} className="border border-gray-200 hover:shadow-md transition-shadow">
+                                    <CardContent className="p-4">
+                                      <div className="flex items-start gap-3 mb-3">
+                                        <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                                          <Image
+                                            src={getAuthorImage(review.author)}
+                                            alt={getAuthorName(review.author)}
+                                            width={40}
+                                            height={40}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center justify-between">
+                                            <h4 className="font-medium text-gray-900">
+                                              {getAuthorName(review.author)}
+                                            </h4>
+                                            <span className="text-sm text-gray-500">
+                                              {formatDate(review.createdAt)}
+                                            </span>
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-1">
+                                            <div className="flex">
+                                              {Array.from({ length: 5 }, (_, i) => (
+                                                <Star
+                                                  key={i}
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    i < review.rating ? "text-[#ffe66d] fill-current" : "text-gray-300"
+                                                  )}
+                                                />
+                                              ))}
+                                            </div>
+                                            {review.visitDate && (
+                                              <span className="text-xs text-gray-500">
+                                                • Visited {formatDate(review.visitDate)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {review.title && (
+                                        <h4 className="font-semibold mb-2">{review.title}</h4>
+                                      )}
+                                      <p className="text-gray-700 mb-3 leading-relaxed">{review.content}</p>
+
+                                      {/* Pros and Cons */}
+                                      {(review.pros?.length || review.cons?.length) && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                          {review.pros && review.pros.length > 0 && (
+                                            <div className="bg-green-50 p-3 rounded-lg">
+                                              <h6 className="font-medium text-green-800 mb-2 flex items-center">
+                                                <Check className="h-4 w-4 mr-1" />
+                                                Pros
+                                              </h6>
+                                              <ul className="space-y-1">
+                                                {review.pros.map((pro, idx) => (
+                                                  <li key={idx} className="text-sm text-green-700">
+                                                    • {pro.pro}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                          {review.cons && review.cons.length > 0 && (
+                                            <div className="bg-red-50 p-3 rounded-lg">
+                                              <h6 className="font-medium text-red-800 mb-2 flex items-center">
+                                                <X className="h-4 w-4 mr-1" />
+                                                Cons
+                                              </h6>
+                                              <ul className="space-y-1">
+                                                {review.cons.map((con, idx) => (
+                                                  <li key={idx} className="text-sm text-red-700">
+                                                    • {con.con}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* Tips */}
+                                      {review.tips && (
+                                        <div className="bg-blue-50 p-3 rounded-lg mb-3">
+                                          <h6 className="font-medium text-blue-800 mb-1 flex items-center">
+                                            <AlertTriangle className="h-4 w-4 mr-1" />
+                                            Insider Tips
+                                          </h6>
+                                          <p className="text-sm text-blue-700">{review.tips}</p>
+                                        </div>
+                                      )}
+
+                                      {/* Helpful Buttons */}
+                                      {currentUser && (
+                                        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                                          <span className="text-sm text-gray-600">Was this helpful?</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleHelpfulClick(review.id, true)}
+                                            className={cn(
+                                              "text-xs",
+                                              helpfulState?.isHelpful === true && "bg-green-100 text-green-700"
+                                            )}
+                                          >
+                                            👍 Yes ({helpfulState?.helpfulCount || 0})
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleHelpfulClick(review.id, false)}
+                                            className={cn(
+                                              "text-xs",
+                                              helpfulState?.isHelpful === false && "bg-red-100 text-red-700"
+                                            )}
+                                          >
+                                            👎 No ({helpfulState?.unhelpfulCount || 0})
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </CardContent>
+                                  </Card>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center py-12">
+                              <Star className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                              <h3 className="text-lg font-medium text-gray-900 mb-2">No reviews yet</h3>
+                              <p className="text-gray-500 mb-6">Be the first to share your experience!</p>
+                              <Button
+                                onClick={handleWriteReview}
+                                className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white"
+                              >
+                                <Edit3 className="h-4 w-4 mr-2" />
+                                Write the First Review
+                              </Button>
+                            </div>
+                          )}
+                        </TabsContent>
+
+                        <TabsContent value="specials" className="space-y-4 mt-4">
+                          {specials.length > 0 ? (
+                            specials.map((special, index) => (
+                              <Card key={index}>
+                                <CardContent className="p-4">
+                                  <h4 className="font-semibold mb-2">{special.title}</h4>
+                                  <p className="text-gray-700 mb-2">{special.description}</p>
+                                  <div className="text-sm text-gray-500">
+                                    Valid: {special.validFrom} - {special.validTo}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))
+                          ) : (
+                            <div className="text-center py-8 text-gray-500">
+                              <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                              <p>No current specials</p>
+                              <p className="text-sm">Check back later for deals!</p>
+                            </div>
+                          )}
+                        </TabsContent>
+                      </div>
+                    </Tabs>
                   </div>
                 </div>
               </div>
             </div>
+          </motion.div>
 
-            {/* Main content */}
-            <div className="p-6">
-              <Tabs defaultValue="overview" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="reviews">Reviews ({reviews.length})</TabsTrigger>
-                  <TabsTrigger value="photos">Photos ({imagesMemo.length})</TabsTrigger>
-                  <TabsTrigger value="specials">Specials</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="overview" className="space-y-6 mt-6">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Main info */}
-                    <div className="lg:col-span-2 space-y-6">
-                      {/* Description */}
-                      {(location.shortDescription || location.description) && (
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">About</h3>
-                          <p className="text-muted-foreground leading-relaxed">
-                            {location.shortDescription || location.description}
-                          </p>
-                        </div>
-                      )}
+          {/* Write Review Modal */}
+          <WriteReviewModal
+            isOpen={isWriteReviewModalOpen}
+            onClose={() => setIsWriteReviewModalOpen(false)}
+            location={location}
+            currentUser={currentUser}
+            onSuccess={() => {
+              fetchReviews()
+              setIsWriteReviewModalOpen(false)
+            }}
+          />
 
-                      {/* Insider Tips */}
-                      {location.insiderTips && (
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Insider Tips</h3>
-                          <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg">
-                            <div className="flex items-start gap-3">
-                              <span className="text-primary text-lg">💡</span>
-                              <p className="text-muted-foreground">{location.insiderTips}</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Tags */}
-                      {location.tags && location.tags.length > 0 && (
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Tags</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {location.tags.map((tag, index) => (
-                              <Badge key={index} variant="secondary">
-                                {tag.tag}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Best Time to Visit */}
-                      {location.bestTimeToVisit && location.bestTimeToVisit.length > 0 && (
-                        <div>
-                          <h3 className="text-lg font-semibold mb-3">Best Time to Visit</h3>
-                          <div className="flex flex-wrap gap-2">
-                            {location.bestTimeToVisit.map((time, index) => (
-                              <Badge key={index} variant="outline" className="border-yellow-200 text-yellow-800">
-                                {time.season}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Sidebar info */}
-                    <div className="space-y-6">
-                      {/* Quick Actions */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Quick Actions</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                          <Button className="w-full" onClick={() => {
-                            if (location.address) {
-                              const addressString = formatAddress(location.address)
-                              const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressString)}`
-                              window.open(mapsUrl, "_blank")
-                            }
-                          }}>
-                            <Navigation className="h-4 w-4 mr-2" />
-                            Get Directions
-                          </Button>
-                          {location.contactInfo?.phone && (
-                            <Button variant="outline" className="w-full" onClick={() => {
-                              if (location.contactInfo?.phone) {
-                                window.location.href = `tel:${location.contactInfo.phone}`
-                              }
-                            }}>
-                              <Phone className="h-4 w-4 mr-2" />
-                              Call
-                            </Button>
-                          )}
-                          {location.contactInfo?.website && (
-                            <Button variant="outline" className="w-full" onClick={() => {
-                              if (location.contactInfo?.website) {
-                                const website = location.contactInfo.website.startsWith("http")
-                                  ? location.contactInfo.website
-                                  : `https://${location.contactInfo.website}`
-                                window.open(website, "_blank")
-                              }
-                            }}>
-                              <Globe className="h-4 w-4 mr-2" />
-                              Website
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-
-                      {/* Contact & Hours */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">Details</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          {/* Address */}
-                          {location.address && (
-                            <div className="flex items-start gap-3">
-                              <MapPin className="h-4 w-4 text-muted-foreground mt-1 flex-shrink-0" />
-                              <div>
-                                <p className="text-sm">{formatAddress(location.address)}</p>
-                                {location.neighborhood && (
-                                  <p className="text-xs text-muted-foreground mt-1">
-                                    {location.neighborhood}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Business Hours */}
-                          {location.businessHours && location.businessHours.length > 0 && (
-                            <div className="flex items-start gap-3">
-                              <Clock className="h-4 w-4 text-muted-foreground mt-1 flex-shrink-0" />
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-sm font-medium">Hours</span>
-                                  <span className={cn("text-sm font-medium", businessStatus.color)}>
-                                    {businessStatus.status}
-                                  </span>
-                                </div>
-                                <div className="space-y-1">
-                                  {location.businessHours.map((hours, index) => (
-                                    <div key={index} className="flex justify-between text-sm text-muted-foreground">
-                                      <span className="capitalize">{hours.day}</span>
-                                      <span>
-                                        {hours.closed ? "Closed" : `${hours.open} - ${hours.close}`}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Contact Info */}
-                          {location.contactInfo?.phone && (
-                            <div className="flex items-center gap-3">
-                              <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <span className="text-sm">{location.contactInfo.phone}</span>
-                            </div>
-                          )}
-
-                          {location.contactInfo?.website && (
-                            <div className="flex items-center gap-3">
-                              <Globe className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <a
-                                href={location.contactInfo.website.startsWith("http") 
-                                  ? location.contactInfo.website 
-                                  : `https://${location.contactInfo.website}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-primary hover:underline"
-                              >
-                                {location.contactInfo.website.replace(/^https?:\/\//, "")}
-                              </a>
-                            </div>
-                          )}
-
-                          {/* Accessibility */}
-                          {location.accessibility && (
-                            <div>
-                              <h4 className="text-sm font-medium mb-2">Accessibility</h4>
-                              <div className="flex flex-wrap gap-2">
-                                {location.accessibility.wheelchairAccess && (
-                                  <Badge variant="outline" className="text-xs">
-                                    ♿ Wheelchair Accessible
-                                  </Badge>
-                                )}
-                                {location.accessibility.parking && (
-                                  <Badge variant="outline" className="text-xs">
-                                    🅿️ Parking
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="reviews" className="space-y-6 mt-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold">Reviews</h3>
-                    <Button>
-                      <MessageSquare className="h-4 w-4 mr-2" />
-                      Write Review
-                    </Button>
-                  </div>
-                  
-                  {loadingReviews ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                  ) : reviews.length > 0 ? (
-                    <div className="space-y-4">
-                      {reviews.map((review, index) => (
-                        <Card key={index}>
-                          <CardContent className="p-6">
-                            <div className="flex items-start justify-between mb-4">
-                              <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                  <h4 className="font-medium">{review.author || "Anonymous"}</h4>
-                                  <div className="flex items-center">
-                                    {Array.from({ length: 5 }, (_, i) => (
-                                      <Star
-                                        key={i}
-                                        className={cn(
-                                          "h-4 w-4",
-                                          i < review.rating ? "text-yellow-400 fill-current" : "text-gray-300"
-                                        )}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
-                                {review.title && (
-                                  <h5 className="font-medium text-foreground mb-2">{review.title}</h5>
-                                )}
-                                <p className="text-muted-foreground">{review.content}</p>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <MessageSquare className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No reviews yet</h3>
-                      <p className="text-muted-foreground mb-4">Be the first to share your experience!</p>
-                      <Button>
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Write the first review
-                      </Button>
-                    </div>
-                  )}
-                </TabsContent>
-
-                <TabsContent value="photos" className="space-y-6 mt-6">
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {imagesMemo.map((image, index) => (
-                      <div
-                        key={index}
-                        className="aspect-square relative rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
-                        onClick={() => setCurrentImageIndex(index)}
-                      >
-                        <Image
-                          src={image}
-                          alt={`${location.name} photo ${index + 1}`}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="specials" className="space-y-6 mt-6">
-                  {loadingSpecials ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                  ) : specials.length > 0 ? (
-                    <div className="grid gap-4">
-                      {specials.map((special, index) => (
-                        <Card key={index}>
-                          <CardContent className="p-6">
-                            <h4 className="font-medium mb-2">{special.title}</h4>
-                            <p className="text-muted-foreground">{special.description}</p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <Ticket className="h-12 w-12 text-muted-foreground/40 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No current specials</h3>
-                      <p className="text-muted-foreground">Check back later for deals and offers!</p>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </div>
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+          {/* Bucket List Modal */}
+          <AddToBucketListModal
+            isOpen={isBucketModalOpen}
+            onClose={() => setIsBucketModalOpen(false)}
+            location={location}
+            userBucketLists={userBucketLists}
+            onSuccess={() => fetchUserBucketLists()}
+          />
+        </>
+      )}
+    </AnimatePresence>,
+    document.body
   )
 }
 
 // Mini marker preview popup component
 export function LocationPreview({ location, onViewDetail }: { location: Location; onViewDetail: () => void }) {
-  const [isLiked, setIsLiked] = useState(false)
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const categoryColor = getCategoryColor(location.categories?.[0])
 
   const getImageUrl = (loc: Location): string => {
-    if (typeof loc.featuredImage === "string") {
-      return loc.featuredImage
-    } else if (loc.featuredImage?.url) {
-      return loc.featuredImage.url
-    } else if (loc.imageUrl) {
-      return loc.imageUrl
+    if (loc.featuredImage) {
+      return typeof loc.featuredImage === "string" ? loc.featuredImage : loc.featuredImage.url || "/placeholder.svg"
     }
     return "/placeholder.svg"
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-4 min-w-[280px] max-w-[320px] border">
-      <div className="flex gap-3">
-        <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
-          <Image
-            src={getImageUrl(location)}
-            alt={location.name}
-            width={64}
-            height={64}
-            className="w-full h-full object-cover"
-          />
+    <Card 
+      className="cursor-pointer hover:shadow-lg transition-all duration-300 border-[#4ecdc4]/20 hover:border-[#4ecdc4]/40 bg-white/80 backdrop-blur-sm" 
+      onClick={onViewDetail}
+    >
+      <div className="relative h-32 w-full">
+        <Image
+          src={getImageUrl(location)}
+          alt={location.name}
+          fill
+          className="object-cover rounded-t-lg"
+        />
+        <div className="absolute top-2 left-2">
+          <Badge 
+            className="text-white text-xs px-2 py-1 border-0"
+            style={{ backgroundColor: categoryColor }}
+          >
+            {getCategoryName(location.categories?.[0])}
+          </Badge>
         </div>
+        {location.isVerified && (
+          <div className="absolute top-2 right-2">
+            <span className="text-xs bg-[#4ecdc4]/90 text-white px-2 py-1 rounded-full font-medium">
+              ✓
+            </span>
+          </div>
+        )}
+      </div>
+      
+      <CardContent className="p-3">
+        <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{location.name}</h3>
         
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm truncate mb-1">{location.name}</h3>
-          
+        {location.averageRating && (
           <div className="flex items-center gap-1 mb-2">
-            {location.averageRating && (
-              <>
-                <Star className="w-3 h-3 text-yellow-400 fill-current" />
-                <span className="text-xs text-muted-foreground">
-                  {location.averageRating.toFixed(1)}
-                </span>
-              </>
+            <Star className="h-3 w-3 text-[#ffe66d] fill-current" />
+            <span className="text-xs font-medium text-gray-900">{location.averageRating.toFixed(1)}</span>
+            {location.reviewCount && (
+              <span className="text-xs text-gray-600">({location.reviewCount})</span>
             )}
           </div>
-          
-          <Button
-            size="sm"
-            className="w-full text-xs"
-            onClick={onViewDetail}
-          >
-            View Details
-          </Button>
-        </div>
-      </div>
-    </div>
+        )}
+        
+        {location.shortDescription && (
+          <p className="text-xs text-gray-600 line-clamp-2">{location.shortDescription}</p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -855,7 +1812,16 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
   // Determine if we should show mobile version
   const shouldShowMobile = isMobile || isResponsiveMobile
 
+  console.log('🔴 MAIN: LocationDetail props:', {
+    locationName: location?.name,
+    isOpen,
+    isMobileProp: isMobile,
+    isResponsiveMobile,
+    shouldShowMobile
+  })
+
   if (shouldShowMobile) {
+    console.log('🔴 MAIN: Rendering mobile version')
     return (
       <LocationDetailMobile 
         location={location} 
@@ -865,6 +1831,7 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
     )
   }
 
+  console.log('🔴 MAIN: Rendering desktop version')
   return (
     <LocationDetailDesktop 
       location={location} 

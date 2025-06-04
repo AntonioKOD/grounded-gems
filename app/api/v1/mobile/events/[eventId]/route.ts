@@ -95,7 +95,19 @@ export async function GET(
     const location = event.location ? {
       id: typeof event.location === 'string' ? event.location : event.location.id,
       name: typeof event.location === 'string' ? 'N/A' : event.location.name,
-      address: typeof event.location === 'object' ? `${event.location.address?.street || ''}, ${event.location.address?.city || ''}`.trim().replace(/^, |, $/g, '') : undefined,
+      address: (() => { // NEW robust address formatting
+          if (typeof event.location === 'object' && event.location && 
+              typeof event.location.address === 'object' && event.location.address) {
+              const street = event.location.address.street?.trim() || '';
+              const city = event.location.address.city?.trim() || '';
+              const addressParts = [street, city].filter(Boolean);
+              return addressParts.length > 0 ? addressParts.join(', ') : undefined;
+          } else if (typeof event.location === 'object' && event.location && 
+                    typeof event.location.address === 'string') {
+              return event.location.address.trim() || undefined;
+          }
+          return undefined;
+      })(),
       coordinates: typeof event.location === 'object' && event.location.coordinates ? {
         latitude: event.location.coordinates.latitude,
         longitude: event.location.coordinates.longitude,

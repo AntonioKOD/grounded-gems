@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, CalendarDays, Search, Bell, PlusSquare } from "lucide-react";
+import { Plus, X, CalendarDays, Search, Bell, PlusSquare, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ActionButton {
@@ -21,10 +21,11 @@ const FloatingActionButtonMenu: React.FC = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
 
   const buttons: ActionButton[] = [
-    { id: "add-location", label: "Add Location", icon: PlusSquare, href: "/add-location", bgColor: "bg-green-500", textColor: "text-white" },
-    { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications", bgColor: "bg-yellow-500", textColor: "text-white" },
-    { id: "search", label: "Search", icon: Search, href: "/search", bgColor: "bg-blue-500", textColor: "text-white" },
-    { id: "plans", label: "Hangout Plans", icon: CalendarDays, href: "/planner", bgColor: "bg-purple-500", textColor: "text-white" }, // Placeholder link
+    { id: "bucket-list", label: "My Local Legends", icon: Crown, href: "/bucket-list", bgColor: "bg-[#FFD93D]", textColor: "text-gray-800" },
+    { id: "add-location", label: "Add Location", icon: PlusSquare, href: "/add-location", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
+    { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications", bgColor: "bg-[#FFE66D]", textColor: "text-gray-800" },
+    { id: "search", label: "Search", icon: Search, href: "/search", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
+    { id: "plans", label: "Hangout Plans", icon: CalendarDays, href: "/planner", bgColor: "bg-[#FF6B6B]", textColor: "text-white" },
   ];
 
   const menuVariants = {
@@ -70,14 +71,14 @@ const FloatingActionButtonMenu: React.FC = () => {
                 className="flex items-center space-x-2"
                 whileHover={{ scale: 1.1 }}
               >
-                <span className="bg-gray-700 text-white text-xs px-2 py-1 rounded-md shadow-lg order-1">
+                <span className="bg-white text-gray-800 text-xs px-2 py-1 rounded-md shadow-lg border border-gray-200 order-1">
                   {button.label}
                 </span>
                 <Link href={button.href} passHref legacyBehavior>
                   <a
                     onClick={() => setIsOpen(false)}
                     className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity order-2",
+                      "w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-all duration-200 hover:scale-105 order-2",
                       button.bgColor,
                       button.textColor
                     )}
@@ -93,7 +94,7 @@ const FloatingActionButtonMenu: React.FC = () => {
 
       <motion.button
         onClick={toggleMenu}
-        className="w-16 h-16 rounded-full bg-pink-600 text-white flex items-center justify-center shadow-xl hover:bg-pink-700 transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500 focus:ring-opacity-50"
+        className="w-16 h-16 rounded-full bg-[#FF6B6B] text-white flex items-center justify-center shadow-xl hover:bg-[#FF5252] transition-colors focus:outline-none focus:ring-2 focus:ring-[#FF6B6B] focus:ring-opacity-50"
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         aria-label={isOpen ? "Close menu" : "Open menu"}

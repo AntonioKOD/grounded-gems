@@ -21,6 +21,7 @@ import { EventRequests } from './collections/EventRequests'
 import { LocationInteractions } from './collections/LocationInteractions'
 import { MatchmakingSessions } from './collections/MatchmakingSessions'
 import { Journeys } from './collections/Journeys'
+import { BucketLists } from './collections/BucketLists'
 
 export default buildConfig({
   
@@ -134,5 +135,6 @@ export default buildConfig({
     LocationInteractions,
     MatchmakingSessions,
     Journeys,
+    BucketLists,
   ],
 })

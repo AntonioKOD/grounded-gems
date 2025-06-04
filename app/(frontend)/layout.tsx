@@ -1,14 +1,14 @@
 import type React from "react"
 import "./globals.css"
 import Footer from "@/components/footer"
-import PWAInstallBanner from "@/components/pwa-install-banner"
 import { Toaster } from "sonner"
 import StoreProvider from "@/app/StoreProvider"
 import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
-import FloatingSearchWrapper from "@/components/ui/floating-search-wrapper"
 import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingActionButtonMenu"
+import MainContentWrapper from "@/components/ui/MainContentWrapper"
+import { GoogleAnalytics } from '@next/third-parties/google'
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -64,21 +64,20 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
       <body className="overflow-x-hidden">
         <StoreProvider initialUser={initialUser}>
           <NavigationWrapper initialUser={initialUser} />
-          <main className="min-h-screen w-full bg-white">
+          <MainContentWrapper>
             {children}
-          </main>
+          </MainContentWrapper>
           {/* Hide footer on mobile, show on desktop */}
           <div className="hidden md:block">
             <Footer />
           </div>
-          <PWAInstallBanner />
           <Toaster />
           {/* Desktop FAB remains in its place */}
-          <div className="hidden md:block">
-            <FloatingSearchWrapper />
-          </div>
           <ClientFloatingActionButtonMenu />
         </StoreProvider>
+        
+        {/* Google Analytics */}
+        <GoogleAnalytics gaId="G-DM1Y9WQP6" />
         
         {/* Service Worker Registration */}
         <Script id="sw-registration" strategy="afterInteractive">

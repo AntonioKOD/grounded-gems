@@ -1053,3 +1053,361 @@ button, .clickable {
   }
 }
 
+/* Bucket List Modal Responsive Styles */
+.bucket-list-modal {
+  /* Mobile first approach */
+  max-width: calc(100vw - 2rem);
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@media (min-width: 480px) {
+  .bucket-list-modal {
+    max-width: 448px; /* max-w-md */
+    width: 448px;
+  }
+}
+
+@media (min-width: 768px) {
+  .bucket-list-modal {
+    max-width: 512px; /* max-w-lg */
+    width: 512px;
+  }
+}
+
+/* Enhanced modal backdrop */
+.modal-backdrop {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Enhanced modal content animations */
+.modal-content {
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+/* Ensure dropdowns in modals have proper z-index */
+.bucket-list-modal [data-radix-select-content] {
+  z-index: 100002 !important;
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.bucket-list-modal [data-radix-select-viewport] {
+  z-index: 100002 !important;
+  background-color: white !important;
+}
+
+/* Ensure select content always appears above modal backdrop with solid white background */
+[data-radix-select-content] {
+  z-index: 100002 !important;
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  padding: 0.25rem !important;
+}
+
+[data-radix-select-viewport] {
+  background-color: white !important;
+  padding: 0 !important;
+}
+
+[data-radix-select-item] {
+  background-color: white !important;
+  border-radius: 0.375rem !important;
+  padding: 0.5rem 0.75rem !important;
+  margin: 0.125rem !important;
+  transition: background-color 0.2s ease !important;
+}
+
+[data-radix-select-item]:hover {
+  background-color: #f3f4f6 !important;
+}
+
+[data-radix-select-item][data-state="checked"] {
+  background-color: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+[data-radix-popper-content-wrapper] {
+  z-index: 100002 !important;
+}
+
+/* General dropdown styling for all select components */
+.select-content,
+[role="listbox"],
+[data-radix-select-content] {
+  background-color: white !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  z-index: 50 !important;
+}
+
+/* Enhanced modal dropdowns specifically */
+.modal-content [data-radix-select-content],
+.bucket-list-modal [data-radix-select-content] {
+  background-color: white !important;
+  z-index: 100002 !important;
+  border: 1px solid #d1d5db !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Ensure dropdown items have proper styling */
+.select-item,
+[data-radix-select-item] {
+  background-color: transparent !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  margin: 0.125rem !important;
+  cursor: pointer !important;
+  transition: background-color 0.15s ease-in-out !important;
+}
+
+.select-item:hover,
+[data-radix-select-item]:hover {
+  background-color: #f9fafb !important;
+}
+
+.select-item:focus,
+[data-radix-select-item]:focus {
+  background-color: #f3f4f6 !important;
+  outline: none !important;
+}
+
+.select-item[data-state="checked"],
+[data-radix-select-item][data-state="checked"] {
+  background-color: #eff6ff !important;
+  color: #1e40af !important;
+}
+
+/* Specific styling for shadcn/ui Select components */
+.select-trigger {
+  background-color: white !important;
+  border: 1px solid #d1d5db !important;
+}
+
+.select-trigger:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Ensure consistent styling across all UI libraries */
+select,
+.dropdown-menu,
+.select-dropdown,
+[role="combobox"] + [role="listbox"] {
+  background-color: white !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Enhanced mobile location detail */
+.mobile-location-detail {
+  /* Smooth scrolling for better UX */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Enhanced mobile tabs */
+.mobile-tabs {
+  /* Better spacing for touch */
+  padding: 0.25rem;
+}
+
+.mobile-tabs .tab-trigger {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.mobile-tabs .tab-trigger[data-state="active"] {
+  background: white;
+  color: #ff6b6b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced mobile buttons */
+.mobile-action-button {
+  min-height: 48px;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-action-button:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.mobile-action-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Enhanced mobile cards */
+.mobile-info-card {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(229, 231, 235, 0.5);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.mobile-info-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Enhanced gradient backgrounds */
+.gradient-header {
+  background: linear-gradient(135deg, 
+    rgba(255, 107, 107, 0.1) 0%, 
+    rgba(78, 205, 196, 0.1) 50%, 
+    rgba(255, 230, 109, 0.1) 100%);
+}
+
+.gradient-card {
+  background: linear-gradient(135deg, 
+    rgba(255, 107, 107, 0.05) 0%, 
+    rgba(78, 205, 196, 0.05) 100%);
+}
+
+/* Enhanced animations for mobile */
+@keyframes slideInUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutDown {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.slide-in-up {
+  animation: slideInUp 0.3s ease-out;
+}
+
+.slide-out-down {
+  animation: slideOutDown 0.3s ease-in;
+}
+
+/* Enhanced focus states for accessibility */
+.focus-enhanced:focus-visible {
+  outline: 2px solid #ff6b6b;
+  outline-offset: 2px;
+  border-color: #ff6b6b;
+  box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+}
+
+/* Enhanced form elements for mobile */
+@media (max-width: 767px) {
+  .bucket-list-modal .select-trigger,
+  .bucket-list-modal .textarea,
+  .bucket-list-modal .button {
+    min-height: 48px; /* Better touch targets */
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  
+  .bucket-list-modal .select-content {
+    max-height: 200px; /* Limit height on mobile */
+  }
+}
+
+/* Improved scrollbar for modal content */
+.modal-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 3px;
+}
+
+.modal-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+
+/* Write Review Modal Styling */
+.write-review-modal [data-radix-select-content] {
+  z-index: 100002 !important;
+  background-color: white !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+.write-review-modal [data-radix-select-viewport] {
+  z-index: 100002 !important;
+  background-color: white !important;
+}
+
+/* Review card styling */
+.review-card {
+  transition: all 0.2s ease;
+}
+
+.review-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Review helpful buttons */
+.review-helpful-btn {
+  transition: all 0.2s ease;
+}
+
+.review-helpful-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* Enhanced form elements for write review modal */
+@media (max-width: 767px) {
+  .write-review-modal .input,
+  .write-review-modal .textarea,
+  .write-review-modal .button {
+    min-height: 48px; /* Better touch targets */
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Improved scrollbar for write review modal content */
+.write-review-modal::-webkit-scrollbar {
+  width: 6px;
+}
+
+.write-review-modal::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.write-review-modal::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 3px;
+}
+
+.write-review-modal::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.5);
+}
+

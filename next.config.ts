@@ -1,6 +1,9 @@
 import { withPayload } from "@payloadcms/next/withPayload";
 import type { NextConfig } from "next";
 
+// Check if building for mobile (Capacitor)
+const isMobileBuild = process.env.MOBILE_BUILD === 'true';
+
 const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -8,8 +11,47 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  output: 'standalone',
-  images: {
+  // Use 'export' for mobile builds, 'standalone' for web
+  output: isMobileBuild ? 'export' : 'standalone',
+  // Add trailing slash for mobile builds to ensure proper routing
+  trailingSlash: isMobileBuild,
+  // Disable image optimization for mobile builds since it's not supported with static export
+  images: isMobileBuild ? {
+    unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: "lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com",
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: "groundedgems.com",
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: "www.groundedgems.com",
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'http',
+        hostname: "localhost",
+        port: '3000',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: "images.unsplash.com",
+        port: '',
+        pathname: '/**',
+      }
+    ],
+    dangerouslyAllowSVG: true,
+  } : {
     remotePatterns: [
       {
         protocol: 'https',

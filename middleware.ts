@@ -56,6 +56,7 @@ export const config = {
     '/notifications/:path*',
     '/post/:path*',
     '/my-route/:path*',
+    '/bucket-list/:path*',
     
     // API routes that require auth (EXCLUDING /api/users/me)
     '/api/users/[id]/:path*',
@@ -70,8 +71,21 @@ export const config = {
     '/api/specials/:path*',
     '/api/upload-image/:path*',
     '/api/upload-media/:path*',
+    '/api/bucket-lists/:path*',
+    '/api/ai-planner/:path*',
+    '/api/journeys/:path*',
+    '/api/dev-media-proxy/:path*',
+    '/api/feed/:path*',
+    '/api/media/:path*',
+    '/api/search/:path*',
     
-    // Admin routes
-    '/admin/:path*',
+    // Protected mobile API routes
+    '/api/v1/mobile/auth/logout',
+    '/api/v1/mobile/posts/:path*',
+    '/api/v1/mobile/locations/:path*',
+    '/api/v1/mobile/notifications/:path*',
+    '/api/v1/mobile/upload/:path*',
+    '/api/v1/mobile/users/:path*',
+    '/api/v1/mobile/events/:path*',
   ],
 }
