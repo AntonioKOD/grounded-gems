@@ -26,7 +26,6 @@ import { useAppDispatch, useAppSelector } from '@/lib/hooks'
 import { likePostAsync, savePostAsync, sharePostAsync } from '@/lib/features/posts/postsSlice'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { normalizePostMedia, debugMediaProcessing, getImageUrl } from "@/lib/image-utils"
 import { Badge } from "@/components/ui/badge"
 import { CommentSystemDark } from "../post/comment-system-dark"
 
@@ -137,47 +136,67 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const [isSharing, setIsSharing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Normalize media using the improved utility function
-  const normalizedMedia = useMemo(() => {
-    const media = normalizePostMedia(post)
-    if (process.env.NODE_ENV === 'development') {
-      debugMediaProcessing(post, media)
+  // Process and normalize media data - simplified approach like profile
+  const imageUrl = useMemo(() => {
+    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
+      return post.image.trim()
     }
-    return media
-  }, [post])
+    return post.image?.url || post.featuredImage?.url || null
+  }, [post.image, post.featuredImage])
 
-  // Create media items array for carousel
+  const videoUrl = useMemo(() => {
+    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
+      return post.video.trim()
+    }
+    return post.video?.url || null
+  }, [post.video])
+
+  const photos = useMemo(() => {
+    if (!Array.isArray(post.photos)) return []
+    return post.photos.map(photo => {
+      if (typeof photo === "string" && photo.trim() !== "") {
+        return photo.trim()
+      }
+      return photo?.url || null
+    }).filter(Boolean)
+  }, [post.photos])
+
+  // Create media items array for carousel - simplified
   const mediaItems = useMemo(() => {
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
     
     // Add main image
-    if (normalizedMedia.image) {
-      items.push({ type: 'image', url: normalizedMedia.image })
+    if (imageUrl) {
+      items.push({ type: 'image', url: imageUrl })
     }
     
     // Add main video
-    if (normalizedMedia.video) {
+    if (videoUrl) {
       items.push({ 
         type: 'video', 
-        url: normalizedMedia.video,
-        thumbnail: normalizedMedia.videoThumbnail || normalizedMedia.image || undefined
+        url: videoUrl,
+        thumbnail: imageUrl || undefined
       })
     }
     
     // Add photos
-    normalizedMedia.photos.forEach(photoUrl => {
-      items.push({ type: 'image', url: photoUrl })
+    photos.forEach(photoUrl => {
+      if (photoUrl) {
+        items.push({ type: 'image', url: photoUrl })
+      }
     })
     
     return items
-  }, [normalizedMedia])
+  }, [imageUrl, videoUrl, photos])
 
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]
 
-  console.log(`📱 Post ${post.id}: Processed ${mediaItems.length} media items:`, {
-    mediaItems,
-    normalizedMedia,
+  console.log(`📱 Post ${post.id} simplified media:`, {
+    imageUrl,
+    videoUrl,
+    photos,
+    mediaItems: mediaItems.length,
     hasMedia
   })
 

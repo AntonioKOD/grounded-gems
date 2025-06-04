@@ -57,7 +57,6 @@ import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import CommentsModal from './comments-modal'
-import { normalizePostMedia, debugMediaProcessing, getImageUrl } from "@/lib/image-utils"
 
 interface FeedPostProps {
   post: Post
@@ -119,30 +118,32 @@ export const FeedPost = memo(function FeedPost({
   const [imageLoadStates, setImageLoadStates] = useState<Record<number, boolean>>({})
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  // Normalize media using improved utility
-  const normalizedMedia = useMemo(() => {
-    const media = normalizePostMedia(post)
-    if (process.env.NODE_ENV === 'development') {
-      debugMediaProcessing(post, media)
+  // Process and normalize media data - simplified approach like profile
+  const imageUrl = useMemo(() => {
+    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
+      return post.image.trim()
     }
-    return media
-  }, [post])
+    return post.image?.url || post.featuredImage?.url || null
+  }, [post.image, post.featuredImage])
 
-  // Create images array for carousel
-  const images = useMemo(() => {
-    const allImages: string[] = []
-    
-    if (normalizedMedia.image) {
-      allImages.push(normalizedMedia.image)
+  const videoUrl = useMemo(() => {
+    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
+      return post.video.trim()
     }
-    
-    allImages.push(...normalizedMedia.photos)
-    
-    return allImages
-  }, [normalizedMedia])
+    return post.video?.url || null
+  }, [post.video])
 
-  const hasMultipleImages = images.length > 1
-  const hasMedia = images.length > 0 || !!normalizedMedia.video
+  const photos = useMemo(() => {
+    if (!Array.isArray(post.photos)) return []
+    return post.photos.map(photo => {
+      if (typeof photo === "string" && photo.trim() !== "") {
+        return photo.trim()
+      }
+      return photo?.url || null
+    }).filter(Boolean)
+  }, [post.photos])
+
+  const hasMedia = !!(imageUrl || videoUrl || photos.length > 0)
 
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {
@@ -297,7 +298,7 @@ export const FeedPost = memo(function FeedPost({
   // Auto-play video when in view
   useEffect(() => {
     const video = videoRef.current
-    if (video && post.video) {
+    if (video && videoUrl) {
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -318,7 +319,7 @@ export const FeedPost = memo(function FeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
-  }, [post.video])
+  }, [videoUrl])
 
   return (
     <>
@@ -433,14 +434,14 @@ export const FeedPost = memo(function FeedPost({
           </div>
 
           {/* Media Display with Video Support */}
-          {(post.image || post.video) && (
+          {hasMedia && (
             <div className="mb-4">
               {/* Video Content */}
-              {post.video && (
+              {videoUrl && (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-black">
                   <video
                     ref={videoRef}
-                    src={post.video}
+                    src={videoUrl}
                     className="w-full h-auto object-cover"
                     loop
                     muted={isVideoMuted}
@@ -502,10 +503,10 @@ export const FeedPost = memo(function FeedPost({
               )}
 
               {/* Image Content */}
-              {post.image && !post.video && (
+              {imageUrl && !videoUrl && (
                 <div className="relative">
                   <Image
-                    src={post.image}
+                    src={imageUrl}
                     alt={post.content || "Post image"}
                     width={600}
                     height={400}

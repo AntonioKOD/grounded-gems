@@ -35,7 +35,7 @@ import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import { CommentSystemLight } from "@/components/post/comment-system-light"
-import { normalizePostMedia, debugMediaProcessing, getImageUrl } from "@/lib/image-utils"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 
 interface EnhancedFeedPostProps {
@@ -113,30 +113,61 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const [showComments, setShowComments] = useState(false)
   const [showFullContent, setShowFullContent] = useState(false)
 
-  // Normalize media using improved utility
-  const normalizedMedia = useMemo(() => {
-    const media = normalizePostMedia(post)
-    if (process.env.NODE_ENV === 'development') {
-      debugMediaProcessing(post, media)
+  // Process and normalize media data - simplified approach like profile
+  const imageUrl = useMemo(() => {
+    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
+      return post.image.trim()
     }
-    return media
-  }, [post])
+    return post.image?.url || post.featuredImage?.url || null
+  }, [post.image, post.featuredImage])
 
-  // Create images array for carousel
-  const images = useMemo(() => {
-    const allImages: string[] = []
+  const videoUrl = useMemo(() => {
+    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
+      return post.video.trim()
+    }
+    return post.video?.url || null
+  }, [post.video])
+
+  const photos = useMemo(() => {
+    if (!Array.isArray(post.photos)) return []
+    return post.photos.map(photo => {
+      if (typeof photo === "string" && photo.trim() !== "") {
+        return photo.trim()
+      }
+      return photo?.url || null
+    }).filter(Boolean)
+  }, [post.photos])
+
+  // Create media items array for carousel - simplified
+  const mediaItems = useMemo(() => {
+    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
     
-    if (normalizedMedia.image) {
-      allImages.push(normalizedMedia.image)
+    // Add main image
+    if (imageUrl) {
+      items.push({ type: 'image', url: imageUrl })
     }
     
-    allImages.push(...normalizedMedia.photos)
+    // Add main video
+    if (videoUrl) {
+      items.push({ 
+        type: 'video', 
+        url: videoUrl,
+        thumbnail: imageUrl || undefined
+      })
+    }
     
-    return allImages
-  }, [normalizedMedia])
+    // Add photos
+    photos.forEach(photoUrl => {
+      if (photoUrl) {
+        items.push({ type: 'image', url: photoUrl })
+      }
+    })
+    
+    return items
+  }, [imageUrl, videoUrl, photos])
 
-  const hasMultipleImages = images.length > 1
-  const hasVideo = !!normalizedMedia.video
+  const hasMedia = mediaItems.length > 0
+  const currentMedia = mediaItems[currentMediaIndex]
 
   // Handle like action with haptics and animations
   const handleLike = useCallback(async (e: React.MouseEvent) => {
@@ -282,7 +313,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   // Auto-play video when in view
   useEffect(() => {
     const video = videoRef.current
-    if (video && normalizedMedia.video) {
+    if (video && videoUrl) {
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -303,7 +334,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
-  }, [normalizedMedia.video])
+  }, [videoUrl])
 
   // Get initials for avatar fallback
   const getInitials = (name: string) => {
@@ -333,20 +364,20 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         {/* Main Media - Reduced height to make room for caption */}
         <div className="absolute inset-0 w-full" style={{ height: 'calc(100% - 120px)' }}>
           {/* Enhanced Media Display */}
-          {(normalizedMedia.video || images.length > 0) && (
+          {hasMedia && (
             <div className="relative mb-4">
               {/* Video Content */}
-              {normalizedMedia.video && (
+              {currentMedia.type === 'video' && (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-black mb-4">
                   <video
                     ref={videoRef}
-                    src={normalizedMedia.video}
+                    src={currentMedia.url}
                     className="w-full h-auto object-cover"
                     loop
                     muted={isVideoMuted}
                     playsInline
                     preload="metadata"
-                    poster={normalizedMedia.videoThumbnail || undefined}
+                    poster={currentMedia.thumbnail || undefined}
                     onTimeUpdate={handleVideoTimeUpdate}
                     onPlay={() => setIsVideoPlaying(true)}
                     onPause={() => setIsVideoPlaying(false)}
@@ -403,11 +434,11 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
               )}
 
               {/* Image Content */}
-              {!normalizedMedia.video && images.length > 0 && (
+              {currentMedia.type === 'image' && (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-gray-100">
                   <div className="relative" style={{ aspectRatio: '16/10' }}>
                     <Image
-                      src={images[currentImageIndex] || "/placeholder.svg"}
+                      src={currentMedia.url}
                       alt={post.title || "Post image"}
                       fill
                       sizes="(max-width: 768px) 100vw, 50vw"
@@ -421,16 +452,16 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                         }))
                       }}
                       onError={() => {
-                        console.error(`Failed to load image: ${images[currentImageIndex]}`)
+                        console.error(`Failed to load image: ${currentMedia.url}`)
                       }}
                     />
                     
                     {/* Image navigation for multiple images */}
-                    {hasMultipleImages && (
+                    {photos.length > 1 && (
                       <>
                         <div className="absolute top-3 right-3">
                           <Badge variant="secondary" className="bg-black/70 text-white border-none">
-                            {currentImageIndex + 1} / {images.length}
+                            {currentImageIndex + 1} / {photos.length}
                           </Badge>
                         </div>
                         
@@ -447,7 +478,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                           </button>
                         )}
                         
-                        {currentImageIndex < images.length - 1 && (
+                        {currentImageIndex < photos.length - 1 && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -461,7 +492,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                         
                         {/* Image dots indicator */}
                         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1">
-                          {images.map((_, index) => (
+                          {photos.map((_, index) => (
                             <button
                               key={index}
                               onClick={(e) => {
@@ -664,7 +695,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         </div>
 
         {/* Mobile Tap to Pause/Play (for videos) */}
-        {post.video && (
+        {videoUrl && (
           <div 
             className="absolute inset-0 md:hidden z-5"
             onClick={(e) => {

@@ -4863,6 +4863,16 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
     try {
       const postId = String(post.id)
       
+      // Debug media objects for first few posts
+      if (posts.indexOf(post) < 2) {
+        console.log(`🎯 Server formatting post ${postId} media:`, {
+          image: post.image,
+          video: post.video,
+          photos: post.photos,
+          videoThumbnail: post.videoThumbnail,
+        })
+      }
+      
       return {
         id: postId,
         author: {
@@ -4891,29 +4901,20 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         content: post.content || "",
         createdAt: post.createdAt || new Date().toISOString(),
         updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
-        image: post.image?.url || post.featuredImage?.url || undefined,
-        video: post.video?.url || undefined,
-        videoThumbnail: post.videoThumbnail?.url || post.image?.url || undefined,
+        image: post.image || post.featuredImage || undefined,
+        video: post.video || undefined,
+        videoThumbnail: post.videoThumbnail || undefined,
         photos: (() => {
-          // Handle photos array
+          // Handle photos array - preserve complete objects
           if (Array.isArray(post.photos)) {
-            return post.photos.map((photo: any) => {
-              if (typeof photo === 'object' && photo?.url) {
-                return photo.url;
-              } else if (typeof photo === 'string') {
-                return photo;
-              }
-              return null;
-            }).filter(Boolean);
+            return post.photos.filter(Boolean);
           } else if (Array.isArray(post.gallery)) {
             // Also check for gallery field as fallback
             return post.gallery.map((item: any) => {
-              if (typeof item === 'object' && item?.image?.url) {
-                return item.image.url;
-              } else if (typeof item === 'object' && item?.url) {
-                return item.url;
+              if (typeof item === 'object' && item?.image) {
+                return item.image;
               }
-              return null;
+              return item;
             }).filter(Boolean);
           }
           return undefined;

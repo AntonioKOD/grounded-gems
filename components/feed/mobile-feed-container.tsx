@@ -12,7 +12,6 @@ import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
 import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, initializeLikedPosts, initializeSavedPosts, initializeLikedComments, selectFeedPosts, selectFeedState } from "@/lib/features/feed/feedSlice"
 import { fetchUser } from "@/lib/features/user/userSlice"
-import { normalizePostMedia, debugMediaProcessing } from "@/lib/image-utils"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
 import FeedErrorState from "./feed-error-state"
 import { Badge } from "@/components/ui/badge"
@@ -68,19 +67,32 @@ export default function MobileFeedContainer({
 
   // Normalize post data to ensure consistent media URLs and interaction states
   const normalizePost = useCallback((post: any): Post => {
-    // Use the improved media normalization from utils
-    const mediaData = normalizePostMedia(post)
-    
-    if (process.env.NODE_ENV === 'development') {
-      debugMediaProcessing(post, mediaData)
-    }
+    // Simple media normalization like profile approach
+    const normalizedImage =
+      post.image && typeof post.image === "string" && post.image.trim() !== ""
+        ? post.image.trim()
+        : post.image?.url || post.featuredImage?.url || null
+
+    const normalizedVideo =
+      post.video && typeof post.video === "string" && post.video.trim() !== ""
+        ? post.video.trim()
+        : post.video?.url || null
+
+    const normalizedPhotos = Array.isArray(post.photos) 
+      ? post.photos.map(photo => {
+          if (typeof photo === "string" && photo.trim() !== "") {
+            return photo.trim()
+          }
+          return photo?.url || null
+        }).filter(Boolean)
+      : []
 
     return {
       ...post,
-      image: mediaData.image,
-      video: mediaData.video,
-      photos: mediaData.photos,
-      videoThumbnail: mediaData.videoThumbnail,
+      image: normalizedImage,
+      video: normalizedVideo,
+      photos: normalizedPhotos,
+      videoThumbnail: post.videoThumbnail?.url || normalizedImage,
       // Ensure required fields are present
       likeCount: post.likeCount || post.likes?.length || 0,
       commentCount: post.commentCount || post.comments?.length || 0,
