@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
-import { useState, memo, useCallback, useEffect, useRef } from "react"
+import { useState, memo, useCallback, useEffect, useRef, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -57,6 +57,7 @@ import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import CommentsModal from './comments-modal'
+import { normalizePostMedia, debugMediaProcessing, getImageUrl } from "@/lib/image-utils"
 
 interface FeedPostProps {
   post: Post
@@ -111,6 +112,37 @@ export const FeedPost = memo(function FeedPost({
   const [videoProgress, setVideoProgress] = useState(0)
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Local state
+  const [showComments, setShowComments] = useState(false)
+  const [showFullContent, setShowFullContent] = useState(false)
+  const [imageLoadStates, setImageLoadStates] = useState<Record<number, boolean>>({})
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+
+  // Normalize media using improved utility
+  const normalizedMedia = useMemo(() => {
+    const media = normalizePostMedia(post)
+    if (process.env.NODE_ENV === 'development') {
+      debugMediaProcessing(post, media)
+    }
+    return media
+  }, [post])
+
+  // Create images array for carousel
+  const images = useMemo(() => {
+    const allImages: string[] = []
+    
+    if (normalizedMedia.image) {
+      allImages.push(normalizedMedia.image)
+    }
+    
+    allImages.push(...normalizedMedia.photos)
+    
+    return allImages
+  }, [normalizedMedia])
+
+  const hasMultipleImages = images.length > 1
+  const hasMedia = images.length > 0 || !!normalizedMedia.video
 
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {

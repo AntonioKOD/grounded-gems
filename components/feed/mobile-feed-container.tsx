@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList, ChevronDown, TrendingUp, Users, Zap, Search, Plus } from 'lucide-react'
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
@@ -10,14 +10,17 @@ import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
 import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { fetchFeedPosts, loadMorePosts, setCategory, updatePost } from "@/lib/features/feed/feedSlice"
+import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, initializeLikedPosts, initializeSavedPosts, initializeLikedComments, selectFeedPosts, selectFeedState } from "@/lib/features/feed/feedSlice"
 import { fetchUser } from "@/lib/features/user/userSlice"
-import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
+import { normalizePostMedia, debugMediaProcessing } from "@/lib/image-utils"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
 import FeedErrorState from "./feed-error-state"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import TopicFilters from "./topic-filters"
+import FeedTransition from "./feed-transition"
+import CollapsiblePostForm from "../post/collapsible-post-form"
 
 interface MobileFeedContainerProps {
   userId?: string
@@ -63,116 +66,21 @@ export default function MobileFeedContainer({
   const observer = useRef<IntersectionObserver | null>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Helper function to normalize post data - convert complex media objects to simple URLs
+  // Normalize post data to ensure consistent media URLs and interaction states
   const normalizePost = useCallback((post: any): Post => {
-    // Helper function to check if URL is broken and provide fallback
-    const getWorkingImageUrl = (url: string | null): string | null => {
-      if (!url) return null
-      
-      // Check if URL is from known broken sources
-      const brokenPatterns = [
-        'groundedgems.com/api/media/file/',
-        'localhost:3001/',
-      ]
-      
-      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
-      
-      if (isBroken) {
-        console.log('📱 Replacing broken image URL with placeholder:', url)
-        return '/placeholder-image.svg'
-      }
-      
-      return url
+    // Use the improved media normalization from utils
+    const mediaData = normalizePostMedia(post)
+    
+    if (process.env.NODE_ENV === 'development') {
+      debugMediaProcessing(post, mediaData)
     }
-
-    const getWorkingVideoUrl = (url: string | null): string | null => {
-      if (!url) return null
-      
-      // Check if URL is from known broken sources
-      const brokenPatterns = [
-        'groundedgems.com/api/media/file/',
-        'localhost:3001/',
-      ]
-      
-      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
-      
-      if (isBroken) {
-        console.log('📱 Detected broken video URL, will show error state:', url)
-        return url // Let the VideoPlayer handle the error state
-      }
-      
-      return url
-    }
-
-    // Handle image field - can be string, object, or boolean
-    const normalizedImage = (() => {
-      if (!post.image) return null
-      if (typeof post.image === 'string' && post.image.trim() !== '') {
-        return getWorkingImageUrl(post.image.trim())
-      }
-      if (typeof post.image === 'object' && post.image !== null) {
-        // Handle PayloadMediaObject
-        if (post.image.sizes?.card?.url) return getWorkingImageUrl(post.image.sizes.card.url)
-        if (post.image.url) return getWorkingImageUrl(post.image.url)
-      }
-      if (post.image === true && post.rawData?.image) {
-        return getWorkingImageUrl(post.rawData.image)
-      }
-      // Fallback to other image fields
-      const fallbackUrl = post.featuredImage?.url || post.image?.url || null
-      return getWorkingImageUrl(fallbackUrl)
-    })()
-
-    // Handle video field - can be string, object, or boolean  
-    const normalizedVideo = (() => {
-      if (!post.video) return null
-      if (typeof post.video === 'string' && post.video.trim() !== '') {
-        return getWorkingVideoUrl(post.video.trim())
-      }
-      if (typeof post.video === 'object' && post.video !== null) {
-        // Handle PayloadMediaObject
-        if (post.video.url) return getWorkingVideoUrl(post.video.url)
-      }
-      if (post.video === true && post.rawData?.video) {
-        return getWorkingVideoUrl(post.rawData.video)
-      }
-      return null
-    })()
-
-    // Handle photos array
-    const normalizedPhotos = (() => {
-      if (!Array.isArray(post.photos)) return []
-      return post.photos
-        .map((photo: any) => {
-          if (typeof photo === 'string' && photo.trim() !== '') return getWorkingImageUrl(photo.trim())
-          if (typeof photo === 'object' && photo !== null) {
-            if (photo.sizes?.card?.url) return getWorkingImageUrl(photo.sizes.card.url)
-            if (photo.url) return getWorkingImageUrl(photo.url)
-          }
-          return null
-        })
-        .filter(Boolean)
-    })()
-
-    // Handle video thumbnail
-    const normalizedVideoThumbnail = (() => {
-      if (post.videoThumbnail) {
-        if (typeof post.videoThumbnail === 'string') return getWorkingImageUrl(post.videoThumbnail)
-        if (typeof post.videoThumbnail === 'object' && post.videoThumbnail?.url) {
-          return getWorkingImageUrl(post.videoThumbnail.url)
-        }
-      }
-      // Fallback to image if video exists
-      if (normalizedVideo && normalizedImage) return normalizedImage
-      return null
-    })()
 
     return {
       ...post,
-      image: normalizedImage,
-      video: normalizedVideo,
-      photos: normalizedPhotos,
-      videoThumbnail: normalizedVideoThumbnail,
+      image: mediaData.image,
+      video: mediaData.video,
+      photos: mediaData.photos,
+      videoThumbnail: mediaData.videoThumbnail,
       // Ensure required fields are present
       likeCount: post.likeCount || post.likes?.length || 0,
       commentCount: post.commentCount || post.comments?.length || 0,

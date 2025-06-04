@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, memo, useCallback, useEffect, useRef } from "react"
+import { useState, memo, useCallback, useEffect, useRef, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
@@ -16,6 +16,8 @@ import {
   MoreHorizontal,
   Loader2,
   Pause,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -33,6 +35,8 @@ import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import { CommentSystemLight } from "@/components/post/comment-system-light"
+import { normalizePostMedia, debugMediaProcessing, getImageUrl } from "@/lib/image-utils"
+import { Badge } from "@/components/ui/badge"
 
 interface EnhancedFeedPostProps {
   post: Post
@@ -103,6 +107,36 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const [videoProgress, setVideoProgress] = useState(0)
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Local state
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [showComments, setShowComments] = useState(false)
+  const [showFullContent, setShowFullContent] = useState(false)
+
+  // Normalize media using improved utility
+  const normalizedMedia = useMemo(() => {
+    const media = normalizePostMedia(post)
+    if (process.env.NODE_ENV === 'development') {
+      debugMediaProcessing(post, media)
+    }
+    return media
+  }, [post])
+
+  // Create images array for carousel
+  const images = useMemo(() => {
+    const allImages: string[] = []
+    
+    if (normalizedMedia.image) {
+      allImages.push(normalizedMedia.image)
+    }
+    
+    allImages.push(...normalizedMedia.photos)
+    
+    return allImages
+  }, [normalizedMedia])
+
+  const hasMultipleImages = images.length > 1
+  const hasVideo = !!normalizedMedia.video
 
   // Handle like action with haptics and animations
   const handleLike = useCallback(async (e: React.MouseEvent) => {
@@ -248,7 +282,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   // Auto-play video when in view
   useEffect(() => {
     const video = videoRef.current
-    if (video && post.video) {
+    if (video && normalizedMedia.video) {
       const observer = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
@@ -269,7 +303,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
-  }, [post.video])
+  }, [normalizedMedia.video])
 
   // Get initials for avatar fallback
   const getInitials = (name: string) => {
@@ -299,19 +333,20 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         {/* Main Media - Reduced height to make room for caption */}
         <div className="absolute inset-0 w-full" style={{ height: 'calc(100% - 120px)' }}>
           {/* Enhanced Media Display */}
-          {(post.video || post.image) && (
+          {(normalizedMedia.video || images.length > 0) && (
             <div className="relative mb-4">
               {/* Video Content */}
-              {post.video && (
+              {normalizedMedia.video && (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-black mb-4">
                   <video
                     ref={videoRef}
-                    src={post.video}
+                    src={normalizedMedia.video}
                     className="w-full h-auto object-cover"
                     loop
                     muted={isVideoMuted}
                     playsInline
                     preload="metadata"
+                    poster={normalizedMedia.videoThumbnail || undefined}
                     onTimeUpdate={handleVideoTimeUpdate}
                     onPlay={() => setIsVideoPlaying(true)}
                     onPause={() => setIsVideoPlaying(false)}
@@ -356,9 +391,9 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                     
                     {/* Progress bar */}
                     <div className="absolute bottom-3 left-3 right-3">
-                      <div className="w-full bg-white/30 rounded-full h-1">
-                        <div 
-                          className="bg-white rounded-full h-1 transition-all duration-100"
+                      <div className="w-full bg-gray-600/50 rounded-full h-1">
+                        <div
+                          className="bg-white rounded-full h-1 transition-all duration-300"
                           style={{ width: `${videoProgress}%` }}
                         />
                       </div>
@@ -368,49 +403,82 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
               )}
 
               {/* Image Content */}
-              {post.image && (
-                <div className="relative">
-                  <Image
-                    src={post.image}
-                    alt={post.content?.slice(0, 100) || "Post image"}
-                    width={600}
-                    height={400}
-                    className="w-full h-auto object-cover rounded-2xl"
-                    priority={priority < 3}
-                    onError={(e) => {
-                      console.error('Image load error:', e)
-                      e.currentTarget.src = '/placeholder-image.jpg'
-                    }}
-                  />
-                  
-                  {/* Multiple images indicator */}
-                  {post.image && (
-                    <div className="absolute top-3 right-3">
-                      <div className="bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                        {currentMediaIndex + 1}/{post.image.length}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Navigation arrows for multiple images */}
-                  {post.image && (
-                    <>
-                      <button
-                        onClick={() => setCurrentMediaIndex(Math.max(0, currentMediaIndex - 1))}
-                        disabled={currentMediaIndex === 0}
-                        className="absolute left-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center disabled:opacity-50"
-                      >
-                        ←
-                      </button>
-                      <button
-                        onClick={() => setCurrentMediaIndex(Math.min(post.image.length - 1, currentMediaIndex + 1))}
-                        disabled={currentMediaIndex === post.image.length - 1}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center disabled:opacity-50"
-                      >
-                        →
-                      </button>
-                    </>
-                  )}
+              {!normalizedMedia.video && images.length > 0 && (
+                <div className="relative w-full rounded-2xl overflow-hidden bg-gray-100">
+                  <div className="relative" style={{ aspectRatio: '16/10' }}>
+                    <Image
+                      src={images[currentImageIndex] || "/placeholder.svg"}
+                      alt={post.title || "Post image"}
+                      fill
+                      sizes="(max-width: 768px) 100vw, 50vw"
+                      className="object-cover"
+                      priority={priority <= 2}
+                      quality={85}
+                      onLoad={() => {
+                        setImageLoadStates(prev => ({
+                          ...prev,
+                          [currentImageIndex]: true
+                        }))
+                      }}
+                      onError={() => {
+                        console.error(`Failed to load image: ${images[currentImageIndex]}`)
+                      }}
+                    />
+                    
+                    {/* Image navigation for multiple images */}
+                    {hasMultipleImages && (
+                      <>
+                        <div className="absolute top-3 right-3">
+                          <Badge variant="secondary" className="bg-black/70 text-white border-none">
+                            {currentImageIndex + 1} / {images.length}
+                          </Badge>
+                        </div>
+                        
+                        {/* Navigation arrows */}
+                        {currentImageIndex > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCurrentImageIndex(prev => prev - 1)
+                            }}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center hover:bg-black/90 transition-colors"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                        )}
+                        
+                        {currentImageIndex < images.length - 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCurrentImageIndex(prev => prev + 1)
+                            }}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center hover:bg-black/90 transition-colors"
+                          >
+                            <ChevronRight className="h-4 w-4" />
+                          </button>
+                        )}
+                        
+                        {/* Image dots indicator */}
+                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1">
+                          {images.map((_, index) => (
+                            <button
+                              key={index}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setCurrentImageIndex(index)
+                              }}
+                              className={`w-2 h-2 rounded-full transition-colors ${
+                                index === currentImageIndex 
+                                  ? 'bg-white' 
+                                  : 'bg-white/50'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -421,56 +489,33 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent via-transparent to-black/80 pointer-events-none" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/20 pointer-events-none" />
 
-        {/* Author Avatar - Top Left */}
-        <div className="absolute top-12 left-4 z-20">
-          <Link 
-            href={`/profile/${post.author.id}`}
-            className="group flex items-center gap-3"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="relative">
-              {/* Instagram-style gradient ring */}
-              <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
-                className="relative"
-              >
-                <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
-                  <div className="w-full h-full rounded-full bg-black p-[2px]">
-                    <Avatar className="h-full w-full border-0 shadow-2xl">
-                      <AvatarImage 
-                        src={post.author.avatar || "/placeholder.svg"} 
-                        alt={post.author.name}
-                        className="object-cover rounded-full"
-                      />
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 via-pink-500 to-red-500 text-white font-bold text-sm rounded-full">
-                        {getInitials(post.author.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                  </div>
-                </div>
-                
-                {/* Premium online indicator with pulse animation */}
-                <motion.div 
-                  animate={{ 
-                    scale: [1, 1.3, 1],
-                    opacity: [1, 0.7, 1]
-                  }}
-                  transition={{ 
-                    duration: 2, 
-                    repeat: Infinity,
-                    ease: "easeInOut"
-                  }}
-                  className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-black shadow-lg"
-                >
-                  <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
-                </motion.div>
-                
-                {/* Subtle glow effect on hover */}
-                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/20 via-red-500/20 to-purple-600/20 blur-md scale-110 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              </motion.div>
+        {/* Author info overlay */}
+        <div className="absolute top-4 left-4 right-4 z-20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10 ring-2 ring-white/20 shadow-lg">
+                <AvatarImage 
+                  src={getImageUrl(post.author.profileImage?.url || post.author.avatar)} 
+                  alt={post.author.name} 
+                />
+                <AvatarFallback className="bg-gray-800 text-white text-sm font-medium">
+                  {getInitials(post.author.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="text-white font-semibold text-sm drop-shadow-lg">
+                  {post.author.name}
+                </p>
+                <p className="text-white/70 text-xs drop-shadow-lg">
+                  {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+                </p>
+              </div>
             </div>
-          </Link>
+            
+            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10 h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
         {/* Right Side Actions - Enhanced TikTok Style */}
