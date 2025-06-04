@@ -18,6 +18,8 @@ import {
   Pause,
   ChevronLeft,
   ChevronRight,
+  MapPin,
+  Clock
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -37,6 +39,7 @@ import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/pos
 import { CommentSystemLight } from "@/components/post/comment-system-light"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 
 interface EnhancedFeedPostProps {
   post: Post
@@ -113,28 +116,21 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const [showComments, setShowComments] = useState(false)
   const [showFullContent, setShowFullContent] = useState(false)
 
-  // Process and normalize media data - simplified approach like profile
+  // Process and normalize media data using proper image utilities
   const imageUrl = useMemo(() => {
-    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
-      return post.image.trim()
-    }
-    return post.image?.url || post.featuredImage?.url || null
+    const url = getImageUrl(post.image || post.featuredImage)
+    return url !== "/placeholder.svg" ? url : null
   }, [post.image, post.featuredImage])
 
   const videoUrl = useMemo(() => {
-    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
-      return post.video.trim()
-    }
-    return post.video?.url || null
+    return getVideoUrl(post.video)
   }, [post.video])
 
   const photos = useMemo(() => {
     if (!Array.isArray(post.photos)) return []
     return post.photos.map(photo => {
-      if (typeof photo === "string" && photo.trim() !== "") {
-        return photo.trim()
-      }
-      return photo?.url || null
+      const url = getImageUrl(photo)
+      return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
   }, [post.photos])
 
@@ -168,6 +164,15 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
 
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]
+
+  console.log(`📱 Enhanced Post ${post.id} using getImageUrl:`, {
+    originalImage: post.image,
+    imageUrl,
+    videoUrl,
+    photos,
+    mediaItems: mediaItems.length,
+    hasMedia
+  })
 
   // Handle like action with haptics and animations
   const handleLike = useCallback(async (e: React.MouseEvent) => {

@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Badge } from "@/components/ui/badge"
 import { CommentSystemDark } from "../post/comment-system-dark"
+import { getImageUrl, getVideoUrl } from '@/lib/image-utils'
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
@@ -136,28 +137,21 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const [isSharing, setIsSharing] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Process and normalize media data - simplified approach like profile
+  // Process and normalize media data using proper image utilities
   const imageUrl = useMemo(() => {
-    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
-      return post.image.trim()
-    }
-    return post.image?.url || post.featuredImage?.url || null
+    const url = getImageUrl(post.image || post.featuredImage)
+    return url !== "/placeholder.svg" ? url : null
   }, [post.image, post.featuredImage])
 
   const videoUrl = useMemo(() => {
-    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
-      return post.video.trim()
-    }
-    return post.video?.url || null
+    return getVideoUrl(post.video)
   }, [post.video])
 
   const photos = useMemo(() => {
     if (!Array.isArray(post.photos)) return []
     return post.photos.map(photo => {
-      if (typeof photo === "string" && photo.trim() !== "") {
-        return photo.trim()
-      }
-      return photo?.url || null
+      const url = getImageUrl(photo)
+      return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
   }, [post.photos])
 
@@ -192,7 +186,8 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]
 
-  console.log(`📱 Post ${post.id} simplified media:`, {
+  console.log(`📱 Post ${post.id} using getImageUrl:`, {
+    originalImage: post.image,
     imageUrl,
     videoUrl,
     photos,

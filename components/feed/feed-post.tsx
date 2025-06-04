@@ -57,6 +57,7 @@ import type { Post } from "@/types/feed"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import CommentsModal from './comments-modal'
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 
 interface FeedPostProps {
   post: Post
@@ -118,32 +119,33 @@ export const FeedPost = memo(function FeedPost({
   const [imageLoadStates, setImageLoadStates] = useState<Record<number, boolean>>({})
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  // Process and normalize media data - simplified approach like profile
+  // Process and normalize media data using proper image utilities
   const imageUrl = useMemo(() => {
-    if (post.image && typeof post.image === "string" && post.image.trim() !== "") {
-      return post.image.trim()
-    }
-    return post.image?.url || post.featuredImage?.url || null
+    const url = getImageUrl(post.image || post.featuredImage)
+    return url !== "/placeholder.svg" ? url : null
   }, [post.image, post.featuredImage])
 
   const videoUrl = useMemo(() => {
-    if (post.video && typeof post.video === "string" && post.video.trim() !== "") {
-      return post.video.trim()
-    }
-    return post.video?.url || null
+    return getVideoUrl(post.video)
   }, [post.video])
 
   const photos = useMemo(() => {
     if (!Array.isArray(post.photos)) return []
     return post.photos.map(photo => {
-      if (typeof photo === "string" && photo.trim() !== "") {
-        return photo.trim()
-      }
-      return photo?.url || null
+      const url = getImageUrl(photo)
+      return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
   }, [post.photos])
 
   const hasMedia = !!(imageUrl || videoUrl || photos.length > 0)
+
+  console.log(`📱 FeedPost ${post.id} using getImageUrl:`, {
+    originalImage: post.image,
+    imageUrl,
+    videoUrl,
+    photos,
+    hasMedia
+  })
 
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {

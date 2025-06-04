@@ -1,138 +1,94 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Enhanced image utilities with PayloadCMS + Vercel Blob Storage support
- * Handles PayloadCMS media objects and converts problematic URLs to working ones
+ * Simplified image utilities for PayloadCMS media
+ * Directly uses URLs from PayloadCMS media objects
  */
 
-/**
- * Check if we're in development mode
- */
+// Environment check
 const isDevelopment = process.env.NODE_ENV === 'development'
 
 /**
- * Extract filename from a PayloadCMS media URL
- */
-function extractFilenameFromPayloadUrl(url: string): string | null {
-  if (!url) return null
-  
-  // Handle groundedgems.com URLs - extract filename
-  if (url.includes('groundedgems.com/api/media/file/')) {
-    const parts = url.split('/api/media/file/')
-    if (parts.length > 1) {
-      return parts[1]
-    }
-  }
-  
-  // Handle direct filenames or other formats
-  const filename = url.split('/').pop()
-  return filename || null
-}
-
-/**
- * Convert PayloadCMS media URL to working URL
- * Priority: Local API > Vercel Blob > Development Proxy > Placeholder
- */
-function convertToWorkingMediaUrl(url: string): string {
-  if (!url) return "/placeholder.svg"
-  
-  // If it's already a working local or blob URL, return as-is
-  if (url.startsWith('/api/media/') || 
-      url.startsWith('/media/') || 
-      url.includes('vercel-storage.com') ||
-      url.includes('blob.store')) {
-    return url
-  }
-  
-  // If it's a groundedgems.com URL, we need to fix it
-  if (url.includes('groundedgems.com')) {
-    const filename = extractFilenameFromPayloadUrl(url)
-    if (filename) {
-      console.log(`🔧 Converting PayloadCMS URL: ${url} → /api/media/${filename}`)
-      
-      // In development, use development proxy for these problematic URLs
-      if (isDevelopment) {
-        const proxyUrl = `/api/dev-media-proxy?url=${encodeURIComponent(url)}&width=400&height=300&type=image`
-        console.log(`🔧 Using development proxy: ${proxyUrl}`)
-        return proxyUrl
-      }
-      
-      // In production, try the local API route
-      return `/api/media/${filename}`
-    }
-  }
-  
-  // For other external URLs, return as-is (they might be valid)
-  return url
-}
-
-/**
- * Enhanced function to get image URL with comprehensive PayloadCMS support
+ * Simple function to get image URL from PayloadCMS media object
  */
 export function getImageUrl(image: any): string {
-  if (!image) return "/placeholder.svg"
-
-  let primaryUrl: string | null = null
+  if (!image) {
+    if (isDevelopment) {
+      console.log('📸 getImageUrl: No image provided')
+    }
+    return "/placeholder.svg"
+  }
 
   // Handle string URLs - use directly
   if (typeof image === "string" && image.trim() !== "") {
-    primaryUrl = image.trim()
+    const url = image.trim()
+    if (isDevelopment) {
+      console.log('📸 getImageUrl: String URL found:', url)
+    }
+    return url
   }
-  // Handle PayloadCMS media objects - extract URL with preference for working URLs
-  else if (typeof image === "object" && image !== null) {
+  
+  // Handle PayloadCMS media objects - extract URL
+  if (typeof image === "object" && image !== null) {
+    // Debug the object structure
+    if (isDevelopment) {
+      console.log('📸 getImageUrl: Media object received:', {
+        type: typeof image,
+        keys: Object.keys(image),
+        url: image.url,
+        thumbnailURL: image.thumbnailURL,
+        sizes: image.sizes,
+        filename: image.filename
+      })
+    }
+    
     // Try different URL sources in order of preference
-    // Prefer Vercel Blob URLs if available
-    primaryUrl = image.url || 
-                 image.sizes?.card?.url || 
-                 image.sizes?.thumbnail?.url || 
-                 image.thumbnailURL ||
-                 null
+    const url = image.url || 
+                image.sizes?.card?.url || 
+                image.sizes?.thumbnail?.url || 
+                image.thumbnailURL ||
+                "/placeholder.svg"
+                
+    if (isDevelopment) {
+      console.log('📸 getImageUrl: Media object processed:', {
+        hasUrl: !!image.url,
+        hasCardUrl: !!image.sizes?.card?.url,
+        hasThumbnailUrl: !!image.sizes?.thumbnail?.url,
+        hasThumbnailURL: !!image.thumbnailURL,
+        finalUrl: url,
+        isPlaceholder: url === "/placeholder.svg"
+      })
+    }
+    
+    return url
   }
 
-  // If we have a URL, convert it to working format
-  if (primaryUrl) {
-    const workingUrl = convertToWorkingMediaUrl(primaryUrl)
-    return workingUrl
+  if (isDevelopment) {
+    console.log('📸 getImageUrl: No valid image found, returning placeholder. Input was:', image)
   }
-
   return "/placeholder.svg"
 }
 
 /**
- * Enhanced function to get video URL with comprehensive PayloadCMS support
+ * Simple function to get video URL from PayloadCMS media object
  */
 export function getVideoUrl(video: any): string | null {
   if (!video) return null
 
-  let primaryUrl: string | null = null
-
   // Handle string URLs
   if (typeof video === "string" && video.trim() !== "") {
-    primaryUrl = video.trim()
+    return video.trim()
   }
+  
   // Handle PayloadCMS media objects
-  else if (typeof video === "object" && video !== null && video.url) {
-    primaryUrl = video.url
-  }
-
-  // If we have a URL, convert it to working format
-  if (primaryUrl) {
-    const workingUrl = convertToWorkingMediaUrl(primaryUrl)
-    
-    // For videos, if we still have a problematic URL, use the proxy
-    if (isDevelopment && workingUrl.includes('groundedgems.com')) {
-      const proxyUrl = `/api/dev-media-proxy?url=${encodeURIComponent(workingUrl)}&width=400&height=300&type=video`
-      console.log(`🔧 Using development proxy for video: ${proxyUrl}`)
-      return proxyUrl
-    }
-    
-    return workingUrl
+  if (typeof video === "object" && video !== null && video.url) {
+    return video.url
   }
 
   return null
 }
 
 /**
- * Simplified media normalization with comprehensive PayloadCMS support
+ * Simple media normalization with debugging
  */
 export function normalizePostMedia(post: any) {
   const image = getImageUrl(post.image || post.featuredImage)
@@ -146,16 +102,29 @@ export function normalizePostMedia(post: any) {
       .filter(url => url !== "/placeholder.svg")
   }
 
-  return {
+  const result = {
     image: image !== "/placeholder.svg" ? image : null,
     video,
     photos,
     videoThumbnail: getImageUrl(post.videoThumbnail || post.image || post.featuredImage)
   }
+  
+  if (isDevelopment) {
+    console.log(`📱 normalizePostMedia for post ${post.id}:`, {
+      original: {
+        image: post.image,
+        video: post.video,
+        photos: post.photos
+      },
+      normalized: result
+    })
+  }
+
+  return result
 }
 
 /**
- * Debug function - enhanced with comprehensive URL conversion info
+ * Debug function
  */
 export function debugMediaProcessing(post: any, normalizedMedia: any) {
   if (process.env.NODE_ENV === 'development') {
@@ -165,19 +134,13 @@ export function debugMediaProcessing(post: any, normalizedMedia: any) {
         video: post.video,
         photos: post.photos
       },
-      normalized: normalizedMedia,
-      environment: isDevelopment ? 'development' : 'production',
-      urlIssuesDetected: {
-        image: post.image?.url?.includes?.('groundedgems.com') || false,
-        video: post.video?.url?.includes?.('groundedgems.com') || false,
-        photos: Array.isArray(post.photos) && post.photos.some((p: any) => p?.url?.includes?.('groundedgems.com'))
-      }
+      normalized: normalizedMedia
     })
   }
 }
 
 /**
- * Get avatar URL with comprehensive PayloadCMS support
+ * Get avatar URL
  */
 export function getAvatarUrl(avatar: any): string {
   const url = getImageUrl(avatar)
@@ -185,7 +148,7 @@ export function getAvatarUrl(avatar: any): string {
 }
 
 /**
- * Create a development-friendly placeholder URL
+ * Create a placeholder URL
  */
 export function createPlaceholderUrl(width: number = 400, height: number = 300): string {
   return `https://via.placeholder.com/${width}x${height}/f0f0f0/999999?text=Image+Not+Available`
