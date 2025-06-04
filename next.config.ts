@@ -44,7 +44,7 @@ const nextConfig: NextConfig = {
     ],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
-    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com groundedgems.com www.groundedgems.com images.unsplash.com data:; default-src 'self'; script-src 'none'; sandbox;",
   },
   experimental: {
     serverActions: {
