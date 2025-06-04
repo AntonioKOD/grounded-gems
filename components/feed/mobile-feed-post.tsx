@@ -72,6 +72,11 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const [showFullContent, setShowFullContent] = useState(false)
   const [hasError, setHasError] = useState(false)
 
+  // Enhanced error handling for media
+  const [imageError, setImageError] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  const [hasValidMedia, setHasValidMedia] = useState(false)
+
   // Use normalized URLs directly from post
   const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
   
@@ -100,7 +105,57 @@ const MobileFeedPost = memo(function MobileFeedPost({
     return items
   }, [post.image, post.video, post.photos])
 
-  console.log(`📱 Mobile Post ${post.id}: ${mediaItems.length} media items:`, mediaItems)
+  // Process media URLs with better error handling
+  const processedImageUrl = useMemo(() => {
+    if (!post.image) return null
+    
+    if (typeof post.image === "string" && post.image.trim() !== "") {
+      return post.image.trim()
+    }
+    
+    const url = post.image?.url || post.featuredImage?.url || null
+    
+    // In development, warn about external URLs that might not work
+    if (process.env.NODE_ENV === 'development' && url?.includes('groundedgems.com')) {
+      console.warn(`🚨 External image URL in development: ${url}`)
+      return null // Use placeholder instead
+    }
+    
+    return url
+  }, [post.image, post.featuredImage])
+
+  const processedVideoUrl = useMemo(() => {
+    if (!post.video) return null
+    
+    if (typeof post.video === "string" && post.video.trim() !== "") {
+      return post.video.trim()
+    }
+    
+    const url = post.video?.url || null
+    
+    // In development, warn about external URLs that might not work
+    if (process.env.NODE_ENV === 'development' && url?.includes('groundedgems.com')) {
+      console.warn(`🚨 External video URL in development: ${url}`)
+      return null // Use placeholder instead
+    }
+    
+    return url
+  }, [post.video])
+
+  // Check if we have any valid media
+  useEffect(() => {
+    const hasImage = processedImageUrl && !imageError
+    const hasVideo = processedVideoUrl && !videoError
+    setHasValidMedia(hasImage || hasVideo)
+  }, [processedImageUrl, processedVideoUrl, imageError, videoError])
+
+  console.log(`📱 MobileFeedPost ${post.id} media check:`, {
+    originalImage: post.image,
+    processedImageUrl,
+    imageError,
+    hasValidMedia,
+    environment: process.env.NODE_ENV
+  })
   
   // Use Redux state as single source of truth
   const isLiked = likedPosts.includes(post.id)
@@ -115,7 +170,6 @@ const MobileFeedPost = memo(function MobileFeedPost({
   
   const [isSharing, setIsSharing] = useState(false)
   const [isLoadingImage, setIsLoadingImage] = useState(true)
-  const [imageError, setImageError] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
   const [showActions, setShowActions] = useState(true)
   const [isViewing, setIsViewing] = useState(false)
@@ -462,10 +516,10 @@ const MobileFeedPost = memo(function MobileFeedPost({
       >
         {/* Main Media with Enhanced Visual Effects */}
         <div className="absolute inset-0 w-full h-full">
-          {post.video && !imageError ? (
+          {processedVideoUrl && !videoError ? (
             <VideoPlayer
-              src={post.video}
-              thumbnail={post.videoThumbnail || post.image}
+              src={processedVideoUrl}
+              thumbnail={post.videoThumbnail || processedImageUrl}
               aspectRatio="9/16"
               className="w-full h-full object-cover"
               onViewStart={() => {
@@ -474,14 +528,15 @@ const MobileFeedPost = memo(function MobileFeedPost({
               onViewComplete={() => {
                 // Track video view completion
               }}
+              onError={() => setVideoError(true)}
               controls={false}
               showProgress={false}
               showPlayButton={false}
             />
-          ) : post.image && post.image !== "" && !imageError ? (
+          ) : processedImageUrl && !imageError ? (
             <div className="relative w-full h-full">
               <Image
-                src={post.image}
+                src={processedImageUrl}
                 alt={post.title || "Post image"}
                 fill
                 className="object-cover w-full h-full"
@@ -489,6 +544,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
                 sizes="100vw"
                 onLoadingComplete={() => setIsLoadingImage(false)}
                 onError={() => {
+                  console.error(`Failed to load image: ${processedImageUrl}`)
                   setIsLoadingImage(false)
                   setImageError(true)
                 }}
@@ -533,9 +589,13 @@ const MobileFeedPost = memo(function MobileFeedPost({
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
-                  className="text-6xl mb-6 animate-pulse"
+                  className="text-6xl mb-6"
                 >
-                  ✨
+                  {processedImageUrl || processedVideoUrl ? (
+                    <span className="animate-spin">⏳</span>
+                  ) : (
+                    "📝"
+                  )}
                 </motion.div>
                 <motion.p 
                   initial={{ opacity: 0, y: 20 }}
@@ -543,7 +603,11 @@ const MobileFeedPost = memo(function MobileFeedPost({
                   transition={{ delay: 0.4 }}
                   className="text-xl font-light leading-relaxed tracking-wide"
                 >
-                  {post.content}
+                  {processedImageUrl || processedVideoUrl ? (
+                    "Loading media..."
+                  ) : (
+                    "Text Post • Sharing thoughts and ideas"
+                  )}
                 </motion.p>
               </div>
             </div>
