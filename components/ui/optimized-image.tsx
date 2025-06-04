@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Sparkles, ImageIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface OptimizedImageProps {
   src: string
@@ -24,6 +25,7 @@ interface OptimizedImageProps {
   showLoadingAnimation?: boolean
   enableHoverEffect?: boolean
   rounded?: boolean
+  unoptimized?: boolean
 }
 
 export default function OptimizedImage({
@@ -44,7 +46,8 @@ export default function OptimizedImage({
   onError,
   showLoadingAnimation = true,
   enableHoverEffect = false,
-  rounded = false
+  rounded = false,
+  unoptimized = false
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
@@ -159,13 +162,7 @@ export default function OptimizedImage({
           {/* Loading state */}
           {isLoading && showLoadingAnimation && (
             <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800 flex items-center justify-center z-10">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="relative"
-              >
-                <Sparkles className="h-6 w-6 text-gray-400" />
-              </motion.div>
+              <div className="w-5 h-5 border-2 border-gray-300 dark:border-gray-600 border-t-primary rounded-full animate-spin" />
             </div>
           )}
 
@@ -183,6 +180,7 @@ export default function OptimizedImage({
               blurDataURL={blurDataURL}
               onLoad={handleLoad}
               onError={handleError}
+              objectFit="cover"
             />
           ) : (
             <Image
@@ -198,6 +196,7 @@ export default function OptimizedImage({
               blurDataURL={blurDataURL}
               onLoad={handleLoad}
               onError={handleError}
+              objectFit="cover"
             />
           )}
 

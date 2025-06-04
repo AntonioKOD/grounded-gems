@@ -27,38 +27,72 @@ import { likePostAsync, savePostAsync, sharePostAsync } from '@/lib/features/pos
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
-// Enhanced Post interface for full-page experience
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
+// Define a type for the Media object based on the provided JSON
+interface PayloadMediaObject {
+  id: string;
+  url?: string; // Full size
+  thumbnailURL?: string;
+  filename?: string;
+  mimeType?: string;
+  filesize?: number;
+  width?: number;
+  height?: number;
+  alt?: string;
+  sizes?: {
+    thumbnail?: {
+      url?: string;
+      width?: number;
+      height?: number;
+    };
+    card?: {
+      url?: string;
+      width?: number;
+      height?: number;
+    };
+    // Add other potential sizes if needed
+  };
+  // other fields like createdAt, updatedAt etc. can be added if needed
+}
+
+// Updated Post interface
 interface Post {
-  id: string
-  content: string
-  title?: string
+  id: string;
+  content: string;
+  title?: string;
   author: {
-    id: string
-    name: string
-    avatar?: string
+    id: string;
+    name: string;
+    avatar?: string;
     profileImage?: {
-      url: string
-    }
-  }
-  image?: string
-  video?: string
-  videoThumbnail?: string
-  photos?: string[]
+      url: string;
+    };
+  };
+  image?: string | PayloadMediaObject | boolean; // Can be URL, object, or boolean flag
+  video?: string | PayloadMediaObject | boolean; // Can be URL, object, or boolean flag
+  videoThumbnail?: string;
+  photos?: (string | PayloadMediaObject)[]; // Array can contain URLs or media objects
   location?: {
-    id: string
-    name: string
-  }
-  type: string
-  rating?: number
-  tags: string[]
-  likeCount: number
-  commentCount: number
-  shareCount: number
-  saveCount: number
-  isLiked: boolean
-  isSaved: boolean
-  createdAt: string
-  updatedAt: string
+    id: string;
+    name: string;
+  };
+  type: string;
+  rating?: number;
+  tags: string[];
+  likeCount: number;
+  commentCount: number;
+  shareCount: number;
+  saveCount: number;
+  isLiked: boolean;
+  isSaved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  rawData?: {
+    image?: string; // Expected to be a direct URL string
+    video?: string; // Expected to be a direct URL string
+    photos?: string[]; // Expected to be direct URL strings
+  };
 }
 
 interface SocialMediaPostProps {
@@ -128,84 +162,131 @@ const SocialMediaPost = memo(function SocialMediaPost({
 
   // Media handling - improved to properly handle photos array and URL formatting
   const getValidMediaUrl = (url?: string, isVideo = false) => {
-    if (!url) return null
-    
-    // Handle absolute URLs (external CDNs, etc.) - let them try to load and fail gracefully
+    if (!url) return null;
     if (url.startsWith('http') || url.startsWith('https')) {
-      return url
+      return url;
     }
-    
-    // Handle data URLs
     if (url.startsWith('data:')) {
-      return url
+      return url;
     }
-    
-    // Handle relative URLs by making them absolute
     if (url.startsWith('/')) {
-      return url
+      return url;
     }
-    
-    // Handle media IDs - route through our media API only for local files
     if (url.match(/^[a-f0-9]{24}$/i)) {
-      return `/api/media/${url}`
+      return `/api/media/${url}`;
     }
-    
-    // Handle Payload media format - keep as-is
     if (url.includes('/media/')) {
-      return url
+      return url;
     }
-    
-    // For other cases, try as relative path
-    return `/${url.replace(/^\/+/, '')}`
-  }
+    return `/${url.replace(/^\/+/, '')}`;
+  };
 
-  const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
+  const extractUrlFromMediaField = (fieldValue: string | PayloadMediaObject | boolean | undefined, isVideo = false): string | undefined => {
+    if (typeof fieldValue === 'string') {
+      return fieldValue;
+    }
+    if (typeof fieldValue === 'object' && fieldValue !== null && !Array.isArray(fieldValue)) {
+      const mediaObj = fieldValue as PayloadMediaObject;
+      if (!isVideo && mediaObj.sizes?.card?.url) {
+        return mediaObj.sizes.card.url;
+      }
+      if (mediaObj.url) {
+        return mediaObj.url;
+      }
+    }
+    return undefined;
+  };
+
+  // Helper functions to get actual media URLs
+  const getActualImageUrl = (): string | undefined => {
+    let url = extractUrlFromMediaField(post.image);
+    if (url) return url;
+
+    // Fallback to rawData if post.image was true or not a usable object/string
+    if (post.image === true && typeof post.rawData?.image === 'string' && post.rawData.image) {
+      return post.rawData.image;
+    }
+    return undefined;
+  };
+
+  const getActualVideoUrl = (): string | undefined => {
+    let url = extractUrlFromMediaField(post.video, true);
+    if (url) return url;
+
+    if (post.video === true && typeof post.rawData?.video === 'string' && post.rawData.video) {
+      return post.rawData.video;
+    }
+    return undefined;
+  };
+
+  const getActualPhotos = (): string[] => {
+    const photoUrls: string[] = [];
+    if (Array.isArray(post.photos)) {
+      for (const photoItem of post.photos) {
+        const url = extractUrlFromMediaField(photoItem);
+        if (url) {
+          photoUrls.push(url);
+        }
+      }
+    }
+    if (photoUrls.length > 0) return photoUrls;
+
+    // Fallback to rawData.photos if post.photos was empty or didn't yield URLs
+    if (Array.isArray(post.rawData?.photos)) {
+      const rawPhotoUrls = post.rawData.photos.filter(p => typeof p === 'string' && p) as string[];
+      if (rawPhotoUrls.length > 0) return rawPhotoUrls;
+    }
+    return [];
+  };
+
+  const actualImageUrl = getActualImageUrl();
+  const actualVideoUrl = getActualVideoUrl();
+  const actualPhotosArray = getActualPhotos();
+
+  const hasMedia = !!(actualImageUrl || actualVideoUrl || (actualPhotosArray && actualPhotosArray.length > 0));
+  
   console.log(`🎯 Post ${post.id} hasMedia:`, hasMedia, {
-    image: !!post.image,
-    video: !!post.video,
-    photos: !!(post.photos && post.photos.length > 0),
-    rawData: { image: post.image, video: post.video, photos: post.photos }
-  })
+    actualImageUrl,
+    actualVideoUrl,
+    actualPhotosCount: actualPhotosArray.length,
+    originalPostImage: post.image, // Log original values for comparison
+    originalPostVideo: post.video,
+    originalPostPhotos: post.photos,
+    rawData: post.rawData
+  });
   
   // Build media items array with proper URL handling
   const mediaItems = [
     // Handle photos array first
-    ...(post.photos && Array.isArray(post.photos) 
-      ? post.photos
-          .filter(photo => photo && typeof photo === 'string') // Only valid photo URLs
-          .map(photo => {
-            const url = getValidMediaUrl(photo)
+    ...(actualPhotosArray.length > 0
+      ? actualPhotosArray
+          .map(photoUrl => {
+            const validUrl = getValidMediaUrl(photoUrl);
             return { 
               type: 'image' as const, 
-              url: url || '/placeholder-image.svg'
-            }
+              url: validUrl || '/placeholder-image.svg'
+            };
           })
       : []
     ),
-    // Add single image if not already in photos
-    ...(post.image && (!post.photos || !post.photos.includes(post.image))
-      ? [{ 
+    // Add single image if not already in photos and if actualImageUrl exists
+    ...(actualImageUrl && !actualPhotosArray.includes(actualImageUrl) // Avoid duplicates if primary image is also in photos array
+      ? [{
           type: 'image' as const, 
-          url: (() => {
-            const url = getValidMediaUrl(post.image)
-            return url || '/placeholder-image.svg'
-          })()
-        }] 
+          url: getValidMediaUrl(actualImageUrl) || '/placeholder-image.svg'
+        }]
       : []
     ),
-    // Add video
-    ...(post.video 
+    // Add video if actualVideoUrl exists
+    ...(actualVideoUrl 
       ? [{ 
           type: 'video' as const, 
-          url: (() => {
-            const url = getValidMediaUrl(post.video, true)
-            return url || ''
-          })(), 
-          thumbnail: getValidMediaUrl(post.videoThumbnail || post.image) || '/placeholder-image.svg'
+          url: getValidMediaUrl(actualVideoUrl, true) || '', 
+          thumbnail: getValidMediaUrl(post.videoThumbnail || (typeof post.image === 'object' ? (post.image as PayloadMediaObject).sizes?.thumbnail?.url || (post.image as PayloadMediaObject).url : actualImageUrl)) || '/placeholder-image.svg'
         }] 
       : []
     )
-  ].filter(item => item.url) // Remove any items without valid URLs
+  ].filter(item => (item.type === 'image' && item.url) || item.type === 'video');
 
   // Log media processing result for debugging
   if (mediaItems.length > 0) {
@@ -216,7 +297,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
   }
 
   const currentMedia = mediaItems[currentMediaIndex]
-  console.log(`📺 Post ${post.id} currentMedia:`, currentMedia, 'index:', currentMediaIndex)
+  // console.log(`📺 Post ${post.id} currentMedia:`, currentMedia, 'index:', currentMediaIndex) // Removed for cleaner logs
 
   // Auto-play video when post becomes active
   useEffect(() => {
