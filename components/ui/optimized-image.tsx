@@ -58,7 +58,6 @@ export default function OptimizedImage({
     if (!src) return true
     // Known broken URL patterns
     const brokenPatterns = [
-      'groundedgems.com/api/media/file/',
       'localhost:3001/', // Development backend that might be down
     ]
     return brokenPatterns.some(pattern => src.includes(pattern))
@@ -78,6 +77,11 @@ export default function OptimizedImage({
     setHasError(false)
     setIsLoading(true)
     setActualSrc(src)
+    
+    // Debug logging for external image URLs
+    if (src.includes('groundedgems.com') || src.includes('/api/media/')) {
+      console.log('🖼️ OptimizedImage: Loading external image:', src)
+    }
   }, [src, isKnownBrokenUrl])
 
   // Add timeout for stuck loading states
@@ -86,11 +90,12 @@ export default function OptimizedImage({
 
     const timeout = setTimeout(() => {
       console.warn('OptimizedImage: Loading timeout, switching to fallback:', src)
+      console.warn('💡 Development hint: If using PayloadCMS with Vercel Blob Storage, ensure BLOB_READ_WRITE_TOKEN is set in .env.local')
       setHasError(true)
       setIsLoading(false)
       setActualSrc('/placeholder-image.svg')
       onError?.()
-    }, 5000) // 5 second timeout (reduced from 10 seconds)
+    }, 3000) // Reduced timeout for faster fallback
 
     return () => clearTimeout(timeout)
   }, [isLoading, hasError, src, onError])
@@ -120,8 +125,14 @@ export default function OptimizedImage({
   }, [onLoad, hasError])
 
   // Handle image error with robust fallback
-  const handleError = useCallback(() => {
+  const handleError = useCallback((event?: React.SyntheticEvent<HTMLImageElement, Event>) => {
     console.warn('OptimizedImage failed to load:', actualSrc)
+    console.log('OptimizedImage error details:', {
+      src: actualSrc,
+      originalSrc: src,
+      error: event?.type,
+      timestamp: new Date().toISOString()
+    })
     setHasError(true)
     setIsLoading(false)
     
@@ -132,11 +143,12 @@ export default function OptimizedImage({
     }
     
     onError?.()
-  }, [onError, actualSrc])
+  }, [onError, actualSrc, src])
 
-  // Check if URL is likely broken (contains groundedgems.com but might be 404)
+  // Check if URL is potentially problematic (for future debugging)
   const isPotentiallyBrokenUrl = useMemo(() => {
-    return src.includes('groundedgems.com/api/media/file/')
+    // Currently no known patterns, but keeping for future debugging
+    return false
   }, [src])
 
   // Generate optimized image URL for different services
@@ -162,6 +174,18 @@ export default function OptimizedImage({
     // For other services or local images, return as is
     return url
   }, [objectFit])
+
+  // Check if we should use unoptimized based on the URL
+  const shouldUseUnoptimized = useMemo(() => {
+    if (unoptimized) return true
+    if (isKnownBrokenUrl) return true
+    // Use unoptimized for external URLs to avoid Next.js optimization issues
+    if (src.includes('groundedgems.com') || src.includes('/api/media/')) {
+      console.log('🖼️ OptimizedImage: Using unoptimized for external URL:', src)
+      return true
+    }
+    return false
+  }, [src, unoptimized, isKnownBrokenUrl])
 
   // Container classes
   const containerClasses = [
@@ -240,7 +264,7 @@ export default function OptimizedImage({
               onLoad={handleLoad}
               onError={handleError}
               objectFit="cover"
-              unoptimized={unoptimized || isKnownBrokenUrl}
+              unoptimized={shouldUseUnoptimized}
             />
           ) : (
             <Image
@@ -257,7 +281,7 @@ export default function OptimizedImage({
               onLoad={handleLoad}
               onError={handleError}
               objectFit="cover"
-              unoptimized={unoptimized || isKnownBrokenUrl}
+              unoptimized={shouldUseUnoptimized}
             />
           )}
 

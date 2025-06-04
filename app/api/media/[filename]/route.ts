@@ -30,8 +30,42 @@ export async function GET(
     const mediaDir = path.join(process.cwd(), 'media')
     const filePath = path.join(mediaDir, filename)
 
-    // Check if file exists
+    // Check if file exists locally
     if (!fs.existsSync(filePath)) {
+      // If using Vercel Blob Storage and local file doesn't exist, 
+      // try to proxy to the blob storage URL
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        try {
+          // Generate blob URL - Vercel blob URLs follow pattern: https://[token].public.blob.vercel-storage.com/[filename]
+          const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '') + '.public.blob.vercel-storage.com'
+          const blobUrl = `https://${blobHostname}/${filename}`
+          
+          console.log(`📦 Proxying media request to blob storage: ${blobUrl}`)
+          
+          // Fetch from blob storage
+          const blobResponse = await fetch(blobUrl)
+          
+          if (blobResponse.ok) {
+            const contentType = blobResponse.headers.get('content-type') || 'application/octet-stream'
+            const body = await blobResponse.arrayBuffer()
+            
+            return new NextResponse(body, {
+              status: 200,
+              headers: {
+                'Content-Type': contentType,
+                'Content-Length': body.byteLength.toString(),
+                'Cache-Control': 'public, max-age=31536000, immutable',
+                'Content-Disposition': `inline; filename="${filename}"`,
+              },
+            })
+          } else {
+            console.warn(`📦 Blob storage request failed with status: ${blobResponse.status}`)
+          }
+        } catch (blobError) {
+          console.error('📦 Error proxying to blob storage:', blobError)
+        }
+      }
+      
       return new NextResponse('File not found', { status: 404 })
     }
 
@@ -146,12 +180,46 @@ export async function HEAD(
     const mediaDir = path.join(process.cwd(), 'media')
     const filePath = path.join(mediaDir, filename)
 
-    // Check if file exists
+    // Check if file exists locally
     if (!fs.existsSync(filePath)) {
+      // If using Vercel Blob Storage and local file doesn't exist, 
+      // try to proxy to the blob storage URL
+      if (process.env.BLOB_READ_WRITE_TOKEN) {
+        try {
+          // Generate blob URL - Vercel blob URLs follow pattern: https://[token].public.blob.vercel-storage.com/[filename]
+          const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '') + '.public.blob.vercel-storage.com'
+          const blobUrl = `https://${blobHostname}/${filename}`
+          
+          console.log(`📦 HEAD request - Proxying to blob storage: ${blobUrl}`)
+          
+          // Fetch HEAD from blob storage
+          const blobResponse = await fetch(blobUrl, { method: 'HEAD' })
+          
+          if (blobResponse.ok) {
+            const contentType = blobResponse.headers.get('content-type') || 'application/octet-stream'
+            const contentLength = blobResponse.headers.get('content-length') || '0'
+            
+            return new NextResponse(null, {
+              status: 200,
+              headers: {
+                'Content-Type': contentType,
+                'Content-Length': contentLength,
+                'Cache-Control': 'public, max-age=31536000, immutable',
+                'Accept-Ranges': 'bytes',
+              },
+            })
+          } else {
+            console.warn(`📦 HEAD request - Blob storage request failed with status: ${blobResponse.status}`)
+          }
+        } catch (blobError) {
+          console.error('📦 HEAD request - Error proxying to blob storage:', blobError)
+        }
+      }
+      
       return new NextResponse(null, { status: 404 })
     }
 
-    // Get file stats
+    // Get file stats for local files
     const stats = fs.statSync(filePath)
 
     // Determine content type based on file extension
@@ -201,6 +269,7 @@ export async function HEAD(
         'Content-Length': stats.size.toString(),
         'Cache-Control': 'public, max-age=31536000, immutable', // Cache for 1 year
         'Last-Modified': stats.mtime.toUTCString(),
+        'Accept-Ranges': 'bytes',
       },
     })
 

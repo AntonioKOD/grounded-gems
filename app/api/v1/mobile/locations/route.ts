@@ -209,24 +209,24 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileLoca
     }
 
     // Determine sort order
-    let sort: any = {}
+    let sort: string = '-createdAt' // Default sort by newest first
     switch (sortBy) {
       case 'rating':
-        sort = { averageRating: 'desc', reviewCount: 'desc' }
+        sort = '-averageRating' // Descending order
         break
       case 'popularity':
-        sort = { reviewCount: 'desc', averageRating: 'desc' }
+        sort = '-reviewCount' // Descending order
         break
       case 'name':
-        sort = { name: 'asc' }
+        sort = 'name' // Ascending order
         break
       case 'createdAt':
-        sort = { createdAt: 'desc' }
+        sort = '-createdAt' // Descending order
         break
       case 'distance':
       default:
         // Distance sorting will be done post-query if coordinates provided
-        sort = { createdAt: 'desc' }
+        sort = '-createdAt' // Descending order
         break
     }
 
