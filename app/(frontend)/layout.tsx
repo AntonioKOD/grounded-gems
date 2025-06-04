@@ -8,7 +8,7 @@ import { getServerSideUser } from "@/lib/auth-server"
 import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
 import FloatingSearchWrapper from "@/components/ui/floating-search-wrapper"
-
+import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingActionButtonMenu"
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -77,6 +77,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           <div className="hidden md:block">
             <FloatingSearchWrapper />
           </div>
+          <ClientFloatingActionButtonMenu />
         </StoreProvider>
         
         {/* Service Worker Registration */}

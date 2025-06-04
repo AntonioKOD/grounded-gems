@@ -56,7 +56,7 @@ export default function OptimizedImage({
   // Check if URL is likely broken and set error state immediately
   const isKnownBrokenUrl = useMemo(() => {
     if (!src) return true
-    // Known broken URL patterns
+    // Known broken URL patterns - removed groundedgems.com since we're transforming them to blob URLs
     const brokenPatterns = [
       'localhost:3001/', // Development backend that might be down
     ]
@@ -78,9 +78,9 @@ export default function OptimizedImage({
     setIsLoading(true)
     setActualSrc(src)
     
-    // Debug logging for external image URLs
-    if (src.includes('groundedgems.com') || src.includes('/api/media/')) {
-      console.log('🖼️ OptimizedImage: Loading external image:', src)
+    // Debug logging for blob storage URLs
+    if (src.includes('.blob.vercel-storage.com') || src.includes('/api/media/')) {
+      console.log('🖼️ OptimizedImage: Loading blob storage image:', src)
     }
   }, [src, isKnownBrokenUrl])
 
@@ -179,11 +179,20 @@ export default function OptimizedImage({
   const shouldUseUnoptimized = useMemo(() => {
     if (unoptimized) return true
     if (isKnownBrokenUrl) return true
+    
     // Use unoptimized for external URLs to avoid Next.js optimization issues
-    if (src.includes('groundedgems.com') || src.includes('/api/media/')) {
+    // Be more aggressive - unoptimize any non-local URL
+    if (src.includes('://') && !src.includes('localhost')) {
       console.log('🖼️ OptimizedImage: Using unoptimized for external URL:', src)
       return true
     }
+    
+    // Also unoptimize any API media URLs
+    if (src.includes('/api/media/') || src.includes('groundedgems.com') || src.includes('.blob.vercel-storage.com')) {
+      console.log('🖼️ OptimizedImage: Using unoptimized for API/blob URL:', src)
+      return true
+    }
+    
     return false
   }, [src, unoptimized, isKnownBrokenUrl])
 

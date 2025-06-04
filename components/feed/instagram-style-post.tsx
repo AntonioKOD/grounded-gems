@@ -10,8 +10,6 @@ import {
   Bookmark, 
   MoreHorizontal,
   MapPin,
-  Play,
-  Pause,
   Volume2,
   VolumeX,
   Sparkles
@@ -19,8 +17,7 @@ import {
 import { formatDistanceToNow } from 'date-fns'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
-import OptimizedImage from '@/components/ui/optimized-image'
-import VideoPlayer from './video-player'
+import Image from 'next/image'
 import CommentsModal from './comments-modal'
 import { useAppDispatch, useAppSelector } from '@/lib/hooks'
 import { likePostAsync, savePostAsync, sharePostAsync } from '@/lib/features/posts/postsSlice'
@@ -363,13 +360,14 @@ const SocialMediaPost = memo(function SocialMediaPost({
           {/* Media Content */}
           <div className="relative w-full h-full overflow-hidden">
             {currentMedia.type === 'image' ? (
-              <OptimizedImage
+              <Image
                 src={currentMedia.url}
                 alt={post.title || post.content}
                 fill
                 quality={90}
                 priority={isActive}
                 className="object-cover"
+                unoptimized={true}
                 onLoad={() => {
                   setIsImageLoaded(true)
                   if (hasError) setHasError(false)
@@ -380,19 +378,25 @@ const SocialMediaPost = memo(function SocialMediaPost({
                 }}
               />
             ) : (
-              <VideoPlayer
+              <video
+                ref={videoRef}
                 src={currentMedia.url}
-                thumbnail={currentMedia.thumbnail}
-                autoPlay={isActive}
-                muted={true}
-                loop={true}
-                aspectRatio="9/16"
-                className="w-full h-full"
-                onPlay={() => setIsVideoLoaded(true)}
+                poster={currentMedia.thumbnail}
+                autoPlay={true}
+                muted
+                loop
+                playsInline // Important for iOS
+                className="w-full h-full object-cover"
+                onLoadedData={() => {
+                  setIsVideoLoaded(true)
+                  if (hasError) setHasError(false)
+                }}
                 onError={() => {
                   console.warn('Video failed to load:', currentMedia.url)
                   setHasError(true)
+                  setIsVideoLoaded(false)
                 }}
+                controls={false} // Keep controls hidden for TikTok style
               />
             )}
           </div>
@@ -423,20 +427,6 @@ const SocialMediaPost = memo(function SocialMediaPost({
               )}
             />
           ))}
-        </div>
-      )}
-
-      {/* Video Controls - Better mobile positioning */}
-      {currentMedia?.type === 'video' && (
-        <div className="absolute top-8 md:top-12 right-3 md:right-4 z-20 flex flex-col gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsVideoLoaded(!isVideoLoaded)}
-            className="bg-black/50 hover:bg-black/70 text-white rounded-full p-2 md:p-3 h-8 w-8 md:h-10 md:w-10"
-          >
-            {isVideoLoaded ? <Pause className="h-3 w-3 md:h-4 md:w-4" /> : <Play className="h-3 w-3 md:h-4 md:w-4" />}
-          </Button>
         </div>
       )}
 
@@ -604,7 +594,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
       </div>
 
       {/* Loading States */}
-      {isImageLoaded && hasMedia && (
+      {currentMedia?.type === 'image' && !isImageLoaded && hasMedia && !hasError && (
         <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-10">
           <div className="w-6 h-6 md:w-8 md:h-8 border-2 border-white/20 border-t-white rounded-full animate-spin" />
         </div>

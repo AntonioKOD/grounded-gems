@@ -20,7 +20,11 @@ export function getImageUrl(image: any): string {
 
   // Handle string URLs - use directly
   if (typeof image === "string" && image.trim() !== "") {
-    const url = image.trim()
+    let url = image.trim()
+    
+    // In development, transform API media URLs to blob URLs
+    url = transformToBlobUrl(url)
+    
     if (isDevelopment) {
       console.log('📸 getImageUrl: String URL found:', url)
     }
@@ -42,11 +46,14 @@ export function getImageUrl(image: any): string {
     }
     
     // Try different URL sources in order of preference
-    const url = image.url || 
-                image.sizes?.card?.url || 
-                image.sizes?.thumbnail?.url || 
-                image.thumbnailURL ||
-                "/placeholder.svg"
+    let url = image.url || 
+              image.sizes?.card?.url || 
+              image.sizes?.thumbnail?.url || 
+              image.thumbnailURL ||
+              "/placeholder.svg"
+    
+    // In development, transform API media URLs to blob URLs
+    url = transformToBlobUrl(url)
                 
     if (isDevelopment) {
       console.log('📸 getImageUrl: Media object processed:', {
@@ -76,12 +83,22 @@ export function getVideoUrl(video: any): string | null {
 
   // Handle string URLs
   if (typeof video === "string" && video.trim() !== "") {
-    return video.trim()
+    let url = video.trim()
+    
+    // In development, transform API media URLs to blob URLs
+    url = transformToBlobUrl(url)
+    
+    return url
   }
   
   // Handle PayloadCMS media objects
   if (typeof video === "object" && video !== null && video.url) {
-    return video.url
+    let url = video.url
+    
+    // In development, transform API media URLs to blob URLs
+    url = transformToBlobUrl(url)
+    
+    return url
   }
 
   return null
@@ -180,5 +197,38 @@ export async function testMediaUrl(url: string): Promise<boolean> {
   } catch {
     return false
   }
+}
+
+/**
+ * Transform API media URLs to direct blob URLs in development
+ */
+function transformToBlobUrl(url: string): string {
+  if (!isDevelopment || !url.includes('/api/media/file/')) {
+    return url
+  }
+  
+  // Only transform if we have blob storage configured
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return url
+  }
+  
+  try {
+    const filename = url.split('/api/media/file/')[1]
+    if (filename) {
+      // Use the blob hostname configured in next.config.ts
+      const blobHostname = 'lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com'
+      const blobUrl = `https://${blobHostname}/${filename}`
+      
+      if (isDevelopment) {
+        console.log('📸 Transformed API URL to blob URL:', { original: url, blob: blobUrl })
+      }
+      
+      return blobUrl
+    }
+  } catch (error) {
+    console.error('Error transforming blob URL:', error)
+  }
+  
+  return url
 }
   

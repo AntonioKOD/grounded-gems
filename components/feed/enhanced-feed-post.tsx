@@ -450,6 +450,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                       className="object-cover"
                       priority={priority <= 2}
                       quality={85}
+                      unoptimized={true}
                       onLoad={() => {
                         setImageLoadStates(prev => ({
                           ...prev,
