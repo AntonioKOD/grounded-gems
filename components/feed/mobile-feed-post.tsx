@@ -44,6 +44,7 @@ import { CommentSystemLight } from "@/components/post/comment-system-light"
 import VideoPlayer from "./video-player"
 import { likePostAsync } from "@/lib/features/posts/postsSlice"
 import { sharePostAsync } from "@/lib/features/posts/postsSlice"
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 
 interface MobileFeedPostProps {
   post: Post
@@ -105,46 +106,18 @@ const MobileFeedPost = memo(function MobileFeedPost({
     return items
   }, [post.image, post.video, post.photos])
 
-  // Process media URLs with better error handling
+  // Process media URLs with better error handling using proper image utils
   const processedImageUrl = useMemo(() => {
-    if (!post.image) return null
-    
-    if (typeof post.image === "string" && post.image.trim() !== "") {
-      return post.image.trim()
-    }
-    
-    const url = post.image?.url || post.featuredImage?.url || null
-    
-    // In development, warn about external URLs that might not work
-    if (process.env.NODE_ENV === 'development' && url?.includes('groundedgems.com')) {
-      console.warn(`🚨 External image URL in development: ${url}`)
-      return null // Use placeholder instead
-    }
-    
-    return url
+    return getImageUrl(post.image || post.featuredImage)
   }, [post.image, post.featuredImage])
 
   const processedVideoUrl = useMemo(() => {
-    if (!post.video) return null
-    
-    if (typeof post.video === "string" && post.video.trim() !== "") {
-      return post.video.trim()
-    }
-    
-    const url = post.video?.url || null
-    
-    // In development, warn about external URLs that might not work
-    if (process.env.NODE_ENV === 'development' && url?.includes('groundedgems.com')) {
-      console.warn(`🚨 External video URL in development: ${url}`)
-      return null // Use placeholder instead
-    }
-    
-    return url
+    return getVideoUrl(post.video)
   }, [post.video])
 
   // Check if we have any valid media
   useEffect(() => {
-    const hasImage = processedImageUrl && !imageError
+    const hasImage = processedImageUrl && processedImageUrl !== "/placeholder.svg" && !imageError
     const hasVideo = processedVideoUrl && !videoError
     setHasValidMedia(hasImage || hasVideo)
   }, [processedImageUrl, processedVideoUrl, imageError, videoError])

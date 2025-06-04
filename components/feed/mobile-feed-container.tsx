@@ -20,6 +20,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import TopicFilters from "./topic-filters"
 import FeedTransition from "./feed-transition"
 import CollapsiblePostForm from "../post/collapsible-post-form"
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 
 interface MobileFeedContainerProps {
   userId?: string
@@ -65,34 +66,37 @@ export default function MobileFeedContainer({
   const observer = useRef<IntersectionObserver | null>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Normalize post data to ensure consistent media URLs and interaction states
+  // Normalize post data to ensure consistent media URLs and interaction states using proper image utilities
   const normalizePost = useCallback((post: any): Post => {
-    // Simple media normalization like profile approach
-    const normalizedImage =
-      post.image && typeof post.image === "string" && post.image.trim() !== ""
-        ? post.image.trim()
-        : post.image?.url || post.featuredImage?.url || null
+    // Use proper image utilities that handle development proxy
+    const normalizedImage = getImageUrl(post.image || post.featuredImage)
+    const normalizedVideo = getVideoUrl(post.video)
 
-    const normalizedVideo =
-      post.video && typeof post.video === "string" && post.video.trim() !== ""
-        ? post.video.trim()
-        : post.video?.url || null
-
+    // Handle photos array
     const normalizedPhotos = Array.isArray(post.photos) 
       ? post.photos.map(photo => {
-          if (typeof photo === "string" && photo.trim() !== "") {
-            return photo.trim()
-          }
-          return photo?.url || null
+          const photoUrl = getImageUrl(photo)
+          return photoUrl !== "/placeholder.svg" ? photoUrl : null
         }).filter(Boolean)
       : []
 
+    // Handle video thumbnail
+    const normalizedVideoThumbnail = (() => {
+      if (post.videoThumbnail) {
+        const thumbnailUrl = getImageUrl(post.videoThumbnail)
+        return thumbnailUrl !== "/placeholder.svg" ? thumbnailUrl : null
+      }
+      // Fallback to image if video exists
+      if (normalizedVideo && normalizedImage !== "/placeholder.svg") return normalizedImage
+      return null
+    })()
+
     return {
       ...post,
-      image: normalizedImage,
+      image: normalizedImage !== "/placeholder.svg" ? normalizedImage : null,
       video: normalizedVideo,
       photos: normalizedPhotos,
-      videoThumbnail: post.videoThumbnail?.url || normalizedImage,
+      videoThumbnail: normalizedVideoThumbnail,
       // Ensure required fields are present
       likeCount: post.likeCount || post.likes?.length || 0,
       commentCount: post.commentCount || post.comments?.length || 0,

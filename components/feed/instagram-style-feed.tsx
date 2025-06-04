@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useAppDispatch } from '@/lib/hooks'
 import { initializeLikedPosts, initializeSavedPosts } from '@/lib/features/posts/postsSlice'
+import { getImageUrl, getVideoUrl } from '@/lib/image-utils'
 
 // Components
 import SocialMediaPost from './instagram-style-post'
@@ -79,80 +80,17 @@ export default function ModernDiscoveryFeed({
   // Redux dispatch
   const dispatch = useAppDispatch()
 
-  // Helper function to normalize post data - convert complex media objects to simple URLs
+  // Helper function to normalize post data using proper image utilities
   const normalizePost = useCallback((post: any): Post => {
-    // Helper function to check if URL is broken and provide fallback
-    const getWorkingImageUrl = (url: string | null): string | null => {
-      if (!url) return null
-      
-      // Check if URL is from known broken sources
-      const brokenPatterns = [
-        'groundedgems.com/api/media/file/',
-        'localhost:3001/',
-      ]
-      
-      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
-      
-      if (isBroken) {
-        console.log('🔧 Replacing broken image URL with placeholder:', url)
-        return '/placeholder-image.svg'
-      }
-      
-      return url
-    }
-
-    const getWorkingVideoUrl = (url: string | null): string | null => {
-      if (!url) return null
-      
-      // Check if URL is from known broken sources
-      const brokenPatterns = [
-        'groundedgems.com/api/media/file/',
-        'localhost:3001/',
-      ]
-      
-      const isBroken = brokenPatterns.some(pattern => url.includes(pattern))
-      
-      if (isBroken) {
-        console.log('🔧 Detected broken video URL, will show error state:', url)
-        return url // Let the VideoPlayer handle the error state
-      }
-      
-      return url
-    }
-
     // Handle image field - can be string, object, or boolean
     const normalizedImage = (() => {
-      if (!post.image) return null
-      if (typeof post.image === 'string' && post.image.trim() !== '') {
-        return getWorkingImageUrl(post.image.trim())
-      }
-      if (typeof post.image === 'object' && post.image !== null) {
-        // Handle PayloadMediaObject
-        if (post.image.sizes?.card?.url) return getWorkingImageUrl(post.image.sizes.card.url)
-        if (post.image.url) return getWorkingImageUrl(post.image.url)
-      }
-      if (post.image === true && post.rawData?.image) {
-        return getWorkingImageUrl(post.rawData.image)
-      }
-      // Fallback to other image fields
-      const fallbackUrl = post.featuredImage?.url || post.image?.url || null
-      return getWorkingImageUrl(fallbackUrl)
+      const imageUrl = getImageUrl(post.image || post.featuredImage)
+      return imageUrl !== "/placeholder.svg" ? imageUrl : null
     })()
 
     // Handle video field - can be string, object, or boolean  
     const normalizedVideo = (() => {
-      if (!post.video) return null
-      if (typeof post.video === 'string' && post.video.trim() !== '') {
-        return getWorkingVideoUrl(post.video.trim())
-      }
-      if (typeof post.video === 'object' && post.video !== null) {
-        // Handle PayloadMediaObject
-        if (post.video.url) return getWorkingVideoUrl(post.video.url)
-      }
-      if (post.video === true && post.rawData?.video) {
-        return getWorkingVideoUrl(post.rawData.video)
-      }
-      return null
+      return getVideoUrl(post.video)
     })()
 
     // Handle photos array
@@ -160,12 +98,8 @@ export default function ModernDiscoveryFeed({
       if (!Array.isArray(post.photos)) return []
       return post.photos
         .map((photo: any) => {
-          if (typeof photo === 'string' && photo.trim() !== '') return getWorkingImageUrl(photo.trim())
-          if (typeof photo === 'object' && photo !== null) {
-            if (photo.sizes?.card?.url) return getWorkingImageUrl(photo.sizes.card.url)
-            if (photo.url) return getWorkingImageUrl(photo.url)
-          }
-          return null
+          const photoUrl = getImageUrl(photo)
+          return photoUrl !== "/placeholder.svg" ? photoUrl : null
         })
         .filter(Boolean)
     })()
@@ -173,10 +107,8 @@ export default function ModernDiscoveryFeed({
     // Handle video thumbnail
     const normalizedVideoThumbnail = (() => {
       if (post.videoThumbnail) {
-        if (typeof post.videoThumbnail === 'string') return getWorkingImageUrl(post.videoThumbnail)
-        if (typeof post.videoThumbnail === 'object' && post.videoThumbnail?.url) {
-          return getWorkingImageUrl(post.videoThumbnail.url)
-        }
+        const thumbnailUrl = getImageUrl(post.videoThumbnail)
+        return thumbnailUrl !== "/placeholder.svg" ? thumbnailUrl : null
       }
       // Fallback to image if video exists
       if (normalizedVideo && normalizedImage) return normalizedImage

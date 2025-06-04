@@ -28,8 +28,10 @@ export default buildConfig({
   // Secret for signing tokens and encrypting data
   secret: process.env.PAYLOAD_SECRET || '',
 
-  // Server URL for CSRF protection - this is important for mobile app authentication
-  serverURL: process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://groundedgems.com',
+  // Server URL for CSRF protection - use local URL in development
+  serverURL: process.env.NODE_ENV === 'development' 
+    ? (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000')
+    : (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://groundedgems.com'),
 
   // Cookie prefix must match the name your middleware expects (e.g. "payload-token")
   cookiePrefix: 'payload',
