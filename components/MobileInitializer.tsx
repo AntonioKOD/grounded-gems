@@ -32,7 +32,8 @@ export default function MobileInitializer() {
           const { Capacitor } = await import('@capacitor/core');
           const { StatusBar, Style } = await import('@capacitor/status-bar');
           const { SplashScreen } = await import('@capacitor/splash-screen');
-          const { App as CapacitorApp } = await import('@capacitor/app');
+          const CapacitorAppModule = await import('@capacitor/app');
+          const CapacitorApp = CapacitorAppModule.App;
           
           const { initializeIOSErrorMonitoring } = await import('@/lib/capacitor-utils');
           const { initializeIOSAuthMonitoring } = await import('@/lib/ios-auth-helper');
