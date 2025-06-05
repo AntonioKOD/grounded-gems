@@ -3,89 +3,72 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { safeRedirectURL } from '@/lib/url-utils'
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl
+export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
   
-  // Fast path exclusions - skip middleware for auth pages, API auth endpoints, and static assets
-  if (pathname.startsWith('/login') || 
-      pathname.startsWith('/signup') || 
-      pathname.startsWith('/verify') ||
-      pathname.startsWith('/_next') ||
-      pathname.startsWith('/api/users/login') ||
-      pathname.startsWith('/api/users/signup') ||
-      pathname.startsWith('/api/users/verify') ||
-      pathname === '/api/users/me' ||  // CRITICAL: Allow /api/users/me to pass through
-      pathname.startsWith('/api/auth-check') ||
-      pathname.includes('.') ||
-      pathname === '/') {
+  // Skip middleware for API routes, static files, and internal Next.js routes
+  if (
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/_next/') ||
+    pathname.startsWith('/favicon.ico') ||
+    pathname.includes('.') ||
+    pathname.startsWith('/sw.js') ||
+    pathname.startsWith('/manifest.webmanifest')
+  ) {
     return NextResponse.next()
   }
 
-  // Quick token check
-  const token = req.cookies.get('payload-token')?.value
+  // Get the authentication cookie
+  const authCookie = request.cookies.get('payload-token')
+  const isAuthenticated = !!authCookie?.value
 
-  // Handle unauthenticated requests
-  if (!token) {
-    // For API routes, return 401 JSON response instead of redirect
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { success: false, error: 'User not authenticated' },
-        { status: 401 }
-      )
+  console.log(`[Middleware] ${pathname} - Authenticated: ${isAuthenticated}`)
+
+  // If accessing root path - implement app launch behavior
+  if (pathname === '/') {
+    if (isAuthenticated) {
+      console.log('[Middleware] Authenticated user accessing /, redirecting to /feed')
+      return NextResponse.redirect(new URL('/feed', request.url))
+    } else {
+      console.log('[Middleware] Unauthenticated user accessing /, redirecting to /login')
+      return NextResponse.redirect(new URL('/login', request.url))
     }
-    
-    // For frontend routes, redirect to login
-    const redirectUrl = safeRedirectURL('/login', pathname)
-    return NextResponse.redirect(redirectUrl)
   }
 
-  // Allow request to proceed
+  // Protected routes - require authentication
+  const protectedRoutes = ['/feed', '/profile', '/post', '/events', '/map', '/bucket-list', '/notifications']
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+  
+  if (isProtectedRoute && !isAuthenticated) {
+    console.log(`[Middleware] Unauthenticated access to protected route ${pathname}, redirecting to /login`)
+    return NextResponse.redirect(new URL(`/login?redirect=${encodeURIComponent(pathname)}`, request.url))
+  }
+
+  // Redirect authenticated users away from auth pages
+  const authRoutes = ['/login', '/signup', '/forgot-password', '/reset-password']
+  const isAuthRoute = authRoutes.some(route => pathname.startsWith(route))
+  
+  if (isAuthRoute && isAuthenticated) {
+    console.log(`[Middleware] Authenticated user accessing auth route ${pathname}, redirecting to /feed`)
+    return NextResponse.redirect(new URL('/feed', request.url))
+  }
+
+  // Continue with the request
   return NextResponse.next()
 }
 
-// Optimized matcher - exclude /api/users/me from matching
 export const config = {
   matcher: [
-    // Frontend routes that require auth
-    '/add-location/:path*',
-    '/events/create/:path*',
-    '/events/requests/:path*',
-    '/feed/:path*',
-    '/profile/:path*',
-    '/matchmaking/:path*',
-    '/notifications/:path*',
-    '/post/:path*',
-    '/my-route/:path*',
-    '/bucket-list/:path*',
-    
-    // API routes that require auth (EXCLUDING /api/users/me)
-    '/api/users/[id]/:path*',
-    '/api/posts/like',
-    '/api/posts/share',
-    '/api/posts/[postId]/save',
-    '/api/locations/interactions/:path*',
-    '/api/locations/event-requests/:path*',
-    '/api/locations/save/:path*',
-    '/api/locations/subscribe/:path*',
-    '/api/notifications/:path*',
-    '/api/specials/:path*',
-    '/api/upload-image/:path*',
-    '/api/upload-media/:path*',
-    '/api/bucket-lists/:path*',
-    '/api/ai-planner/:path*',
-    '/api/journeys/:path*',
-    '/api/dev-media-proxy/:path*',
-    '/api/feed/:path*',
-    '/api/media/:path*',
-    '/api/search/:path*',
-    
-    // Protected mobile API routes
-    '/api/v1/mobile/auth/logout',
-    '/api/v1/mobile/posts/:path*',
-    '/api/v1/mobile/locations/:path*',
-    '/api/v1/mobile/notifications/:path*',
-    '/api/v1/mobile/upload/:path*',
-    '/api/v1/mobile/users/:path*',
-    '/api/v1/mobile/events/:path*',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)  
+     * - favicon.ico (favicon file)
+     * - sw.js (service worker)
+     * - manifest.webmanifest (PWA manifest)
+     * - Any file with an extension (e.g., .png, .jpg, .css, .js)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|.*\\..*).*)',
   ],
 }

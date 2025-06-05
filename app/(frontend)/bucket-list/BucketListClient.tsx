@@ -575,6 +575,11 @@ const getTypeColor = (type: string) => {
 }
 
 const getRelativeTime = (dateString: string) => {
+  // Prevent hydration mismatches by returning consistent server-side value
+  if (typeof window === 'undefined') {
+    return 'Recently'
+  }
+  
   const date = new Date(dateString)
   const now = new Date()
   const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))

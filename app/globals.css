@@ -297,8 +297,8 @@
   
   /* Fix for mobile keyboard pushing content */
   .mobile-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-top: env(safe-area-inset-top);
+    padding-bottom: var(--safe-area-inset-bottom, 0px);
+    padding-top: var(--safe-area-inset-top, 0px);
   }
 
   /* Post transitions */
@@ -348,7 +348,7 @@
   /* FAB-specific bottom positioning for mobile navigation */
   .bottom-fab {
     /* Mobile: position above mobile nav (h-16 = 4rem) + safe area + spacing */
-    bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 1rem);
+    bottom: calc(4rem + var(--safe-area-inset-bottom, 0px) + 1rem);
   }
 
   .mobile-feed-container {
@@ -385,7 +385,7 @@
 @media (min-width: 768px) {
   .bottom-fab {
     /* Desktop: normal bottom positioning */
-    bottom: max(24px, env(safe-area-inset-bottom, 24px));
+    bottom: max(24px, var(--safe-area-inset-bottom, 24px));
   }
 }
 
@@ -442,11 +442,11 @@
 
 /* Safe area handling for notched devices */
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--safe-area-inset-bottom, 0px);
 }
 
 .safe-area-top {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--safe-area-inset-top, 0px);
 }
 
 /* Feed post transitions */
@@ -561,15 +561,15 @@
 
 /* Safe area utilities */
 .bottom-safe {
-  bottom: max(24px, env(safe-area-inset-bottom, 24px));
+  bottom: max(24px, var(--safe-area-inset-bottom, 24px));
 }
 
 .right-safe {
-  right: max(16px, env(safe-area-inset-right, 16px));
+  right: max(16px, var(--safe-area-inset-right, 16px));
 }
 
 .left-safe {
-  left: max(16px, env(safe-area-inset-left, 16px));
+  left: max(16px, var(--safe-area-inset-left, 16px));
 }
 
 /* Enhanced scrollbar hiding for all feed containers */
@@ -1234,7 +1234,7 @@
 @supports (padding: max(0px)) {
   @media (max-width: 768px) {
     .mobile-preview-modal {
-      padding-bottom: max(env(safe-area-inset-bottom), 20px);
+      padding-bottom: max(var(--safe-area-inset-bottom, 0px), 20px);
     }
   }
 }
@@ -1441,11 +1441,11 @@
   
   /* Safe area handling */
   .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-area-inset-bottom, 0px);
   }
   
   .safe-area-top {
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--safe-area-inset-top, 0px);
   }
   
   /* Improve video performance on mobile */

@@ -3,6 +3,9 @@ import { Metadata } from "next"
 import CreatePostForm from "@/components/post/create-post-form"
 import { Loader2 } from "lucide-react"
 
+// Force dynamic rendering for this page since it requires authentication
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: "Create Post | Grounded Gems",
   description: "Share your experience with the community",

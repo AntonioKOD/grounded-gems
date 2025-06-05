@@ -52,10 +52,19 @@ const LoginForm = memo(function LoginForm() {
     if (!isLoading && isAuthenticated && !hasRedirected) {
       console.log("LoginForm: User already authenticated, redirecting immediately to:", redirectPath)
       setHasRedirected(true)
-      // Use replace instead of push to avoid back button issues
-      router.replace(redirectPath)
+      
+      // Use a more stable redirect method to prevent loops
+      if (typeof window !== 'undefined') {
+        // Small delay to prevent rapid-fire redirects
+        const redirectTimer = setTimeout(() => {
+          window.location.replace(redirectPath)
+        }, 100)
+        
+        // Cleanup timer if component unmounts
+        return () => clearTimeout(redirectTimer)
+      }
     }
-  }, [isAuthenticated, isLoading, router, redirectPath, hasRedirected])
+  }, [isAuthenticated, isLoading, redirectPath, hasRedirected]) // Removed router from deps to prevent re-execution
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target

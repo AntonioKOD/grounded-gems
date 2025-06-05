@@ -15,21 +15,32 @@ export default function MobileTopNavbar({ initialUser }: MobileTopNavbarProps) {
   if (!initialUser) return null
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 border-b border-gray-100 h-16 flex items-center px-3 md:hidden backdrop-blur">
-      {/* Logo - bigger, no text */}
+    <nav className="fixed top-0 left-4 right-4 mt-2 z-50 bg-white/95 backdrop-blur-xl border border-gray-200/50 rounded-2xl shadow-lg h-14 flex items-center px-4 md:hidden">
+      {/* Logo - optimized for smaller space */}
       <Link href="/" className="flex items-center h-full">
-        <Image src="/logo.svg" alt="Logo" width={44} height={44} className="h-11 w-11" />
+        <Image src="/logo.svg" alt="Logo" width={36} height={36} className="h-9 w-9" />
       </Link>
+      
       {/* Spacer */}
       <div className="flex-1" />
-      {/* Floating Search Button in Navbar */}
-      <div className="flex items-center justify-center mr-3">
-        <FloatingSearchButton className="w-11 h-11" />
+      
+      {/* Action buttons container */}
+      <div className="flex items-center gap-2">
+        {/* Floating Search Button in Navbar */}
+        <div className="flex items-center justify-center">
+          <FloatingSearchButton className="w-10 h-10 bg-gray-100/80 hover:bg-gray-200/80 transition-all duration-300" />
+        </div>
+        
+        {/* Notifications Button */}
+        {initialUser?.id && (
+          <div className="bg-gray-100/80 hover:bg-gray-200/80 rounded-xl transition-all duration-300">
+            <NotificationCenter userId={initialUser.id} />
+          </div>
+        )}
       </div>
-      {/* Notifications Button */}
-      {initialUser?.id && (
-        <NotificationCenter userId={initialUser.id} />
-      )}
+
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-[#FF6B6B]/5 via-transparent to-[#4ECDC4]/5 pointer-events-none"></div>
     </nav>
   )
 } 

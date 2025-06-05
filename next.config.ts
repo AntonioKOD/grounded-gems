@@ -1,96 +1,56 @@
-import { withPayload } from "@payloadcms/next/withPayload";
-import type { NextConfig } from "next";
-
-// Check if building for mobile (Capacitor)
-const isMobileBuild = process.env.MOBILE_BUILD === 'true';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   eslint: {
+    // Don't run eslint during build for faster builds
     ignoreDuringBuilds: true,
   },
   typescript: {
+    // Don't run TypeScript checking during build for faster builds 
     ignoreBuildErrors: true,
   },
-  // Use 'export' for mobile builds, 'standalone' for web
-  output: isMobileBuild ? 'export' : 'standalone',
-  // Add trailing slash for mobile builds to ensure proper routing
-  trailingSlash: isMobileBuild,
-  // Disable image optimization for mobile builds since it's not supported with static export
-  images: isMobileBuild ? {
-    unoptimized: true,
+  // Use standalone for both web and mobile builds to support API routes
+  output: 'standalone',
+  images: {
+    unoptimized: true, // Required for static export
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: "lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com",
+        hostname: 'lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com',
         port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: "groundedgems.com",
+        hostname: 'groundedgems.com',
         port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: "www.groundedgems.com",
+        hostname: 'www.groundedgems.com',
         port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'http',
-        hostname: "localhost",
-        port: '3000',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: "images.unsplash.com",
+        hostname: 'images.unsplash.com',
         port: '',
         pathname: '/**',
-      }
+      },
     ],
-    dangerouslyAllowSVG: true,
-  } : {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: "lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com",
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: "groundedgems.com",
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: "www.groundedgems.com",
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'http',
-        hostname: "localhost",
-        port: '3000',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: "images.unsplash.com",
-        port: '',
-        pathname: '/**',
-      }
-    ],
+    deviceSizes: [320, 420, 768, 1024, 1200],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    formats: ['image/webp'],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com groundedgems.com www.groundedgems.com images.unsplash.com data:; default-src 'self'; script-src 'none'; sandbox;",
   },
+  
+  // Disable static optimization for dynamic routes
   experimental: {
     serverActions: {
-      bodySizeLimit: '50mb', // Increased from 10mb to 50mb for video uploads
+      bodySizeLimit: '50mb',
     },
     // Fix for Next.js App Router production issues
     optimisticClientCache: false,
@@ -99,115 +59,58 @@ const nextConfig: NextConfig = {
       static: 0,
     },
   },
+  
+  // Asset configuration for mobile apps
+  assetPrefix: '',
+  basePath: '',
+  
+  // Headers for better mobile performance
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block',
+          },
+        ],
+      },
+    ];
+  },
+  
+  // Webpack configuration for better Capacitor compatibility
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+      };
+    }
+    return config;
+  },
   serverExternalPackages: ['payload'],
   env: {
     // Ensure NEXTAUTH_URL is available in production
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL || (
-      process.env.NODE_ENV === 'production' 
-        ? 'https://groundedgems.com'
-        : process.env.VERCEL_URL 
-          ? `https://${process.env.VERCEL_URL}` 
-          : 'http://localhost:3000'
-    ),
+    NEXT_PUBLIC_SERVER_URL:
+      process.env.NODE_ENV === 'production'
+        ? process.env.NEXT_PUBLIC_SERVER_URL || 'https://groundedgems.com'
+        : process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000',
+    PAYLOAD_PUBLIC_SERVER_URL:
+      process.env.NODE_ENV === 'production'
+        ? process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://groundedgems.com'
+        : 'http://localhost:3000',
   },
-  // Only add headers for web builds as they're not supported with export
-  ...(!isMobileBuild && {
-    async headers() {
-      return [
-        {
-          source: '/manifest.json',
-          headers: [
-            {
-              key: 'Content-Type',
-              value: 'application/manifest+json',
-            },
-            {
-              key: 'Cache-Control',
-              value: 'public, max-age=31536000, immutable',
-            },
-          ],
-        },
-        {
-          source: '/sw.js',
-          headers: [
-            {
-              key: 'Content-Type',
-              value: 'application/javascript',
-            },
-            {
-              key: 'Cache-Control',
-              value: 'public, max-age=0, must-revalidate',
-            },
-          ],
-        },
-        {
-          source: '/api/:path*',
-          headers: [
-            {
-              key: 'Cache-Control',
-              value: 'no-store, max-age=0',
-            },
-            // CORS headers for mobile app support
-            {
-              key: 'Access-Control-Allow-Origin',
-              value: process.env.NODE_ENV === 'development' ? '*' : 'https://groundedgems.com',
-            },
-            {
-              key: 'Access-Control-Allow-Methods',
-              value: 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-            },
-            {
-              key: 'Access-Control-Allow-Headers',
-              value: 'Content-Type, Authorization, X-Requested-With',
-            },
-            {
-              key: 'Access-Control-Allow-Credentials',
-              value: 'true',
-            },
-            {
-              key: 'Access-Control-Max-Age',
-              value: '86400', // 24 hours
-            },
-          ],
-        },
-        // Add headers to prevent authentication caching issues
-        {
-          source: '/api/users/me',
-          headers: [
-            {
-              key: 'Cache-Control',
-              value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
-            },
-            {
-              key: 'Pragma',
-              value: 'no-cache',
-            },
-            {
-              key: 'Expires',
-              value: '0',
-            },
-          ],
-        },
-        {
-          source: '/api/users/login',
-          headers: [
-            {
-              key: 'Cache-Control',
-              value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
-            },
-            {
-              key: 'Pragma',
-              value: 'no-cache',
-            },
-            {
-              key: 'Expires',
-              value: '0',
-            },
-          ],
-        },
-      ];
-    }
-  })
 };
 
-export default withPayload(nextConfig);
+export default nextConfig;

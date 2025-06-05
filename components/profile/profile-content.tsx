@@ -943,10 +943,11 @@ export default function ProfileContent({
                     </CardHeader>
                     <CardContent>
                       <p className="text-gray-900 font-medium">{formatDate(profile.createdAt)}</p>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {profile.createdAt 
-                          ? Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))
-                          : 0} days on Grounded Gems
+                      <p className="text-sm text-gray-500 mt-1" suppressHydrationWarning>
+                        {profile.createdAt && typeof window !== 'undefined'
+                          ? `${Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days on Grounded Gems`
+                          : 'Member of Grounded Gems'
+                        }
                       </p>
                     </CardContent>
                   </Card>

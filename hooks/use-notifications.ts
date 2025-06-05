@@ -206,6 +206,8 @@ export function useNotificationPreferences() {
 
   const requestPermission = useCallback(async () => {
     try {
+      // Only import if running in browser environment
+      if (typeof window === 'undefined') return 'denied'
       const { requestNotificationPermission } = await import('@/lib/notifications')
       const permission = await requestNotificationPermission()
       setHasPermission(permission === 'granted')
@@ -218,6 +220,8 @@ export function useNotificationPreferences() {
 
   const testNotification = useCallback(async () => {
     try {
+      // Only import if running in browser environment
+      if (typeof window === 'undefined') throw new Error('Not in browser environment')
       const { showTestNotification } = await import('@/lib/notifications')
       await showTestNotification()
     } catch (error) {

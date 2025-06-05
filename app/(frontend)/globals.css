@@ -134,7 +134,7 @@
 
   /* Specific padding for pages with bottom content */
   .mobile-feed-container {
-    padding-bottom: 70px; /* Just space for mobile nav since feed is fullscreen */
+    padding-bottom: 70px; /* Space for mobile nav */
   }
 
   /* Safe zones for floating elements */
@@ -149,12 +149,12 @@
 
   /* Container padding for all pages */
   main, .main-content {
-    padding-bottom: 70px; /* Reduced space - only for mobile nav */
+    padding-bottom: 70px; /* Space for mobile nav */
   }
 
   /* Special handling for fullscreen content like feeds */
   .fullscreen-content {
-    padding-bottom: 70px; /* Just mobile nav space */
+    padding-bottom: 70px; /* Space for mobile nav */
   }
   
   /* Improved tap highlighting */
@@ -190,6 +190,143 @@
     height: 90vh;
     max-height: 90vh;
     border-radius: 20px 20px 0 0;
+  }
+
+  /* Enhanced floating navigation animations */
+  .mobile-nav-item {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform: translateZ(0); /* Enable hardware acceleration */
+  }
+  
+  .mobile-nav-item:active {
+    transform: scale(0.95) translateZ(0);
+  }
+  
+  /* Enhanced touch feedback for navigation items */
+  .mobile-nav-icon {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(8px);
+  }
+  
+  .mobile-nav-icon:hover {
+    background: rgba(255, 107, 107, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 107, 107, 0.2);
+  }
+  
+  /* Enhanced add button with better visual hierarchy */
+  .mobile-nav-add-button {
+    background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+    box-shadow: 0 8px 24px rgba(255, 107, 107, 0.3);
+    transform: translateZ(0);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .mobile-nav-add-button:hover {
+    box-shadow: 0 12px 32px rgba(255, 107, 107, 0.4);
+    transform: translateY(-3px) scale(1.05) translateZ(0);
+  }
+  
+  .mobile-nav-add-button:active {
+    transform: translateY(-1px) scale(0.98) translateZ(0);
+  }
+  
+  /* Enhanced floating navigation container */
+  .mobile-nav-container {
+    backdrop-filter: blur(20px);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 20px 40px rgba(0, 0, 0, 0.1),
+      0 8px 16px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  
+  /* Enhanced glass-morphism effect for navigation */
+  .mobile-nav-glass {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.9) 100%
+    );
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  /* Better haptic feedback visual cues */
+  .haptic-feedback {
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .haptic-feedback:active {
+    transform: scale(0.92);
+    filter: brightness(0.95);
+  }
+  
+  /* Enhanced notification badge positioning for floating nav */
+  .mobile-nav-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #FF6B6B;
+    color: white;
+    border-radius: 50%;
+    min-width: 20px;
+    height: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+  }
+}
+
+/* Top navigation enhancements for floating design */
+@media (max-width: 767px) {
+  .mobile-top-nav-container {
+    backdrop-filter: blur(20px) saturate(180%);
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 
+      0 8px 24px rgba(0, 0, 0, 0.08),
+      0 4px 8px rgba(0, 0, 0, 0.04);
+  }
+  
+  .mobile-top-nav-button {
+    background: rgba(248, 250, 252, 0.8);
+    backdrop-filter: blur(8px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .mobile-top-nav-button:hover {
+    background: rgba(255, 107, 107, 0.1);
+    transform: scale(1.05);
+    border-color: rgba(255, 107, 107, 0.2);
+  }
+}
+
+/* Enhanced content spacing for floating navigation */
+@media (max-width: 767px) {
+  .mobile-content-spacing {
+    padding-top: 80px; /* Account for floating top nav */
+    padding-bottom: 120px; /* Account for floating bottom nav */
+  }
+  
+  .mobile-page-container {
+    min-height: calc(100vh - 200px); /* Account for both floating navs */
+    padding: 80px 16px 120px;
+  }
+  
+  /* Enhanced scroll behavior for mobile */
+  .mobile-smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-top: 80px;
+    scroll-padding-bottom: 120px;
   }
 }
 
@@ -637,9 +774,10 @@
   
   /* Mobile-specific custom properties */
   --mobile-header-height: 60px;
-  --mobile-nav-height: 70px;
-  --mobile-safe-area-top: env(safe-area-inset-top, 0px);
-  --mobile-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-nav-height: 70px; /* Standard mobile nav height */
+  /* Safe area variables will be set client-side to prevent hydration mismatch */
+  --mobile-safe-area-top: 0px;
+  --mobile-safe-area-bottom: 0px;
 }
 
 .dark {
@@ -725,7 +863,7 @@
 
 /* Enhanced safe area handling for mobile navigation */
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: var(--mobile-safe-area-bottom, 0px);
 }
 
 /* Enhanced Feed Animations */

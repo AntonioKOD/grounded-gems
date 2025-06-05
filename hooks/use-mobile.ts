@@ -163,10 +163,13 @@ export function useViewport() {
       })
 
       // Update CSS custom properties for use in components
-      document.documentElement.style.setProperty('--viewport-height', `${height}px`)
-      document.documentElement.style.setProperty('--visual-viewport-height', `${visualViewportHeight}px`)
-      document.documentElement.style.setProperty('--safe-area-top', `${safeAreaTop}px`)
-      document.documentElement.style.setProperty('--safe-area-bottom', `${safeAreaBottom}px`)
+      // Add a small delay to prevent hydration conflicts
+      setTimeout(() => {
+        document.documentElement.style.setProperty('--viewport-height', `${height}px`)
+        document.documentElement.style.setProperty('--visual-viewport-height', `${visualViewportHeight}px`)
+        document.documentElement.style.setProperty('--safe-area-top', `${safeAreaTop}px`)
+        document.documentElement.style.setProperty('--safe-area-bottom', `${safeAreaBottom}px`)
+      }, 100)
     }
 
     updateViewport()

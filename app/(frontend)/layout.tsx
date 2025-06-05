@@ -8,7 +8,10 @@ import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
 import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingActionButtonMenu"
 import MainContentWrapper from "@/components/ui/MainContentWrapper"
-import { GoogleAnalytics } from '@next/third-parties/google'
+
+import MobileInitializer from '@/components/MobileInitializer'
+import SafeAreaManager from '@/components/SafeAreaManager'
+import HydrationErrorFixer from '@/components/HydrationErrorFixer'
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -22,80 +25,133 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
   const initialUser = await getServerSideUser()
 
   return (
-    <html lang="en">
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="manifest" href="/manifest.webmanifest" />
-        
-        {/* PWA Meta Tags */}
-        <meta name="theme-color" content="#FF6B6B" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Grounded Gems" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        
-        {/* SEO Meta Tags */}
-        <meta name="description" content={metadata.description} />
-        <meta name="keywords" content="travel, locations, events, social, discovery, community, local, recommendations, hidden gems" />
-        <meta name="author" content="Grounded Gems Team" />
-        
-        {/* Open Graph Meta Tags */}
-        <meta property="og:title" content={metadata.title} />
-        <meta property="og:description" content={metadata.description} />
-        <meta property="og:type" content="website" />
-        <meta property="og:image" content="/icon-512.png" />
-        <meta property="og:site_name" content="Grounded Gems" />
-        
-        {/* Twitter Meta Tags */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={metadata.title} />
-        <meta name="twitter:description" content={metadata.description} />
-        <meta name="twitter:image" content="/icon-192.png" />
-        
-        {/* Apple Touch Icons */}
-        <link rel="apple-touch-icon" href="/icon-192.png" />
-        <link rel="apple-touch-icon" sizes="152x152" href="/icon-192.png" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
-        <link rel="apple-touch-icon" sizes="167x167" href="/icon-192.png" />
-        
-        {/* Performance optimization - removed unused external script preloads */}
-      </head>
-      <body className="overflow-x-hidden">
-        <StoreProvider initialUser={initialUser}>
-          <NavigationWrapper initialUser={initialUser} />
-          <MainContentWrapper>
-            {children}
-          </MainContentWrapper>
-          {/* Hide footer on mobile, show on desktop */}
-          <div className="hidden md:block">
-            <Footer />
-          </div>
-          <Toaster />
-          {/* Desktop FAB remains in its place */}
-          <ClientFloatingActionButtonMenu />
-        </StoreProvider>
-        
-        {/* Google Analytics */}
-        <GoogleAnalytics gaId="G-DM1Y9WQP6" />
-        
-        {/* Service Worker Registration */}
-        <Script id="sw-registration" strategy="afterInteractive">
-          {`
-            if ('serviceWorker' in navigator) {
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js')
-                  .then(function(registration) {
-                    console.log('SW registered: ', registration);
-                  })
-                  .catch(function(registrationError) {
-                    console.log('SW registration failed: ', registrationError);
-                  });
-              });
+    <div suppressHydrationWarning>
+      <StoreProvider initialUser={initialUser}>
+        <NavigationWrapper initialUser={initialUser} />
+        <MainContentWrapper>
+          {children}
+        </MainContentWrapper>
+        {/* Hide footer on mobile, show on desktop */}
+        <div className="hidden md:block">
+          <Footer />
+        </div>
+        <Toaster />
+        {/* Desktop FAB remains in its place */}
+        <ClientFloatingActionButtonMenu />
+        <MobileInitializer />
+        <SafeAreaManager />
+        <HydrationErrorFixer />
+      </StoreProvider>
+
+      {/* iOS and Mobile Initialization */}
+      <Script id="mobile-init" strategy="beforeInteractive">
+        {`
+          // Initialize iOS history throttling FIRST to prevent Safari errors
+          (function() {
+            if (typeof window === 'undefined') return;
+            
+            // Detect iOS Safari
+            const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                               (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            
+            if (isIOSSafari) {
+              console.log('[iOS Init] Initializing history throttling for iOS Safari');
+              
+              // Simple throttling implementation
+              let callCount = 0;
+              let resetTimeout = null;
+              const MAX_CALLS = 80;
+              const RESET_INTERVAL = 30000;
+              
+              const originalReplaceState = window.history.replaceState;
+              const originalPushState = window.history.pushState;
+              
+              window.history.replaceState = function(data, title, url) {
+                if (callCount >= MAX_CALLS) {
+                  console.warn('[iOS Throttle] history.replaceState() call skipped');
+                  return;
+                }
+                
+                callCount++;
+                if (!resetTimeout) {
+                  resetTimeout = setTimeout(() => {
+                    callCount = 0;
+                    resetTimeout = null;
+                  }, RESET_INTERVAL);
+                }
+                
+                try {
+                  originalReplaceState.call(this, data, title, url);
+                } catch (error) {
+                  console.error('[iOS Throttle] Error:', error);
+                }
+              };
+              
+              window.history.pushState = function(data, title, url) {
+                if (callCount >= MAX_CALLS) {
+                  console.warn('[iOS Throttle] history.pushState() call skipped');
+                  return;
+                }
+                
+                callCount++;
+                if (!resetTimeout) {
+                  resetTimeout = setTimeout(() => {
+                    callCount = 0;
+                    resetTimeout = null;
+                  }, RESET_INTERVAL);
+                }
+                
+                try {
+                  originalPushState.call(this, data, title, url);
+                } catch (error) {
+                  console.error('[iOS Throttle] Error:', error);
+                }
+              };
             }
-          `}
-        </Script>
-      </body>
-    </html>
+          })();
+          
+          // iOS WebView error handling
+          if (window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios') {
+            // Enhanced error logging for iOS
+            window.addEventListener('error', function(event) {
+              console.warn('[iOS Error]', event.message, event.filename, event.lineno);
+            });
+            
+            window.addEventListener('unhandledrejection', function(event) {
+              console.warn('[iOS Promise Rejection]', event.reason);
+            });
+            
+            // Handle WebView navigation errors
+            window.addEventListener('beforeunload', function(event) {
+              // Prevent unnecessary warnings on iOS
+              if (event.returnValue !== undefined) {
+                event.returnValue = '';
+              }
+            });
+          }
+         
+         // Enhanced mobile viewport handling
+         function setupMobileViewport() {
+           const viewport = document.querySelector('meta[name="viewport"]');
+           if (viewport && window.Capacitor) {
+             // Enhanced viewport for mobile apps
+             viewport.setAttribute('content', 
+               'width=device-width, initial-scale=1, maximum-scale=5, minimum-scale=1, user-scalable=yes, viewport-fit=cover'
+             );
+           }
+         }
+         
+         // Safe area CSS variables are now handled by SafeAreaManager component
+         
+         if (document.readyState === 'loading') {
+           document.addEventListener('DOMContentLoaded', function() {
+             setupMobileViewport();
+           });
+         } else {
+           setupMobileViewport();
+         }
+        `}
+      </Script>
+    </div>
   )
 }

@@ -3,6 +3,9 @@
 import Link from "next/link"
 import { LayoutList, Calendar, Plus, MapPin, User } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/hooks/use-auth"
+import { useState, useCallback, useEffect } from "react"
+import { safeIOSNavigation } from "@/lib/ios-auth-helper"
 import type { UserData } from "@/lib/features/user/userSlice"
 
 interface MobileNavigationProps {
@@ -11,111 +14,151 @@ interface MobileNavigationProps {
 
 export default function MobileNavigation({ initialUser }: MobileNavigationProps) {
   const router = useRouter()
+  const { isAuthenticated, isLoading } = useAuth()
+  const [navigating, setNavigating] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
 
-  // Handle add post action - stable function
-  const handleAddPost = () => {
-    if (initialUser) {
-      router.push('/post/create')
+  // Prevent hydration mismatch by only rendering on client
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  // Safe navigation function that uses iOS-optimized auth checking
+  const safeNavigate = useCallback(async (path: string, requiresAuth: boolean = true) => {
+    if (navigating) return // Prevent multiple navigation attempts
+    
+    setNavigating(path)
+    
+    try {
+      // Use iOS-optimized navigation helper
+      const success = await safeIOSNavigation(path, {
+        requiresAuth,
+        fallbackPath: '/login',
+        useWindowLocation: true // Always use window.location for mobile for better reliability
+      })
+      
+      if (!success) {
+        console.log('[Mobile Nav] Navigation failed or redirected to login')
+      }
+      
+    } catch (error) {
+      console.error('[Mobile Nav] Navigation error:', error)
+    } finally {
+      // Reset navigation state after a delay
+      setTimeout(() => setNavigating(null), 1000)
+    }
+  }, [navigating])
+
+  // Handle add post action - check auth first
+  const handleAddPost = useCallback(() => {
+    safeNavigate('/post/create', true)
+  }, [safeNavigate])
+
+  // Handle profile action - check auth first  
+  const handleProfile = useCallback(() => {
+    // Always check current auth state rather than relying on props
+    if (isClient && isAuthenticated && initialUser) {
+      safeNavigate(`/profile/${initialUser.id}`, true)
     } else {
-      router.push('/login?redirect=/post/create')
+      safeNavigate('/login?redirect=/profile', false)
     }
-  }
+  }, [safeNavigate, isAuthenticated, initialUser, isClient])
 
-  // Handle profile action - stable function  
-  const handleProfile = () => {
-    if (initialUser) {
-      router.push(`/profile/${initialUser.id}`)
-    } else {
-      router.push('/login?redirect=/profile')
-    }
-  }
+  // Handle feed navigation
+  const handleFeed = useCallback(() => {
+    safeNavigate('/feed', true)
+  }, [safeNavigate])
 
-  // Static navigation structure - no dependencies
-  const navItems = [
-    {
-      id: "feed",
-      href: "/feed", 
-      icon: LayoutList,
-      label: "Local Buzz"
-    },
-    {
-      id: "map",
-      href: "/map",
-      icon: MapPin,
-      label: "Explore"
-    },
-    {
-      id: "add",
-      icon: Plus,
-      label: "Add",
-      onClick: handleAddPost
-    },
-    {
-      id: "events", 
-      href: "/events",
-      icon: Calendar,
-      label: "Events"
-    },
-    {
-      id: "profile",
-      icon: User,
-      label: "Profile",
-      onClick: handleProfile
-    }
-  ];
+  // Handle events navigation
+  const handleEvents = useCallback(() => {
+    safeNavigate('/events', true)
+  }, [safeNavigate])
 
-  return (
-    <>
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden">
-        <div className="safe-area-bottom">
-          <div className="flex items-center justify-around h-16 px-2">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              
-              // Handle click-based navigation
-              if (item.onClick) {
-                return (
-                  <button
-                    key={item.id}
-                    onClick={item.onClick}
-                    className="flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105"
-                  >
-                    {item.id === 'add' ? (
-                      <div className="w-12 h-12 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] rounded-full flex items-center justify-center mb-1 shadow-lg hover:shadow-xl transition-all duration-200 relative">
-                        <Icon className="h-6 w-6 text-white" />
-                        <div className="absolute inset-0 rounded-full bg-white/20 animate-pulse"></div>
-                      </div>
-                    ) : item.id === 'profile' ? (
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1 transition-all duration-200 bg-gray-100 text-gray-600 hover:bg-gray-200">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                    ) : (
-                      <Icon className="h-5 w-5 mb-0.5" />
-                    )}
-                    <span className={`text-xs font-medium ${
-                      item.id === 'add' ? 'text-[#FF6B6B] font-semibold' : ''
-                    }`}>
-                      {item.label}
-                    </span>
-                  </button>
-                )
-              }
-              
-              // Handle link-based navigation
-              return (
-                <Link
-                  key={item.id}
-                  href={item.href!}
-                  className="flex flex-col items-center justify-center h-12 min-w-[60px] transition-all duration-200 text-gray-600 hover:text-[#FF6B6B] hover:scale-105"
-                >
-                  <Icon className="h-5 w-5 mb-0.5" />
-                  <span className="text-xs font-medium">{item.label}</span>
-                </Link>
-              )
-            })}
+  // Show skeleton during SSR and initial client render to prevent hydration mismatch
+  if (!isClient) {
+    return (
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden" suppressHydrationWarning={true}>
+        <div className="flex items-center justify-around h-20 px-2">
+            {/* Static skeleton that matches the final render */}
+            <div className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-400">
+              <LayoutList className="h-6 w-6 mb-1" />
+              <span className="text-xs">Local Buzz</span>
+            </div>
+            <div className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-400">
+              <MapPin className="h-6 w-6 mb-1" />
+              <span className="text-xs">Map</span>
+            </div>
+            <div className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2">
+              <div className="w-14 h-14 bg-gray-300 rounded-full flex items-center justify-center mb-1">
+                <Plus className="h-7 w-7 text-gray-500" />
+              </div>
+            </div>
+            <div className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-400">
+              <Calendar className="h-6 w-6 mb-1" />
+              <span className="text-xs">Events</span>
+            </div>
+            <div className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-400">
+              <User className="h-6 w-6 mb-1" />
+              <span className="text-xs">Profile</span>
+            </div>
           </div>
-        </div>
       </nav>
-    </>
+    )
+  }
+
+  // Client-side rendered navigation with full functionality
+  return (
+    <nav 
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 md:hidden" 
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      suppressHydrationWarning={true}
+    >
+      <div className="flex items-center justify-around h-20 px-2">
+          <button
+            onClick={handleFeed}
+            disabled={navigating === '/feed'}
+            className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-600 hover:text-[#FF6B6B] transition-colors disabled:opacity-50"
+          >
+            <LayoutList className="h-6 w-6 mb-1" />
+            <span className="text-xs">Local Buzz</span>
+          </button>
+
+          <Link
+            href="/map"
+            className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-600 hover:text-[#FF6B6B] transition-colors"
+          >
+            <MapPin className="h-6 w-6 mb-1" />
+            <span className="text-xs">Map</span>
+          </Link>
+
+          <button
+            onClick={handleAddPost}
+            disabled={navigating === '/post/create'}
+            className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-white transition-colors disabled:opacity-50"
+          >
+            <div className="w-14 h-14 bg-[#FF6B6B] rounded-full flex items-center justify-center mb-1 hover:bg-[#FF5252] transition-colors">
+              <Plus className="h-7 w-7" />
+            </div>
+          </button>
+
+          <button
+            onClick={handleEvents}
+            disabled={navigating === '/events'}
+            className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-600 hover:text-[#FF6B6B] transition-colors disabled:opacity-50"
+          >
+            <Calendar className="h-6 w-6 mb-1" />
+            <span className="text-xs">Events</span>
+          </button>
+
+          <button
+            onClick={handleProfile}
+            disabled={navigating?.startsWith('/profile')}
+            className="flex flex-col items-center justify-center h-16 min-w-[60px] px-2 text-gray-600 hover:text-[#FF6B6B] transition-colors disabled:opacity-50"
+          >
+            <User className="h-6 w-6 mb-1" />
+            <span className="text-xs">Profile</span>
+          </button>
+        </div>
+    </nav>
   )
 }

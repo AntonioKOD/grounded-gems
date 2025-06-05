@@ -430,8 +430,8 @@ const SocialMediaPost = memo(function SocialMediaPost({
         </div>
       )}
 
-      {/* Right Side Action Bar (TikTok Style) - Moved higher up for better accessibility */}
-      <div className="absolute right-2 md:right-4 bottom-40 md:bottom-44 z-20 flex flex-col gap-3 md:gap-4">
+      {/* Right Side Action Bar (TikTok Style) - Optimized for mobile content */}
+      <div className="absolute right-3 md:right-4 bottom-52 md:bottom-44 z-20 flex flex-col gap-4 md:gap-4">
         {/* Like Button */}
         <motion.button
           whileHover={{ scale: 1.1 }}
@@ -506,69 +506,78 @@ const SocialMediaPost = memo(function SocialMediaPost({
         </motion.button>
       </div>
 
-      {/* Bottom Content Area - Better mobile spacing and navigation clearance */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 p-3 md:p-6 pb-20 md:pb-6 bg-gradient-to-t from-black/90 via-black/60 to-transparent">
-        {/* Author Info */}
-        <div className="flex items-center gap-2 md:gap-3 mb-2 md:mb-3">
-          <Link href={`/profile/${post.author.id}`} className="flex items-center gap-2 md:gap-3 group/author">
+      {/* Enhanced Bottom Content Area - More space and better mobile optimization */}
+      <div className="absolute bottom-0 left-0 right-0 z-20 p-4 md:p-6 pb-24 md:pb-6 bg-gradient-to-t from-black/95 via-black/70 to-transparent min-h-[200px] md:min-h-auto">
+        {/* Title - Show if available for better content visibility */}
+        {post.title && (
+          <div className="mb-3">
+            <h2 className="text-white text-lg md:text-xl font-bold leading-tight drop-shadow-lg">
+              {post.title}
+            </h2>
+          </div>
+        )}
+
+        {/* Author Info - Enhanced for mobile */}
+        <div className="flex items-center gap-3 mb-4">
+          <Link href={`/profile/${post.author.id}`} className="flex items-center gap-3 group/author flex-1">
             <div className="relative">
-              <Avatar className="h-8 w-8 md:h-10 md:w-10 ring-2 ring-white/30 group-hover/author:ring-white/50 transition-all">
+              <Avatar className="h-10 w-10 md:h-12 md:w-12 ring-2 ring-white/30 group-hover/author:ring-white/50 transition-all">
                 <AvatarImage src={getAuthorProfileImageUrl()} alt={post.author.name} />
-                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-xs">
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold text-sm">
                   {getInitials(post.author.name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border border-black" />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 md:w-3.5 md:h-3.5 bg-green-500 rounded-full border-2 border-black" />
             </div>
-            <div>
-              <p className="font-bold text-sm md:text-base text-white drop-shadow-lg">
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-base md:text-lg text-white drop-shadow-lg truncate">
                 {post.author.name}
               </p>
-              <p className="text-xs text-white/80 drop-shadow-lg">
+              <p className="text-sm text-white/80 drop-shadow-lg">
                 {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
               </p>
             </div>
           </Link>
           {post.rating && (
-            <div className="flex items-center gap-1 ml-auto">
-              <Sparkles className="h-3 w-3 md:h-4 md:w-4 text-yellow-400" />
-              <span className="text-yellow-400 font-medium text-xs md:text-sm">{post.rating}/5</span>
+            <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 py-1.5 rounded-full">
+              <Sparkles className="h-4 w-4 text-yellow-400" />
+              <span className="text-yellow-400 font-bold text-sm">{post.rating}/5</span>
             </div>
           )}
         </div>
 
-        {/* Location */}
+        {/* Location - Enhanced visibility */}
         {post.location && (
-          <div className="flex items-center gap-2 mb-2 md:mb-3">
-            <MapPin className="h-3 w-3 md:h-4 md:w-4 text-white flex-shrink-0" />
-            <span className="text-white/90 text-xs md:text-sm font-medium truncate">
+          <div className="flex items-center gap-2 mb-4 bg-white/10 backdrop-blur-sm px-3 py-2 rounded-full w-fit">
+            <MapPin className="h-4 w-4 text-white flex-shrink-0" />
+            <span className="text-white/90 text-sm font-medium">
               {post.location.name}
             </span>
           </div>
         )}
 
-        {/* Content */}
-        <div className="mb-3 md:mb-4">
+        {/* Content - More space and better readability */}
+        <div className="mb-4">
           <p className={cn(
-            "text-white text-sm md:text-base leading-relaxed",
-            !showFullContent && post.content.length > 120 && "line-clamp-2 md:line-clamp-3"
+            "text-white text-base md:text-lg leading-relaxed drop-shadow-lg",
+            !showFullContent && post.content.length > 150 && "line-clamp-3"
           )}>
             {post.content}
           </p>
-          {post.content.length > 120 && (
+          {post.content.length > 150 && (
             <button
               onClick={() => setShowFullContent(!showFullContent)}
-              className="text-white/80 text-xs md:text-sm font-medium mt-1 hover:text-white transition-colors"
+              className="text-white/80 text-sm font-semibold mt-2 hover:text-white transition-colors bg-white/10 backdrop-blur-sm px-3 py-1 rounded-full"
             >
-              {showFullContent ? 'Show less' : 'Show more'}
+              {showFullContent ? 'Show less' : 'Read more'}
             </button>
           )}
         </div>
 
-        {/* Tags */}
+        {/* Tags - Enhanced layout */}
         {post.tags && post.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 md:gap-2 max-w-[calc(100%-80px)]">
-            {post.tags.slice(0, 3).map((tag, index) => {
+          <div className="flex flex-wrap gap-2 max-w-[calc(100%-80px)]">
+            {post.tags.slice(0, 4).map((tag, index) => {
               const tagText = typeof tag === 'object' && tag !== null && 'tag' in tag 
                 ? (tag as any).tag 
                 : typeof tag === 'string' 
@@ -578,15 +587,15 @@ const SocialMediaPost = memo(function SocialMediaPost({
               return (
                 <span 
                   key={index}
-                  className="bg-white/20 backdrop-blur-sm text-white text-xs md:text-sm px-2 md:px-3 py-1 rounded-full hover:bg-white/30 transition-colors cursor-pointer flex-shrink-0"
+                  className="bg-white/20 backdrop-blur-sm text-white text-sm px-3 py-1.5 rounded-full hover:bg-white/30 transition-colors cursor-pointer flex-shrink-0 border border-white/20"
                 >
                   #{tagText}
                 </span>
               )
             })}
-            {post.tags.length > 3 && (
-              <span className="text-white/60 text-xs md:text-sm px-2 py-1">
-                +{post.tags.length - 3} more
+            {post.tags.length > 4 && (
+              <span className="text-white/60 text-sm px-3 py-1.5 bg-white/10 rounded-full">
+                +{post.tags.length - 4}
               </span>
             )}
           </div>

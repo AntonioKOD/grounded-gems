@@ -45,5 +45,78 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	
+	<!-- Privacy Usage Descriptions (Required for iOS 14+) -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app uses the camera to capture photos of local gems and hidden locations to share with the community.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app accesses your photo library to select images of local gems and locations to share with other users.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to discover nearby hidden gems and local attractions.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app uses your location to discover nearby hidden gems and provide location-based recommendations.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app uses the microphone to record audio for posts and stories about local gems.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>This app accesses your contacts to help you find and invite friends to discover local gems together.</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>This app uses tracking to provide personalized recommendations for local gems and improve your experience.</string>
+	
+	<!-- Network Security Configuration -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.0</string>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<false/>
+			</dict>
+			<key>groundedgems.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	
+	<!-- WebView and Capacitor Configuration -->
+	<key>WKAppBoundDomains</key>
+	<array>
+		<string>localhost</string>
+		<string>groundedgems.com</string>
+		<string>capacitorjs.com</string>
+	</array>
+	
+	<!-- Prevent App Store Connect API issues -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	
+	<!-- Enable background app refresh -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>background-fetch</string>
+		<string>background-processing</string>
+	</array>
+	
+	<!-- Support for modern iOS features -->
+	<key>UISupportsDocumentBrowser</key>
+	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>
