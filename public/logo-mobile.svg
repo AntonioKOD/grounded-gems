@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style="shape-rendering:geometricPrecision;">
+  <!-- Simplified background circle -->
+  <circle cx="256" cy="256" r="220" fill="#FF6B6B" opacity="0.1"/>
+  
+  <!-- Main gem shape -->
+  <path d="M256 120L320 200L280 350L232 350L192 200Z" fill="#FF6B6B" stroke="#4ECDC4" stroke-width="4"/>
+  
+  <!-- Highlight -->
+  <path d="M256 120L300 180L270 220L226 220L196 180Z" fill="#4ECDC4" opacity="0.8"/>
+  
+  <!-- Center sparkle -->
+  <circle cx="256" cy="200" r="8" fill="white" opacity="0.9"/>
+  <circle cx="280" cy="240" r="4" fill="white" opacity="0.7"/>
+  <circle cx="232" cy="240" r="4" fill="white" opacity="0.7"/>
+  
+  <!-- Simple text indicator (can be removed for pure icon) -->
+  <text x="256" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="32" font-weight="bold" fill="#FF6B6B">GG</text>
+</svg> 

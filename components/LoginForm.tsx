@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
+import { MobileAuthService } from "@/lib/mobile-auth"
+import { Capacitor } from '@capacitor/core'
 
 // Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
@@ -91,10 +93,24 @@ const LoginForm = memo(function LoginForm() {
       const loginResponse = await loginUser(formData)
       console.log("Login API response received:", loginResponse.success)
       
+      // Save auth data to mobile storage if on native platform
+      if (Capacitor.isNativePlatform() && loginResponse.token) {
+        try {
+          await MobileAuthService.saveAuthToken(loginResponse.token)
+          if (loginResponse.user) {
+            await MobileAuthService.saveUserData(loginResponse.user)
+          }
+          await MobileAuthService.saveRememberMe(formData.rememberMe)
+          console.log("Auth data saved to mobile storage")
+        } catch (error) {
+          console.error("Failed to save auth data to mobile storage:", error)
+        }
+      }
+      
       // If the login response includes user data, preload it immediately
       if (loginResponse.user) {
         console.log("Login successful, preloading user data:", loginResponse.user)
-        preloadUser(loginResponse.user)
+        await preloadUser(loginResponse.user)
         
         // Dispatch events immediately for instant UI updates
         window.dispatchEvent(new CustomEvent("user-login", { detail: loginResponse.user }))

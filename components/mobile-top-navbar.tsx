@@ -18,7 +18,16 @@ export default function MobileTopNavbar({ initialUser }: MobileTopNavbarProps) {
     <nav className="fixed top-0 left-4 right-4 mt-2 z-50 bg-white/95 backdrop-blur-xl border border-gray-200/50 rounded-2xl shadow-lg h-14 flex items-center px-4 md:hidden">
       {/* Logo - optimized for smaller space */}
       <Link href="/" className="flex items-center h-full">
-        <Image src="/logo.svg" alt="Logo" width={36} height={36} className="h-9 w-9" />
+        <div className="relative w-9 h-9 flex items-center justify-center bg-gradient-to-br from-[#FF6B6B]/10 to-[#4ECDC4]/10 rounded-lg">
+          <Image 
+            src="/logo-mobile.svg" 
+            alt="Grounded Gems" 
+            width={36} 
+            height={36} 
+            className="w-full h-full object-contain"
+            priority
+          />
+        </div>
       </Link>
       
       {/* Spacer */}

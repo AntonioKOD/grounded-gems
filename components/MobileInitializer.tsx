@@ -28,9 +28,31 @@ export default function MobileInitializer() {
         if (window.Capacitor) {
           console.log('[MobileInit] Capacitor detected, initializing mobile utilities...');
           
-          const { initializeIOSErrorMonitoring, hideSplashScreen } = await import('@/lib/capacitor-utils');
+          // Import Capacitor modules
+          const { Capacitor } = await import('@capacitor/core');
+          const { StatusBar, Style } = await import('@capacitor/status-bar');
+          const { SplashScreen } = await import('@capacitor/splash-screen');
+          const { App as CapacitorApp } = await import('@capacitor/app');
+          
+          const { initializeIOSErrorMonitoring } = await import('@/lib/capacitor-utils');
           const { initializeIOSAuthMonitoring } = await import('@/lib/ios-auth-helper');
           const { initializeHydrationMonitoring } = await import('@/lib/hydration-debug');
+          const { MobileNotificationService } = await import('@/lib/mobile-notifications');
+
+          // Initialize status bar first
+          try {
+            if (Capacitor.isNativePlatform()) {
+              await StatusBar.setStyle({ style: Style.Light });
+              await StatusBar.setBackgroundColor({ color: '#FF6B6B' });
+              await StatusBar.show();
+              console.log('✅ [MobileInit] Status bar configured.');
+            }
+          } catch (error) {
+            console.warn('⚡️ [warn] - Failed to configure status bar:', {
+              message: error?.message || 'Unknown error',
+              type: typeof error
+            });
+          }
 
           // Initialize with additional safety checks
           try {
@@ -69,9 +91,59 @@ export default function MobileInitializer() {
             });
           }
 
+          // Initialize mobile notifications
           try {
-            if (typeof hideSplashScreen === 'function') {
-              hideSplashScreen();
+            const notificationService = MobileNotificationService.getInstance();
+            await notificationService.initialize();
+            console.log('✅ [MobileInit] Mobile notifications initialized.');
+          } catch (error) {
+            console.warn('⚡️ [warn] - Failed to initialize mobile notifications:', {
+              message: error?.message || 'Unknown error',
+              type: typeof error
+            });
+          }
+
+          // Handle app state changes
+          try {
+            const handleAppStateChange = async (state: { isActive: boolean }) => {
+              console.log('App state changed:', state.isActive ? 'foreground' : 'background');
+              
+              if (state.isActive && Capacitor.isNativePlatform()) {
+                // App came to foreground
+                try {
+                  await StatusBar.setStyle({ style: Style.Light });
+                  await StatusBar.setBackgroundColor({ color: '#FF6B6B' });
+                  await StatusBar.show();
+                } catch (error) {
+                  console.error('Failed to update status bar on foreground:', error);
+                }
+              }
+            };
+
+            const appStateListener = CapacitorApp.addListener('appStateChange', handleAppStateChange);
+            
+            // Store cleanup function for later
+            (window as any).__mobileInitCleanup = () => {
+              appStateListener.remove();
+            };
+
+            console.log('✅ [MobileInit] App state listeners registered.');
+          } catch (error) {
+            console.warn('⚡️ [warn] - Failed to register app state listeners:', {
+              message: error?.message || 'Unknown error',
+              type: typeof error
+            });
+          }
+
+          // Hide splash screen after initialization
+          try {
+            // Wait a bit for everything to be ready
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            if (Capacitor.isNativePlatform()) {
+              await SplashScreen.hide({
+                fadeOutDuration: 300
+              });
               console.log('✅ [MobileInit] Splash screen hidden.');
             }
           } catch (error) {
@@ -80,6 +152,7 @@ export default function MobileInitializer() {
               type: typeof error
             });
           }
+
         } else {
           console.log('[MobileInit] Running in web mode, initializing web-only utilities...');
           
@@ -99,18 +172,33 @@ export default function MobileInitializer() {
         }
 
         setInitialized(true);
+        
+        // Signal that mobile initialization is complete
+        (window as any).__mobileInitComplete = true;
+        console.log('✅ [MobileInit] Mobile initialization complete.');
+        
       } catch (importError) {
         console.error('⚡️ [error] - Failed to import mobile utilities:', {
           message: importError?.message || 'Unknown import error',
           type: typeof importError
         });
+        
+        // Still signal completion to prevent hanging
+        (window as any).__mobileInitComplete = true;
       }
     };
 
     // Add extra delay to ensure full hydration completion
     const timeoutId = setTimeout(initializeMobileUtils, 500);
     
-    return () => clearTimeout(timeoutId);
+    return () => {
+      clearTimeout(timeoutId);
+      // Cleanup listeners if they exist
+      if ((window as any).__mobileInitCleanup) {
+        (window as any).__mobileInitCleanup();
+        delete (window as any).__mobileInitCleanup;
+      }
+    };
   }, [isClient, initialized]);
 
   // Don't render anything during SSR to prevent hydration mismatches

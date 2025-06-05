@@ -22,6 +22,7 @@ import { LocationInteractions } from './collections/LocationInteractions'
 import { MatchmakingSessions } from './collections/MatchmakingSessions'
 import { Journeys } from './collections/Journeys'
 import { BucketLists } from './collections/BucketLists'
+import { DeviceTokens } from './collections/DeviceTokens'
 
 export default buildConfig({
   
@@ -109,5 +110,6 @@ export default buildConfig({
     MatchmakingSessions,
     Journeys,
     BucketLists,
+    DeviceTokens,
   ],
 })

@@ -16,16 +16,14 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 3000, // Increased for better loading
-      backgroundColor: '#ffffff',
+      launchShowDuration: 2000, // Reduced for faster app start
+      backgroundColor: '#FF6B6B',
       androidScaleType: 'CENTER_CROP',
-      showSpinner: true, // Show spinner for better UX
-      spinnerStyle: 'small',
-      spinnerColor: '#FF6B6B',
+      showSpinner: false, // Disable spinner to prevent conflicts
       splashFullScreen: true,
       splashImmersive: true,
       // Auto-hide after timeout to prevent hanging
-      launchAutoHide: true
+      launchAutoHide: false // We'll control this manually
     },
     StatusBar: {
       style: 'dark',
@@ -50,6 +48,11 @@ const config: CapacitorConfig = {
     },
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert']
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_icon_config_sample',
+      iconColor: '#FF6B6B',
+      sound: 'beep.wav',
     },
     // Enhanced WebView settings for iOS
     CapacitorWebView: {

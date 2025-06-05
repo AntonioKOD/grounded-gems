@@ -24,6 +24,8 @@ PODS:
     - Capacitor
   - CapacitorNetwork (7.0.1):
     - Capacitor
+  - CapacitorPreferences (7.0.1):
+    - Capacitor
   - CapacitorPushNotifications (7.0.1):
     - Capacitor
   - CapacitorShare (7.0.1):
@@ -50,6 +52,7 @@ DEPENDENCIES:
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
   - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
   - "CapacitorNetwork (from `../../node_modules/@capacitor/network`)"
+  - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
@@ -86,6 +89,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/local-notifications"
   CapacitorNetwork:
     :path: "../../node_modules/@capacitor/network"
+  CapacitorPreferences:
+    :path: "../../node_modules/@capacitor/preferences"
   CapacitorPushNotifications:
     :path: "../../node_modules/@capacitor/push-notifications"
   CapacitorShare:
@@ -110,6 +115,7 @@ SPEC CHECKSUMS:
   CapacitorKeyboard: 09fd91dcde4f8a37313e7f11bde553ad1ed52036
   CapacitorLocalNotifications: c2212755b33d2513b8bb325096ce3a64d4039ae3
   CapacitorNetwork: 15cb4385f0913a8ceb5e9a4d7af1ec554bdb8de8
+  CapacitorPreferences: 6c98117d4d7508034a4af9db64d6b26fc75d7b94
   CapacitorPushNotifications: 6a2794788c583dd89215f1805ca4bced1b13dbdf
   CapacitorShare: e573823f511f260f598d0423c33b1e3d7bbe5fd1
   CapacitorSplashScreen: 1d67815a422a9b61539c94f283c08ed56667c0fc
@@ -118,6 +124,6 @@ SPEC CHECKSUMS:
   IONFilesystemLib: ceacae793975039530458eabab0c495c70515a0d
   IONGeolocationLib: 81f33f88d025846946de2cf63b0c7628e7c6bc9d
 
-PODFILE CHECKSUM: 5597ce619f5c70324b4f578ddef3be3463121489
+PODFILE CHECKSUM: 31977a3718ca88b767ececee314ab7364a99e625
 
 COCOAPODS: 1.16.2

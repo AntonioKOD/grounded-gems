@@ -141,6 +141,7 @@ export default function NavBar({ initialUser }: NavBarProps) {
                     className="w-full h-full object-contain"
                     width={32}
                     height={32}
+                    priority
                   />
                 </div>
               </div>

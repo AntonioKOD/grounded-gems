@@ -3,6 +3,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { logoutUser } from "@/lib/auth"
+import { MobileAuthService, type StoredUserData } from "@/lib/mobile-auth"
+import { Capacitor } from '@capacitor/core'
 
 export interface UserData {
   id: string
@@ -126,13 +128,44 @@ export function UserProvider({
     [initialUser, user, isInitialized],
   )
 
-  // More aggressive initial fetch - fetch immediately on mount
+  // Enhanced initial fetch with mobile auth restoration
   useEffect(() => {
-    // Always try to fetch user data on mount, even if we have initial user
-    if (!fetchAttempted) {
-      // Fetch immediately without delay
-      fetchUser({ force: true })
+    const initializeUser = async () => {
+      // For mobile platforms, try to restore user session first
+      if (Capacitor.isNativePlatform() && !fetchAttempted) {
+        try {
+          const { userData, shouldAutoLogin } = await MobileAuthService.restoreUserSession()
+          
+          if (shouldAutoLogin && userData) {
+            console.log("Restoring user session from mobile storage")
+            setUser(userData as UserData)
+            setIsLoading(false)
+            setIsInitialized(true)
+            setFetchAttempted(true)
+            
+            // Dispatch events for other components
+            window.dispatchEvent(new CustomEvent("user-updated", { detail: userData }))
+            
+            // Verify session with server in background
+            setTimeout(() => {
+              fetchUser({ force: true, silent: true })
+            }, 1000)
+            
+            return
+          }
+        } catch (error) {
+          console.error("Failed to restore mobile session:", error)
+        }
+      }
+      
+      // Always try to fetch user data on mount, even if we have initial user
+      if (!fetchAttempted) {
+        // Fetch immediately without delay
+        fetchUser({ force: true })
+      }
     }
+    
+    initializeUser()
   }, [fetchUser, fetchAttempted])
 
   // Also try to fetch user data when the page becomes visible (user switches tabs)
@@ -160,12 +193,23 @@ export function UserProvider({
   }, [fetchUser, isInitialized])
 
   // Preload user function for instant updates after login
-  const preloadUser = useCallback((userData: UserData) => {
+  const preloadUser = useCallback(async (userData: UserData) => {
     console.log("Preloading user data:", userData)
     setUser(userData)
     setIsLoading(false)
     setIsInitialized(true)
     setFetchAttempted(true)
+    
+    // Save to mobile storage if on native platform
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await MobileAuthService.saveUserData(userData as StoredUserData)
+        await MobileAuthService.saveRememberMe(true)
+        console.log("User data saved to mobile storage")
+      } catch (error) {
+        console.error("Failed to save user data to mobile storage:", error)
+      }
+    }
     
     // Dispatch custom event for other components
     window.dispatchEvent(new CustomEvent("user-updated", { detail: userData }))
@@ -197,6 +241,16 @@ export function UserProvider({
       const success = await logoutUser()
 
       if (success) {
+        // Clear mobile storage if on native platform
+        if (Capacitor.isNativePlatform()) {
+          try {
+            await MobileAuthService.clearAuthData()
+            console.log("Mobile auth data cleared")
+          } catch (error) {
+            console.error("Failed to clear mobile auth data:", error)
+          }
+        }
+        
         setUser(null)
         setIsInitialized(true)
         setFetchAttempted(false)
