@@ -248,11 +248,21 @@ function ImageGallery({
 // Enhanced location info with better mobile layout
 function LocationInfo({ location }: { location: Location }) {
   const formatPhone = (phone: string) => {
-    return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+    try {
+      return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
+    } catch (error) {
+      console.warn('Error formatting phone number:', error)
+      return phone
+    }
   }
 
   const formatWebsite = (website: string) => {
-    return website.replace(/^https?:\/\/(www\.)?/, "")
+    try {
+      return website.replace(/^https?:\/\/(www\.)?/, "")
+    } catch (error) {
+      console.warn('Error formatting website:', error)
+      return website
+    }
   }
 
   const getBusinessStatus = () => {
@@ -1545,19 +1555,39 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Wait for component to mount before rendering portal
+  useEffect(() => {
+    setMounted(true)
+    return () => {
+      setMounted(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (isOpen && location) {
+    if (isOpen && location && mounted) {
+      setError(null) // Clear any previous errors
       fetchCurrentUser()
       fetchReviews()
     }
-  }, [isOpen, location])
+  }, [isOpen, location, mounted])
 
   useEffect(() => {
     if (user) {
       fetchUserBucketLists()
     }
   }, [user])
+
+  // Handle cleanup when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setError(null)
+      setIsBucketModalOpen(false)
+      setIsWriteReviewModalOpen(false)
+    }
+  }, [isOpen])
 
   const fetchCurrentUser = async () => {
     try {
@@ -1570,6 +1600,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
       }
     } catch (error) {
       console.error('Error fetching current user:', error)
+      // Don't set error state for user fetch failure as it's optional
     }
   }
 
@@ -1584,9 +1615,12 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
       if (response.ok) {
         const data = await response.json()
         setUserBucketLists(data.bucketLists || [])
+      } else {
+        console.error('Failed to fetch bucket lists:', response.status)
       }
     } catch (error) {
       console.error('Error fetching bucket lists:', error)
+      // Don't set error state as bucket lists are not critical for viewing location details
     } finally {
       setIsLoadingBucketLists(false)
     }
@@ -1603,9 +1637,12 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
         setReviewItems(data.reviews || [])
       } else {
         console.error('Failed to fetch reviews:', response.status)
+        // Set empty reviews array instead of error to allow modal to still display
+        setReviewItems([])
       }
     } catch (error) {
       console.error('Error fetching reviews:', error)
+      setReviewItems([]) // Set empty array instead of error
     } finally {
       setIsLoadingReviews(false)
     }
@@ -1674,30 +1711,94 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
   }
 
+  // Don't render if not mounted (prevents SSR issues)
+  if (!mounted) return null
+  
+  // Don't render if no location
   if (!location) return null
 
-  const getImageUrl = (loc: Location): string => {
-    if (typeof loc.featuredImage === 'string') {
-      return loc.featuredImage
-    } else if (loc.featuredImage?.url) {
-      return loc.featuredImage.url
-    } else if (loc.imageUrl) {
-      return loc.imageUrl
-    }
-    return '/placeholder.svg'
+  // Handle errors gracefully
+  if (error) {
+    return createPortal(
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
+              onClick={onClose}
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed inset-x-0 bottom-0 top-0 bg-white z-[9999] overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b">
+                <h1 className="text-lg font-bold text-gray-900">Error</h1>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onClose}
+                  className="hover:bg-gray-100 text-gray-600 rounded-full h-10 w-10"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+              <div className="flex-1 flex items-center justify-center p-8">
+                <div className="text-center">
+                  <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
+                  <p className="text-gray-600 mb-6">{error}</p>
+                  <Button onClick={onClose} className="bg-[#ff6b6b] text-white">
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>,
+      document.body
+    )
   }
 
-  const galleryImages = location.gallery?.map(g => 
-    typeof g.image === 'string' ? g.image : g.image?.url || ''
-  ).filter(Boolean) || [getImageUrl(location)]
-
-  if (location.featuredImage) {
-    const featuredUrl = typeof location.featuredImage === 'string' 
-      ? location.featuredImage 
-      : location.featuredImage.url
-    if (featuredUrl && !galleryImages.includes(featuredUrl)) {
-      galleryImages.unshift(featuredUrl)
+  const getImageUrl = (loc: Location): string => {
+    try {
+      if (typeof loc.featuredImage === 'string') {
+        return loc.featuredImage
+      } else if (loc.featuredImage?.url) {
+        return loc.featuredImage.url
+      } else if (loc.imageUrl) {
+        return loc.imageUrl
+      }
+      return '/placeholder.svg'
+    } catch (error) {
+      console.warn('Error getting image URL:', error)
+      return '/placeholder.svg'
     }
+  }
+
+  let galleryImages: string[] = []
+  try {
+    galleryImages = location.gallery?.map(g => 
+      typeof g.image === 'string' ? g.image : g.image?.url || ''
+    ).filter(Boolean) || [getImageUrl(location)]
+
+    if (location.featuredImage) {
+      const featuredUrl = typeof location.featuredImage === 'string' 
+        ? location.featuredImage 
+        : location.featuredImage.url
+      if (featuredUrl && !galleryImages.includes(featuredUrl)) {
+        galleryImages.unshift(featuredUrl)
+      }
+    }
+  } catch (error) {
+    console.warn('Error processing gallery images:', error)
+    galleryImages = ['/placeholder.svg']
   }
 
   return createPortal(

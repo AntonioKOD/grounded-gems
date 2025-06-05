@@ -14,6 +14,7 @@ import SafeAreaManager from '@/components/SafeAreaManager'
 import HydrationErrorFixer from '@/components/HydrationErrorFixer'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import AppLoadingScreen from '@/components/AppLoadingScreen'
+import AppLifecycleManager from '@/components/AppLifecycleManager'
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -44,6 +45,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           <MobileInitializer />
           <SafeAreaManager />
           <HydrationErrorFixer />
+          <AppLifecycleManager />
         </StoreProvider>
       </ErrorBoundary>
 
