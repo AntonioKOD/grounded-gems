@@ -452,4 +452,101 @@ export const capacitorUtils = {
   errorHandler: IOSErrorHandler.getInstance(),
   initializeIOSErrorMonitoring,
   monitorIOSHistoryUsage
-}; 
+};
+
+export const isCapacitorApp = (): boolean => {
+  // Server-side rendering check
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  try {
+    return Capacitor.isNativePlatform()
+  } catch {
+    // Fallback detection
+    return window.navigator.userAgent.includes('Capacitor') ||
+           window.navigator.userAgent.includes('GroundedGems')
+  }
+}
+
+export const getServerUrl = (): string => {
+  // Server-side rendering check
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
+  }
+
+  // For Capacitor apps, use the production server
+  if (isCapacitorApp()) {
+    return 'https://groundedgems.com'
+  }
+  
+  // For web browsers, use current origin
+  return window.location.origin
+}
+
+export const createApiUrl = (path: string): string => {
+  const serverUrl = getServerUrl()
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  return `${serverUrl}${cleanPath}`
+}
+
+export const fetchWithCapacitorSupport = async (
+  url: string, 
+  options?: RequestInit
+): Promise<Response> => {
+  // Ensure we're using the correct server URL for API calls
+  const fullUrl = url.startsWith('http') ? url : createApiUrl(url)
+  
+  const defaultOptions: RequestInit = {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(isCapacitorApp() && {
+        'User-Agent': 'GroundedGems/1.0 Capacitor'
+      }),
+      ...options?.headers
+    }
+  }
+
+  return fetch(fullUrl, { ...defaultOptions, ...options })
+}
+
+export const initializeCapacitorApp = async (): Promise<void> => {
+  if (!isCapacitorApp()) return
+
+  try {
+    const { SplashScreen } = await import('@capacitor/splash-screen')
+    const { StatusBar } = await import('@capacitor/status-bar')
+    const { App } = await import('@capacitor/app')
+
+    // Initialize essential plugins only
+    const { Style } = await import('@capacitor/status-bar')
+    await Promise.all([
+      StatusBar.setStyle({ style: Style.Dark }),
+      StatusBar.setBackgroundColor({ color: '#ffffff' })
+    ])
+
+    // Hide splash screen after app is ready
+    setTimeout(async () => {
+      await SplashScreen.hide()
+    }, 500)
+
+    // Handle app state changes
+    App.addListener('appStateChange', ({ isActive }) => {
+      console.log('App state changed. Is active?', isActive)
+    })
+
+    // Handle back button on Android
+    App.addListener('backButton', ({ canGoBack }) => {
+      if (!canGoBack) {
+        App.exitApp()
+      } else {
+        window.history.back()
+      }
+    })
+
+    console.log('Capacitor app initialized successfully')
+  } catch (error) {
+    console.error('Error initializing Capacitor app:', error)
+  }
+} 

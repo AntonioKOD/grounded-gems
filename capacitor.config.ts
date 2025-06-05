@@ -5,22 +5,28 @@ const config: CapacitorConfig = {
   appName: 'Grounded Gems',
   webDir: 'public',
   server: {
+    // Use the actual production server URL, not localhost
+    url: process.env.NODE_ENV === 'production' 
+      ? 'https://groundedgems.com' 
+      : 'http://localhost:3000',
+    cleartext: true, // Allow HTTP in development
     androidScheme: 'https',
-    iosScheme: 'ionic', // Use ionic scheme for better iOS performance
-    hostname: 'localhost', // Use localhost for better mobile performance
-    cleartext: true, // Allow for better local development
-    // iOS-specific optimizations
-    errorPath: '/login' // Redirect errors to login instead of index
+    iosScheme: 'capacitor', // Use capacitor scheme for reliability
+    // Only use hostname and errorPath for local development
+    ...(process.env.NODE_ENV !== 'production' && {
+      hostname: 'localhost',
+      errorPath: '/login'
+    })
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 500, // Very fast for iOS performance
+      launchShowDuration: 500,
       backgroundColor: '#FF6B6B',
       androidScaleType: 'CENTER_CROP',
-      showSpinner: false, // No spinner for faster performance
+      showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
-      launchAutoHide: true, // Auto-hide for faster startup
+      launchAutoHide: true,
       fadeOutDuration: 200
     },
     StatusBar: {
@@ -31,9 +37,8 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: 'body',
       style: 'dark',
-      resizeOnFullScreen: true, // iOS specific
-      accessoryBarVisible: false // Hide accessory bar on iOS
-      // Enhanced keyboard handling for iOS
+      resizeOnFullScreen: true,
+      accessoryBarVisible: false,
       disableScroll: false
     },
     Camera: {
@@ -41,7 +46,6 @@ const config: CapacitorConfig = {
     },
     Geolocation: {
       permissions: ['location'],
-      // Enhanced geolocation settings
       timeout: 10000,
       enableHighAccuracy: true
     },
@@ -53,48 +57,43 @@ const config: CapacitorConfig = {
       iconColor: '#FF6B6B',
       sound: 'beep.wav',
     },
-    // Enhanced WebView settings for iOS
+    // Simplified WebView settings
     CapacitorWebView: {
       allowsInlineMediaPlayback: true,
-      allowsBackForwardNavigationGestures: true,
+      allowsBackForwardNavigationGestures: false, // Disable to prevent web redirects
       allowMultipleWindows: false,
       enableViewportScale: true,
       allowsLinkPreview: false,
-      overrideUserAgent: 'GroundedGems/1.0.0 (iOS; Mobile App)',
-      appendUserAgent: 'GroundedGems'
+      appendUserAgent: 'GroundedGems/1.0 Capacitor'
     }
   },
   ios: {
     contentInset: 'automatic',
     scrollEnabled: true,
     backgroundColor: '#ffffff',
-    // Enhanced iOS WebView configuration
-    scheme: 'https',
-    hostname: 'groundedgems.com',
-    // Better WebView settings for iOS
+    // Use capacitor scheme for iOS to prevent web redirects
+    scheme: 'capacitor',
+    // Remove conflicting hostname - let server.url handle this
     webViewConfiguration: {
-      allowsInlineMediaPlaybook: true,
+      allowsInlineMediaPlayback: true,
       allowsAirPlayForMediaPlayback: true,
       allowsPictureInPictureMediaPlayback: true,
       suppressesIncrementalRendering: false,
-      allowsBackForwardNavigationGestures: true,
+      allowsBackForwardNavigationGestures: false, // Prevent unwanted navigation
       allowsLinkPreview: false,
       mediaTypesRequiringUserActionForPlayback: []
     },
-    // Network and security settings
-    appendUserAgent: 'GroundedGems iOS',
+    appendUserAgent: 'GroundedGems iOS Capacitor',
     overrideUserAgent: false,
-    // Handle navigation errors gracefully
     handleApplicationURL: true,
-    // Privacy and tracking settings
-    limitsNavigationsToAppBoundDomains: true
+    // Allow app-bound domains for the server
+    limitsNavigationsToAppBoundDomains: false // Allow server connections
   },
   android: {
     backgroundColor: '#ffffff',
     allowMixedContent: true,
     webContentsDebuggingEnabled: true,
-    // Enhanced Android settings
-    appendUserAgent: 'GroundedGems Android',
+    appendUserAgent: 'GroundedGems Android Capacitor',
     overrideUserAgent: false,
     useLegacyBridge: false
   }

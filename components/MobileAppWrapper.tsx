@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { useRouter } from 'next/navigation'
+import { isCapacitorApp, initializeCapacitorApp } from '../lib/capacitor-utils'
 
 interface MobileAppWrapperProps {
   children: React.ReactNode
@@ -11,11 +12,17 @@ interface MobileAppWrapperProps {
 export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
   const [isReady, setIsReady] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
   const router = useRouter()
   const initRef = useRef(false)
 
+  // Prevent SSR issues
   useEffect(() => {
-    if (initRef.current) return
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isMounted || initRef.current) return
     initRef.current = true
 
     const initMobileApp = async () => {
@@ -26,9 +33,9 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
 
         console.log('🚀 [MobileApp] Initializing...', { platform })
 
-        if (Capacitor.isNativePlatform()) {
-          // Fast mobile-specific initialization
-          await initializeCapacitorPlugins()
+        if (isCapacitorApp()) {
+          // Use the new Capacitor utilities
+          await initializeCapacitorApp()
           await handleAuthState()
         }
 
@@ -43,49 +50,13 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
     }
 
     initMobileApp()
-  }, [])
+  }, [isMounted])
 
-  const initializeCapacitorPlugins = async () => {
-    try {
-      // Only initialize essential plugins
-      const [
-        { SplashScreen },
-        { StatusBar, Style },
-        { App }
-      ] = await Promise.all([
-        import('@capacitor/splash-screen'),
-        import('@capacitor/status-bar'),
-        import('@capacitor/app')
-      ])
 
-      // Hide splash screen immediately for faster perceived performance
-      await SplashScreen.hide({ fadeOutDuration: 100 })
-
-      // Set status bar quickly
-      if (isIOS) {
-        await StatusBar.setStyle({ style: Style.Dark })
-        await StatusBar.setBackgroundColor({ color: '#FF6B6B' })
-      }
-
-      // Handle app state changes efficiently
-      App.addListener('appStateChange', (state) => {
-        console.log('📱 App state:', state.isActive ? 'foreground' : 'background')
-        
-        if (!state.isActive) {
-          // Clean up when going to background
-          console.log('🧹 Cleaning up for background')
-        }
-      })
-
-      console.log('🔌 Capacitor plugins initialized')
-    } catch (error) {
-      console.error('🔌 Plugin init error:', error)
-    }
-  }
 
   const handleAuthState = async () => {
     try {
-      // Quick auth check without heavy operations
+      // Quick auth check with simple fetch
       const response = await fetch('/api/users/me', {
         credentials: 'include',
         signal: AbortSignal.timeout(3000) // 3 second timeout
@@ -119,8 +90,13 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
     }
   }
 
+  // Prevent flash during SSR
+  if (!isMounted) {
+    return <>{children}</>
+  }
+
   // Show minimal loading for mobile apps
-  if (!isReady && Capacitor.isNativePlatform()) {
+  if (!isReady && isCapacitorApp()) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#ff6b6b] to-[#4ecdc4]">
         <div className="text-center">

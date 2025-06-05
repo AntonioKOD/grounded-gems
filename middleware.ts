@@ -1,10 +1,13 @@
-// middleware.ts - Mobile-Optimized, Minimal Redirects
+// middleware.ts - Capacitor Mobile App Optimized
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const userAgent = request.headers.get('user-agent') || ''
+  
+  // Detect Capacitor mobile apps specifically
+  const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('GroundedGems')
   const isMobile = /Mobile|Android|iOS|iPhone|iPad/.test(userAgent)
   
   // Skip middleware for all static resources and API routes
@@ -21,24 +24,36 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // For mobile apps (Capacitor), minimize server-side redirects
-  // Let the client handle navigation and authentication
-  if (isMobile || request.headers.get('sec-fetch-dest') === 'document') {
-    // Only redirect root path, let client handle auth state
+  // For Capacitor apps, absolutely NO redirects except for root
+  // This prevents the app from opening external browser
+  if (isCapacitorApp) {
+    // Only handle the root path, let client handle everything else
     if (pathname === '/') {
-      // Default to login page, let client redirect if authenticated
+      // Simple redirect to login, no auth checking
       return NextResponse.redirect(new URL('/login', request.url))
     }
     
-    // For all other routes, let them load and handle auth client-side
+    // For all other routes in Capacitor, let them load directly
+    // The client-side will handle authentication and navigation
     return NextResponse.next()
   }
 
-  // For web browsers, minimal auth checking
+  // For mobile browsers (not Capacitor), be more permissive
+  if (isMobile) {
+    // Only redirect root path
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    
+    // Let mobile browsers load routes naturally
+    return NextResponse.next()
+  }
+
+  // For desktop web browsers, minimal auth checking
   const authCookie = request.cookies.get('payload-token')
   const isAuthenticated = !!authCookie?.value
 
-  // Only handle root path redirects
+  // Only handle root path redirects for web
   if (pathname === '/') {
     if (isAuthenticated) {
       return NextResponse.redirect(new URL('/feed', request.url))
@@ -54,7 +69,7 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match only essential paths, exclude more static resources
+     * Match only essential paths, exclude static resources
      */
     '/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|media|admin|.*\\..*).*)',
   ],
