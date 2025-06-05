@@ -182,7 +182,13 @@ export default function OptimizedImage({
     
     // Use unoptimized for external URLs to avoid Next.js optimization issues
     // Be more aggressive - unoptimize any non-local URL
-    if (src.includes('://') && !src.includes('localhost')) {
+    // For iOS and Capacitor apps, consider any non-production domain as external
+    const isLocalUrl = src.includes('localhost') || 
+                      src.includes('127.0.0.1') || 
+                      src.includes('192.168.') ||
+                      src.includes('10.0.')
+    
+    if (src.includes('://') && !isLocalUrl && !src.includes('groundedgems.com')) {
       console.log('🖼️ OptimizedImage: Using unoptimized for external URL:', src)
       return true
     }

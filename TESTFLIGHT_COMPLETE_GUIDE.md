@@ -142,7 +142,8 @@ The app uses standard iOS permissions:
 
 BACKGROUND MODES:
 - fetch (for background content updates)
-- processing (for background data processing)
+
+Note: The 'processing' background mode was removed as it requires additional BGTaskSchedulerPermittedIdentifiers configuration and is typically only needed for apps performing longer-running background tasks using iOS 13+'s BGTaskScheduler.
 
 All user-generated content is moderated. No sensitive or inappropriate content is allowed.
 ```
@@ -240,3 +241,21 @@ Your app is now configured for TestFlight! Following the [official Apple TestFli
 ✅ **Get valuable feedback before launch**  
 
 **Need help?** Reference the [App Store Connect Help](https://developer.apple.com/help/app-store-connect/test-a-beta-version/testflight-overview) for detailed guidance on each step. 
+
+### iOS Network Configuration
+
+The app has been optimized for iOS with the following fixes:
+
+**Localhost Resolution Issues Fixed:**
+- All API calls now automatically use production URLs when running in iOS
+- Capacitor detection ensures mobile apps never attempt localhost connections
+- Comprehensive URL utility functions handle environment detection
+- Image optimization configured for iOS WebView compatibility
+
+**Technical Implementation:**
+- `lib/config.ts` - Centralized configuration for iOS compatibility
+- `lib/utils.ts` - Enhanced URL resolution for mobile apps
+- `lib/capacitor-utils.ts` - Mobile-specific API request handling
+- Background mode configuration optimized for App Store validation
+
+All user-generated content is moderated. No sensitive or inappropriate content is allowed. 

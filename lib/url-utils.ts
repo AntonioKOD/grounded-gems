@@ -1,6 +1,7 @@
 /**
  * Safe URL utilities for production environments
  * Handles URL construction failures gracefully
+ * Enhanced for iOS and Capacitor apps
  */
 
 /**
@@ -18,10 +19,23 @@ export function safeCreateURL(path: string, base?: string): URL | null {
 
 /**
  * Get the production base URL with fallbacks
+ * Enhanced for iOS and mobile Capacitor apps
  */
 export function getProductionBaseUrl(): string {
   // Client-side
   if (typeof window !== 'undefined') {
+    // Check if we're in a Capacitor app (iOS/Android)
+    const isCapacitor = window.location.protocol === 'capacitor:' || 
+                       window.location.protocol === 'ionic:' ||
+                       window.navigator.userAgent.includes('Capacitor') ||
+                       (window.location.hostname === 'localhost' && window.navigator.userAgent.includes('Mobile'))
+    
+    // If we're in a mobile app, always use production URL
+    if (isCapacitor) {
+      return 'https://groundedgems.com'
+    }
+    
+    // For web browsers, use current origin
     return window.location.origin
   }
   
@@ -30,7 +44,12 @@ export function getProductionBaseUrl(): string {
     return 'https://groundedgems.com'
   }
   
-  // Development fallback
+  // Check environment variables
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL
+  }
+  
+  // Development fallback (web only)
   return 'http://localhost:3000'
 }
 

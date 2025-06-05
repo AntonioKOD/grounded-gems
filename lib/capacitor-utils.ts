@@ -17,6 +17,49 @@ import { Device } from '@capacitor/device';
 export const isNative = () => Capacitor.isNativePlatform();
 export const getPlatform = () => Capacitor.getPlatform();
 
+/**
+ * Get the correct API base URL for the current environment
+ * Always uses production URL for native mobile apps
+ */
+export const getApiBaseUrl = (): string => {
+  // If we're in a native Capacitor app, always use production URL
+  if (Capacitor.isNativePlatform()) {
+    return 'https://groundedgems.com';
+  }
+  
+  // For web, check environment
+  if (typeof window !== 'undefined') {
+    // Production web
+    if (window.location.hostname === 'groundedgems.com') {
+      return 'https://groundedgems.com';
+    }
+    
+    // Development web
+    return window.location.origin;
+  }
+  
+  // Server-side fallback
+  return process.env.NODE_ENV === 'production' 
+    ? 'https://groundedgems.com' 
+    : 'http://localhost:3000';
+};
+
+/**
+ * Make an API request with the correct base URL
+ */
+export const apiRequest = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
+  const baseUrl = getApiBaseUrl();
+  const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
+  
+  return fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+};
+
 // Camera utilities
 export const takePicture = async () => {
   try {

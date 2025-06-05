@@ -219,7 +219,9 @@ export default function VideoPlayer({
     // Known broken URL patterns
     const brokenPatterns = [
       'groundedgems.com/api/media/file/',
-      'localhost:3001/', // Development backend that might be down
+              'localhost:', // Development backend that might be down
+        '127.0.0.1:', // Local development
+        '192.168.', // Local network development
     ]
     return brokenPatterns.some(pattern => src.includes(pattern))
   }, [src])

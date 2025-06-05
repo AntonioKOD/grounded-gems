@@ -114,7 +114,7 @@ class APIService {
         case .staging:
             return "https://staging.grounded-gems.vercel.app" 
         case .development:
-            return "http://localhost:3000"
+            return "https://groundedgems.com"
         case .custom:
             return customBaseURL
         }

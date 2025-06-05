@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
+import { getBaseUrl } from "@/lib/utils"
 import LocationDetailPage from "./location-detail-page"
 
 // Dynamic route for individual location pages
@@ -81,7 +82,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
   
   try {
     // Fetch location data for metadata
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/locations/${id}`)
+    const baseUrl = getBaseUrl()
+    const response = await fetch(`${baseUrl}/api/locations/${id}`)
     
     if (!response.ok) {
       return {
@@ -160,7 +162,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
 export async function generateStaticParams() {
   try {
     // Fetch popular/featured locations to pre-generate
-    const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/locations/all?featured=true&limit=50`)
+    const baseUrl = getBaseUrl()
+    const response = await fetch(`${baseUrl}/api/locations/all?featured=true&limit=50`)
     
     if (!response.ok) {
       return []

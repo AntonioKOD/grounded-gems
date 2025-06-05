@@ -108,7 +108,6 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
-		<string>processing</string>
 	</array>
 	
 	<!-- Support for modern iOS features -->

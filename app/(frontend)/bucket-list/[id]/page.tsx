@@ -1,5 +1,6 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
+import { getBaseUrl } from '@/lib/utils'
 import PublicBucketListView from './PublicBucketListView'
 
 interface PageProps {
@@ -9,24 +10,18 @@ interface PageProps {
 }
 
 async function getBucketList(id: string) {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_URL || 'http://localhost:3000'}/api/bucket-lists/${id}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+  const baseUrl = getBaseUrl()
+  const response = await fetch(`${baseUrl}/api/bucket-lists/${id}`, {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
 
-    if (!response.ok) {
-      return null
-    }
-
-    const data = await response.json()
-    return data.success ? data.bucketList : null
-  } catch (error) {
-    console.error('Error fetching bucket list:', error)
+  if (!response.ok) {
     return null
   }
+
+  return response.json()
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {

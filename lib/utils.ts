@@ -7,11 +7,22 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Get the base URL for the application
- * Works in both client and server environments
+ * Enhanced for iOS and mobile Capacitor apps
  */
 export function getBaseUrl(): string {
-  // Client-side
+  // Client-side - check if we're in a Capacitor app
   if (typeof window !== 'undefined') {
+    // If we're in a Capacitor app or iOS, always use production URL
+    const isCapacitor = window.location.protocol === 'capacitor:' || 
+                       window.location.protocol === 'ionic:' ||
+                       window.navigator.userAgent.includes('Capacitor') ||
+                       window.location.hostname === 'localhost' && window.navigator.userAgent.includes('Mobile')
+    
+    if (isCapacitor) {
+      return 'https://groundedgems.com'
+    }
+    
+    // For web browsers, use current origin
     return window.location.origin
   }
   
@@ -21,6 +32,10 @@ export function getBaseUrl(): string {
   }
   
   // Server-side - check environment variables
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL
+  }
+  
   if (process.env.NEXTAUTH_URL) {
     return process.env.NEXTAUTH_URL
   }
@@ -29,12 +44,13 @@ export function getBaseUrl(): string {
     return `https://${process.env.VERCEL_URL}`
   }
   
-  // Fallback for development
+  // Fallback for development (web only)
   return 'http://localhost:3000'
 }
 
 /**
  * Construct an API URL with the correct base URL
+ * Enhanced for mobile/iOS environments
  */
 export function getApiUrl(path: string): string {
   const baseUrl = getBaseUrl()

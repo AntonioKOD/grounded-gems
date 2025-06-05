@@ -62,7 +62,16 @@
     <script>
         // Redirect to the Next.js development server
         // This will work when the Capacitor app is running in development mode
-        window.location.href = 'http://localhost:3000';
+        // Redirect to production URL for mobile apps, or current origin for web
+        const isCapacitor = window.location.protocol === 'capacitor:' || 
+                           window.location.protocol === 'ionic:' ||
+                           navigator.userAgent.includes('Capacitor');
+        
+        if (isCapacitor) {
+          window.location.href = 'https://groundedgems.com';
+        } else {
+          window.location.href = window.location.origin;
+        }
     </script>
 </body>
 </html> 
