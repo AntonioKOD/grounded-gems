@@ -16,14 +16,17 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000, // Reduced for faster app start
+      launchShowDuration: 1500, // Faster for iOS
       backgroundColor: '#FF6B6B',
       androidScaleType: 'CENTER_CROP',
       showSpinner: false, // Disable spinner to prevent conflicts
       splashFullScreen: true,
       splashImmersive: true,
-      // Auto-hide after timeout to prevent hanging
-      launchAutoHide: false // We'll control this manually
+      // iOS-specific improvements
+      launchAutoHide: false, // Manual control
+      iosSpinnerStyle: 'small',
+      androidSpinnerStyle: 'large',
+      spinnerColor: '#ffffff'
     },
     StatusBar: {
       style: 'dark',
@@ -33,7 +36,8 @@ const config: CapacitorConfig = {
     Keyboard: {
       resize: 'body',
       style: 'dark',
-      resizeOnFullScreen: true,
+      resizeOnFullScreen: true, // iOS specific
+      accessoryBarVisible: false // Hide accessory bar on iOS
       // Enhanced keyboard handling for iOS
       disableScroll: false
     },

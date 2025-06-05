@@ -30,6 +30,8 @@ import {
   AlertTriangle,
   MessageSquare,
 } from "lucide-react"
+import { Capacitor } from '@capacitor/core'
+import { trackIOSModal, logIOSEvent } from '@/lib/ios-crash-debug'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -1557,22 +1559,46 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isIOS, setIsIOS] = useState(false)
 
   // Wait for component to mount before rendering portal
   useEffect(() => {
     setMounted(true)
+    setIsIOS(Capacitor.getPlatform() === 'ios')
+    
+    if (Capacitor.getPlatform() === 'ios') {
+      logIOSEvent('location_detail_mobile_mount', { 
+        locationId: location?.id,
+        locationName: location?.name 
+      })
+    }
+    
     return () => {
       setMounted(false)
+      if (Capacitor.getPlatform() === 'ios') {
+        logIOSEvent('location_detail_mobile_unmount', { 
+          locationId: location?.id 
+        })
+      }
     }
   }, [])
 
   useEffect(() => {
     if (isOpen && location && mounted) {
       setError(null) // Clear any previous errors
+      
+      if (isIOS) {
+        trackIOSModal('opening', { 
+          locationId: location.id,
+          locationName: location.name,
+          modalType: 'location_detail'
+        })
+      }
+      
       fetchCurrentUser()
       fetchReviews()
     }
-  }, [isOpen, location, mounted])
+  }, [isOpen, location, mounted, isIOS])
 
   useEffect(() => {
     if (user) {
@@ -1583,11 +1609,18 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   // Handle cleanup when modal closes
   useEffect(() => {
     if (!isOpen) {
+      if (isIOS) {
+        trackIOSModal('closing', { 
+          locationId: location?.id,
+          modalType: 'location_detail'
+        })
+      }
+      
       setError(null)
       setIsBucketModalOpen(false)
       setIsWriteReviewModalOpen(false)
     }
-  }, [isOpen])
+  }, [isOpen, isIOS, location?.id])
 
   const fetchCurrentUser = async () => {
     try {
@@ -1804,14 +1837,23 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div 
+          data-modal="true" 
+          data-modal-type="location-detail"
+          className={isIOS ? 'ios-modal-container' : ''}
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]"
-            onClick={onClose}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] modal-backdrop"
+            onClick={(e) => {
+              if (isIOS) {
+                logIOSEvent('modal_backdrop_click', { locationId: location.id })
+              }
+              onClose()
+            }}
           />
 
           {/* Enhanced Mobile Modal */}
@@ -2060,7 +2102,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
               setIsBucketModalOpen(false)
             }}
           />
-        </>
+        </div>
       )}
     </AnimatePresence>,
     document.body
