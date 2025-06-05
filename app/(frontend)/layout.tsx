@@ -9,13 +9,8 @@ import NavigationWrapper from "@/components/navigation-wrapper"
 import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingActionButtonMenu"
 import MainContentWrapper from "@/components/ui/MainContentWrapper"
 
-import MobileInitializer from '@/components/MobileInitializer'
-import SafeAreaManager from '@/components/SafeAreaManager'
-import HydrationErrorFixer from '@/components/HydrationErrorFixer'
+import MobileAppWrapper from '@/components/MobileAppWrapper'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import AppLoadingScreen from '@/components/AppLoadingScreen'
-import AppLifecycleManager from '@/components/AppLifecycleManager'
-import IOSAppFixer from '@/components/IOSAppFixer'
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
@@ -31,24 +26,21 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
   return (
     <div suppressHydrationWarning>
       <ErrorBoundary>
-        <StoreProvider initialUser={initialUser}>
-          <NavigationWrapper initialUser={initialUser} />
-          <MainContentWrapper>
-            {children}
-          </MainContentWrapper>
-          {/* Hide footer on mobile, show on desktop */}
-          <div className="hidden md:block">
-            <Footer />
-          </div>
-          <Toaster />
-          {/* Desktop FAB remains in its place */}
-          <ClientFloatingActionButtonMenu />
-          <MobileInitializer />
-          <SafeAreaManager />
-          <HydrationErrorFixer />
-          <AppLifecycleManager />
-          <IOSAppFixer />
-        </StoreProvider>
+        <MobileAppWrapper>
+          <StoreProvider initialUser={initialUser}>
+            <NavigationWrapper initialUser={initialUser} />
+            <MainContentWrapper>
+              {children}
+            </MainContentWrapper>
+            {/* Hide footer on mobile, show on desktop */}
+            <div className="hidden md:block">
+              <Footer />
+            </div>
+            <Toaster />
+            {/* Desktop FAB remains in its place */}
+            <ClientFloatingActionButtonMenu />
+          </StoreProvider>
+        </MobileAppWrapper>
       </ErrorBoundary>
 
       {/* iOS and Mobile Initialization */}

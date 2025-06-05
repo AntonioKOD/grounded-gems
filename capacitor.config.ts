@@ -6,27 +6,22 @@ const config: CapacitorConfig = {
   webDir: 'public',
   server: {
     androidScheme: 'https',
-    iosScheme: 'https',
-    hostname: 'groundedgems.com',
-    // Production server URL for iOS TestFlight builds
-    url: 'https://groundedgems.com',
-    cleartext: false, // Set to false for production
-    // Enhanced error handling for iOS
-    errorPath: '/index.html'
+    iosScheme: 'ionic', // Use ionic scheme for better iOS performance
+    hostname: 'localhost', // Use localhost for better mobile performance
+    cleartext: true, // Allow for better local development
+    // iOS-specific optimizations
+    errorPath: '/login' // Redirect errors to login instead of index
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 1500, // Faster for iOS
+      launchShowDuration: 500, // Very fast for iOS performance
       backgroundColor: '#FF6B6B',
       androidScaleType: 'CENTER_CROP',
-      showSpinner: false, // Disable spinner to prevent conflicts
+      showSpinner: false, // No spinner for faster performance
       splashFullScreen: true,
       splashImmersive: true,
-      // iOS-specific improvements
-      launchAutoHide: false, // Manual control
-      iosSpinnerStyle: 'small',
-      androidSpinnerStyle: 'large',
-      spinnerColor: '#ffffff'
+      launchAutoHide: true, // Auto-hide for faster startup
+      fadeOutDuration: 200
     },
     StatusBar: {
       style: 'dark',

@@ -248,7 +248,17 @@ function ImageGallery({
 }
 
 // Enhanced location info with better mobile layout
-function LocationInfo({ location }: { location: Location }) {
+function LocationInfo({ 
+  location, 
+  onWriteReview, 
+  onAddToBucketList,
+  isLoadingBucketLists 
+}: { 
+  location: Location
+  onWriteReview: () => void
+  onAddToBucketList: () => void
+  isLoadingBucketLists: boolean
+}) {
   const formatPhone = (phone: string) => {
     try {
       return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
@@ -461,7 +471,7 @@ function LocationInfo({ location }: { location: Location }) {
           <span className="text-sm">Directions</span>
         </Button>
         <Button
-          onClick={handleWriteReview}
+          onClick={onWriteReview}
           variant="outline"
           className="h-12 rounded-xl border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/10 font-medium"
         >
@@ -469,7 +479,7 @@ function LocationInfo({ location }: { location: Location }) {
           <span className="text-sm">Review</span>
         </Button>
         <Button
-          onClick={handleAddToBucketList}
+          onClick={onAddToBucketList}
           disabled={isLoadingBucketLists}
           className="h-12 rounded-xl bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
         >
@@ -1954,7 +1964,12 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
 
               {/* Enhanced Location Info */}
               <div className="p-4 space-y-6">
-                <LocationInfo location={location} />
+                <LocationInfo 
+                  location={location} 
+                  onWriteReview={handleWriteReview}
+                  onAddToBucketList={handleAddToBucketList}
+                  isLoadingBucketLists={isLoadingBucketLists}
+                />
 
                 {/* Enhanced Action Buttons */}
                 <div className="grid grid-cols-3 gap-3">
