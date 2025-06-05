@@ -4,6 +4,8 @@
  * Directly uses URLs from PayloadCMS media objects
  */
 
+import { getApiBaseUrl } from './capacitor-utils'
+
 // Environment check
 const isDevelopment = process.env.NODE_ENV === 'development'
 
@@ -230,5 +232,89 @@ function transformToBlobUrl(url: string): string {
   }
   
   return url
+}
+
+/**
+ * Get the correct image URL for Payload CMS images
+ * Handles both relative and absolute URLs for mobile compatibility
+ */
+export function getPayloadImageUrl(imageUrl: string | undefined | null): string {
+  if (!imageUrl) {
+    return '/placeholder-image.svg'
+  }
+
+  // If it's already a full URL, return as is
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return imageUrl
+  }
+
+  // If it's a relative URL from Payload, construct the full URL
+  if (imageUrl.startsWith('/api/media/') || imageUrl.startsWith('/media/')) {
+    const baseUrl = getApiBaseUrl()
+    return `${baseUrl}${imageUrl}`
+  }
+
+  // If it starts with just a filename or path, assume it's from Payload media
+  if (!imageUrl.startsWith('/')) {
+    const baseUrl = getApiBaseUrl()
+    return `${baseUrl}/api/media/${imageUrl}`
+  }
+
+  // For any other relative path, use the base URL
+  const baseUrl = getApiBaseUrl()
+  return `${baseUrl}${imageUrl}`
+}
+
+/**
+ * Get the correct URL for Payload CMS media regardless of how it's stored
+ * Handles Vercel Blob Storage, local media, and other storage providers
+ */
+export function getPayloadMediaUrl(media: any): string {
+  if (!media) {
+    return '/placeholder-image.svg'
+  }
+
+  // Handle different Payload media object structures
+  let imageUrl: string | undefined
+
+  // Direct string URL
+  if (typeof media === 'string') {
+    imageUrl = media
+  }
+  // Media object with url property
+  else if (media.url) {
+    imageUrl = media.url
+  }
+  // Media object with filename
+  else if (media.filename) {
+    imageUrl = `/api/media/${media.filename}`
+  }
+  // Nested media object
+  else if (media.featuredImage) {
+    return getPayloadMediaUrl(media.featuredImage)
+  }
+
+  return getPayloadImageUrl(imageUrl)
+}
+
+/**
+ * Extract image sizes from Payload media object
+ */
+export function getPayloadImageSizes(media: any): { [key: string]: string } {
+  const sizes: { [key: string]: string } = {}
+  
+  if (!media || !media.sizes) {
+    return sizes
+  }
+
+  Object.entries(media.sizes).forEach(([sizeName, sizeData]: [string, any]) => {
+    if (sizeData && sizeData.url) {
+      sizes[sizeName] = getPayloadImageUrl(sizeData.url)
+    } else if (sizeData && sizeData.filename) {
+      sizes[sizeName] = getPayloadImageUrl(`/api/media/${sizeData.filename}`)
+    }
+  })
+
+  return sizes
 }
   

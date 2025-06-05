@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { Sparkles, ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getPayloadImageUrl } from '@/lib/image-utils'
 
 interface OptimizedImageProps {
   src: string
@@ -51,7 +52,19 @@ export default function OptimizedImage({
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
-  const [actualSrc, setActualSrc] = useState(src)
+  
+  // Process the image URL using Payload utilities
+  const actualSrc = useMemo(() => {
+    // Use Payload image utilities to handle URL correctly
+    const processedUrl = getPayloadImageUrl(src)
+    
+    // If it's still a problematic URL, use placeholder
+    if (!processedUrl || processedUrl === '/placeholder-image.svg') {
+      return '/placeholder-image.svg'
+    }
+    
+    return processedUrl
+  }, [src])
 
   // Check if URL is likely broken and set error state immediately
   const isKnownBrokenUrl = useMemo(() => {

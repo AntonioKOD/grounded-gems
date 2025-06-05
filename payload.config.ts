@@ -29,48 +29,27 @@ export default buildConfig({
   // Secret for signing tokens and encrypting data
   secret: process.env.PAYLOAD_SECRET || '',
 
-  // Server URL for CSRF protection - use local URL in development
+  // Server URL for CSRF protection - simplified without PAYLOAD_PUBLIC_SERVER_URL dependency
   serverURL: process.env.NODE_ENV === 'development' 
-    ? (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'http://localhost:3000')
-    : (process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://groundedgems.com'),
+    ? 'http://localhost:3000'  // Simplified for development
+    : 'https://groundedgems.com', // Production URL
 
   // Cookie prefix must match the name your middleware expects (e.g. "payload-token")
   cookiePrefix: 'payload',
 
   // Enable CORS and allow credentials so cookies are sent to the front end
-  cors: {
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
-      if (!origin) return callback(null, true);
-      
-      // Define allowed origins
-      const allowedOrigins = [
-        process.env.FRONTEND_URL || 'http://localhost:3000',
-        'http://localhost:3001', // Mobile app dev server
-        'http://localhost:8081', // Expo dev server
-        'https://groundedgems.com', // Production web app
-      ];
-      
-      // Allow localhost in development
-      if (process.env.NODE_ENV === 'development') {
-        if (origin.includes('localhost') || origin.includes('192.168.') || origin.includes('exp://')) {
-          return callback(null, true);
-        }
-      }
-      
-      // Check against allowed origins
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // Reject the request
-      callback(new Error('Not allowed by CORS'));
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    credentials: true,
-    optionsSuccessStatus: 200, // Support legacy browsers
-  },
+  cors: [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'http://localhost:3001', // Mobile app dev server
+    'http://localhost:8081', // Expo dev server
+    'https://groundedgems.com', // Production web app
+    // Add localhost patterns for development
+    ...(process.env.NODE_ENV === 'development' ? [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:8081',
+    ] : []),
+  ],
 
   // Whitelist auth endpoints to avoid CSRF errors
   csrf: [
@@ -78,12 +57,6 @@ export default buildConfig({
     'http://localhost:3001', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
     'https://groundedgems.com', // Production web app
-    // Allow all localhost and local network requests in development
-    ...(process.env.NODE_ENV === 'development' ? [
-      /localhost/,
-      /192\.168\./,
-      /exp:\/\//,
-    ] : []),
   ],
 
   // Configure your database adapter
