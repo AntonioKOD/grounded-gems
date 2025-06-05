@@ -7,9 +7,9 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
-    hostname: 'localhost',
-    // Commented out development URL for production builds
-    // url: 'http://localhost:3000',
+    hostname: 'groundedgems.com',
+    // Production server URL for iOS TestFlight builds
+    url: 'https://groundedgems.com',
     cleartext: false, // Set to false for production
     // Enhanced error handling for iOS
     errorPath: '/index.html'
@@ -68,7 +68,7 @@ const config: CapacitorConfig = {
     backgroundColor: '#ffffff',
     // Enhanced iOS WebView configuration
     scheme: 'https',
-    hostname: 'localhost',
+    hostname: 'groundedgems.com',
     // Better WebView settings for iOS
     webViewConfiguration: {
       allowsInlineMediaPlaybook: true,
