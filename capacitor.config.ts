@@ -5,18 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Grounded Gems',
   webDir: 'public',
   server: {
-    // Use the actual production server URL, not localhost
-    url: process.env.NODE_ENV === 'production' 
-      ? 'https://groundedgems.com' 
-      : 'http://localhost:3000',
-    cleartext: true, // Allow HTTP in development
-    androidScheme: 'https',
-    iosScheme: 'capacitor', // Use capacitor scheme for reliability
-    // Only use hostname and errorPath for local development
-    ...(process.env.NODE_ENV !== 'production' && {
-      hostname: 'localhost',
-      errorPath: '/login'
-    })
+    url: 'https://groundedgems.com',
+    cleartext: false
   },
   plugins: {
     SplashScreen: {
@@ -27,16 +17,16 @@ const config: CapacitorConfig = {
       splashFullScreen: true,
       splashImmersive: true,
       launchAutoHide: true,
-      fadeOutDuration: 200
+      launchFadeOutDuration: 200
     },
     StatusBar: {
-      style: 'dark',
+      style: 'DARK',
       backgroundColor: '#ffffff',
-      overlay: false
+      overlaysWebView: false
     },
     Keyboard: {
       resize: 'body',
-      style: 'dark',
+      style: 'DARK',
       resizeOnFullScreen: true,
       accessoryBarVisible: false,
       disableScroll: false
