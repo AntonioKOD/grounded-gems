@@ -12,7 +12,10 @@ const nextConfig: NextConfig = {
   // Use standalone for both web and mobile builds to support API routes
   output: 'standalone',
   images: {
-    unoptimized: true, // Required for static export
+    // Use custom loader for better mobile and Payload CMS compatibility
+    loader: 'custom',
+    loaderFile: './lib/image-loader.ts',
+    unoptimized: false, // Enable optimization with custom loader
     remotePatterns: [
       {
         protocol: 'https',
@@ -38,13 +41,19 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'http',
+        hostname: 'localhost',
+        port: '3000',
+        pathname: '/**',
+      },
     ],
     deviceSizes: [320, 420, 768, 1024, 1200],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     formats: ['image/webp'],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
-    contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com groundedgems.com www.groundedgems.com images.unsplash.com data:; default-src 'self'; script-src 'none'; sandbox;",
+    contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com groundedgems.com www.groundedgems.com images.unsplash.com localhost:3000 data:; default-src 'self'; script-src 'none'; sandbox;",
   },
   
   // Disable static optimization for dynamic routes

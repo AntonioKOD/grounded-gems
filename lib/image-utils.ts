@@ -4,10 +4,57 @@
  * Directly uses URLs from PayloadCMS media objects
  */
 
-import { getApiBaseUrl } from './capacitor-utils'
+/**
+ * Image utilities for handling various image sources and optimization
+ * Enhanced for mobile compatibility and server-side rendering
+ */
 
 // Environment check
 const isDevelopment = process.env.NODE_ENV === 'development'
+const isServer = typeof window === 'undefined'
+
+// Safely import Capacitor utilities only on client-side
+let getApiBaseUrlFromCapacitor: (() => string) | null = null
+
+if (!isServer) {
+  // Dynamic import for client-side only
+  import('./capacitor-utils').then((module) => {
+    getApiBaseUrlFromCapacitor = module.getApiBaseUrl
+  }).catch(() => {
+    // Fallback if capacitor-utils fails to load
+    getApiBaseUrlFromCapacitor = null
+  })
+}
+
+/**
+ * Get base URL safely for both server and client
+ */
+function getBaseUrlSafely(): string {
+  // Server-side logic
+  if (isServer) {
+    return process.env.NODE_ENV === 'production' 
+      ? 'https://groundedgems.com' 
+      : 'http://localhost:3000'
+  }
+
+  // Client-side logic
+  if (getApiBaseUrlFromCapacitor) {
+    return getApiBaseUrlFromCapacitor()
+  }
+
+  // Fallback for client-side
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'groundedgems.com') {
+      return 'https://groundedgems.com'
+    }
+    return window.location.origin
+  }
+
+  // Final fallback
+  return process.env.NODE_ENV === 'production' 
+    ? 'https://groundedgems.com' 
+    : 'http://localhost:3000'
+}
 
 /**
  * Simple function to get image URL from PayloadCMS media object
@@ -250,18 +297,18 @@ export function getPayloadImageUrl(imageUrl: string | undefined | null): string 
 
   // If it's a relative URL from Payload, construct the full URL
   if (imageUrl.startsWith('/api/media/') || imageUrl.startsWith('/media/')) {
-    const baseUrl = getApiBaseUrl()
+    const baseUrl = getBaseUrlSafely()
     return `${baseUrl}${imageUrl}`
   }
 
   // If it starts with just a filename or path, assume it's from Payload media
   if (!imageUrl.startsWith('/')) {
-    const baseUrl = getApiBaseUrl()
+    const baseUrl = getBaseUrlSafely()
     return `${baseUrl}/api/media/${imageUrl}`
   }
 
   // For any other relative path, use the base URL
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getBaseUrlSafely()
   return `${baseUrl}${imageUrl}`
 }
 
