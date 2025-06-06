@@ -3,7 +3,6 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
 import { createPost, getFeedPosts, getPostById } from '@/app/actions'
-import { getServerSideUser } from '@/lib/auth-server'
 
 // Input validation schema for mobile post creation
 const createPostSchema = z.object({
@@ -62,11 +61,28 @@ export async function GET(request: NextRequest) {
     const saved = searchParams.get('saved') === 'true'
     const liked = searchParams.get('liked') === 'true'
     
-    // Get current user for personalization
-    const user = await getServerSideUser()
-    const currentUserId = user?.id
+    const payload = await getPayload({ config })
+    
+    // Get current user for personalization - use payload.auth() instead of getServerSideUser()
+    let currentUser = null
+    let currentUserId = null
+    
+    try {
+      const authHeader = request.headers.get('Authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const { user } = await payload.auth({ headers: request.headers })
+        currentUser = user
+        currentUserId = user?.id
+      }
+    } catch (authError) {
+      console.log('Authentication failed:', authError)
+      // Don't return 401 here - we'll handle it below based on the request type
+    }
 
-    if (!currentUserId) {
+    // Check if authentication is required for this specific request
+    const requiresAuth = saved || liked || (!authorId && feedType !== 'discover')
+    
+    if (requiresAuth && !currentUserId) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
@@ -76,10 +92,8 @@ export async function GET(request: NextRequest) {
     let posts = []
 
     if (saved) {
-      // Fetch saved posts for current user
+      // Fetch saved posts for current user (requires auth)
       console.log(`Mobile API: Getting saved posts for user ${currentUserId}, page ${page}, limit ${limit}`)
-      
-      const payload = await getPayload({ config })
       
       // Get user's saved posts through relationships
       const userDoc = await payload.findByID({
@@ -127,10 +141,8 @@ export async function GET(request: NextRequest) {
       }))
       
     } else if (liked) {
-      // Fetch liked posts for current user
+      // Fetch liked posts for current user (requires auth)
       console.log(`Mobile API: Getting liked posts for user ${currentUserId}, page ${page}, limit ${limit}`)
-      
-      const payload = await getPayload({ config })
       
       // Find all posts that the current user has liked
       const result = await payload.find({
@@ -182,10 +194,8 @@ export async function GET(request: NextRequest) {
       }))
       
     } else if (authorId) {
-      // Fetch posts by specific author
+      // Fetch posts by specific author (public endpoint - no auth required)
       console.log(`Mobile API: Getting posts by author ${authorId}, page ${page}, limit ${limit}`)
-      
-      const payload = await getPayload({ config })
       
       const result = await payload.find({
         collection: 'posts',
@@ -225,7 +235,7 @@ export async function GET(request: NextRequest) {
           commentCount: post.comments?.length || 0,
           shareCount: post.shares?.length || 0,
           saveCount: 0,
-          isLiked: post.likes?.some((like: any) => like.user === currentUserId) || false,
+          isLiked: currentUserId ? post.likes?.some((like: any) => like.user === currentUserId) || false : false,
           isSaved: false, // Would need to check user's saved posts
         },
         categories: post.categories?.map((cat: any) => cat.name || cat) || [],
@@ -236,7 +246,7 @@ export async function GET(request: NextRequest) {
       }))
       
     } else {
-      // Fetch regular feed posts
+      // Fetch regular feed posts (may or may not require auth depending on feedType)
       console.log(`Mobile API: Getting ${feedType} posts, page ${page}, limit ${limit}`)
       posts = await getFeedPosts(feedType, sortBy, page, category, currentUserId)
     }
