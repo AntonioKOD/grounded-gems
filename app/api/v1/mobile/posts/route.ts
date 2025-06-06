@@ -49,7 +49,7 @@ interface MobileCreatePostResponse {
   code?: string
 }
 
-// GET /api/v1/mobile/posts - Get posts (feed, user posts, or saved posts)
+// GET /api/v1/mobile/posts - Get posts (feed, user posts, saved posts, or liked posts)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category')
     const authorId = searchParams.get('authorId')
     const saved = searchParams.get('saved') === 'true'
+    const liked = searchParams.get('liked') === 'true'
     
     // Get current user for personalization
     const user = await getServerSideUser()
@@ -117,6 +118,61 @@ export async function GET(request: NextRequest) {
           saveCount: 0, // We don't track this separately
           isLiked: post.likes?.some((like: any) => like.user === currentUserId) || false,
           isSaved: true, // All posts in this response are saved
+        },
+        categories: post.categories?.map((cat: any) => cat.name || cat) || [],
+        tags: post.tags || [],
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        rating: post.rating,
+      }))
+      
+    } else if (liked) {
+      // Fetch liked posts for current user
+      console.log(`Mobile API: Getting liked posts for user ${currentUserId}, page ${page}, limit ${limit}`)
+      
+      const payload = await getPayload({ config })
+      
+      // Find all posts that the current user has liked
+      const result = await payload.find({
+        collection: 'posts',
+        where: {
+          likes: {
+            contains: currentUserId
+          }
+        },
+        sort: sortBy === 'popular' ? '-likes' : '-createdAt',
+        limit,
+        page,
+        depth: 2,
+      })
+
+      // Format liked posts for mobile response
+      posts = result.docs.map((post: any) => ({
+        id: post.id,
+        caption: post.content || post.caption || '',
+        author: {
+          id: post.author?.id || post.author,
+          name: post.author?.name || 'Unknown Author',
+          profileImage: post.author?.profileImage ? { url: post.author.profileImage.url } : null,
+        },
+        location: post.location ? {
+          id: post.location.id,
+          name: post.location.name,
+          coordinates: post.location.coordinates,
+        } : null,
+        media: post.media?.map((m: any) => ({
+          type: m.mimeType?.startsWith('video/') ? 'video' : 'image',
+          url: m.url,
+          thumbnail: m.thumbnail?.url,
+          alt: m.alt,
+        })) || [],
+        engagement: {
+          likeCount: post.likes?.length || 0,
+          commentCount: post.comments?.length || 0,
+          shareCount: post.shares?.length || 0,
+          saveCount: 0,
+          isLiked: true, // All posts in this response are liked by the current user
+          isSaved: false, // Would need to check user's saved posts
         },
         categories: post.categories?.map((cat: any) => cat.name || cat) || [],
         tags: post.tags || [],
