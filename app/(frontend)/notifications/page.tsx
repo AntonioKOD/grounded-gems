@@ -1,12 +1,13 @@
 import { Suspense } from "react"
 import NotificationsPage from "@/components/notifications/notifications-page"
 import NotificationsPageSkeleton from "@/components/notifications/notifications-page-skeleton"
+import { Metadata } from "next"
 
 export const dynamic = 'force-dynamic' 
 
-export const metadata = {
-  title: "Notifications | Grounded Gems",
-  description: "View your notifications and activity updates",
+export const metadata: Metadata = {
+  title: "Journey Updates | Sacavia",
+  description: "Stay connected with your community and never miss important updates on your exploration journey.",
 }
 
 export default function NotificationsRoute() {

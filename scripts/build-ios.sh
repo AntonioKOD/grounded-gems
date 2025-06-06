@@ -1,11 +1,12 @@
 #!/bin/bash
 
-# Grounded Gems iOS Build Script for TestFlight
+# Sacavia iOS Build Script for TestFlight
+# This script builds and prepares the iOS app for TestFlight distribution
 # Usage: ./scripts/build-ios.sh
 
 set -e
 
-echo "🚀 Building Grounded Gems for iOS TestFlight..."
+echo "🚀 Building Sacavia for iOS TestFlight..."
 
 # Step 1: Install dependencies
 echo "📦 Installing dependencies..."
@@ -37,6 +38,6 @@ echo "4. Upload to App Store Connect"
 echo ""
 echo "Build Info:"
 echo "- App ID: com.groundedgems.app"
-echo "- App Name: Grounded Gems"
+echo "- App Name: Sacavia"
 echo "- Target: iOS 14.0+"
 echo "" 

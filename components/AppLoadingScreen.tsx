@@ -9,110 +9,52 @@ interface AppLoadingScreenProps {
   message?: string
 }
 
-export default function AppLoadingScreen({ isLoading, message = "Loading..." }: AppLoadingScreenProps) {
-  const [progress, setProgress] = useState(0)
-  const [currentMessage, setCurrentMessage] = useState(message)
-
-  useEffect(() => {
-    if (!isLoading) return
-
-    const messages = [
-      "Initializing app...",
-      "Loading your data...",
-      "Setting up notifications...",
-      "Almost ready..."
-    ]
-
-    let messageIndex = 0
-    let progressValue = 0
-
-    const progressInterval = setInterval(() => {
-      progressValue += Math.random() * 15 + 5 // Random progress between 5-20%
-      
-      if (progressValue >= 100) {
-        progressValue = 100
-        clearInterval(progressInterval)
-      }
-      
-      setProgress(Math.min(progressValue, 100))
-    }, 200)
-
-    const messageInterval = setInterval(() => {
-      messageIndex = (messageIndex + 1) % messages.length
-      setCurrentMessage(messages[messageIndex])
-    }, 800)
-
-    return () => {
-      clearInterval(progressInterval)
-      clearInterval(messageInterval)
-    }
-  }, [isLoading])
-
-  useEffect(() => {
-    setCurrentMessage(message)
-  }, [message])
-
-  if (!isLoading) return null
-
+export default function AppLoadingScreen() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4]">
-      {/* Background pattern */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-stone-900 via-amber-900 to-stone-800">
+      {/* Animated geometric pattern background */}
       <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-10 left-10 w-20 h-20 bg-white rounded-full"></div>
-        <div className="absolute top-1/4 right-16 w-12 h-12 bg-white rounded-full"></div>
-        <div className="absolute bottom-1/4 left-1/4 w-16 h-16 bg-white rounded-full"></div>
-        <div className="absolute bottom-16 right-1/3 w-8 h-8 bg-white rounded-full"></div>
+        <div className="absolute top-1/4 left-1/4 w-32 h-32 border border-amber-300/30 rotate-45 animate-pulse"></div>
+        <div className="absolute top-3/4 right-1/4 w-24 h-24 border border-stone-300/20 rotate-12 animate-bounce"></div>
+        <div className="absolute bottom-1/4 left-1/3 w-20 h-20 border border-amber-400/25 -rotate-12 animate-pulse delay-1000"></div>
       </div>
-
-      <div className="relative z-10 flex flex-col items-center justify-center p-8 max-w-sm mx-auto">
+      
+      <div className="text-center z-10">
         {/* Logo */}
-        <div className="relative mb-8">
-          <div className="w-24 h-24 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+        <div className="flex justify-center mb-8">
+          <div className="relative">
+            <div className="absolute inset-0 bg-amber-400/20 rounded-full blur-lg animate-pulse"></div>
             <Image
-              src="/logo-mobile.svg"
-              alt="Grounded Gems"
-              width={64}
-              height={64}
-              className="w-16 h-16 object-contain"
+              src="https://i.imgur.com/btJCRer.png"
+              width={120}
+              height={120}
+              alt="Sacavia"
+              className="relative rounded-full shadow-2xl ring-4 ring-amber-300/30"
               priority
             />
           </div>
-          
-          {/* Pulse animation */}
-          <div className="absolute inset-0 w-24 h-24 bg-white/10 rounded-2xl animate-pulse"></div>
         </div>
-
-        {/* App name */}
-        <h1 className="text-2xl font-bold text-white mb-2 text-center">
-          Grounded Gems
+        
+        {/* App Name */}
+        <h1 className="text-4xl md:text-5xl font-bold text-amber-100 mb-4 tracking-wide">
+          Sacavia
         </h1>
         
-        {/* Loading message */}
-        <p className="text-white/90 text-sm mb-8 text-center min-h-[20px]">
-          {currentMessage}
+        {/* Tagline */}
+        <p className="text-stone-300 text-lg md:text-xl mb-8 max-w-md mx-auto leading-relaxed">
+          Guided by wisdom, connected by stories
         </p>
-
-        {/* Progress bar */}
-        <div className="w-full max-w-xs mb-4">
-          <div className="w-full bg-white/20 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-white rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+        
+        {/* Loading indicator */}
+        <div className="flex justify-center items-center space-x-2">
+          <div className="w-3 h-3 bg-amber-400 rounded-full animate-bounce"></div>
+          <div className="w-3 h-3 bg-amber-300 rounded-full animate-bounce delay-100"></div>
+          <div className="w-3 h-3 bg-stone-400 rounded-full animate-bounce delay-200"></div>
         </div>
-
-        {/* Progress percentage */}
-        <p className="text-white/70 text-xs">
-          {Math.round(progress)}%
+        
+        <p className="text-stone-400 text-sm mt-6 animate-fade-in-up delay-500">
+          Preparing your journey...
         </p>
-
-        {/* Animated dots */}
-        <div className="flex space-x-1 mt-4">
-          <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-          <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-          <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-        </div>
       </div>
     </div>
   )

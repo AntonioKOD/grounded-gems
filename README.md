@@ -1,104 +1,185 @@
-# 💎 Grounded Gems
+# 🏔️ Sacavia
 
-**Discover Hidden Treasures in Your Local Area**
+*Guided Discovery. Authentic Journeys. Connected Communities.*
 
-Grounded Gems is a community-driven platform that helps you discover authentic experiences and hidden gems in your local area. Connect with your community through meaningful events and places that matter.
+Sacavia is a community-driven platform that helps you discover authentic experiences and meaningful places in your local area. Named after the legendary guide Sacagawea, our platform honors the spirit of exploration and community connection, helping you navigate to hidden treasures and create lasting memories with your tribe.
 
-## ✨ Features
+## 🌟 Overview
 
-- 🗺️ **Explore Map** - Discover hidden gems near you with our interactive map
-- 🎉 **Local Events** - Find and create authentic community events
-- 📱 **Community Feed** - Stay connected with local highlights and activities
-- 👥 **Social Connection** - Connect with like-minded people in your area
-- 📍 **Location Sharing** - Share your favorite spots with the community
-- 🔔 **Smart Notifications** - Get notified about events and activities you care about
-- 📱 **PWA Support** - Install as an app for the best experience
+Sacavia empowers you to:
+- **Discover** hidden gems and authentic local experiences
+- **Connect** with like-minded explorers in your community  
+- **Share** your own discoveries and sacred places
+- **Plan** meaningful journeys with friends and family
+- **Experience** places through the eyes of local guides
+
+Whether you're seeking adventure on new trails, gathering places for community events, or simply want to explore your area with the wisdom of local knowledge, Sacavia guides your path to discovery.
+
+## ✨ Key Features
+
+### 🗺️ **Guided Discovery**
+- Interactive map with curated locations
+- Location verification by community members
+- Insider tips and cultural context
+- Accessibility information and inclusive spaces
+
+### 🎯 **Smart Matching**  
+- AI-powered recommendations based on your interests
+- Event matchmaking for group activities
+- Community-driven content curation
+- Personalized journey suggestions
+
+### 🤝 **Community Connection**
+- Create and join local events
+- Share experiences through stories and photos
+- Follow trusted local guides and explorers
+- Build your network of adventure companions
+
+### 📱 **Native Mobile Experience**
+- Progressive Web App (PWA) for all devices
+- Offline functionality for remote adventures
+- Push notifications for event updates
+- Location-based proximity alerts
+
+## 🛠️ Technology
+
+Sacavia is built as a Progressive Web App (PWA) with:
+
+### Frontend
+- **Next.js 15** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Tailwind CSS** - Utility-first styling
+- **Framer Motion** - Smooth animations
+- **Leaflet/MapLibre** - Interactive mapping
+- **PWA** - Native app experience on web
+
+### Backend  
+- **Payload CMS** - Headless content management
+- **MongoDB** - Flexible document database
+- **Vercel** - Serverless deployment
+- **Resend** - Transactional emails
+- **JWT** - Secure authentication
+
+### Mobile
+- **Capacitor** - Native mobile app wrapper
+- **iOS/Android** - Cross-platform deployment
+- **Push Notifications** - Real-time engagement
+- **Geolocation** - Location-aware features
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
+- Node.js 18+
 - MongoDB database
+- Vercel account (for deployment)
 
 ### Installation
-
-1. Clone the repository:
 ```bash
-git clone https://github.com/your-username/grounded-gems.git
-cd grounded-gems
-```
+# Clone the repository
+git clone https://github.com/yourusername/sacavia.git
+cd sacavia
 
-2. Install dependencies:
-```bash
+# Install dependencies
 npm install
-```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env
-```
+# Copy environment variables
+cp .env.example .env.local
 
-4. Configure your `.env` file with:
-- MongoDB connection string
-- NextAuth configuration
-- Email service settings
-- Other required environment variables
+# Configure your environment variables in .env.local
+# PAYLOAD_SECRET, MONGODB_URI, RESEND_API_KEY, etc.
 
-5. Run the development server:
-```bash
+# Run development server
 npm run dev
 ```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser
+**Sacavia** - *Your Guide to Authentic Discovery* 🏔️
 
-## 🛠️ Tech Stack
+## 🎨 Design Philosophy
 
-- **Frontend**: Next.js 15, React, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, Payload CMS
-- **Database**: MongoDB
-- **Authentication**: NextAuth.js
-- **Maps**: Mapbox/Google Maps
-- **Notifications**: Web Push API
-- **PWA**: Service Workers, Web App Manifest
+Inspired by the wisdom of indigenous navigation and the spirit of Sacagawea's guidance, Sacavia embraces:
 
-## 📱 Progressive Web App
+- **Respect for Place** - Honor the land and communities you visit
+- **Authentic Connection** - Build genuine relationships with people and places
+- **Guided Wisdom** - Learn from those who know the land best
+- **Sustainable Exploration** - Discover responsibly and give back
+- **Inclusive Community** - Welcome all travelers on their journey
 
-Grounded Gems is built as a Progressive Web App (PWA) with:
+## 🌐 API Documentation
 
-- ✅ Offline functionality
-- ✅ Push notifications
-- ✅ App-like experience
-- ✅ Install prompts
-- ✅ Background sync
+### Mobile API Endpoints
 
-## 🎨 Design System
+Sacavia provides a comprehensive REST API for mobile applications:
 
-The app uses a cohesive design system with:
+#### Authentication
+```typescript
+POST /api/v1/mobile/auth/login
+POST /api/v1/mobile/auth/register  
+GET  /api/v1/mobile/auth/me
+POST /api/v1/mobile/auth/logout
+```
 
-- **Primary Colors**: Coral (#FF6B6B) and Teal (#4ECDC4)
-- **Typography**: Modern, readable fonts
-- **Components**: Reusable UI components
-- **Responsive**: Mobile-first design
+#### Discovery & Places
+```typescript
+GET  /api/v1/mobile/locations
+POST /api/v1/mobile/locations
+GET  /api/v1/mobile/locations/[id]
+POST /api/v1/mobile/locations/[id]/interact
+```
+
+#### Community & Events
+```typescript
+GET  /api/v1/mobile/events
+POST /api/v1/mobile/events
+POST /api/v1/mobile/events/[id]/rsvp
+```
+
+#### Stories & Content
+```typescript
+GET  /api/v1/mobile/posts
+POST /api/v1/mobile/posts  
+GET  /api/v1/mobile/posts/[id]
+POST /api/v1/mobile/posts/comments
+```
+
+#### Search & Navigation
+```typescript
+GET  /api/v1/mobile/search
+POST /api/v1/mobile/search/suggestions
+```
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+We welcome contributions from fellow explorers! Please read our [Contributing Guide](CONTRIBUTING.md) to get started.
 
-## 📄 License
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
 
 ## 🙏 Acknowledgments
 
-- Built with ❤️ for local communities
-- Inspired by the need for authentic local connections
-- Thanks to all contributors and community members
+- Inspired by the courage and wisdom of Sacagawea
+- Built with respect for indigenous knowledge and land stewardship
+- Powered by the open-source community
+
+## 📞 Connect With Us
+
+- **Website**: [sacavia.com](https://sacavia.com)
+- **Email**: hello@sacavia.com
+- **Community**: Join our Discord server
+- **Updates**: Follow us on social media
 
 ---
 
-**Grounded Gems** - *Discover Hidden Treasures* 💎
+*"The land knows you, even when you are lost."* - Robin Wall Kimmerer
+
+**Sacavia** - Where every journey begins with wisdom. 🏔️✨
 
 ## Recent Updates
 
@@ -139,162 +220,6 @@ This approach prevents the corruption from reaching the problematic image-size l
 - 👥 User authentication and profiles
 - 📰 Personalized feed with real-time updates
 - 💾 Offline caching and sync capabilities
-
-## API Documentation
-
-### Mobile Endpoints
-- `POST /api/v1/mobile/auth/login` - User authentication
-- `POST /api/v1/mobile/auth/register` - User registration
-- `GET /api/v1/mobile/auth/me` - Get current user
-- `POST /api/v1/mobile/upload/image` - Upload images
-- `POST /api/v1/mobile/posts` - Create posts
-- `GET /api/v1/mobile/posts/feed` - Get personalized feed
-- `GET /api/v1/mobile/locations` - Search locations
-
-## Mobile App Development
-
-This project supports mobile app development using **Capacitor**, which allows you to build native iOS and Android apps from the same codebase.
-
-### Prerequisites
-
-- **iOS Development:** Xcode (macOS only)
-- **Android Development:** Android Studio
-- **Node.js** (v18+)
-
-### Mobile Development Setup
-
-1. **Install Capacitor dependencies** (already included in package.json):
-   ```bash
-   npm install
-   ```
-
-2. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
-
-3. **Sync Capacitor and open mobile app:**
-   ```bash
-   # For iOS
-   npm run dev:mobile
-   
-   # For Android
-   npm run dev:mobile:android
-   ```
-
-### Mobile Development Scripts
-
-- `npm run dev:mobile` - Sync and open iOS project in Xcode
-- `npm run dev:mobile:android` - Sync and open Android project in Android Studio
-- `npm run sync:mobile` - Sync web assets to native projects
-- `npm run add:ios` - Add iOS platform
-- `npm run add:android` - Add Android platform
-- `npm run open:ios` - Open iOS project in Xcode
-- `npm run open:android` - Open Android project in Android Studio
-- `npm run build:mobile` - Build for mobile static export
-
-### Mobile Features
-
-The app includes native mobile features through Capacitor plugins:
-
-- **📱 Camera & Photo Library** - Take photos or select from gallery
-- **📍 Geolocation** - Get user's current location
-- **🔗 Share** - Native sharing functionality
-- **📳 Haptics** - Vibration feedback
-- **🍞 Toast Notifications** - Native toast messages
-- **🌐 In-App Browser** - Open links in native browser
-- **⌨️ Keyboard** - Handle keyboard appearance
-- **📱 Status Bar** - Control status bar appearance
-- **🚀 Splash Screen** - Native splash screen
-
-### Using Mobile Features in Code
-
-Use the `useMobile` hook to access native features:
-
-```tsx
-import { useMobile } from '@/hooks/use-mobile'
-
-export function MyComponent() {
-  const { isMobile, platform, features, actions } = useMobile()
-  
-  const handleTakePhoto = async () => {
-    if (features.camera) {
-      try {
-        const photo = await actions.takePicture()
-        console.log('Photo taken:', photo)
-      } catch (error) {
-        console.error('Error taking photo:', error)
-      }
-    }
-  }
-  
-  const handleGetLocation = async () => {
-    if (features.geolocation) {
-      try {
-        const position = await actions.getCurrentPosition()
-        console.log('Location:', position)
-      } catch (error) {
-        console.error('Error getting location:', error)
-      }
-    }
-  }
-  
-  const handleShare = async () => {
-    await actions.shareContent(
-      'Check out Grounded Gems!',
-      'Discover hidden local treasures',
-      'https://groundedgems.com'
-    )
-  }
-  
-  return (
-    <div>
-      {isMobile && <p>Running on {platform}</p>}
-      <button onClick={handleTakePhoto}>Take Photo</button>
-      <button onClick={handleGetLocation}>Get Location</button>
-      <button onClick={handleShare}>Share App</button>
-    </div>
-  )
-}
-```
-
-### Mobile Configuration
-
-The mobile app configuration is in `capacitor.config.ts`:
-
-- **Development:** Points to `http://localhost:3000` for live reloading
-- **Production:** Will be configured to use your deployed web app
-- **Plugins:** Camera, geolocation, haptics, sharing, etc.
-
-### Building for Production
-
-For production mobile builds:
-
-1. **Build the web app:**
-   ```bash
-   npm run build:mobile
-   ```
-
-2. **Update Capacitor config** to point to your production URL
-3. **Sync and build native apps:**
-   ```bash
-   npm run sync:mobile
-   ```
-
-### Development Workflow
-
-1. **Start the web development server:** `npm run dev`
-2. **Make changes to your React components**
-3. **The mobile app automatically refreshes** (connected to localhost:3000)
-4. **Test native features** using device simulators or real devices
-5. **Use browser dev tools** for debugging (enable in mobile simulators)
-
-### Troubleshooting
-
-- **Xcode build errors:** Make sure you have the latest Xcode and iOS SDK
-- **Android build errors:** Ensure Android Studio and SDK are properly installed
-- **Network issues:** Make sure your mobile device/simulator can reach `localhost:3000`
-- **Plugin errors:** Check that required permissions are granted in device settings
 
 ## Project Structure
 

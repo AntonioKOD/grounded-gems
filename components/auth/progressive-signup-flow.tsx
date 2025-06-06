@@ -109,8 +109,10 @@ export default function ProgressiveSignupFlow({ onComplete }: ProgressiveSignupF
       {currentStep === 1 && (
         <div className="space-y-4">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Grounded Gems</h2>
-            <p className="text-gray-600">Let's get you started with discovering amazing places</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to Sacavia</h2>
+            <p className="text-gray-600 mb-6">
+              Begin your journey of guided discovery. Connect with your community and explore authentic places together.
+            </p>
           </div>
 
           <div className="space-y-4">
@@ -253,8 +255,10 @@ export default function ProgressiveSignupFlow({ onComplete }: ProgressiveSignupF
       {currentStep === 4 && (
         <div className="space-y-4">
           <div className="text-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">How will you use Grounded Gems?</h2>
-            <p className="text-gray-600">This helps us optimize your experience</p>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">How will you explore with Sacavia?</h2>
+            <p className="text-gray-600 mb-6">
+              Help us guide you to the experiences that matter most to you.
+            </p>
           </div>
 
           <div className="space-y-3">

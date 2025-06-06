@@ -144,8 +144,8 @@ self.addEventListener('message', (event) => {
 
 // Push notification event
 self.addEventListener('push', (event) => {
-  let title = 'Grounded Gems';
-  let body = 'New notification from Grounded Gems!';
+  let title = 'Sacavia';
+  let body = 'New notification from Sacavia!';
   let icon = '/icon-192.png';
   let data = {};
 

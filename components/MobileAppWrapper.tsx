@@ -104,9 +104,15 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
   if (!isReady && isCapacitor) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#ff6b6b] to-[#4ecdc4]">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-white font-medium">Loading Grounded Gems...</p>
+        <div className="bg-gradient-to-br from-stone-900 via-amber-900 to-stone-800 p-6 rounded-lg text-center">
+          <h3 className="text-xl font-semibold mb-2 text-amber-100">Welcome to Sacavia</h3>
+          <p className="text-stone-300 mb-4">Your guide to authentic discovery</p>
+          <div className="flex items-center justify-center space-x-2">
+            <div className="w-2 h-2 bg-amber-400 rounded-full animate-bounce"></div>
+            <div className="w-2 h-2 bg-amber-300 rounded-full animate-bounce delay-100"></div>
+            <div className="w-2 h-2 bg-stone-400 rounded-full animate-bounce delay-200"></div>
+          </div>
+          <p className="text-amber-200 font-medium mt-4">Loading Sacavia...</p>
         </div>
       </div>
     )

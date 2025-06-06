@@ -235,22 +235,9 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
       <div className="flex justify-center items-center min-h-[70vh] px-4">
         <Card className="w-full max-w-lg text-center">
           <CardHeader>
-            <CardTitle>Welcome to Grounded Gems!</CardTitle>
+            <CardTitle>Welcome to Sacavia!</CardTitle>
             <CardDescription>
-              {status === "success" && (
-                <>
-                  <CheckCircle className="inline-block h-5 w-5 text-green-600 mb-2" />
-                  <br />
-                  We&apos;ve sent a verification link to <strong>{userData.email}</strong>. 
-                  Please check your inbox to complete your registration.
-                </>
-              )}
-              {status === "resending" && "Resending verification email…"}
-              {status === "resent" && (
-                <>
-                  <CheckCircle className="inline-block h-5 w-5 text-green-600" /> Verification email resent!
-                </>
-              )}
+              Join our community of explorers and discover authentic experiences guided by local wisdom.
             </CardDescription>
           </CardHeader>
           <CardFooter className="flex flex-col gap-3">
@@ -517,7 +504,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
               <div className="space-y-6">
                 <div>
                   <Label className="text-sm font-medium text-gray-700 mb-3 block">
-                    How will you primarily use Grounded Gems?
+                    How will you primarily explore with Sacavia?
                   </Label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {useCaseOptions.map((option) => (

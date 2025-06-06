@@ -1,35 +1,36 @@
-import type { CapacitorConfig } from '@capacitor/cli';
+import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.groundedgems.app',
-  appName: 'Grounded Gems',
-  webDir: 'public',
+  appId: 'com.sacavia.app',
+  appName: 'Sacavia',
+  webDir: 'out',
   server: {
-    url: 'https://groundedgems.com',
-    cleartext: false
+    androidScheme: 'https'
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 500,
-      backgroundColor: '#FF6B6B',
-      androidScaleType: 'CENTER_CROP',
+      launchShowDuration: 3000,
+      launchAutoHide: true,
+      backgroundColor: "#8B4513",
+      androidSplashResourceName: "splash",
+      androidScaleType: "CENTER_CROP",
       showSpinner: false,
+      androidSpinnerStyle: "large",
+      iosSpinnerStyle: "small",
+      spinnerColor: "#D2B48C",
       splashFullScreen: true,
       splashImmersive: true,
-      launchAutoHide: true,
-      launchFadeOutDuration: 200
+      layoutName: "launch_screen",
+      useDialog: true,
     },
     StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#ffffff',
-      overlaysWebView: false
+      style: 'dark',
+      backgroundColor: "#8B4513",
     },
     Keyboard: {
       resize: 'body',
-      style: 'DARK',
+      style: 'dark',
       resizeOnFullScreen: true,
-      accessoryBarVisible: false,
-      disableScroll: false
     },
     Camera: {
       permissions: ['camera', 'photos']

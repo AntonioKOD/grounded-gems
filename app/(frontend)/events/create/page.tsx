@@ -9,8 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Create Event | Grounded Gems",
-  description: "Create a new event and invite others to join",
+  title: "Create Community Gathering | Sacavia",
+  description: "Organize a meaningful gathering for your community. Share experiences and bring people together around authentic connections.",
 }
 
 export default function CreateEventPage() {

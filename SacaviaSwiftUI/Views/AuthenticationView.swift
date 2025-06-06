@@ -15,9 +15,10 @@ struct AuthenticationView: View {
                     .frame(width: 120, height: 120)
                     .padding(.top, 50)
                 
-                Text("Grounded Gems")
+                Text("Sacavia")
                     .font(.largeTitle)
                     .fontWeight(.bold)
+                    .foregroundColor(Color(red: 0.545, green: 0.271, blue: 0.075)) // #8B4513
                     .padding(.bottom, 30)
                 
                 // Segmented Control
@@ -412,7 +413,7 @@ struct LoginView: View {
     private func authenticateWithBiometrics() {
         Task {
             let result = await BiometricAuthManager.shared.authenticateWithBiometrics(
-                reason: "Log in to your Grounded Gems account"
+                reason: "Authenticate to access your Sacavia journey"
             )
             
             switch result {

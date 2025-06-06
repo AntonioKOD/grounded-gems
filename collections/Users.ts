@@ -16,8 +16,8 @@ export const Users: CollectionConfig = {
   auth: {
     maxLoginAttempts: 0, // Disable login attempt limits (0 = unlimited)
     verify: {
-      generateEmailSubject: (args: any) => 
-        `Welcome to Grounded Gems, please verify ${args?.user?.email}`,   // Custom subject  [oai_citation:14‡Payload](https://payloadcms.com/docs/authentication/email?utm_source=chatgpt.com)
+      generateEmailSubject: ({ user }) => 
+        `Welcome to Sacavia, please verify ${user?.email}`,   // Custom subject
       generateEmailHTML: (args: any) => {
         const { req, token, user } = args || {};
         const url = `${process.env.FRONTEND_URL}/verify?token=${token}`;
@@ -55,7 +55,7 @@ export const Users: CollectionConfig = {
                           Hi <strong>${user.name}</strong>,
                         </p>
                         <p style="margin-top:0;margin-bottom:25px;">
-                          Thank you for joining Grounded Gems! We're excited to have you as part of our community. To get started, please verify your email address by clicking the button below:
+                          Thank you for joining Sacavia! We're excited to have you as part of our community of explorers. To get started on your journey of guided discovery, please verify your email address by clicking the button below:
                         </p>
                         
                         <!-- Button -->
@@ -78,13 +78,13 @@ export const Users: CollectionConfig = {
                         <p style="margin-top:0;margin-bottom:20px;font-size:14px;color:#666666;">
                           If the button above doesn't work, copy and paste this URL into your browser:
                         </p>
-                        <p style="margin-top:0;margin-bottom:30px;font-size:14px;color:#666666;word-break:break-all;background-color:#f3f4f6;padding:12px;border-radius:8px;border:1px solid #4ecdc4;">
-                          <a href="${url}" style="color:#ff6b6b;text-decoration:none;">${url}</a>
+                        <p style="margin-top:0;margin-bottom:30px;font-size:14px;color:#666666;word-break:break-all;background-color:#f3f4f6;padding:12px;border-radius:8px;border:1px solid #8B4513;">
+                          <a href="${url}" style="color:#8B4513;text-decoration:none;">${url}</a>
                         </p>
                         
-                        <p style="margin-top:30px;margin-bottom:0;border-top:1px solid #4ecdc4;padding-top:20px;">
-                          Cheers,<br />
-                          <strong>The Grounded Gems Team</strong>
+                        <p style="margin-top:30px;margin-bottom:0;border-top:1px solid #8B4513;padding-top:20px;">
+                          Blessings on your journey,<br />
+                          <strong>The Sacavia Team</strong>
                         </p>
                       </td>
                     </tr>
@@ -131,7 +131,7 @@ export const Users: CollectionConfig = {
     },
     forgotPassword: {
       generateEmailSubject: (args: any) => 
-        `Reset your Grounded Gems password`,
+        `Reset your Sacavia password`,
       generateEmailHTML: (args: any) => {
         const { req, token, user } = args || {};
         const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
@@ -169,7 +169,7 @@ export const Users: CollectionConfig = {
                           Hi <strong>${user.name || user.email}</strong>,
                         </p>
                         <p style="margin-top:0;margin-bottom:25px;">
-                          We received a request to reset your password for your Grounded Gems account. If you didn't make this request, you can safely ignore this email.
+                          We received a request to reset your password for your Sacavia account. If you didn't make this request, you can safely ignore this email.
                         </p>
                         <p style="margin-top:0;margin-bottom:25px;">
                           To reset your password, click the button below:

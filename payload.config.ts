@@ -70,8 +70,8 @@ export default buildConfig({
 
   // Email transport using Resend
   email: resendAdapter({
-    defaultFromAddress: 'info@groundedgems.com',
-    defaultFromName: 'Grounded Gems',
+    defaultFromName: 'Sacavia',
+    defaultFromAddress: 'hello@sacavia.com',
     apiKey: process.env.RESEND_API_KEY || '',
   }),
 

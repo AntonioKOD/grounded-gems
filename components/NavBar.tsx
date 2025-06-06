@@ -139,25 +139,17 @@ export default function NavBar({ initialUser }: NavBarProps) {
         <div className="container mx-auto px-4 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center space-x-3 group relative">
-              <div className="relative w-10 h-10 lg:w-12 lg:h-12 flex items-center justify-center transition-all duration-300 group-hover:scale-110">
-                <div className="absolute inset-0 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-xl blur-sm group-hover:blur-md transition-all duration-300 opacity-0 group-hover:opacity-100"></div>
-                <div className="relative bg-white/80 backdrop-blur-sm rounded-xl p-2 shadow-lg group-hover:shadow-xl transition-all duration-300 border border-white/30">
-                  <Image 
-                    src="/logo.svg" 
-                    alt="Grounded Gems" 
-                    className="w-full h-full object-contain"
-                    width={32}
-                    height={32}
-                    priority
-                  />
-                </div>
-              </div>
-              <div className="hidden sm:block">
-                <span className="text-xl lg:text-2xl font-bold bg-gradient-to-r from-[#FF6B6B] via-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent transition-all duration-300 group-hover:bg-gradient-to-r group-hover:from-[#4ECDC4] group-hover:to-[#FF6B6B]">
-                  Grounded Gems
-                </span>
-              </div>
+            <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+              <Image
+                src="https://i.imgur.com/btJCRer.png"
+                width={40}
+                height={40}
+                alt="Sacavia"
+                className="rounded-lg"
+              />
+              <span className="ml-3 text-xl font-bold text-[#8B4513] hidden sm:block">
+                Sacavia
+              </span>
             </Link>
 
             {/* Desktop Navigation Links */}

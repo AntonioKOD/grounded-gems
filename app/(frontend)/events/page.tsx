@@ -8,8 +8,8 @@ import { getSavedGemJourneys } from '@/app/(frontend)/events/actions'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Events | Grounded Gems",
-  description: "Discover and join local events in your area",
+  title: "Community Gatherings | Sacavia",
+  description: "Discover and join authentic community gatherings and events. Connect with fellow explorers and create meaningful memories together.",
 }
 
 export default async function EventsPage({ searchParams }: { searchParams: any }) {

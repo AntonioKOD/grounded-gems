@@ -2,31 +2,30 @@ import { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Grounded Gems - Discover Hidden Treasures',
-    short_name: 'Grounded Gems',
-    description: 'Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.',
+    name: 'Sacavia - Guided Discovery & Authentic Journeys',
+    short_name: 'Sacavia',
+    description: 'Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#FF6B6B',
-    orientation: 'portrait-primary',
+    background_color: '#8B4513',
+    theme_color: '#8B4513',
+    orientation: 'portrait',
     scope: '/',
     icons: [
       {
-        src: '/icon-192.png',
+        src: '/icon-192x192.png',
         sizes: '192x192',
         type: 'image/png',
-        purpose: 'any maskable'
       },
       {
-        src: '/icon-512.png',
+        src: '/icon-512x512.png',
         sizes: '512x512',
         type: 'image/png',
-        purpose: 'any maskable'
-      }
+      },
     ],
-    categories: ['lifestyle', 'social', 'travel', 'local', 'community'],
+    categories: ['travel', 'social', 'lifestyle', 'navigation'],
     lang: 'en',
+    dir: 'ltr',
     shortcuts: [
       {
         name: 'Explore Map',

@@ -20,11 +20,11 @@ export default function MobileTopNavbar({ initialUser }: MobileTopNavbarProps) {
       <Link href="/" className="flex items-center h-full">
         <div className="relative w-9 h-9 flex items-center justify-center bg-gradient-to-br from-[#FF6B6B]/10 to-[#4ECDC4]/10 rounded-lg">
           <Image 
-            src="/logo-mobile.svg" 
-            alt="Grounded Gems" 
+            src="https://i.imgur.com/btJCRer.png" 
+            alt="Sacavia" 
             width={36} 
             height={36} 
-            className="w-full h-full object-contain"
+            className="w-full h-full object-contain rounded-lg"
             priority
           />
         </div>

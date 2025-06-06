@@ -45,8 +45,8 @@ export default function MobileAppInit() {
               // Show welcome notification
               setTimeout(() => {
                 MobileNotificationService.showLocalNotification({
-                  title: '🎉 Welcome to Grounded Gems!',
-                  body: 'You\'ll now receive notifications about new locations and events.',
+                  title: '🎉 Welcome to Sacavia!',
+                  body: 'Your guide to authentic discovery is ready. Start exploring meaningful places in your community.',
                   data: { type: 'welcome' }
                 })
               }, 2000)

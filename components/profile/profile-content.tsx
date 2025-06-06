@@ -945,8 +945,8 @@ export default function ProfileContent({
                       <p className="text-gray-900 font-medium">{formatDate(profile.createdAt)}</p>
                       <p className="text-sm text-gray-500 mt-1" suppressHydrationWarning>
                         {profile.createdAt && typeof window !== 'undefined'
-                          ? `${Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days on Grounded Gems`
-                          : 'Member of Grounded Gems'
+                                                      ? `${Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days on the journey`
+                          : 'Explorer with Sacavia'
                         }
                       </p>
                     </CardContent>

@@ -18,8 +18,13 @@ export const dynamic = "force-dynamic"
 export const revalidate = 60 // Revalidate at most once per minute
 
 export const metadata: Metadata = {
-  title: "Grounded Gems | Discover Hidden Treasures",
-  description: "Explore and share hidden gems, local experiences, and amazing places with like-minded explorers.",
+  title: "Sacavia | Guided Discovery & Authentic Journeys",
+  description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories. Your journey begins here.",
+  openGraph: {
+    title: "Sacavia | Guided Discovery & Authentic Journeys",
+    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    images: ['/og-image.png'],
+  },
 }
 
 

@@ -11,10 +11,56 @@ import MainContentWrapper from "@/components/ui/MainContentWrapper"
 
 import MobileAppWrapper from '@/components/MobileAppWrapper'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import { Metadata } from "next"
 
-export const metadata = {
-  description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",
-  title: "Grounded Gems - Discover Hidden Treasures",
+export const metadata: Metadata = {
+  title: "Sacavia - Guided Discovery & Authentic Journeys",
+  description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+  keywords: "local discovery, authentic experiences, community events, guided exploration, travel, places, native wisdom",
+  authors: [{ name: "Sacavia Team" }],
+  creator: "Sacavia",
+  publisher: "Sacavia",
+  metadataBase: new URL('https://sacavia.com'),
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: "Sacavia - Guided Discovery & Authentic Journeys",
+    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    url: 'https://sacavia.com',
+    siteName: 'Sacavia',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Sacavia - Your Guide to Authentic Discovery',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: "Sacavia - Guided Discovery & Authentic Journeys",
+    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    images: ['/og-image.png'],
+    creator: '@sacaviaapp',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  verification: {
+    google: 'your-google-verification-code',
+  },
 }
 
 export default async function RootLayout(props: { children: React.ReactNode }) {

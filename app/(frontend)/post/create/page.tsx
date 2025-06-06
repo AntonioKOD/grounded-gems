@@ -7,8 +7,8 @@ import { Loader2 } from "lucide-react"
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Create Post | Grounded Gems",
-  description: "Share your experience with the community",
+  title: "Share Your Story | Sacavia",
+  description: "Share your discoveries and experiences with the community. Help others find their path to authentic places.",
 }
 
 export default function CreatePostPage() {
