@@ -200,46 +200,86 @@ export function useMobile() {
   const [isMobile, setIsMobile] = useState(false)
   const [platform, setPlatform] = useState<string>('')
   const [isReady, setIsReady] = useState(false)
+  const [features, setFeatures] = useState({
+    camera: false,
+    geolocation: false,
+    haptics: false,
+  })
 
   useEffect(() => {
     // Check if we're running in a native environment
-    const checkMobile = () => {
-      const mobile = isNative()
-      const currentPlatform = getPlatform()
-      
-      setIsMobile(mobile)
-      setPlatform(currentPlatform)
-      setIsReady(true)
+    const checkMobile = async () => {
+      try {
+        // Import functions dynamically to prevent SSR issues
+        const { isNative, getPlatform, canUseCamera, canUseGeolocation, canUseHaptics } = await import('@/lib/capacitor-utils')
+        
+        const mobile = await isNative()
+        const currentPlatform = await getPlatform()
+        
+        setIsMobile(mobile)
+        setPlatform(currentPlatform)
+        
+        // Check features asynchronously
+        const [camera, geolocation, haptics] = await Promise.all([
+          canUseCamera(),
+          canUseGeolocation(),
+          canUseHaptics(),
+        ])
+        
+        setFeatures({
+          camera,
+          geolocation,
+          haptics,
+        })
+        
+        setIsReady(true)
+      } catch (error) {
+        console.error('Error checking mobile capabilities:', error)
+        // Set fallback values and mark as ready
+        setIsMobile(false)
+        setPlatform('web')
+        setFeatures({
+          camera: false,
+          geolocation: false,
+          haptics: false,
+        })
+        setIsReady(true)
+      }
     }
 
     // Wait for capacitor to be ready
     if (typeof window !== 'undefined') {
-      if (window.Capacitor) {
-        checkMobile()
-      } else {
-        // Not a native app, still set as ready
-        setIsReady(true)
-      }
+      checkMobile()
+    } else {
+      // Server-side, set defaults
+      setIsReady(true)
     }
   }, [])
+
+  // Import actions dynamically to prevent SSR issues
+  const getActions = async () => {
+    try {
+      const { takePicture, pickImage, getCurrentPosition, shareContent, showToast, vibrate, openUrl } = await import('@/lib/capacitor-utils')
+      return {
+        takePicture,
+        pickImage,
+        getCurrentPosition,
+        shareContent,
+        showToast,
+        vibrate,
+        openUrl,
+      }
+    } catch (error) {
+      console.error('Error loading mobile actions:', error)
+      return {}
+    }
+  }
 
   return {
     isMobile,
     platform,
     isReady,
-    features: {
-      camera: canUseCamera(),
-      geolocation: canUseGeolocation(),
-      haptics: canUseHaptics(),
-    },
-    actions: {
-      takePicture,
-      pickImage,
-      getCurrentPosition,
-      shareContent,
-      showToast,
-      vibrate,
-      openUrl,
-    }
+    features,
+    getActions, // Return a function to get actions asynchronously
   }
 }

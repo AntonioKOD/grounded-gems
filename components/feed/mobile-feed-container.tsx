@@ -1,16 +1,18 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
-import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList, ChevronDown, TrendingUp, Users, Zap, Search, Plus } from 'lucide-react'
+import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList, ChevronDown, TrendingUp, Users, Zap, Search, Plus, Loader2 } from 'lucide-react'
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
+import { Capacitor } from '@capacitor/core'
+import { getActions } from '@/lib/capacitor-utils'
 
 import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
 import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, selectFeedPosts, selectFeedState } from "@/lib/features/feed/feedSlice"
+import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, selectFeedPosts, selectFeedState, setFeedType, setSortBy, setUserId } from "@/lib/features/feed/feedSlice"
 import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
 import { fetchUser } from "@/lib/features/user/userSlice"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
@@ -23,6 +25,7 @@ import FeedTransition from "./feed-transition"
 import CollapsiblePostForm from "../post/collapsible-post-form"
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 import { useMobile } from "@/hooks/use-mobile"
+import { useThrottledScroll, useInfiniteScroll, useMemoryManagement } from "@/hooks/use-performance"
 
 interface MobileFeedContainerProps {
   userId?: string
@@ -58,18 +61,41 @@ export default function MobileFeedContainer({
   const { user, isLoading: isUserLoading, isAuthenticated } = useAppSelector((state) => state.user)
 
   // Mobile integration
-  const { isMobile, platform, features, actions } = useMobile()
+  const { isMobile, platform, features, getActions } = useMobile()
 
-  const [pullToRefreshDelta, setPullToRefreshDelta] = useState<number>(0)
-  const [isPullingToRefresh, setIsPullingToRefresh] = useState<boolean>(false)
-  const [activeCategory, setActiveCategory] = useState<string>("discover")
+  // Local state
   const [isMounted, setIsMounted] = useState<boolean>(false)
+  const [activeCategory, setActiveCategory] = useState<string>("all")
+  const [isPullingToRefresh, setIsPullingToRefresh] = useState<boolean>(false)
+  const [pullToRefreshDelta, setPullToRefreshDelta] = useState<number>(0)
+
+  // Refs for better performance
+  const initialLoadComplete = useRef<boolean>(false)
   const feedRef = useRef<HTMLDivElement>(null)
-  const initialLoadComplete = useRef(false)
   const touchStartY = useRef<number>(0)
-  const scrollPosition = useRef<number>(0)
-  const observer = useRef<IntersectionObserver | null>(null)
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Memory management
+  const { addCleanup } = useMemoryManagement()
+
+  // Add scroll cleanup on mount
+  useEffect(() => {
+    const currentFeedRef = feedRef.current
+    
+    // Add cleanup for scroll event listeners
+    if (currentFeedRef) {
+      addCleanup(() => {
+        // Clean up any remaining event listeners
+        console.log('Cleaning up mobile feed scroll listeners')
+      })
+    }
+
+    return () => {
+      // Additional cleanup on unmount
+      if (currentFeedRef) {
+        currentFeedRef.removeEventListener('scroll', handleScroll as any)
+      }
+    }
+  }, [addCleanup, handleScroll])
 
   // Normalize post data to ensure consistent media URLs and interaction states using proper image utilities
   const normalizePost = useCallback((post: any): Post => {
@@ -186,19 +212,37 @@ export default function MobileFeedContainer({
     window.addEventListener("user-login", handleUserLogin as any);
     window.addEventListener("postCreated", handlePostCreated as any);
 
+    // Add cleanup
+    addCleanup(() => {
+      window.removeEventListener("user-updated", handleUserUpdate as any);
+      window.removeEventListener("user-login", handleUserLogin as any);
+      window.removeEventListener("postCreated", handlePostCreated as any);
+    });
+
     return () => {
       window.removeEventListener("user-updated", handleUserUpdate as any);
       window.removeEventListener("user-login", handleUserLogin as any);
       window.removeEventListener("postCreated", handlePostCreated as any);
     };
-  }, [dispatch, feedType, sortBy, activeCategory, isMounted, loading]);
+  }, [dispatch, feedType, sortBy, activeCategory, isMounted, loading, addCleanup]);
 
   // Categories for feed filtering
-  const categories = [
-    { id: "discover", name: "Discover", icon: Sparkles },
-    { id: "trending", name: "Popular", icon: Flame },
-    { id: "recent", name: "Latest", icon: Clock },
-  ]
+  const categories = useMemo(() => [
+    { id: "all", name: "All", emoji: "🌟" },
+    { id: "discover", name: "Discover", emoji: "🗺️" },
+    { id: "food", name: "Food", emoji: "🍽️" },
+    { id: "nature", name: "Nature", emoji: "🌲" },
+    { id: "culture", name: "Culture", emoji: "🎭" },
+    { id: "sports", name: "Sports", emoji: "⚽" },
+    { id: "nightlife", name: "Nightlife", emoji: "🌙" },
+  ], [])
+
+  // Initialize feed settings
+  useEffect(() => {
+    dispatch(setFeedType(feedType))
+    dispatch(setSortBy(sortBy))
+    if (userId) dispatch(setUserId(userId))
+  }, [dispatch, feedType, sortBy, userId])
 
   // Set mounted state and load initial data
   useEffect(() => {
@@ -218,7 +262,7 @@ export default function MobileFeedContainer({
         feedType: "all", 
         sortBy: "recent", 
         userId,
-        category: activeCategory,
+        category: activeCategory !== "all" ? activeCategory : undefined,
         currentUserId: user?.id,
         force: false // Don't force on initial load
       }))
@@ -235,145 +279,61 @@ export default function MobileFeedContainer({
 
     return () => {
       setIsMounted(false)
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-      if (observer.current) {
-        observer.current.disconnect()
-      }
     }
-  }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id, isUserLoading])
+  }, [dispatch, userId, activeCategory, user?.id, isUserLoading])
 
-  // Refresh posts with pull-to-refresh
-  const refreshPosts = async () => {
-    try {
-      setIsRefreshing(true)
-      console.log('Refreshing posts...')
+  // Load more posts function with optimized dependencies
+  const handleLoadMore = useCallback(() => {
+    if (!loading && !loadingMore && hasMore && isMounted) {
+      dispatch(loadMorePosts({ 
+        feedType, 
+        sortBy, 
+        userId,
+        category: activeCategory !== "all" ? activeCategory : undefined,
+        currentUserId: user?.id
+      }))
+    }
+  }, [dispatch, loading, loadingMore, hasMore, isMounted, feedType, sortBy, userId, activeCategory, user?.id])
+
+  // Optimized infinite scroll with better threshold
+  const lastPostElementRef = useInfiniteScroll(
+    handleLoadMore,
+    hasMore,
+    loading || loadingMore,
+    300 // Load when 300px from bottom
+  )
+
+  // Optimized scroll handling with throttling
+  const handleScroll = useThrottledScroll(
+    useCallback((scrollTop: number, scrollHeight: number, clientHeight: number) => {
+      // Only handle pull-to-refresh if at the top
+      if (scrollTop === 0 && features.pullToRefresh) {
+        // Handle pull-to-refresh logic here if needed
+      }
       
-      const response = await dispatch(
-        fetchFeedPosts({
-          feedType,
-          sortBy,
-          page: 1,
-          category: activeCategory !== 'all' ? activeCategory : undefined
-        })
-      ).unwrap()
-
-      // Normalize posts before setting them
-      if (response.posts) {
-        const normalizedPosts = response.posts.map((post: any) => normalizePost(post))
-        setNormalizedPosts(normalizedPosts)
+      // Auto-trigger load more when approaching bottom (backup to intersection observer)
+      if (scrollTop + clientHeight >= scrollHeight - 100 && !loadingMore && hasMore && !loading) {
+        // This provides additional load triggering besides intersection observer
+        handleLoadMore()
       }
+    }, [features.pullToRefresh, loadingMore, hasMore, loading, handleLoadMore]),
+    100 // Throttle to every 100ms for better performance
+  )
 
-      console.log('Posts refreshed successfully')
-      toast.success('Feed refreshed!')
-    } catch (error) {
-      console.error('Error refreshing posts:', error)
-      toast.error('Failed to refresh feed')
-    } finally {
-      setIsRefreshing(false)
-      setLastRefresh(Date.now())
-    }
-  }
+  // Refresh posts function
+  const refreshPosts = useCallback(() => {
+    dispatch(fetchFeedPosts({ 
+      feedType, 
+      sortBy, 
+      userId,
+      category: activeCategory !== "all" ? activeCategory : undefined,
+      currentUserId: user?.id,
+      force: true 
+    }))
+  }, [dispatch, feedType, sortBy, userId, activeCategory, user?.id])
 
-  // Load more posts for infinite scroll  
-  const handleLoadMore = async () => {
-    if (loading || loadingMore || !hasMore) return
-
-    try {
-      const response = await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
-      
-      // Normalize new posts before adding them
-      if (response.posts) {
-        const normalizedNewPosts = response.posts.map((post: any) => normalizePost(post))
-        setNormalizedPosts(prev => [...prev, ...normalizedNewPosts])
-      }
-    } catch (error) {
-      console.error('Error loading more posts:', error)
-      toast.error('Failed to load more posts')
-    }
-  }
-
-  // Handle post update
-  const handlePostUpdate = (updatedPost: Post) => {
-    dispatch(updatePost(updatedPost))
-  }
-  
-  // Handle scroll events with debounce
-  useEffect(() => {
-    if (!isMounted) return
-    
-    const container = feedRef.current
-
-    const handleScroll = () => {
-      if (!container) return
-      
-      // Clear existing timeout
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-
-      // Set new timeout for scroll handling
-      scrollTimeoutRef.current = setTimeout(() => {
-        if (!isMounted) return
-        
-        // Record scroll position
-        scrollPosition.current = container.scrollTop
-        
-        // Load more posts when reaching the bottom
-        const { scrollTop, scrollHeight, clientHeight } = container
-        if (scrollTop + clientHeight >= scrollHeight - 300 && !loadingMore && hasMore && !loading) {
-          handleLoadMore()
-        }
-      }, 150) // Increased debounce to reduce excessive calls
-    }
-    
-    container?.addEventListener('scroll', handleScroll)
-    return () => {
-      container?.removeEventListener('scroll', handleScroll)
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-    }
-  }, [loadingMore, hasMore, isMounted, loading])
-  
-  // Pull-to-refresh implementation
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isMounted || loading || refreshing) return
-    
-    if (scrollPosition.current === 0) {
-      touchStartY.current = e.touches[0].clientY
-    }
-  }
-  
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isMounted || loading || refreshing) return
-    
-    if (scrollPosition.current === 0 && touchStartY.current > 0) {
-      const currentY = e.touches[0].clientY
-      const delta = currentY - touchStartY.current
-      
-      if (delta > 0 && delta < 150) {
-        setPullToRefreshDelta(delta)
-        setIsPullingToRefresh(true)
-      }
-    }
-  }
-  
-  const handleTouchEnd = () => {
-    if (!isMounted || loading || refreshing) return
-    
-    if (isPullingToRefresh && pullToRefreshDelta > 80) {
-      refreshPosts()
-    }
-    
-    setPullToRefreshDelta(0)
-    setIsPullingToRefresh(false)
-    touchStartY.current = 0
-  }
-  
-  // Handle category change
-  const handleCategoryChange = (category: string) => {
+  // Handle category change with haptic feedback
+  const handleCategoryChange = useCallback((category: string) => {
     if (!isMounted || category === activeCategory || loading) return
     
     setActiveCategory(category)
@@ -383,7 +343,7 @@ export default function MobileFeedContainer({
       feedRef.current.scrollTop = 0
     }
     
-    // Update Redux state and fetch posts with the new category
+    // Update Redux state and fetch posts
     dispatch(setCategory(category !== "all" ? category : undefined))
     dispatch(fetchFeedPosts({ 
       feedType, 
@@ -394,25 +354,27 @@ export default function MobileFeedContainer({
       force: true 
     }))
     
-    // Use native haptic feedback on mobile, fallback to web vibration
+    // Haptic feedback
     if (isMobile && features.haptics) {
-      actions.vibrate()
-    } else if (isMounted && typeof navigator !== 'undefined' && navigator.vibrate) {
+      getActions().then(actions => {
+        if (actions.vibrate) {
+          actions.vibrate()
+        }
+      }).catch(() => {
+        if (isMounted && navigator.vibrate) {
+          navigator.vibrate(30)
+        }
+      })
+    } else if (isMounted && navigator.vibrate) {
       navigator.vibrate(30)
     }
-  }
-  
-  // Create a ref callback for the last post element (infinite scrolling)
-  const lastPostElementRef = useCallback((node: HTMLDivElement) => {
-    if (loading || loadingMore) return
-    if (observer.current) observer.current.disconnect()
-    observer.current = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting && hasMore && !loading) {
-        handleLoadMore()
-      }
-    })
-    if (node) observer.current.observe(node)
-  }, [loading, loadingMore, hasMore])
+  }, [isMounted, activeCategory, loading, feedRef, dispatch, feedType, sortBy, userId, user?.id, isMobile, features.haptics])
+
+  // Post update handler
+  const handlePostUpdate = useCallback((updatedPost: Post) => {
+    // Post updates are handled by Redux automatically
+    console.log('Post updated:', updatedPost.id)
+  }, [])
 
   // Don't render anything before hydration completes
   if (!isMounted) {
@@ -431,71 +393,105 @@ export default function MobileFeedContainer({
   })
 
   return (
-    <div className={`max-w-2xl mx-auto relative ${className}`}>
-      <div className="w-full relative">
-        {/* Categories horizontal scroll */}
-        <div className="sticky top-0 z-10 bg-gradient-to-b from-black via-black/80 to-transparent">
-          <ScrollArea className="w-full">
-            <div className="flex justify-center space-x-2 py-3">
-              {categories.map((category) => {
-                const Icon = category.icon
-                return (
-                  <Button
-                    key={category.id}
-                    variant={activeCategory === category.id ? "default" : "ghost"}
-                    size="sm"
-                    className={`flex items-center gap-1.5 px-3 rounded-full flex-shrink-0 transition-all duration-300
-                      ${activeCategory === category.id ? 
-                        "bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm" : 
-                        "text-white/60 hover:text-white hover:bg-white/5"}`}
-                    onClick={() => handleCategoryChange(category.id)}
-                    disabled={loading}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    <span className="text-sm font-medium">{category.name}</span>
-                  </Button>
-                )
-              })}
-            </div>
-          </ScrollArea>
-        </div>
-        
-        {/* Pull to refresh indicator */}
-        <AnimatePresence>
-          {pullToRefreshDelta > 0 && (
-            <motion.div 
-              className="absolute top-0 left-0 right-0 flex justify-center items-center z-20 pt-2"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+    <div className={`w-full h-full flex flex-col bg-white dark:bg-gray-900 ${className}`}>
+      {/* Header with category filters */}
+      <div className="flex-shrink-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20">
+        {/* Category Pills */}
+        <div className="flex overflow-x-auto scrollbar-hide px-4 py-3 gap-2">
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              onClick={() => handleCategoryChange(category.id)}
+              className={`
+                flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200
+                ${activeCategory === category.id
+                  ? 'bg-[#FF6B6B] text-white shadow-lg transform scale-105'
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }
+              `}
             >
-              <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm flex items-center gap-2 text-sm">
-                <RefreshCw 
-                  className={`h-4 w-4 ${pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-400"} ${
-                    refreshing ? "animate-spin" : "transition-transform"
-                  }`} 
-                  style={{ 
-                    transform: !refreshing ? `rotate(${(pullToRefreshDelta / 150) * 360}deg)` : 'none'
-                  }}
-                />
-                <span className={pullToRefreshDelta > 80 ? "text-[#FF6B6B]" : "text-gray-500"}>
-                  {pullToRefreshDelta > 80 ? "Release to refresh" : "Pull to refresh"}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <span className="mr-1">{category.emoji}</span>
+              {category.name}
+            </button>
+          ))}
+        </div>
 
-        {/* Feed content */}
+        {/* Post form */}
+        {showPostForm && user && (
+          <div className="px-4 pb-3">
+            <CollapsiblePostForm 
+              user={user} 
+              onPostCreated={() => refreshPosts()}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Pull to refresh indicator */}
+      {isPullingToRefresh && (
+        <div 
+          className="absolute top-16 left-0 right-0 flex justify-center z-30 pointer-events-none"
+          style={{ transform: `translateY(${Math.min(pullToRefreshDelta - 20, 50)}px)` }}
+        >
+          <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full flex items-center gap-2 text-white">
+            <RefreshCw 
+              className={`h-4 w-4 ${pullToRefreshDelta > 80 ? "text-green-400" : "text-white/60"} ${
+                refreshing ? "animate-spin" : ""
+              }`} 
+              style={{ 
+                transform: !refreshing ? `rotate(${(pullToRefreshDelta / 150) * 360}deg)` : 'none'
+              }}
+            />
+            <span className={`text-sm ${pullToRefreshDelta > 80 ? "text-green-400" : "text-white/60"}`}>
+              {pullToRefreshDelta > 80 ? "Release to refresh" : "Pull to refresh"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Feed content */}
+      <div className="flex-1 relative overflow-hidden">
         <div 
           ref={feedRef}
-          className="h-[100dvh] snap-y snap-mandatory overflow-y-auto overflow-x-hidden relative pb-20 mobile-scroll"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          className="h-full overflow-y-auto mobile-scroll pb-20"
+          onTouchStart={(e) => {
+            if (!isMounted || loading || refreshing) return
+            
+            if (feedRef.current?.scrollTop === 0) {
+              touchStartY.current = e.touches[0].clientY
+            }
+          }}
+          onTouchMove={(e) => {
+            if (!isMounted || loading || refreshing) return
+            
+            if (feedRef.current?.scrollTop === 0 && touchStartY.current > 0) {
+              const currentY = e.touches[0].clientY
+              const delta = currentY - touchStartY.current
+              
+              if (delta > 0 && delta < 150) {
+                setPullToRefreshDelta(delta)
+                setIsPullingToRefresh(true)
+              }
+            }
+          }}
+          onTouchEnd={() => {
+            if (!isMounted || loading || refreshing) return
+            
+            if (isPullingToRefresh && pullToRefreshDelta > 80) {
+              refreshPosts()
+            }
+            
+            setPullToRefreshDelta(0)
+            setIsPullingToRefresh(false)
+            touchStartY.current = 0
+          }}
+          onScroll={(e) => handleScroll(
+            e.currentTarget.scrollTop,
+            e.currentTarget.scrollHeight,
+            e.currentTarget.clientHeight
+          )}
           style={{
-            height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
-            paddingBottom: 0
+            height: 'calc(100vh - 140px)', // Account for header and mobile nav
           }}
         >
           {loading && reduxPosts.length === 0 ? (
@@ -505,50 +501,45 @@ export default function MobileFeedContainer({
               {reduxPosts.length === 0 ? (
                 <FeedErrorState
                   message={error || "No posts found. Try a different category or check back later."}
-                  onRetry={() => refreshPosts()}
+                  onRetry={refreshPosts}
                 />
               ) : (
-                <div className="space-y-0 pb-16">
-                  {reduxPosts
-                    // Deduplicate posts by ID to prevent duplicate keys
-                    .filter((post, index, array) => {
-                      const firstIndex = array.findIndex(p => p.id === post.id)
-                      const isDuplicate = firstIndex !== index
-                      if (isDuplicate) {
-                        console.warn(`Duplicate post detected: ${post.id} at index ${index}, first seen at ${firstIndex}`)
-                      }
-                      return firstIndex === index
-                    })
-                    .map((post, index) => (
+                <div className="space-y-1">
+                  {reduxPosts.map((post, index) => (
                     <div
-                      key={`${post.id}-${index}`}
-                      ref={index === reduxPosts.length - 1 ? lastPostElementRef : null}
-                      className="snap-start w-full flex items-center justify-center relative"
-                      style={{
-                        height: 'calc(100vh - 70px)', // Full viewport height minus mobile nav height
-                        minHeight: '400px'
-                      }}
+                      key={post.id}
+                      ref={index === reduxPosts.length - 1 ? lastPostElementRef : undefined}
                     >
                       <MobileFeedPost
                         post={post}
-                        user={user ? {
-                          id: user.id,
-                          name: user.name || '',
-                          avatar: user.profileImage?.url || user.avatar
-                        } : undefined}
+                        user={user}
                         onPostUpdated={handlePostUpdate}
-                        className="w-full h-full"
+                        className="mb-1"
                       />
                     </div>
                   ))}
-                  
-                  {/* Load more indicator */}
+
+                  {/* Loading more indicator */}
                   {loadingMore && (
-                    <div className="absolute bottom-4 left-0 right-0 py-4 flex justify-center bg-black/80 backdrop-blur-sm">
-                      <div className="flex items-center gap-2">
-                        <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
-                        <span className="text-sm text-white/80">Loading more posts...</span>
+                    <div className="flex justify-center py-8">
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Loading more posts...</span>
                       </div>
+                    </div>
+                  )}
+
+                  {/* No more posts message */}
+                  {!hasMore && reduxPosts.length > 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <p>You've seen all the latest posts!</p>
+                      <Button 
+                        onClick={refreshPosts}
+                        variant="ghost" 
+                        className="mt-2 text-[#FF6B6B] hover:text-[#FF6B6B]"
+                      >
+                        Refresh for more
+                      </Button>
                     </div>
                   )}
                 </div>

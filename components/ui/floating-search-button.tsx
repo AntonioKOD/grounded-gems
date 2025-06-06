@@ -20,12 +20,16 @@ export default function FloatingSearchButton({ className }: FloatingSearchButton
   // Check if mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768)
+      if (typeof window !== 'undefined') {
+        setIsMobile(window.innerWidth < 768)
+      }
     }
     
     checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', checkMobile)
+      return () => window.removeEventListener('resize', checkMobile)
+    }
   }, [])
 
   // Fetch unread notification count
@@ -52,7 +56,7 @@ export default function FloatingSearchButton({ className }: FloatingSearchButton
   const getDynamicPosition = () => {
     if (typeof window === 'undefined') return ''
     
-    const path = window.location.pathname
+    const path = typeof window !== 'undefined' ? window.location.pathname : ''
     const isMapPage = path.includes('/map')
     
     // On map page, move FAB to avoid map controls
@@ -200,7 +204,7 @@ export function useFloatingButtonVisibility() {
 
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.scrollY
+      const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0
       
       // Hide on scroll down (except near top), show on scroll up
       if (currentScrollY > lastScrollY && currentScrollY > 100) {
@@ -213,9 +217,10 @@ export function useFloatingButtonVisibility() {
     }
 
     // Handle keyboard visibility on mobile
-    const handleResize = () => {
-      const viewportHeight = window.visualViewport?.height || window.innerHeight
-      const windowHeight = window.innerHeight
+          const handleResize = () => {
+        if (typeof window === 'undefined') return
+        const viewportHeight = window.visualViewport?.height || window.innerHeight
+        const windowHeight = window.innerHeight
       
       // If keyboard is likely open (viewport smaller than window)
       if (viewportHeight < windowHeight * 0.75) {
@@ -223,15 +228,17 @@ export function useFloatingButtonVisibility() {
       }
     }
 
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    window.addEventListener('resize', handleResize)
-    window.visualViewport?.addEventListener('resize', handleResize)
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-      window.removeEventListener('resize', handleResize)
-      window.visualViewport?.removeEventListener('resize', handleResize)
-    }
+          if (typeof window !== 'undefined') {
+        window.addEventListener('scroll', handleScroll, { passive: true })
+        window.addEventListener('resize', handleResize)
+        window.visualViewport?.addEventListener('resize', handleResize)
+        
+        return () => {
+          window.removeEventListener('scroll', handleScroll)
+          window.removeEventListener('resize', handleResize)
+          window.visualViewport?.removeEventListener('resize', handleResize)
+        }
+      }
   }, [lastScrollY])
 
   return isVisible

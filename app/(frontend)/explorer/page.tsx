@@ -1,6 +1,10 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+
+// Force dynamic rendering to prevent SSR issues
+export const dynamic = 'force-dynamic'
+
 import { getPersonalizedLocations, getFilteredLocationsAction, getUserPersonalizationData } from '@/app/actions'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

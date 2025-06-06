@@ -1,5 +1,8 @@
 "use client"
 
+// Force dynamic rendering to prevent SSR issues
+export const dynamic = 'force-dynamic'
+
 import React, { useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, Mail, Loader2, CheckCircle, AlertCircle } from "lucide-react"

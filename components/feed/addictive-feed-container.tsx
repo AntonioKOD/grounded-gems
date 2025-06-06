@@ -137,23 +137,35 @@ export default function AddictiveFeedContainer({
     }
   }, [dispatch, feedType, sortBy, userId, user?.id, isUserLoading])
 
-  // Scroll handling for infinite scroll
+  // Optimized scroll handling for infinite scroll with throttling
   useEffect(() => {
+    let ticking = false;
+    
     const handleScroll = () => {
-      if (!scrollRef.current) return
+      if (!scrollRef.current || ticking) return
       
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-      
-      // Auto-load more when near bottom
-      if (scrollTop + clientHeight >= scrollHeight - 100 && !loadingMore && hasMore && !loading) {
-        handleLoadMore()
-      }
+      ticking = true;
+      requestAnimationFrame(() => {
+        if (!scrollRef.current) {
+          ticking = false;
+          return;
+        }
+        
+        const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+        
+        // Auto-load more when near bottom
+        if (scrollTop + clientHeight >= scrollHeight - 100 && !loadingMore && hasMore && !loading) {
+          handleLoadMore()
+        }
+        
+        ticking = false;
+      });
     }
 
     const scrollElement = scrollRef.current
-    scrollElement?.addEventListener('scroll', handleScroll)
+    scrollElement?.addEventListener('scroll', handleScroll, { passive: true })
     return () => scrollElement?.removeEventListener('scroll', handleScroll)
-  }, [loadingMore, hasMore, loading])
+  }, [loadingMore, hasMore, loading, handleLoadMore])
 
   // Pull to refresh implementation
   const handleTouchStart = (e: React.TouchEvent) => {

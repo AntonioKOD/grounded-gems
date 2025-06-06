@@ -16,9 +16,10 @@ export const Users: CollectionConfig = {
   auth: {
     maxLoginAttempts: 0, // Disable login attempt limits (0 = unlimited)
     verify: {
-      generateEmailSubject: ({ user }) => 
-        `Welcome to Grounded Gems, please verify ${user.email}`,   // Custom subject  [oai_citation:14‡Payload](https://payloadcms.com/docs/authentication/email?utm_source=chatgpt.com)
-      generateEmailHTML: ({ req, token, user }) => {
+      generateEmailSubject: (args: any) => 
+        `Welcome to Grounded Gems, please verify ${args?.user?.email}`,   // Custom subject  [oai_citation:14‡Payload](https://payloadcms.com/docs/authentication/email?utm_source=chatgpt.com)
+      generateEmailHTML: (args: any) => {
+        const { req, token, user } = args || {};
         const url = `${process.env.FRONTEND_URL}/verify?token=${token}`;
        return `
         <!DOCTYPE html>
@@ -129,9 +130,10 @@ export const Users: CollectionConfig = {
       },
     },
     forgotPassword: {
-      generateEmailSubject: ({ user }) => 
+      generateEmailSubject: (args: any) => 
         `Reset your Grounded Gems password`,
-      generateEmailHTML: ({ req, token, user }) => {
+      generateEmailHTML: (args: any) => {
+        const { req, token, user } = args || {};
         const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
        return `
         <!DOCTYPE html>
@@ -349,22 +351,21 @@ export const Users: CollectionConfig = {
     },
     { 
       name: 'interests', 
-      type: 'select', 
+      type: 'text', 
       hasMany: true,
-      options: [
-        { label: 'Coffee Shops', value: 'coffee' },
-        { label: 'Restaurants', value: 'restaurants' },
-        { label: 'Nature & Parks', value: 'nature' },
-        { label: 'Photography Spots', value: 'photography' },
-        { label: 'Nightlife', value: 'nightlife' },
-        { label: 'Shopping', value: 'shopping' },
-        { label: 'Arts & Culture', value: 'arts' },
-        { label: 'Sports & Recreation', value: 'sports' },
-        { label: 'Markets & Local Business', value: 'markets' },
-        { label: 'Events & Entertainment', value: 'events' }
-      ],
       admin: {
-        description: 'Select your main interests for personalized recommendations'
+        description: 'User interests for personalized recommendations (stored as category slugs)'
+      },
+      validate: (value: string[] | null | undefined) => {
+        // Allow any valid string values for flexibility
+        if (value === null || value === undefined) return true
+        if (!Array.isArray(value)) return 'Interests must be an array'
+        for (const interest of value) {
+          if (typeof interest !== 'string' || interest.trim().length === 0) {
+            return 'Each interest must be a non-empty string'
+          }
+        }
+        return true
       }
     },
     { name: 'isCreator', type: 'checkbox', defaultValue: false },

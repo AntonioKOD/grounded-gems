@@ -3,6 +3,9 @@ import { Suspense } from "react"
 import EnhancedSearch from "@/components/search/enhanced-search"
 import { Loader2 } from "lucide-react"
 
+// Force dynamic rendering to prevent SSR issues with search components
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: "Search | Grounded Gems",
   description: "Search for people, locations, and discover amazing places near you",

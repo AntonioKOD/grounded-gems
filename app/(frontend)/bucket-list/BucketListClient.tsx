@@ -483,7 +483,7 @@ function ShareListModal({ list, isOpen, onClose, shareUrl, onCopyUrl, copied }: 
   if (!list) return null
 
   const handleNativeShare = async () => {
-    if (navigator.share) {
+    if (typeof window !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
           title: `Check out my bucket list: ${list.name}`,
@@ -534,7 +534,7 @@ function ShareListModal({ list, isOpen, onClose, shareUrl, onCopyUrl, copied }: 
             </div>
           </div>
 
-          {navigator.share && (
+          {typeof window !== 'undefined' && navigator.share && (
             <Button
               onClick={handleNativeShare}
               className="w-full bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFEB3B] hover:to-[#FF7043] text-gray-800"
@@ -580,13 +580,17 @@ const getRelativeTime = (dateString: string) => {
     return 'Recently'
   }
   
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-  
-  if (diffInMinutes < 60) return `${diffInMinutes}m ago`
-  if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
-  return `${Math.floor(diffInMinutes / 1440)}d ago`
+  try {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
+    return `${Math.floor(diffInMinutes / 1440)}d ago`
+  } catch (error) {
+    return 'Recently'
+  }
 }
 
 // Helper function to safely get display text for bucket list items
@@ -725,7 +729,7 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
     setSelectedListForAction(list)
     
     // Generate share URL
-    const baseUrl = window.location.origin
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
     const shareableUrl = `${baseUrl}/bucket-list/${list.id}`
     setShareUrl(shareableUrl)
     
@@ -774,6 +778,7 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
   // Copy share URL to clipboard
   const handleCopyShareUrl = async () => {
     try {
+      if (typeof window === 'undefined' || !navigator.clipboard) return
       await navigator.clipboard.writeText(shareUrl)
       setCopied(true)
       toast.success('Share link copied to clipboard!')

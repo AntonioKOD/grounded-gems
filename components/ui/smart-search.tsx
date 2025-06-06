@@ -22,7 +22,9 @@ export default function SmartSearch({ className = "" }: SmartSearchProps) {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchTerm.trim()) {
-      window.location.href = `/search?q=${encodeURIComponent(searchTerm.trim())}`
+      if (typeof window !== 'undefined') {
+        window.location.href = `/search?q=${encodeURIComponent(searchTerm.trim())}`
+      }
     }
   }
 

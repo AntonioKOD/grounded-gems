@@ -1199,7 +1199,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     return clusters
   }, [])
 
-  // Update markers when locations change
+  // Update markers when locations change - optimized to prevent infinite loops
   useEffect(() => {
     if (!mapRef.current || !mapLoaded || !isMountedRef.current) return
     
@@ -1292,9 +1292,9 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         })
       }
     })
-  }, [locations, mapLoaded, selectedLocation?.id, zoom, createMarkerElement, detectMarkerClusters])
+  }, [locations, mapLoaded, selectedLocation?.id, zoom]) // Removed function dependencies to prevent infinite loops
 
-  // Update clusters when zoom changes
+  // Update clusters when zoom changes - fixed dependency array
   useEffect(() => {
     if (!mapRef.current || !mapLoaded || !locations.length) return
     
@@ -1310,42 +1310,112 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     if (clusteringChanged) {
       setMarkerClusters(newClusters)
     }
-  }, [zoom, locations, markerClusters, detectMarkerClusters])
+  }, [zoom, locations, mapLoaded]) // Removed markerClusters and detectMarkerClusters from deps to prevent infinite loops
 
-  // Update marker selection states and handle mobile preview collisions
+  // Update marker selection states and handle mobile preview collisions - optimized
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return
-    
-    markersRef.current.forEach((markerData, locationId) => {
-      const isSelected = selectedLocation?.id === locationId || 
-        (markerData.spiderGroup && 
-         markerClusters.find(c => c.id === markerData.spiderGroup)?.locations.some(loc => loc.id === selectedLocation?.id))
+
+    const map = mapRef.current
+    const markers = markersRef.current
+
+    // Update marker styles based on selection
+    markers.forEach((markerData, locationId) => {
+      const isSelected = selectedLocation?.id === locationId
+      const element = markerData.element
       
-      const markerEl = markerData.element
-      
-      if (isDetailModalOpen) { // If main detail modal is open, dim all markers significantly
-        markerEl.style.opacity = '0.1'
-        markerEl.style.pointerEvents = 'none'
-        markerEl.style.zIndex = '10' // Ensure they are behind everything
-      } else if (isMobile && showMobilePreview && !isSelected) {
-        // Handle collision with mobile bottom sheet preview - reduce opacity of non-selected markers
-        markerEl.style.opacity = '0.3'
-        markerEl.style.pointerEvents = 'none' // Disable interactions to prevent interference
-        markerEl.style.zIndex = '20' // Lower z-index when preview is open
-      } else {
-        markerEl.style.opacity = '1'
-        markerEl.style.pointerEvents = 'auto'
-        
-        if (isSelected) {
-          markerEl.classList.add('selected')
-          markerEl.style.zIndex = '60'
-        } else {
-          markerEl.classList.remove('selected')
-          markerEl.style.zIndex = markerData.spiderGroup ? '45' : '40'
-        }
+      if (element) {
+        element.style.zIndex = isSelected ? '1000' : '999'
+        element.style.transform = isSelected ? 'scale(1.2)' : 'scale(1)'
+        element.style.transition = 'all 0.2s ease-in-out'
       }
     })
-  }, [selectedLocation?.id, mapLoaded, markerClusters, isMobile, showMobilePreview, isDetailModalOpen])
+  }, [selectedLocation?.id, mapLoaded]) // Simplified dependencies
+
+  // Force refresh effect - optimized
+  useEffect(() => {
+    if (!forceRefresh || !mapRef.current) return
+
+    console.log('🔄 Force refreshing map...')
+    
+    const timeoutId = setTimeout(() => {
+      if (mapRef.current && isMountedRef.current) {
+        try {
+          mapRef.current.resize()
+          console.log('✅ Map force refresh completed')
+        } catch (error) {
+          console.warn('⚠️ Map force refresh failed:', error)
+        }
+      }
+    }, 100)
+
+    return () => clearTimeout(timeoutId)
+  }, [forceRefresh])
+
+  // Cleanup effect - improved memory management
+  useEffect(() => {
+    return () => {
+      console.log('🧹 Cleaning up MapComponent...')
+      
+      // Clear all markers
+      if (markersRef.current) {
+        markersRef.current.forEach((markerData) => {
+          try {
+            if (markerData.cleanup) {
+              markerData.cleanup()
+            }
+            if (markerData.marker && typeof markerData.marker.remove === 'function') {
+              markerData.marker.remove()
+            }
+          } catch (error) {
+            console.warn('Failed to cleanup marker:', error)
+          }
+        })
+        markersRef.current.clear()
+      }
+
+      // Clear user marker
+      if (userMarkerRef.current && typeof userMarkerRef.current.remove === 'function') {
+        try {
+          userMarkerRef.current.remove()
+          userMarkerRef.current = null
+        } catch (error) {
+          console.warn('Failed to cleanup user marker:', error)
+        }
+      }
+
+      // Clear radius circle
+      if (radiusCircleRef.current && mapRef.current) {
+        try {
+          const map = mapRef.current
+          if (map.getLayer && map.getLayer('radius-circle')) {
+            map.removeLayer('radius-circle')
+          }
+          if (map.getSource && map.getSource('radius-circle')) {
+            map.removeSource('radius-circle')
+          }
+          radiusCircleRef.current = null
+        } catch (error) {
+          console.warn('Failed to cleanup radius circle:', error)
+        }
+      }
+
+      // Cleanup map instance
+      if (mapRef.current && typeof mapRef.current.remove === 'function') {
+        try {
+          mapRef.current.off() // Remove all event listeners
+          mapRef.current.remove()
+          mapRef.current = null
+        } catch (error) {
+          console.warn('Failed to cleanup map instance:', error)
+        }
+      }
+
+      // Reset state
+      mapInitializedRef.current = false
+      isMountedRef.current = false
+    }
+  }, []) // Empty dependency array for cleanup on unmount only
 
   // Update map center and zoom
   useEffect(() => {

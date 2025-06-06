@@ -1,6 +1,10 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
+
+// Force dynamic rendering to prevent SSR issues
+export const dynamic = 'force-dynamic'
+
 import { useRouter } from 'next/navigation'
 import BucketListClient from './BucketListClient'
 import ProtectedRoute from '@/components/auth/protected-route'
@@ -56,7 +60,7 @@ export default function BucketListPage() {
           </div>
         </div>
       }>
-        <BucketListClient userId={user?.id} />
+        <BucketListClient userId={user?.id || ''} />
       </Suspense>
     </ProtectedRoute>
   )

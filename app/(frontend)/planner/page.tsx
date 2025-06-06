@@ -1,5 +1,8 @@
 "use client"
 
+// Force dynamic rendering to prevent SSR issues
+export const dynamic = 'force-dynamic'
+
 import React, { useState, useRef, useEffect } from "react"
 import { User, Users, Heart, Users2, Loader2, Utensils, Music, GlassWater, MapPin, Film, Star, PartyPopper, Coffee, Book, ShoppingBag, Sun, Moon, Share2, Bookmark, RefreshCw, Wand2, Calendar, Clock, ArrowRight, CheckCircle2, UserPlus, Home, Copy, Check, Sparkles } from "lucide-react"
 import { cn } from '@/lib/utils'

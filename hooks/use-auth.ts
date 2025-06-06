@@ -104,7 +104,9 @@ export function useAuth() {
       circuitBreaker.isOpen = false
       fetchAttempted.current = false
       // Dispatch logout event for other components
-      window.dispatchEvent(new Event('logout-success'))
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('logout-success'))
+      }
       // Redirect to login page
       router.push('/login')
     } catch (error) {

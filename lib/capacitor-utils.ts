@@ -1,30 +1,88 @@
-import { Capacitor } from '@capacitor/core';
-import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
-import { Geolocation } from '@capacitor/geolocation';
-import { Share } from '@capacitor/share';
-import { Toast } from '@capacitor/toast';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { Browser } from '@capacitor/browser';
-// Note: Filesystem, Directory, LocalNotifications are available but not used in current implementation
-// import { Filesystem, Directory } from '@capacitor/filesystem';
-// import { LocalNotifications } from '@capacitor/local-notifications';
-import { StatusBar, Style } from '@capacitor/status-bar';
-import { SplashScreen } from '@capacitor/splash-screen';
-import { Network } from '@capacitor/network';
-import { Device } from '@capacitor/device';
-// import { App } from '@capacitor/app';
+// Dynamic imports to prevent SSR issues
+const getCapacitor = async () => {
+  if (typeof window === 'undefined') return null
+  const { Capacitor } = await import('@capacitor/core')
+  return Capacitor
+}
 
-export const isNative = () => Capacitor.isNativePlatform();
-export const getPlatform = () => Capacitor.getPlatform();
+const getCamera = async () => {
+  if (typeof window === 'undefined') return null
+  return import('@capacitor/camera')
+}
+
+const getGeolocation = async () => {
+  if (typeof window === 'undefined') return null
+  const { Geolocation } = await import('@capacitor/geolocation')
+  return Geolocation
+}
+
+const getShare = async () => {
+  if (typeof window === 'undefined') return null
+  const { Share } = await import('@capacitor/share')
+  return Share
+}
+
+const getToast = async () => {
+  if (typeof window === 'undefined') return null
+  const { Toast } = await import('@capacitor/toast')
+  return Toast
+}
+
+const getHaptics = async () => {
+  if (typeof window === 'undefined') return null
+  return import('@capacitor/haptics')
+}
+
+const getBrowser = async () => {
+  if (typeof window === 'undefined') return null
+  const { Browser } = await import('@capacitor/browser')
+  return Browser
+}
+
+const getStatusBar = async () => {
+  if (typeof window === 'undefined') return null
+  return import('@capacitor/status-bar')
+}
+
+const getSplashScreen = async () => {
+  if (typeof window === 'undefined') return null
+  const { SplashScreen } = await import('@capacitor/splash-screen')
+  return SplashScreen
+}
+
+const getNetwork = async () => {
+  if (typeof window === 'undefined') return null
+  const { Network } = await import('@capacitor/network')
+  return Network
+}
+
+const getDevice = async () => {
+  if (typeof window === 'undefined') return null
+  const { Device } = await import('@capacitor/device')
+  return Device
+}
+
+export const isNative = async () => {
+  const Capacitor = await getCapacitor()
+  return Capacitor?.isNativePlatform() || false
+}
+
+export const getPlatform = async () => {
+  const Capacitor = await getCapacitor()
+  return Capacitor?.getPlatform() || 'web'
+}
 
 /**
  * Get the correct API base URL for the current environment
  * Always uses production URL for native mobile apps
  */
-export const getApiBaseUrl = (): string => {
+export const getApiBaseUrl = async (): Promise<string> => {
   // If we're in a native Capacitor app, always use production URL
-  if (Capacitor.isNativePlatform()) {
-    return 'https://groundedgems.com';
+  if (typeof window !== 'undefined') {
+    const Capacitor = await getCapacitor()
+    if (Capacitor?.isNativePlatform()) {
+      return 'https://groundedgems.com';
+    }
   }
   
   // For web, check environment
@@ -48,7 +106,7 @@ export const getApiBaseUrl = (): string => {
  * Make an API request with the correct base URL
  */
 export const apiRequest = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
-  const baseUrl = getApiBaseUrl();
+  const baseUrl = await getApiBaseUrl();
   const url = endpoint.startsWith('/') ? `${baseUrl}${endpoint}` : `${baseUrl}/${endpoint}`;
   
   return fetch(url, {
@@ -63,11 +121,14 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}): P
 // Camera utilities
 export const takePicture = async () => {
   try {
-    const image = await Camera.getPhoto({
+    const cameraModule = await getCamera()
+    if (!cameraModule) throw new Error('Camera not available')
+    
+    const image = await cameraModule.Camera.getPhoto({
       quality: 90,
       allowEditing: false,
-      resultType: CameraResultType.DataUrl,
-      source: CameraSource.Camera
+      resultType: cameraModule.CameraResultType.DataUrl,
+      source: cameraModule.CameraSource.Camera
     });
     return image.dataUrl;
   } catch (error) {
@@ -78,11 +139,14 @@ export const takePicture = async () => {
 
 export const pickImage = async () => {
   try {
-    const image = await Camera.getPhoto({
+    const cameraModule = await getCamera()
+    if (!cameraModule) throw new Error('Camera not available')
+    
+    const image = await cameraModule.Camera.getPhoto({
       quality: 90,
       allowEditing: false,
-      resultType: CameraResultType.DataUrl,
-      source: CameraSource.Photos
+      resultType: cameraModule.CameraResultType.DataUrl,
+      source: cameraModule.CameraSource.Photos
     });
     return image.dataUrl;
   } catch (error) {
@@ -94,6 +158,9 @@ export const pickImage = async () => {
 // Geolocation utilities
 export const getCurrentPosition = async () => {
   try {
+    const Geolocation = await getGeolocation()
+    if (!Geolocation) throw new Error('Geolocation not available')
+    
     const coordinates = await Geolocation.getCurrentPosition({
       enableHighAccuracy: true,
       timeout: 10000
@@ -111,6 +178,9 @@ export const getCurrentPosition = async () => {
 // Share utilities
 export const shareContent = async (title: string, text: string, url?: string) => {
   try {
+    const Share = await getShare()
+    if (!Share) throw new Error('Share not available')
+    
     await Share.share({
       title,
       text,
@@ -126,6 +196,9 @@ export const shareContent = async (title: string, text: string, url?: string) =>
 // Toast utilities
 export const showToast = async (message: string) => {
   try {
+    const Toast = await getToast()
+    if (!Toast) throw new Error('Toast not available')
+    
     await Toast.show({
       text: message,
       duration: 'short',
@@ -137,9 +210,12 @@ export const showToast = async (message: string) => {
 };
 
 // Haptics utilities
-export const vibrate = async (style: ImpactStyle = ImpactStyle.Medium) => {
+export const vibrate = async (style: 'Light' | 'Medium' | 'Heavy' = 'Medium') => {
   try {
-    await Haptics.impact({ style });
+    const hapticsModule = await getHaptics()
+    if (!hapticsModule) throw new Error('Haptics not available')
+    
+    await hapticsModule.Haptics.impact({ style: hapticsModule.ImpactStyle[style] });
   } catch (error) {
     console.error('Error with haptics:', error);
   }
@@ -148,6 +224,9 @@ export const vibrate = async (style: ImpactStyle = ImpactStyle.Medium) => {
 // Browser utilities
 export const openUrl = async (url: string) => {
   try {
+    const Browser = await getBrowser()
+    if (!Browser) throw new Error('Browser not available')
+    
     await Browser.open({ url });
   } catch (error) {
     console.error('Error opening URL:', error);
@@ -155,16 +234,19 @@ export const openUrl = async (url: string) => {
 };
 
 // Check if app can use native features
-export const canUseCamera = () => {
-  return isNative() && Capacitor.isPluginAvailable('Camera');
+export const canUseCamera = async () => {
+  const Capacitor = await getCapacitor()
+  return Capacitor?.isNativePlatform() && Capacitor?.isPluginAvailable('Camera');
 };
 
-export const canUseGeolocation = () => {
-  return isNative() && Capacitor.isPluginAvailable('Geolocation');
+export const canUseGeolocation = async () => {
+  const Capacitor = await getCapacitor()
+  return Capacitor?.isNativePlatform() && Capacitor?.isPluginAvailable('Geolocation');
 };
 
-export const canUseHaptics = () => {
-  return isNative() && Capacitor.isPluginAvailable('Haptics');
+export const canUseHaptics = async () => {
+  const Capacitor = await getCapacitor()
+  return Capacitor?.isNativePlatform() && Capacitor?.isPluginAvailable('Haptics');
 };
 
 // Enhanced iOS error handling and diagnostics
@@ -199,9 +281,15 @@ export class IOSErrorHandler {
   }
 
   async diagnosePlatform() {
-    if (!Capacitor.isNativePlatform()) return null;
+    const Capacitor = await getCapacitor()
+    if (!Capacitor?.isNativePlatform()) return null;
 
     try {
+      const Device = await getDevice()
+      const Network = await getNetwork()
+      
+      if (!Device || !Network) return null;
+
       const [deviceInfo, networkStatus] = await Promise.all([
         Device.getInfo(),
         Network.getStatus()
@@ -230,7 +318,8 @@ export class IOSErrorHandler {
 // Enhanced WebView utilities for iOS
 export const webViewUtils = {
   async forceReload() {
-    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios') {
+    const Capacitor = await getCapacitor()
+    if (Capacitor?.isNativePlatform() && Capacitor.getPlatform() === 'ios') {
       try {
         // Force a complete reload on iOS
         window.location.reload();
@@ -241,7 +330,8 @@ export const webViewUtils = {
   },
 
   async clearWebViewCache() {
-    if (Capacitor.isNativePlatform()) {
+    const Capacitor = await getCapacitor()
+    if (Capacitor?.isNativePlatform()) {
       try {
         // Clear any cached data
         if ('caches' in window) {
@@ -271,32 +361,37 @@ export const webViewUtils = {
 };
 
 // Platform detection with enhanced iOS handling
-export function isPlatform(platform: 'web' | 'ios' | 'android'): boolean {
-  if (!Capacitor.isNativePlatform() && platform === 'web') return true;
-  return Capacitor.getPlatform() === platform;
+export async function isPlatform(platform: 'web' | 'ios' | 'android'): Promise<boolean> {
+  const Capacitor = await getCapacitor()
+  if (!Capacitor?.isNativePlatform() && platform === 'web') return true;
+  return Capacitor?.getPlatform() === platform;
 }
 
-export function isIOS(): boolean {
-  return isPlatform('ios');
+export async function isIOS(): Promise<boolean> {
+  return await isPlatform('ios');
 }
 
-export function isAndroid(): boolean {
-  return isPlatform('android');
+export async function isAndroid(): Promise<boolean> {
+  return await isPlatform('android');
 }
 
-export function isWeb(): boolean {
-  return isPlatform('web');
+export async function isWeb(): Promise<boolean> {
+  return await isPlatform('web');
 }
 
 // Enhanced Haptics with iOS-specific handling
 export async function triggerHaptic(style: 'light' | 'medium' | 'heavy' = 'light'): Promise<void> {
   try {
-    if (!Capacitor.isNativePlatform()) return;
+    const Capacitor = await getCapacitor()
+    if (!Capacitor?.isNativePlatform()) return;
 
-    const impactStyle = style === 'light' ? ImpactStyle.Light : 
-                      style === 'medium' ? ImpactStyle.Medium : ImpactStyle.Heavy;
+    const hapticsModule = await getHaptics()
+    if (!hapticsModule) return;
+
+    const impactStyle = style === 'light' ? hapticsModule.ImpactStyle.Light : 
+                      style === 'medium' ? hapticsModule.ImpactStyle.Medium : hapticsModule.ImpactStyle.Heavy;
     
-    await Haptics.impact({ style: impactStyle });
+    await hapticsModule.Haptics.impact({ style: impactStyle });
   } catch (error: unknown) {
     // Haptics errors are non-critical, just log them
     IOSErrorHandler.getInstance().logError(`Haptics error: ${(error as Error)?.message || error}`, 'Haptics');
@@ -306,10 +401,14 @@ export async function triggerHaptic(style: 'light' | 'medium' | 'heavy' = 'light
 // Enhanced Status Bar control with iOS handling
 export async function setStatusBarStyle(style: 'light' | 'dark' = 'dark'): Promise<void> {
   try {
-    if (!Capacitor.isNativePlatform()) return;
+    const Capacitor = await getCapacitor()
+    if (!Capacitor?.isNativePlatform()) return;
 
-    await StatusBar.setStyle({
-      style: style === 'light' ? Style.Light : Style.Dark
+    const statusBarModule = await getStatusBar()
+    if (!statusBarModule) return;
+
+    await statusBarModule.StatusBar.setStyle({
+      style: style === 'light' ? statusBarModule.Style.Light : statusBarModule.Style.Dark
     });
   } catch (error: unknown) {
     IOSErrorHandler.getInstance().logError(`Status bar error: ${(error as Error)?.message || error}`, 'Status Bar');
@@ -319,12 +418,16 @@ export async function setStatusBarStyle(style: 'light' | 'dark' = 'dark'): Promi
 // Enhanced Splash Screen control
 export async function hideSplashScreen(): Promise<void> {
   try {
-    if (!Capacitor.isNativePlatform()) return;
+    const Capacitor = await getCapacitor()
+    if (!Capacitor?.isNativePlatform()) return;
     
     // Wait a bit for the app to fully load before hiding
     setTimeout(async () => {
       try {
-        await SplashScreen.hide();
+        const SplashScreen = await getSplashScreen()
+        if (SplashScreen) {
+          await SplashScreen.hide();
+        }
       } catch (error: unknown) {
         IOSErrorHandler.getInstance().logError(`Splash screen error: ${(error as Error)?.message || error}`, 'Splash Screen');
       }
@@ -337,8 +440,14 @@ export async function hideSplashScreen(): Promise<void> {
 // Enhanced Network monitoring
 export async function getNetworkStatus() {
   try {
-    if (!Capacitor.isNativePlatform()) {
-      return { connected: navigator.onLine, connectionType: 'unknown' };
+    const Capacitor = await getCapacitor()
+    if (!Capacitor?.isNativePlatform()) {
+      return { connected: typeof navigator !== 'undefined' ? navigator.onLine : false, connectionType: 'unknown' };
+    }
+
+    const Network = await getNetwork()
+    if (!Network) {
+      return { connected: false, connectionType: 'unknown' };
     }
 
     const status = await Network.getStatus();
@@ -353,8 +462,10 @@ export async function getNetworkStatus() {
 }
 
 // Initialize iOS-specific error monitoring
-export function initializeIOSErrorMonitoring() {
-  if (!isIOS()) return;
+export async function initializeIOSErrorMonitoring() {
+  if (typeof window === 'undefined') return;
+  
+  if (!(await isIOS())) return;
 
   const errorHandler = IOSErrorHandler.getInstance();
 
@@ -369,12 +480,16 @@ export function initializeIOSErrorMonitoring() {
   });
 
   // Monitor network changes
-  if (Capacitor.isNativePlatform()) {
-    Network.addListener('networkStatusChange', (status) => {
-      if (!status.connected) {
-        errorHandler.logError('Network disconnected', 'Network Status');
-      }
-    });
+  const Capacitor = await getCapacitor()
+  if (Capacitor?.isNativePlatform()) {
+    const Network = await getNetwork()
+    if (Network) {
+      Network.addListener('networkStatusChange', (status) => {
+        if (!status.connected) {
+          errorHandler.logError('Network disconnected', 'Network Status');
+        }
+      });
+    }
   }
 
   // Perform initial diagnostics
@@ -384,8 +499,10 @@ export function initializeIOSErrorMonitoring() {
 }
 
 // Monitor history usage for iOS Safari rate limit debugging
-export function monitorIOSHistoryUsage() {
-  if (!isIOS()) return;
+export async function monitorIOSHistoryUsage() {
+  if (typeof window === 'undefined') return;
+  
+  if (!(await isIOS())) return;
 
   let callCount = 0;
   let startTime = Date.now();
@@ -454,14 +571,15 @@ export const capacitorUtils = {
   monitorIOSHistoryUsage
 };
 
-export const isCapacitorApp = (): boolean => {
+export const isCapacitorApp = async (): Promise<boolean> => {
   // Server-side rendering check
   if (typeof window === 'undefined') {
     return false
   }
 
   try {
-    return Capacitor.isNativePlatform()
+    const Capacitor = await getCapacitor()
+    return Capacitor?.isNativePlatform() || false
   } catch {
     // Fallback detection
     return window.navigator.userAgent.includes('Capacitor') ||
@@ -469,14 +587,14 @@ export const isCapacitorApp = (): boolean => {
   }
 }
 
-export const getServerUrl = (): string => {
+export const getServerUrl = async (): Promise<string> => {
   // Server-side rendering check
   if (typeof window === 'undefined') {
     return process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
   }
 
   // For Capacitor apps, use the production server
-  if (isCapacitorApp()) {
+  if (await isCapacitorApp()) {
     return 'https://groundedgems.com'
   }
   
@@ -484,8 +602,8 @@ export const getServerUrl = (): string => {
   return window.location.origin
 }
 
-export const createApiUrl = (path: string): string => {
-  const serverUrl = getServerUrl()
+export const createApiUrl = async (path: string): Promise<string> => {
+  const serverUrl = await getServerUrl()
   const cleanPath = path.startsWith('/') ? path : `/${path}`
   return `${serverUrl}${cleanPath}`
 }
@@ -495,13 +613,13 @@ export const fetchWithCapacitorSupport = async (
   options?: RequestInit
 ): Promise<Response> => {
   // Ensure we're using the correct server URL for API calls
-  const fullUrl = url.startsWith('http') ? url : createApiUrl(url)
+  const fullUrl = url.startsWith('http') ? url : await createApiUrl(url)
   
   const defaultOptions: RequestInit = {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(isCapacitorApp() && {
+      ...((await isCapacitorApp()) && {
         'User-Agent': 'GroundedGems/1.0 Capacitor'
       }),
       ...options?.headers
@@ -512,7 +630,7 @@ export const fetchWithCapacitorSupport = async (
 }
 
 export const initializeCapacitorApp = async (): Promise<void> => {
-  if (!isCapacitorApp()) return
+  if (!(await isCapacitorApp())) return
 
   try {
     const { SplashScreen } = await import('@capacitor/splash-screen')

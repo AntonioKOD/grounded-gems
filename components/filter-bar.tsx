@@ -13,12 +13,15 @@ export default function FilterBar() {
 
   useEffect(() => {
     const handleScroll = () => {
+      if (typeof window === 'undefined') return
       const offset = window.scrollY
       setIsSticky(offset > 500)
     }
 
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
+    if (typeof window !== 'undefined') {
+      window.addEventListener("scroll", handleScroll)
+      return () => window.removeEventListener("scroll", handleScroll)
+    }
   }, [])
 
   const toggleFilter = (filter: string | null) => {

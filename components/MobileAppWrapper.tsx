@@ -1,9 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from 'react'
-import { Capacitor } from '@capacitor/core'
 import { useRouter } from 'next/navigation'
-import { isCapacitorApp, initializeCapacitorApp } from '../lib/capacitor-utils'
 
 interface MobileAppWrapperProps {
   children: React.ReactNode
@@ -13,6 +11,7 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
   const [isReady, setIsReady] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
   const [isMounted, setIsMounted] = useState(false)
+  const [isCapacitor, setIsCapacitor] = useState(false)
   const router = useRouter()
   const initRef = useRef(false)
 
@@ -27,13 +26,19 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
 
     const initMobileApp = async () => {
       try {
-        const platform = Capacitor.getPlatform()
+        // Import capacitor utils dynamically to prevent SSR issues
+        const { isCapacitorApp, initializeCapacitorApp, getPlatform } = await import('../lib/capacitor-utils')
+        
+        const platform = await getPlatform()
         const isIOSDevice = platform === 'ios'
+        const isCapacitorDevice = await isCapacitorApp()
+        
         setIsIOS(isIOSDevice)
+        setIsCapacitor(isCapacitorDevice)
 
-        console.log('🚀 [MobileApp] Initializing...', { platform })
+        console.log('🚀 [MobileApp] Initializing...', { platform, isCapacitorDevice })
 
-        if (isCapacitorApp()) {
+        if (isCapacitorDevice) {
           // Use the new Capacitor utilities
           await initializeCapacitorApp()
           await handleAuthState()
@@ -96,7 +101,7 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
   }
 
   // Show minimal loading for mobile apps
-  if (!isReady && isCapacitorApp()) {
+  if (!isReady && isCapacitor) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#ff6b6b] to-[#4ecdc4]">
         <div className="text-center">

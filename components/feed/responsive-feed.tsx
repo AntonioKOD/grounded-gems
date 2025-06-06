@@ -26,7 +26,7 @@ export default function ResponsiveFeed({
 
   // Memoize the resize handler
   const handleResize = useCallback(() => {
-    if (!isMounted) return
+    if (!isMounted || typeof window === 'undefined') return
     setIsMobile(window.innerWidth < 768)
   }, [isMounted])
 
@@ -45,16 +45,25 @@ export default function ResponsiveFeed({
       resizeTimeoutRef.current = setTimeout(handleResize, 100)
     }
 
-    window.addEventListener("resize", debouncedResize)
+    if (typeof window !== 'undefined') {
+      window.addEventListener("resize", debouncedResize)
 
-    // Clean up
-    return () => {
-      window.removeEventListener("resize", debouncedResize)
-      if (resizeTimeoutRef.current) {
-        clearTimeout(resizeTimeoutRef.current)
+        // Clean up
+        return () => {
+          window.removeEventListener("resize", debouncedResize)
+          if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current)
+          }
+          setIsMounted(false)
+        }
+      } else {
+        return () => {
+          if (resizeTimeoutRef.current) {
+            clearTimeout(resizeTimeoutRef.current)
+          }
+          setIsMounted(false)
+        }
       }
-      setIsMounted(false)
-    }
   }, [handleResize])
 
   // During hydration, always show desktop version to avoid mismatch

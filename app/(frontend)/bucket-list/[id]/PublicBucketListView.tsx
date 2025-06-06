@@ -127,6 +127,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
 
   const handleCopyUrl = async () => {
     try {
+      if (typeof window === 'undefined') return
       const url = window.location.href
       await navigator.clipboard.writeText(url)
       setCopied(true)
@@ -139,7 +140,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
   }
 
   const handleNativeShare = async () => {
-    if (navigator.share) {
+    if (typeof window !== 'undefined' && navigator.share) {
       try {
         await navigator.share({
           title: `Check out this bucket list: ${bucketList.name}`,
@@ -430,7 +431,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
               <div className="flex gap-2 mt-1">
                 <Input
                   id="share-url"
-                  value={window.location.href}
+                  value={typeof window !== 'undefined' ? window.location.href : ''}
                   readOnly
                   className="border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20"
                 />
@@ -447,7 +448,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
               </div>
             </div>
 
-            {navigator.share && (
+            {typeof navigator !== 'undefined' && navigator.share && (
               <Button
                 onClick={handleNativeShare}
                 className="w-full bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"

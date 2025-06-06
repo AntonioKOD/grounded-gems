@@ -122,12 +122,14 @@ export default function BucketListCreateModal({
         // Get user's location quietly in the background
         let coordinates = null
         try {
-          const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
-          })
-          coordinates = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
+          if (typeof window !== 'undefined' && navigator.geolocation) {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 })
+            })
+            coordinates = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            }
           }
         } catch (e) {
           // Location access failed - that's okay, AI can still work
