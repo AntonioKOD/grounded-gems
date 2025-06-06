@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import AppLoadingScreen from './AppLoadingScreen'
-import { ErrorBoundary } from './ErrorBoundary'
+import ErrorBoundary from './ErrorBoundary'
 
 interface AppWrapperProps {
   children: React.ReactNode

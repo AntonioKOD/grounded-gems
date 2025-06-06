@@ -1,5 +1,4 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { likePost, sharePost, addComment, getCommentsByPostId, addCommentReply, likeCommentOrReply, getCommentsWithReplies } from '@/app/actions'
 import { fetchUser } from '../user/userSlice'
 
 interface CommentData {

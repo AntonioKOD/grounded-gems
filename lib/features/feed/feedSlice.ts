@@ -1,14 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
-import { 
-  getFeedPosts, 
-  getPersonalizedFeed, 
-  getFeedPostsByUser,
-  getDiscoverFeed,
-  getPopularFeed,
-  getLatestFeed,
-  getSavedPostsFeed
-} from '@/app/actions'
-import type { Post } from '@/types/feed'
+import type { Post } from '../../../types/feed'
 
 interface FeedState {
   posts: Post[]
@@ -38,7 +29,7 @@ const initialState: FeedState = {
   lastFetched: null,
 }
 
-// Async thunk for fetching feed posts
+// Async thunk for fetching feed posts using mobile API
 export const fetchFeedPosts = createAsyncThunk(
   'feed/fetchPosts',
   async (
@@ -71,35 +62,24 @@ export const fetchFeedPosts = createAsyncThunk(
         return { posts: state.feed.posts, hasMore: state.feed.hasMore }
       }
 
-      let posts: Post[] = []
+      // Fetch posts using API endpoint
+      const params = new URLSearchParams({
+        type: feedType,
+        sortBy: sortBy,
+        page: page.toString(),
+        limit: '10'
+      })
+      
+      if (category) params.append('category', category)
+      if (currentUserId) params.append('userId', currentUserId)
 
-      if (feedType === 'personalized' && currentUserId) {
-        posts = (await getPersonalizedFeed(currentUserId, 10, (page - 1) * 10, category)) ?? []
-      } else if (feedType === 'user' && userId) {
-        posts = (await getFeedPostsByUser(userId, category)) as Post[]
-      } else {
-        // Use specialized algorithms based on category
-        switch (category) {
-          case 'discover':
-            posts = await getDiscoverFeed(currentUserId, page, 10)
-            break
-          case 'trending':
-            posts = await getPopularFeed(currentUserId, page, 10, '7d')
-            break
-          case 'recent':
-            posts = await getLatestFeed(currentUserId, page, 10)
-            break
-          case 'bookmarks':
-            if (currentUserId) {
-              posts = await getSavedPostsFeed(currentUserId, page, 10)
-            } else {
-              posts = []
-            }
-            break
-          default:
-            posts = await getFeedPosts(feedType, sortBy, page, category, currentUserId)
-        }
+      const response = await fetch(`/api/feed?${params}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch feed: ${response.statusText}`)
       }
+      
+      const data = await response.json()
+      const posts: Post[] = data.posts || []
 
       return {
         posts,
@@ -132,35 +112,24 @@ export const loadMorePosts = createAsyncThunk(
       const { currentUserId } = params
       const nextPage = page + 1
 
-      let morePosts: Post[] = []
+      // Fetch more posts using API endpoint
+      const params = new URLSearchParams({
+        type: feedType,
+        sortBy: sortBy,
+        page: nextPage.toString(),
+        limit: '10'
+      })
+      
+      if (category) params.append('category', category)
+      if (currentUserId) params.append('userId', currentUserId)
 
-      if (feedType === 'personalized' && currentUserId) {
-        morePosts = (await getPersonalizedFeed(currentUserId, 10, nextPage * 10, category)) ?? []
-      } else if (feedType === 'user' && userId) {
-        morePosts = (await getFeedPostsByUser(userId, category)) as Post[]
-      } else {
-        // Use specialized algorithms based on category for load more
-        switch (category) {
-          case 'discover':
-            morePosts = await getDiscoverFeed(currentUserId, nextPage, 10)
-            break
-          case 'trending':
-            morePosts = await getPopularFeed(currentUserId, nextPage, 10, '7d')
-            break
-          case 'recent':
-            morePosts = await getLatestFeed(currentUserId, nextPage, 10)
-            break
-          case 'bookmarks':
-            if (currentUserId) {
-              morePosts = await getSavedPostsFeed(currentUserId, nextPage, 10)
-            } else {
-              morePosts = []
-            }
-            break
-          default:
-            morePosts = await getFeedPosts(feedType, sortBy, nextPage, category, currentUserId)
-        }
+      const response = await fetch(`/api/feed?${params}`)
+      if (!response.ok) {
+        throw new Error(`Failed to load more posts: ${response.statusText}`)
       }
+      
+      const data = await response.json()
+      const morePosts: Post[] = data.posts || []
 
       return {
         posts: morePosts,

@@ -10,7 +10,7 @@ import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingAction
 import MainContentWrapper from "@/components/ui/MainContentWrapper"
 
 import MobileAppWrapper from '@/components/MobileAppWrapper'
-import { ErrorBoundary } from '@/components/ErrorBoundary'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 export const metadata = {
   description: "Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places.",

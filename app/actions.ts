@@ -605,6 +605,13 @@ export async function getUserbyId(id: string) {
       console.error("getUserbyId called with invalid id format:", id)
       return null
     }
+
+    // Additional validation for common ObjectId format (24 hex characters)
+    const objectIdRegex = /^[a-fA-F0-9]{24}$/
+    if (!objectIdRegex.test(id.trim())) {
+      console.error("getUserbyId called with invalid ObjectId format:", id)
+      return null
+    }
     
     const payload = await getPayload({ config: config })
     
@@ -631,17 +638,30 @@ export async function getUserbyId(id: string) {
       }
       
       // Handle validation errors
-      if (error.message?.includes('Invalid ID')) {
+      if (error.message?.includes('Invalid ID') || error.message?.includes('Cast to ObjectId failed')) {
         console.error(`Invalid user ID format: ${id}`)
+        return null
+      }
+
+      // Handle network or database connection issues
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('connection')) {
+        console.error(`Database connection error for user ID ${id}:`, error.message)
         return null
       }
       
       // Log other errors but don't throw
-      console.error("Error fetching user from Payload:", error)
+      console.error("Error fetching user from Payload:", {
+        error: error.message,
+        stack: error.stack,
+        userId: id
+      })
       return null
     }
   } catch (error) {
-    console.error("Error in getUserbyId:", error)
+    console.error("Error in getUserbyId:", {
+      error: error instanceof Error ? error.message : String(error),
+      userId: id
+    })
     return null
   }
 }
