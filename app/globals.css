@@ -1045,15 +1045,23 @@
 @media (max-width: 768px) {
   .mapboxgl-ctrl-group {
     @apply scale-90;
+    margin-bottom: 100px !important; /* Avoid mobile nav */
   }
   
   .mapboxgl-ctrl-group button {
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 48px !important;
+    min-height: 48px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    backdrop-filter: blur(10px) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
   }
   
   .location-marker {
     transform-origin: center center;
+    min-width: 44px; /* Ensure touch targets are at least 44px */
+    min-height: 44px;
   }
   
   .location-marker:hover {
@@ -1068,6 +1076,26 @@
   .marker-preview,
   .cluster-preview {
     display: none !important;
+  }
+  
+  /* Improve touch performance */
+  .mapboxgl-map {
+    touch-action: pan-x pan-y !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+  
+  /* Better mobile scrolling */
+  .map-container {
+    overscroll-behavior: none !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  /* Enhanced toggle button for mobile */
+  .fixed.bottom-24.left-4 button {
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
   }
 }
 

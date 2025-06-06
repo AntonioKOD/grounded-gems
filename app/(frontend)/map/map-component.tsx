@@ -162,12 +162,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
   // Handle mobile detection and resize events with debouncing
   useEffect(() => {
     const initialMobile = isMobileDevice()
-    console.log('📱 Initial mobile detection:', {
-      isMobileDevice: initialMobile,
-      userAgent: navigator.userAgent,
-      innerWidth: window.innerWidth
-    })
-    
     setIsMobile(initialMobile)
     
     let resizeTimeout: NodeJS.Timeout
@@ -184,12 +178,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         const hasChanged = newMobile !== isMobile
         
         if (hasChanged) {
-          console.log('📱 Mobile detection changed on resize:', {
-            isMobileDevice: newMobile,
-            innerWidth: window.innerWidth,
-            changed: hasChanged
-          })
-          
           setIsMobile(newMobile)
         }
         
@@ -267,30 +255,17 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
 
   // Initialize map
   useEffect(() => {
-    console.log('🔍 Map initialization useEffect triggered with dependencies:', {
-      center,
-      zoom, 
-      mapStyle,
-      hasContainer: !!mapContainerRef.current,
-      isClient: typeof window !== 'undefined',
-      mapInitialized: mapInitializedRef.current,
-      hasMap: !!mapRef.current
-    })
-    
     // Don't initialize if we're not in browser or if we don't have a container
     if (typeof window === 'undefined') {
-      console.log('🔍 Skipping map init: not in browser')
       return
     }
     
     if (!mapContainerRef.current) {
-      console.log('🔍 Skipping map init: no container ref')
       return
     }
     
     // Reset initialization state if map was previously cleaned up
     if (!mapRef.current && mapInitializedRef.current) {
-      console.log('🗺️ Resetting map initialization state after cleanup')
       mapInitializedRef.current = false
       setMapLoaded(false)
       setMapReady(false)
@@ -298,14 +273,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     
     // Skip if already initialized and map exists
     if (mapInitializedRef.current && mapRef.current) {
-      console.log('🗺️ Map already initialized, skipping')
       return
     }
-    
-    console.log('🗺️ Map initialization starting...')
-    console.log('🗺️ Container ref available:', !!mapContainerRef.current)
-    console.log('🗺️ Mount state:', isMountedRef.current)
-    console.log('🗺️ Previous init state:', mapInitializedRef.current)
     
     const initializeMap = async () => {
       // Ensure isLoading is true at the start of any initialization attempt
@@ -344,70 +313,45 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       try {
         // Load Mapbox if not available
         if (!window.mapboxgl) {
-          console.log('🗺️ Mapbox GL not found on window, attempting to load script...');
           await loadMapboxScript(); // This will reject if script fails to load
         }
         
         // Double check after script loading attempt
         if (!window.mapboxgl) {
-          console.error('🗺️ Mapbox GL still not available after attempting to load script.');
           setMapError('Mapbox GL JS could not be loaded. Please check your internet connection and try again.');
           setIsLoading(false);
           return;
         }
 
         if (!isMountedRef.current || !mapContainerRef.current) {
-          console.warn('🗺️ Component unmounted or container ref became null during pre-init checks.');
           setIsLoading(false);
           return;
         }
         
         const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
         if (!accessToken) {
-          console.error('🗺️ Mapbox access token missing!')
-          console.error('🗺️ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_token_here')
-          console.error('🗺️ Add it to your .env.local file')
-          
+          console.error('Mapbox access token missing. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your .env.local file')
           setMapError('Mapbox access token is required. Please set NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN in your .env.local file.')
           setIsLoading(false)
           return
         }
         
-        console.log('🗺️ Creating map with access token:', accessToken.substring(0, 10) + '...')
-        console.log('🗺️ Map style:', `mapbox://styles/mapbox/${mapStyle}`)
-        console.log('🗺️ Container element:', mapContainerRef.current)
-        console.log('🗺️ Container dimensions:', {
-          width: mapContainerRef.current.clientWidth,
-          height: mapContainerRef.current.clientHeight,
-          offsetWidth: mapContainerRef.current.offsetWidth,
-          offsetHeight: mapContainerRef.current.offsetHeight
-        })
-        
         // Ensure container has proper dimensions before creating map
         if (mapContainerRef.current.clientWidth === 0 || mapContainerRef.current.clientHeight === 0) {
-          console.warn('🗺️ Container has zero dimensions, forcing proper sizing...')
           mapContainerRef.current.style.width = '100%'
           mapContainerRef.current.style.height = '100%'
           
           // Wait a frame for DOM update
           await new Promise(resolve => requestAnimationFrame(resolve))
-          
-          console.log('🗺️ Updated container dimensions:', {
-            width: mapContainerRef.current.clientWidth,
-            height: mapContainerRef.current.clientHeight,
-          })
         }
         
         window.mapboxgl.accessToken = accessToken
         
         // Double-check component is still mounted and container is still available right before map creation
         if (!isMountedRef.current || !mapContainerRef.current) {
-          console.warn('🗺️ Component unmounted or container ref became null during initialization')
           setIsLoading(false)
           return
         }
-        
-        console.log('🗺️ Initializing Mapbox GL Map...')
         
         const map = new window.mapboxgl.Map({
           container: mapContainerRef.current,
@@ -419,14 +363,24 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           pitchWithRotate: false,
           dragRotate: false,
           touchZoomRotate: false,
-          // Mobile optimizations
-          cooperativeGestures: isMobile,
+          // Enhanced mobile optimizations
+          cooperativeGestures: false, // Allow normal scrolling for easier mobile use
           touchPitch: false,
-          maxTileCacheSize: isMobile ? 50 : 200,
+          maxTileCacheSize: isMobile ? 30 : 200, // Reduce cache size for mobile memory
           localIdeographFontFamily: false,
-          // Add performance optimizations
+          // Performance optimizations
           preserveDrawingBuffer: false,
           antialias: !isMobile, // Disable on mobile for better performance
+          // Improved mobile scrolling behavior
+          doubleClickZoom: true,
+          scrollZoom: true,
+          boxZoom: false,
+          dragPan: true,
+          keyboard: false, // Disable keyboard nav on mobile
+          // Smoother animations on mobile
+          fadeDuration: isMobile ? 100 : 300,
+          // Better touch handling
+          clickTolerance: isMobile ? 8 : 3,
         })
         
         console.log('🗺️ Map instance created with center:', center, 'zoom:', zoom)
@@ -512,7 +466,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         })
         
         map.on('sourcedata', () => {
-          console.log('🗺️ Map source data loaded')
         })
         
         map.on('move', () => {
@@ -531,15 +484,15 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           }
         })
         
-        // Add navigation controls
+        // Add navigation controls with mobile optimizations
         const nav = new window.mapboxgl.NavigationControl({
           showCompass: !isMobile,
           showZoom: true,
           visualizePitch: false
         })
-        map.addControl(nav, 'top-right')
+        map.addControl(nav, isMobile ? 'bottom-right' : 'top-right')
         
-        // Add geolocation control
+        // Add geolocation control  
         const geolocate = new window.mapboxgl.GeolocateControl({
           positionOptions: {
             enableHighAccuracy: true
@@ -548,7 +501,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           showUserHeading: false,
           showAccuracyCircle: false
         })
-        map.addControl(geolocate, 'top-right')
+        map.addControl(geolocate, isMobile ? 'bottom-right' : 'top-right')
         
       } catch (error: any) { // Explicitly type error
         console.error('🗺️ Map initialization error:', error);
@@ -985,15 +938,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       // Check mobile status dynamically instead of using captured variable
       const currentIsMobile = isMobileDevice()
       
-      console.log('📱 Touch end event fired', {
-        isMobile,
-        currentIsMobile,
-        location: location.name,
-        hasMoved,
-        isClusterMarker
-      })
-      
-      if (currentIsMobile) {
+            if (currentIsMobile) {
         e.preventDefault()
         e.stopPropagation()
         
@@ -1007,29 +952,16 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         // Only trigger if it's a tap (not a move) and reasonable duration
         if (!hasMoved && touchDuration < 1000) {
           const target = e.target as HTMLElement
-          console.log('📱 Mobile touch end - processing tap', {
-            location: location.name,
-            touchDuration,
-            hasMoved,
-            isCluster: isClusterMarker,
-            target: target.className,
-            hasCluster: !!cluster,
-            clusterSize: cluster?.locations?.length || 0
-          })
-          
-          console.log('📱 About to check button handlers...');
           
           // Handle preview button clicks on mobile
           const viewDetailsBtn = target.closest('.view-details-btn')
           if (viewDetailsBtn) {
-            console.log('📱 Mobile View Details button tapped for:', location.name)
             onViewDetail?.(location)
             return
           }
           
           const directionsBtn = target.closest('.directions-btn')
           if (directionsBtn) {
-            console.log('📱 Mobile Directions button tapped for:', location.name)
             if (location.address) {
               const address = typeof location.address === "string"
                 ? location.address
@@ -1046,7 +978,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
             const locationId = locationItem.getAttribute('data-location-id')
             const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
             if (selectedLocation) {
-              console.log('📱 Mobile cluster item tapped:', selectedLocation.name)
               onViewDetail?.(selectedLocation)
               return
             }
@@ -1054,12 +985,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           
           // Handle cluster marker tap for mobile
           if (isClusterMarker && cluster && cluster.locations.length > 1) {
-            console.log('🔥🔥 Mobile cluster marker tapped!', {
-              clusterSize: cluster.locations.length,
-              locations: cluster.locations.map(l => l.name),
-              center: cluster.center
-            })
-            
             // For mobile, ONLY dispatch preview event - don't call onMarkerClick
             // This ensures the preview opens instead of going straight to detail
             const clusterPreviewEvent = new CustomEvent('markerMobilePreview', {
@@ -1081,21 +1006,12 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
             window.dispatchEvent(clusterPreviewEvent)
             markerEl.dispatchEvent(clusterPreviewEvent)
             
-            console.log('🔥 Dispatched cluster mobile preview event (no direct marker click)')
-            
             // Trigger vibration for cluster interaction
             if (navigator.vibrate) {
               navigator.vibrate([50, 50, 50]) // Triple vibration for cluster
             }
             return
           }
-          
-          console.log('🔥🔥 Mobile single marker tapped!', {
-            location: location.name,
-            coordinates: { lat: location.latitude, lng: location.longitude },
-            isMobile,
-            isCluster: false
-          })
           
           // For mobile, ONLY dispatch preview event - don't call onMarkerClick
           // This ensures the preview opens instead of going straight to detail
@@ -1110,18 +1026,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
             cancelable: true
           })
           
-          console.log('🔥 About to dispatch single location mobile preview event', {
-            location: location.name,
-            coordinates: { lat: location.latitude, lng: location.longitude },
-            eventDetail: previewEvent.detail
-          })
-          
           // Dispatch on multiple targets for broader coverage
           document.dispatchEvent(previewEvent)
           window.dispatchEvent(previewEvent)
           markerEl.dispatchEvent(previewEvent)
-          
-          console.log('🔥 Dispatched single location mobile preview event (no direct marker click)')
           
           // Also trigger vibration on supported devices for tactile feedback
           if (navigator.vibrate) {
@@ -1221,13 +1129,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           markerEl.style.opacity = '1'
         }, 100)
       }
-    })
-    
-    console.log('📱 Marker element created with touch listeners', {
-      location: location.name,
-      isMobile,
-      currentIsMobile: isMobileDevice(),
-      hasListeners: true
     })
     
     return markerEl
@@ -1667,7 +1568,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
 
   return (
     <div className={cn("relative w-full h-full overflow-hidden map-wrapper", className)}>
-      {/* Map container with explicit sizing */}
+      {/* Map container with explicit sizing and mobile optimizations */}
       <div
         ref={mapContainerRef}
         className="w-full h-full absolute inset-0 map-container"
@@ -1675,8 +1576,15 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           minHeight: '200px',
           width: '100%',
           height: '100%',
-          position: 'relative'
-           // Ensure proper positioning for Mapbox
+          position: 'relative',
+          // Mobile touch optimizations
+          touchAction: isMobile ? 'pan-x pan-y' : 'none',
+          WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
+          userSelect: 'none',
+          // Smooth scrolling for mobile
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'none'
         }}
       />
 

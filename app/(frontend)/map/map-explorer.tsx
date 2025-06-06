@@ -352,17 +352,10 @@ export default function MapExplorer() {
   // Listen for mobile marker events from MapComponent
   useEffect(() => {
     const handleMarkerMobilePreviewEvent = (e: CustomEvent) => {
-      console.log('🎉 MapExplorer: Received markerMobilePreview event', {
-        isMobile,
-        eventDetail: e.detail,
-        hasLocation: !!e.detail?.location
-      })
-      
       const { location: primaryLocationFromEvent, cluster, isCluster, coordinates } = e.detail
       
       if (isMobile && primaryLocationFromEvent) {
         if (isCluster && cluster && cluster.locations.length > 1) {
-          console.log("MapExplorer: Cluster marker tapped on mobile", cluster);
           setClusterPreviewData({ 
             locations: cluster.locations, 
             isCluster: true,
@@ -376,11 +369,9 @@ export default function MapExplorer() {
           setSelectedLocation(null); // Don't pre-select a location when showing cluster list
         } else {
           // Single location tapped on map - use LocationBottomSheet
-          console.log("MapExplorer: Single marker tapped on mobile, using LocationBottomSheet", primaryLocationFromEvent);
           setClusterPreviewData({ // Use clusterPreviewData to pass single location to LocationBottomSheet
             locations: [primaryLocationFromEvent],
             isCluster: false, // Explicitly false for single
-            // center: coordinates ? [coordinates.lng, coordinates.lat] : getLocationCoordinates(primaryLocationFromEvent) // Use tapped coords or location's coords
           });
           setShowClusterBottomSheet(true); // Show the bottom sheet
           // When showing bottom sheet for single location, adjust map padding
@@ -636,13 +627,13 @@ export default function MapExplorer() {
               )}
             </div>
 
-            {/* Mobile view toggle button */}
-            <div className="absolute bottom-4 right-4 z-20">
+            {/* Mobile view toggle button - moved to bottom left above nav */}
+            <div className="fixed bottom-24 left-4 z-30">
               <Button
                 onClick={() => setActiveView(activeView === "map" ? "list" : "map")}
-                className="rounded-full w-12 h-12 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-lg"
+                className="rounded-full w-14 h-14 bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 shadow-xl border-2 border-white/20 backdrop-blur-sm"
               >
-                {activeView === "map" ? <List className="h-5 w-5" /> : <MapIcon className="h-5 w-5" />}
+                {activeView === "map" ? <List className="h-6 w-6 text-white" /> : <MapIcon className="h-6 w-6 text-white" />}
               </Button>
             </div>
           </>
