@@ -1,355 +1,209 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { z } from 'zod'
+import { 
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  getRecentNotifications
+} from '@/app/actions'
+import { getServerSideUser } from '@/lib/auth-server'
 
-// Query parameters validation
-const notificationsQuerySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(50)).default('20'),
-  unreadOnly: z.string().transform((val) => val === 'true').default('false'),
-  type: z.enum(['all', 'follow', 'like', 'comment', 'mention', 'event', 'location', 'system']).default('all'),
-})
-
-interface MobileNotificationsResponse {
-  success: boolean
-  message: string
-  data?: {
-    notifications: Array<{
-      id: string
-      type: string
-      title: string
-      message: string
-      isRead: boolean
-      createdAt: string
-      metadata?: {
-        userId?: string
-        postId?: string
-        locationId?: string
-        eventId?: string
-        followerId?: string
-        followerName?: string
-        followerAvatar?: string
-        [key: string]: any
-      }
-      actionUrl?: string
-    }>
-    pagination: {
-      page: number
-      limit: number
-      total: number
-      totalPages: number
-      hasNext: boolean
-      hasPrev: boolean
-    }
-    unreadCount: number
-  }
-  error?: string
-  code?: string
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse<MobileNotificationsResponse>> {
+// GET /api/v1/mobile/notifications - Get user notifications
+export async function GET(request: NextRequest) {
   try {
-    const payload = await getPayload({ config })
-    const { searchParams } = new URL(request.url)
+    const user = await getServerSideUser()
     
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    const { user } = await payload.auth({ headers: request.headers })
     if (!user) {
       return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
-        },
+        { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
 
-    // Validate query parameters
-    const queryValidation = notificationsQuerySchema.safeParse(Object.fromEntries(searchParams))
-    if (!queryValidation.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid query parameters',
-          error: queryValidation.error.errors[0].message,
-          code: 'VALIDATION_ERROR'
-        },
-        { status: 400 }
-      )
+    const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type') || 'all' // all, recent, unread
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const markAsRead = searchParams.get('markAsRead') === 'true'
+
+    console.log(`Mobile API: Getting ${type} notifications for user ${user.id}`)
+
+    let notifications: any[] = []
+    let unreadCount = 0
+
+    switch (type) {
+      case 'recent':
+        notifications = await getRecentNotifications(user.id, limit)
+        break
+        
+      case 'unread':
+        // Get all notifications and filter unread
+        const allNotifications = await getNotifications(user.id, limit * 2) // Get more to ensure we have enough unread
+        notifications = allNotifications.filter(notif => !notif.read).slice(0, limit)
+        break
+        
+      default: // 'all'
+        notifications = await getNotifications(user.id, limit)
     }
 
-    const { page, limit, unreadOnly, type } = queryValidation.data
+    // Get unread count
+    unreadCount = await getUnreadNotificationCount(user.id)
 
-    // Build query conditions
-    let whereClause: any = {
-      recipient: { equals: user.id }
+    // Mark notifications as read if requested
+    if (markAsRead && notifications.length > 0) {
+      const readPromises = notifications
+        .filter(notif => !notif.read)
+        .map(notif => markNotificationAsRead(notif.id))
+      
+      await Promise.all(readPromises)
+      
+      // Update the notifications to reflect read status
+      notifications = notifications.map(notif => ({ ...notif, read: true }))
+      unreadCount = Math.max(0, unreadCount - notifications.filter(notif => !notif.read).length)
     }
 
-    // Filter by read status
-    if (unreadOnly) {
-      whereClause.isRead = { equals: false }
-    }
+    // Format notifications for mobile
+    const formattedNotifications = notifications.map((notification: any) => ({
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      read: notification.read,
+      priority: notification.priority || 'normal',
+      actionRequired: notification.actionRequired || false,
+      createdAt: notification.createdAt,
+      relatedTo: notification.relatedTo ? {
+        id: notification.relatedTo.id,
+        collection: notification.relatedTo.collection
+      } : null,
+      metadata: notification.metadata || {},
+      // Additional fields for specific notification types
+      inviteStatus: notification.inviteStatus,
+      journeyTitle: notification.journeyTitle,
+      journeyOwner: notification.journeyOwner
+    }))
 
-    // Filter by notification type
-    if (type !== 'all') {
-      whereClause.type = { equals: type }
-    }
-
-    // Fetch notifications
-    const notificationsResult = await payload.find({
-      collection: 'notifications',
-      where: whereClause,
-      sort: { createdAt: 'desc' },
-      page,
-      limit,
-      depth: 1,
-    })
-
-    // Get total unread count for user
-    const unreadResult = await payload.find({
-      collection: 'notifications',
-      where: {
-        recipient: { equals: user.id },
-        isRead: { equals: false }
-      },
-      limit: 0,
-    })
-
-    // Format notifications for mobile consumption
-    const formattedNotifications = notificationsResult.docs.map((notification: any) => {
-      // Determine action URL based on notification type
-      let actionUrl: string | undefined
-
-      switch (notification.type) {
-        case 'follow':
-          if (notification.metadata?.followerId) {
-            actionUrl = `/profile/${notification.metadata.followerId}`
-          }
-          break
-        case 'like':
-        case 'comment':
-          if (notification.metadata?.postId) {
-            actionUrl = `/post/${notification.metadata.postId}`
-          }
-          break
-        case 'event':
-          if (notification.metadata?.eventId) {
-            actionUrl = `/events/${notification.metadata.eventId}`
-          }
-          break
-        case 'location':
-          if (notification.metadata?.locationId) {
-            actionUrl = `/locations/${notification.metadata.locationId}`
-          }
-          break
-        default:
-          actionUrl = undefined
-      }
-
-      return {
-        id: notification.id,
-        type: notification.type,
-        title: notification.title,
-        message: notification.message,
-        isRead: notification.isRead || false,
-        createdAt: notification.createdAt,
-        metadata: notification.metadata || {},
-        actionUrl,
-      }
-    })
-
-    // Calculate pagination
-    const totalPages = Math.ceil(notificationsResult.totalDocs / limit)
-
-    const response: MobileNotificationsResponse = {
+    return NextResponse.json({
       success: true,
-      message: 'Notifications retrieved successfully',
       data: {
         notifications: formattedNotifications,
-        pagination: {
-          page,
+        unreadCount,
+        meta: {
+          type,
           limit,
-          total: notificationsResult.totalDocs,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1,
-        },
-        unreadCount: unreadResult.totalDocs,
-      },
-    }
-
-    return NextResponse.json(response, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'private, max-age=60', // 1 minute cache for notifications
-        'X-Content-Type-Options': 'nosniff',
+          hasMore: notifications.length === limit
+        }
       }
     })
-
   } catch (error) {
-    console.error('Mobile notifications error:', error)
-    
+    console.error('Mobile API: Error fetching notifications:', error)
     return NextResponse.json(
       {
         success: false,
-        message: 'Internal server error',
-        error: 'Notifications service unavailable',
-        code: 'SERVER_ERROR'
+        error: 'Failed to fetch notifications',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
   }
 }
 
-// PATCH endpoint for bulk operations (mark all as read)
-export async function PATCH(request: NextRequest): Promise<NextResponse<{ success: boolean; message: string; data?: any; error?: string; code?: string }>> {
+// PUT /api/v1/mobile/notifications/[notificationId] - Mark notification as read
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ notificationId: string }> }
+) {
   try {
-    const payload = await getPayload({ config })
-    const body = await request.json()
-
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    const { user } = await payload.auth({ headers: request.headers })
+    const user = await getServerSideUser()
+    
     if (!user) {
       return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
-        },
+        { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
 
-    const { action, notificationIds } = body
+    const { notificationId } = await params
+    const body = await request.json()
+    const { action } = body // 'read', 'unread', 'delete'
 
-    if (action === 'markAllAsRead') {
-      // Mark all user's notifications as read
-      const unreadNotifications = await payload.find({
-        collection: 'notifications',
-        where: {
-          recipient: { equals: user.id },
-          isRead: { equals: false }
-        },
-        limit: 0, // We only need the count for the response, or all IDs for update
-        select: { id: true } // Only select IDs to be efficient
-      })
+    console.log(`Mobile API: ${action} notification ${notificationId}`)
 
-      if (unreadNotifications.docs.length > 0) {
-        const idsToUpdate = unreadNotifications.docs.map((n: any) => n.id);
-        await payload.update({
-          collection: 'notifications',
-          where: {
-            id: { in: idsToUpdate },
-            recipient: { equals: user.id } // Ensure user owns these notifications
-          },
-          data: { isRead: true },
-        });
-      }
+    let result: boolean
+    switch (action) {
+      case 'read':
+        result = await markNotificationAsRead(notificationId)
+        break
+        
+      case 'delete':
+        result = await deleteNotification(notificationId)
+        break
+        
+      default:
+        return NextResponse.json(
+          { success: false, error: 'Invalid action' },
+          { status: 400 }
+        )
+    }
 
+    if (result) {
       return NextResponse.json({
         success: true,
-        message: 'All notifications marked as read',
-        data: {
-          markedCount: unreadNotifications.docs.length,
-        },
+        message: `Notification ${action} successfully`
       })
-
-    } else if (action === 'markAsRead' && Array.isArray(notificationIds) && notificationIds.length > 0) {
-      // Mark specific notifications as read using bulk update
-      const result = await payload.update({
-        collection: 'notifications',
-        where: {
-          id: { in: notificationIds },
-          recipient: { equals: user.id } // Ensure user owns these notifications
-        },
-        data: { isRead: true },
-      });
-
-      // The `update` operation with a `where` clause might not return a simple count
-      // of updated documents directly in all Payload versions or configurations.
-      // We assume it processes all valid IDs. If specific counts of successful updates
-      // are needed, we might need to query again or inspect `result.docs` if available.
-      // For now, we report based on the number of IDs requested.
-      // Payload's bulk operations typically return `{ docs: [], errors: [] }`
-      // A more precise count would be `notificationIds.length - result.errors.length` if errors are populated.
-      // Let's assume for now `result.docs.length` gives us the count if available and successful,
-      // otherwise, we fall back to requested count as a general success message.
-      
-      let successCount = 0;
-      if (result && Array.isArray(result.docs)) {
-        successCount = result.docs.length; // Number of documents that matched and were updated
-      } else {
-        // Fallback or if `result.docs` isn't populated as expected for bulk updates.
-        // This part might need adjustment based on the exact structure of `result` from bulk `payload.update`
-        // For this example, we will assume the operation attempts to update all valid IDs.
-        // A more robust way is to count IDs that didn't produce an error if `result.errors` is available.
-        successCount = notificationIds.length; // Assume all requested were attempted
-      }
-      
-      // A more accurate way if errors are reported:
-      // const successCount = notificationIds.length - (result.errors ? result.errors.length : 0);
-
-      return NextResponse.json({
-        success: true,
-        message: `${successCount} of ${notificationIds.length} notifications processed for marking as read`,
-        data: {
-          markedCount: successCount, // This might be an optimistic count
-          requestedCount: notificationIds.length,
-          // errors: result.errors // Optionally return errors if any
-        },
-      })
-
     } else {
       return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid action',
-          error: 'Action must be "markAllAsRead" or "markAsRead" with notificationIds',
-          code: 'INVALID_ACTION'
-        },
+        { success: false, error: `Failed to ${action} notification` },
         { status: 400 }
       )
     }
-
   } catch (error) {
-    console.error('Mobile notifications update error:', error)
-    
+    console.error('Mobile API: Error updating notification:', error)
     return NextResponse.json(
       {
         success: false,
-        message: 'Internal server error',
-        error: 'Notifications update service unavailable',
-        code: 'SERVER_ERROR'
+        error: 'Failed to update notification',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// POST /api/v1/mobile/notifications/mark-all-read - Mark all notifications as read
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    console.log(`Mobile API: Marking all notifications as read for user ${user.id}`)
+
+    const result = await markAllNotificationsAsRead(user.id)
+
+    if (result) {
+      return NextResponse.json({
+        success: true,
+        message: 'All notifications marked as read'
+      })
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Failed to mark notifications as read' },
+        { status: 400 }
+      )
+    }
+  } catch (error) {
+    console.error('Mobile API: Error marking all notifications as read:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to mark notifications as read',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
@@ -362,7 +216,7 @@ export async function OPTIONS() {
     status: 200,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Max-Age': '86400',
     },

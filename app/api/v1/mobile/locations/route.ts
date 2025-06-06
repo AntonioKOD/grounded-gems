@@ -1,440 +1,229 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import { z } from 'zod'
+import { 
+  getLocations, 
+  createLocation, 
+  updateLocation,
+  getReviewsbyId,
+  recordLocationInteraction,
+  toggleSaveLocationAction,
+  toggleSubscribeLocationAction,
+  getUserLocationDataAction,
+  type LocationFormData 
+} from '@/app/actions'
+import { getNearbyOrPopularLocations } from '@/app/(frontend)/home-page-actions/actions'
+import { getServerSideUser } from '@/lib/auth-server'
 
-// Query parameters validation
-const locationsQuerySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(50)).default('20'),
-  search: z.string().optional(),
-  category: z.string().optional(),
-  latitude: z.string().transform(Number).pipe(z.number().min(-90).max(90)).optional(),
-  longitude: z.string().transform(Number).pipe(z.number().min(-180).max(180)).optional(),
-  radius: z.string().transform(Number).pipe(z.number().min(1).max(100)).default('25'),
-  priceRange: z.enum(['free', 'budget', 'moderate', 'expensive', 'luxury']).optional(),
-  rating: z.string().transform(Number).pipe(z.number().min(1).max(5)).optional(),
-  sortBy: z.enum(['distance', 'rating', 'popularity', 'name', 'createdAt']).default('distance'),
-  isOpen: z.string().transform((val) => val === 'true').optional(),
-})
-
-interface MobileLocationsResponse {
-  success: boolean
-  message: string
-  data?: {
-    locations: Array<{
-      id: string
-      name: string
-      slug: string
-      description?: string
-      shortDescription?: string
-      featuredImage?: {
-        url: string
-        alt?: string
-      } | null
-      gallery?: Array<{
-        url: string
-        caption?: string
-      }>
-      coordinates: {
-        latitude: number
-        longitude: number
-      }
-      address: {
-        street?: string
-        city?: string
-        state?: string
-        zip?: string
-        country?: string
-        formatted?: string
-      }
-      categories: Array<{
-        id: string
-        name: string
-        color?: string
-      }>
-      rating: {
-        average: number
-        count: number
-      }
-      priceRange?: string
-      businessHours?: Array<{
-        day: string
-        open?: string
-        close?: string
-        closed?: boolean
-      }>
-      contactInfo?: {
-        phone?: string
-        website?: string
-      }
-      distance?: number // in km if user location provided
-      isOpen?: boolean
-      isSaved?: boolean
-      isVerified: boolean
-      isFeatured: boolean
-      createdAt: string
-    }>
-    pagination: {
-      page: number
-      limit: number
-      total: number
-      totalPages: number
-      hasNext: boolean
-      hasPrev: boolean
-    }
-    meta: {
-      appliedFilters: {
-        search?: string
-        category?: string
-        coordinates?: {
-          latitude: number
-          longitude: number
-          radius: number
-        }
-        priceRange?: string
-        rating?: number
-        sortBy: string
-        isOpen?: boolean
-      }
-      searchRadius?: number
-    }
-  }
-  error?: string
-  code?: string
-}
-
-// Calculate distance between two coordinates using Haversine formula
-function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371 // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLon = (lon2 - lon1) * Math.PI / 180
-  const a = 
-    Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-  return R * c
-}
-
-// Check if location is currently open
-function isLocationOpen(businessHours: any[]): boolean {
-  if (!businessHours || !Array.isArray(businessHours)) return false
-  
-  const now = new Date()
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-  const currentDay = dayNames[now.getDay()]
-  const currentTime = now.toTimeString().slice(0, 5) // HH:MM format
-  
-  const todayHours = businessHours.find(h => h.day === currentDay)
-  if (!todayHours || todayHours.closed) return false
-  
-  if (!todayHours.open || !todayHours.close) return false
-  
-  return currentTime >= todayHours.open && currentTime <= todayHours.close
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse<MobileLocationsResponse>> {
+// GET /api/v1/mobile/locations - Get locations with various filters
+export async function GET(request: NextRequest) {
   try {
-    const payload = await getPayload({ config })
     const { searchParams } = new URL(request.url)
+    const type = searchParams.get('type') || 'all' // all, nearby, popular, saved, created
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const page = parseInt(searchParams.get('page') || '1')
+    const category = searchParams.get('category')
+    const lat = searchParams.get('lat')
+    const lng = searchParams.get('lng')
+    const radius = parseInt(searchParams.get('radius') || '25')
+    const search = searchParams.get('search')
+
+    // Get current user for personalization
+    const user = await getServerSideUser()
+    const currentUserId = user?.id
+
+    console.log(`Mobile API: Getting ${type} locations`)
+
+    let locations: any[] = []
+    let hasMore = false
+
+    switch (type) {
+      case 'nearby':
+      case 'popular':
+        if (lat && lng) {
+          const coordinates = { latitude: parseFloat(lat), longitude: parseFloat(lng) }
+          locations = await getNearbyOrPopularLocations(coordinates, limit, radius)
+        } else {
+          locations = await getNearbyOrPopularLocations(undefined, limit, radius)
+        }
+        break
+        
+      case 'saved':
+        if (currentUserId) {
+          const { getSavedLocationsAction } = await import('@/app/actions')
+          const savedLocations = await getSavedLocationsAction()
+          locations = savedLocations.map(item => item.location).filter(Boolean)
+        }
+        break
+        
+      case 'created':
+        if (currentUserId) {
+          const { getPayload } = await import('payload')
+          const config = (await import('@payload-config')).default
+          const payload = await getPayload({ config })
+          
+          const result = await payload.find({
+            collection: 'locations',
+            where: {
+              createdBy: { equals: currentUserId }
+            },
+            limit,
+            page,
+            depth: 2
+          })
+          
+          locations = result.docs
+          hasMore = result.hasNextPage || false
+        }
+        break
+        
+      default: // 'all'
+        const allLocations = await getLocations()
+        
+        // Apply filters
+        let filteredLocations = allLocations
+        
+        if (category) {
+          filteredLocations = allLocations.filter(location => 
+            location.categories?.some((cat: any) => 
+              typeof cat === 'string' ? cat === category : cat.name === category
+            )
+          )
+        }
+        
+        if (search) {
+          const searchLower = search.toLowerCase()
+          filteredLocations = filteredLocations.filter(location =>
+            location.name?.toLowerCase().includes(searchLower) ||
+            location.description?.toLowerCase().includes(searchLower) ||
+            location.address?.toLowerCase().includes(searchLower)
+          )
+        }
+        
+        // Apply pagination
+        const startIndex = (page - 1) * limit
+        const endIndex = startIndex + limit
+        locations = filteredLocations.slice(startIndex, endIndex)
+        hasMore = endIndex < filteredLocations.length
+    }
+
+    // Get user's saved and subscribed locations for interaction state
+    let savedLocations: string[] = []
+    let subscribedLocations: string[] = []
     
-    // Validate query parameters
-    const queryValidation = locationsQuerySchema.safeParse(Object.fromEntries(searchParams))
-    if (!queryValidation.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid query parameters',
-          error: queryValidation.error.errors[0].message,
-          code: 'VALIDATION_ERROR'
-        },
-        { status: 400 }
-      )
-    }
-
-    const { 
-      page, 
-      limit, 
-      search, 
-      category, 
-      latitude, 
-      longitude, 
-      radius, 
-      priceRange, 
-      rating, 
-      sortBy, 
-      isOpen 
-    } = queryValidation.data
-
-    // Get current user (optional)
-    let currentUser = null
-    try {
-      const authHeader = request.headers.get('Authorization')
-      if (authHeader?.startsWith('Bearer ')) {
-        const { user } = await payload.auth({ headers: request.headers })
-        currentUser = user
-      }
-    } catch (authError) {
-      console.log('No authenticated user for locations request')
-    }
-
-    // Build base query
-    let whereClause: any = {
-      status: { equals: 'published' }
-    }
-
-    // Apply text search
-    if (search) {
-      whereClause.or = [
-        { name: { contains: search } },
-        { description: { contains: search } },
-        { shortDescription: { contains: search } }
-      ]
-    }
-
-    // Apply category filter
-    if (category) {
-      whereClause.categories = { contains: category }
-    }
-
-    // Apply price range filter
-    if (priceRange) {
-      whereClause.priceRange = { equals: priceRange }
-    }
-
-    // Apply rating filter
-    if (rating) {
-      whereClause.averageRating = { greater_than_equal: rating }
-    }
-
-    // Determine sort order
-    let sort: string = '-createdAt' // Default sort by newest first
-    switch (sortBy) {
-      case 'rating':
-        sort = '-averageRating' // Descending order
-        break
-      case 'popularity':
-        sort = '-reviewCount' // Descending order
-        break
-      case 'name':
-        sort = 'name' // Ascending order
-        break
-      case 'createdAt':
-        sort = '-createdAt' // Descending order
-        break
-      case 'distance':
-      default:
-        // Distance sorting will be done post-query if coordinates provided
-        sort = '-createdAt' // Descending order
-        break
-    }
-
-    // Fetch locations
-    const locationsResult = await payload.find({
-      collection: 'locations',
-      where: whereClause,
-      sort,
-      page,
-      limit: latitude && longitude ? 1000 : limit, // Get more for distance filtering
-      depth: 2,
-    })
-
-    let processedLocations = locationsResult.docs
-
-    // Apply distance filtering and sorting if coordinates provided
-    if (latitude && longitude) {
-      // Calculate distances and filter by radius
-      processedLocations = processedLocations
-        .map((location: any) => {
-          const locLat = location.coordinates?.latitude || location.latitude
-          const locLng = location.coordinates?.longitude || location.longitude
-          
-          if (!locLat || !locLng) return null
-          
-          const distance = calculateDistance(latitude, longitude, locLat, locLng)
-          
-          return {
-            ...location,
-            distance: Math.round(distance * 100) / 100 // Round to 2 decimal places
-          }
-        })
-        .filter((location: any) => location && location.distance <= radius)
-        .sort((a: any, b: any) => {
-          if (sortBy === 'distance') {
-            return a.distance - b.distance
-          }
-          return 0 // Keep original sort for other types
-        })
-
-      // Apply pagination after distance filtering
-      const startIndex = (page - 1) * limit
-      const endIndex = startIndex + limit
-      processedLocations = processedLocations.slice(startIndex, endIndex)
-    }
-
-    // Apply open/closed filter if requested
-    if (isOpen !== undefined) {
-      processedLocations = processedLocations.filter((location: any) => {
-        const locationIsOpen = isLocationOpen(location.businessHours)
-        return isOpen ? locationIsOpen : !locationIsOpen
-      })
-    }
-
-    // Get user's saved locations if authenticated
-    let userSavedLocations: string[] = []
-    if (currentUser) {
+    if (currentUserId) {
       try {
-        const userData = await payload.findByID({
-          collection: 'users',
-          id: currentUser.id,
-        })
-        userSavedLocations = Array.isArray(userData.savedLocations) ? userData.savedLocations : []
+        const userData = await getUserLocationDataAction()
+        savedLocations = userData.savedLocations
+        subscribedLocations = userData.subscribedLocations
       } catch (error) {
-        console.warn('Failed to fetch user saved locations:', error)
+        console.warn('Could not fetch user location data:', error)
       }
     }
 
-    // Format locations for mobile consumption
-    const formattedLocations = processedLocations.map((location: any) => {
-      // Format address
-      const address = typeof location.address === 'string' 
-        ? { formatted: location.address }
-        : {
-            street: location.address?.street,
-            city: location.address?.city,
-            state: location.address?.state,
-            zip: location.address?.zip,
-            country: location.address?.country,
-            formatted: location.address ? 
-              `${location.address.street || ''} ${location.address.city || ''} ${location.address.state || ''} ${location.address.zip || ''}`.trim()
-              : undefined
-          }
+    // Format locations for mobile with interaction state
+    const formattedLocations = locations.map((location: any) => ({
+      id: location.id,
+      name: location.name,
+      description: location.description,
+      shortDescription: location.shortDescription,
+      address: typeof location.address === 'string' ? location.address : 
+        [
+          location.address?.street,
+          location.address?.city,
+          location.address?.state,
+          location.address?.zip
+        ].filter(Boolean).join(', '),
+      coordinates: {
+        latitude: location.latitude || location.coordinates?.latitude,
+        longitude: location.longitude || location.coordinates?.longitude
+      },
+      featuredImage: location.featuredImage?.url || location.imageUrl,
+      gallery: location.gallery?.map((item: any) => ({
+        image: item.image?.url,
+        caption: item.caption
+      })) || [],
+      categories: location.categories?.map((cat: any) => 
+        typeof cat === 'string' ? cat : cat.name
+      ) || [],
+      priceRange: location.priceRange,
+      rating: location.averageRating || 0,
+      reviewCount: location.reviewCount || 0,
+      visitCount: location.visitCount || 0,
+      businessHours: location.businessHours || [],
+      contactInfo: location.contactInfo || {},
+      isVerified: location.isVerified || false,
+      isFeatured: location.isFeatured || false,
+      // User interaction state
+      isSaved: savedLocations.includes(location.id),
+      isSubscribed: subscribedLocations.includes(location.id),
+      createdAt: location.createdAt,
+      updatedAt: location.updatedAt
+    }))
 
-      // Format categories
-      const categories = Array.isArray(location.categories)
-        ? location.categories.map((cat: any) => ({
-            id: typeof cat === 'string' ? cat : cat.id,
-            name: typeof cat === 'string' ? cat : cat.name,
-            color: typeof cat === 'object' ? cat.color : undefined
-          }))
-        : []
-
-      // Format featured image
-      const featuredImage = location.featuredImage ? {
-        url: typeof location.featuredImage === 'object' && location.featuredImage.url
-          ? location.featuredImage.url
-          : typeof location.featuredImage === 'string'
-          ? location.featuredImage
-          : '', // Fallback
-        alt: typeof location.featuredImage === 'object' 
-          ? location.featuredImage.alt 
-          : undefined
-      } : null
-
-      // Format gallery
-      const gallery = Array.isArray(location.gallery) 
-        ? location.gallery.map((item: any) => ({
-            url: typeof item.image === 'object' && item.image.url
-              ? item.image.url
-              : typeof item.image === 'string'
-              ? item.image
-              : '', // Fallback
-            caption: item.caption
-          }))
-        : []
-
-      return {
-        id: location.id,
-        name: location.name,
-        slug: location.slug,
-        description: location.description,
-        shortDescription: location.shortDescription,
-        featuredImage,
-        gallery,
-        coordinates: {
-          latitude: location.coordinates?.latitude || location.latitude,
-          longitude: location.coordinates?.longitude || location.longitude
-        },
-        address,
-        categories,
-        rating: {
-          average: location.averageRating || 0,
-          count: location.reviewCount || 0
-        },
-        priceRange: location.priceRange,
-        businessHours: location.businessHours || [],
-        contactInfo: {
-          phone: location.contactInfo?.phone,
-          website: location.contactInfo?.website
-        },
-        distance: location.distance,
-        isOpen: isLocationOpen(location.businessHours),
-        isSaved: userSavedLocations.includes(location.id),
-        isVerified: location.isVerified || false,
-        isFeatured: location.isFeatured || false,
-        createdAt: location.createdAt
-      }
-    })
-
-    // Calculate pagination (adjust for distance filtering)
-    const totalAfterFiltering = latitude && longitude 
-      ? processedLocations.length 
-      : locationsResult.totalDocs
-    const totalPages = Math.ceil(totalAfterFiltering / limit)
-
-    const response: MobileLocationsResponse = {
+    return NextResponse.json({
       success: true,
-      message: 'Locations retrieved successfully',
       data: {
         locations: formattedLocations,
         pagination: {
           page,
           limit,
-          total: totalAfterFiltering,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
+          hasMore
         },
         meta: {
-          appliedFilters: {
-            search,
-            category,
-            coordinates: latitude && longitude ? {
-              latitude,
-              longitude,
-              radius
-            } : undefined,
-            priceRange,
-            rating,
-            sortBy,
-            isOpen
-          },
-          searchRadius: latitude && longitude ? radius : undefined
+          type,
+          category,
+          search,
+          coordinates: lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null
         }
       }
-    }
-
-    return NextResponse.json(response, {
-      status: 200,
-      headers: {
-        'Cache-Control': currentUser 
-          ? 'private, max-age=300' // 5 minutes for authenticated users
-          : 'public, max-age=600', // 10 minutes for public
-        'X-Content-Type-Options': 'nosniff',
-        'Vary': 'Authorization'
-      }
     })
-
   } catch (error) {
-    console.error('Mobile locations error:', error)
-    
+    console.error('Mobile API: Error fetching locations:', error)
     return NextResponse.json(
       {
         success: false,
-        message: 'Internal server error',
-        error: 'Locations service unavailable',
-        code: 'SERVER_ERROR'
+        error: 'Failed to fetch locations',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    )
+  }
+}
+
+// POST /api/v1/mobile/locations - Create a new location
+export async function POST(request: NextRequest) {
+  try {
+    const user = await getServerSideUser()
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const body = await request.json()
+    const locationData: LocationFormData = {
+      ...body,
+      createdBy: user.id,
+      status: 'review' // Default to review status for mobile submissions
+    }
+
+    console.log(`Mobile API: Creating location for user ${user.id}`)
+
+    const location = await createLocation(locationData)
+
+    return NextResponse.json({
+      success: true,
+      message: 'Location created successfully and is under review',
+      data: { location }
+    })
+  } catch (error) {
+    console.error('Mobile API: Error creating location:', error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to create location',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
