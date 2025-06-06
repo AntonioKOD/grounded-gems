@@ -49,7 +49,7 @@ interface MobileCreatePostResponse {
   code?: string
 }
 
-// GET /api/v1/mobile/posts - Get feed posts
+// GET /api/v1/mobile/posts - Get posts (feed, user posts, or saved posts)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -58,14 +58,132 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const category = searchParams.get('category')
+    const authorId = searchParams.get('authorId')
+    const saved = searchParams.get('saved') === 'true'
     
     // Get current user for personalization
     const user = await getServerSideUser()
     const currentUserId = user?.id
 
-    console.log(`Mobile API: Getting ${feedType} posts, page ${page}, limit ${limit}`)
+    if (!currentUserId) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    const posts = await getFeedPosts(feedType, sortBy, page, category, currentUserId)
+    let posts = []
+
+    if (saved) {
+      // Fetch saved posts for current user
+      console.log(`Mobile API: Getting saved posts for user ${currentUserId}, page ${page}, limit ${limit}`)
+      
+      const payload = await getPayload({ config })
+      
+      // Get user's saved posts through relationships
+      const userDoc = await payload.findByID({
+        collection: 'users',
+        id: currentUserId,
+        depth: 3,
+      })
+
+      // Extract saved posts (assuming there's a savedPosts field)
+      const savedPosts = userDoc?.savedPosts || []
+      
+      // Format saved posts for mobile response
+      posts = savedPosts.slice((page - 1) * limit, page * limit).map((post: any) => ({
+        id: post.id,
+        caption: post.content || post.caption || '',
+        author: {
+          id: post.author?.id || post.author,
+          name: post.author?.name || 'Unknown Author',
+          profileImage: post.author?.profileImage ? { url: post.author.profileImage.url } : null,
+        },
+        location: post.location ? {
+          id: post.location.id,
+          name: post.location.name,
+          coordinates: post.location.coordinates,
+        } : null,
+        media: post.media?.map((m: any) => ({
+          type: m.mimeType?.startsWith('video/') ? 'video' : 'image',
+          url: m.url,
+          thumbnail: m.thumbnail?.url,
+          alt: m.alt,
+        })) || [],
+        engagement: {
+          likeCount: post.likes?.length || 0,
+          commentCount: post.comments?.length || 0,
+          shareCount: post.shares?.length || 0,
+          saveCount: 0, // We don't track this separately
+          isLiked: post.likes?.some((like: any) => like.user === currentUserId) || false,
+          isSaved: true, // All posts in this response are saved
+        },
+        categories: post.categories?.map((cat: any) => cat.name || cat) || [],
+        tags: post.tags || [],
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        rating: post.rating,
+      }))
+      
+    } else if (authorId) {
+      // Fetch posts by specific author
+      console.log(`Mobile API: Getting posts by author ${authorId}, page ${page}, limit ${limit}`)
+      
+      const payload = await getPayload({ config })
+      
+      const result = await payload.find({
+        collection: 'posts',
+        where: {
+          author: {
+            equals: authorId
+          }
+        },
+        sort: sortBy === 'popular' ? '-likes' : '-createdAt',
+        limit,
+        page,
+        depth: 2,
+      })
+
+      // Format posts for mobile response
+      posts = result.docs.map((post: any) => ({
+        id: post.id,
+        caption: post.content || post.caption || '',
+        author: {
+          id: post.author?.id || post.author,
+          name: post.author?.name || 'Unknown Author',
+          profileImage: post.author?.profileImage ? { url: post.author.profileImage.url } : null,
+        },
+        location: post.location ? {
+          id: post.location.id,
+          name: post.location.name,
+          coordinates: post.location.coordinates,
+        } : null,
+        media: post.media?.map((m: any) => ({
+          type: m.mimeType?.startsWith('video/') ? 'video' : 'image',
+          url: m.url,
+          thumbnail: m.thumbnail?.url,
+          alt: m.alt,
+        })) || [],
+        engagement: {
+          likeCount: post.likes?.length || 0,
+          commentCount: post.comments?.length || 0,
+          shareCount: post.shares?.length || 0,
+          saveCount: 0,
+          isLiked: post.likes?.some((like: any) => like.user === currentUserId) || false,
+          isSaved: false, // Would need to check user's saved posts
+        },
+        categories: post.categories?.map((cat: any) => cat.name || cat) || [],
+        tags: post.tags || [],
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        rating: post.rating,
+      }))
+      
+    } else {
+      // Fetch regular feed posts
+      console.log(`Mobile API: Getting ${feedType} posts, page ${page}, limit ${limit}`)
+      posts = await getFeedPosts(feedType, sortBy, page, category, currentUserId)
+    }
 
     return NextResponse.json({
       success: true,
@@ -74,7 +192,8 @@ export async function GET(request: NextRequest) {
         pagination: {
           page,
           limit,
-          hasMore: posts.length === limit
+          hasMore: posts.length === limit,
+          total: posts.length,
         }
       }
     })
