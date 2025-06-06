@@ -49,62 +49,34 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import type { Location, Media as ImportedMedia } from "./map-data"
+import type { Location } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
 import LocationDetailMobile from "./location-detail-mobile"
-
-// User interface
-interface User {
-  id: string
-  name?: string
-  email?: string
-}
-
-// Enhanced Review interface
-interface Review {
-  id: string
-  title: string
-  content: string
-  rating: number
-  author?: { 
-    id: string
-    name?: string
-    profileImage?: { url: string }
-  } | string
-  visitDate?: string | Date
-  createdAt: string | Date
-  pros?: Array<{ pro: string }>
-  cons?: Array<{ con: string }>
-  tips?: string
-  helpfulCount?: number
-  unhelpfulCount?: number
-  usersWhoMarkedHelpful?: string[]
-  usersWhoMarkedUnhelpful?: string[]
-}
-
-// Bucket list interface
-interface BucketList {
-  id: string
-  name: string
-  description?: string
-  type: 'personal' | 'shared' | 'ai-generated'
-  stats: {
-    totalItems: number
-    completedItems: number
-  }
-}
-
-// Location detail props
-interface LocationDetailProps {
-  location: Location | null
-  isOpen: boolean
-  onClose: () => void
-  isMobile?: boolean
-  cluster?: {
-    locations: Location[]
-    isCluster: boolean
-  } | null
-}
+import type { 
+  User, 
+  ReviewItem as Review, 
+  BucketList, 
+  LocationDetailProps,
+  WriteReviewModalProps,
+  AddToBucketListModalProps
+} from "./location-detail-types"
+import {
+  formatAddress,
+  formatPriceRange,
+  formatDate,
+  getBusinessStatus,
+  getLocationImageUrl,
+  getAuthorName,
+  getAuthorImage,
+  handleDirections,
+  handleLikeLocation,
+  handleSaveLocation,
+  handleReviewHelpful,
+  fetchCurrentUser,
+  fetchUserBucketLists,
+  fetchLocationReviews,
+  processGalleryImages
+} from "./location-detail-utils"
 
 // Simple responsive hook
 const useResponsive = () => {
@@ -132,13 +104,7 @@ function AddToBucketListModal({
   location,
   userBucketLists,
   onSuccess,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  location: Location | null
-  userBucketLists: BucketList[]
-  onSuccess: () => void
-}) {
+}: AddToBucketListModalProps) {
   const [selectedListId, setSelectedListId] = useState<string>('')
   const [goal, setGoal] = useState('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
@@ -430,13 +396,7 @@ function WriteReviewModal({
   location,
   currentUser,
   onSuccess,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  location: Location | null
-  currentUser: User | null
-  onSuccess: () => void
-}) {
+}: WriteReviewModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -844,8 +804,8 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
 
   useEffect(() => {
     if (isOpen && location) {
-      fetchCurrentUser()
-      fetchReviews()
+      loadCurrentUser()
+      loadReviews()
       fetchSpecials()
       loadInteractionCounts()
     }
@@ -854,7 +814,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
   // Fetch bucket lists when user is available
   useEffect(() => {
     if (currentUser) {
-      fetchUserBucketLists()
+      loadUserBucketLists()
     }
   }, [currentUser])
 
@@ -874,24 +834,17 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     setHelpfulStates(states)
   }, [reviews, currentUser])
 
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch('/api/users/me', {
-        credentials: 'include'
-      })
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Current user fetched:', data.user)
-        setCurrentUser(data.user)
-      } else {
-        console.log('No authenticated user found')
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
+  const loadCurrentUser = async () => {
+    const user = await fetchCurrentUser()
+    if (user) {
+      console.log('Current user fetched:', user)
+      setCurrentUser(user)
+    } else {
+      console.log('No authenticated user found')
     }
   }
 
-  const fetchUserBucketLists = async () => {
+  const loadUserBucketLists = async () => {
     if (!currentUser) {
       console.log('No current user for fetching bucket lists')
       return
@@ -899,27 +852,11 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     
     setIsLoadingBucketLists(true)
     console.log('Fetching bucket lists for user:', currentUser.id)
-    try {
-      const response = await fetch(`/api/bucket-lists?userId=${currentUser.id}`, {
-        credentials: 'include'
-      })
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Fetched bucket lists:', data.bucketLists?.length || 0, 'lists')
-        console.log('Bucket lists data:', data.bucketLists)
-        setUserBucketLists(data.bucketLists || [])
-      } else {
-        console.error('Failed to fetch bucket lists:', response.status, response.statusText)
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Error response:', errorData)
-        toast.error('Failed to load your bucket lists')
-      }
-    } catch (error) {
-      console.error('Error fetching bucket lists:', error)
-      toast.error('Failed to load your bucket lists')
-    } finally {
-      setIsLoadingBucketLists(false)
-    }
+    const bucketLists = await fetchUserBucketLists(currentUser.id)
+    console.log('Fetched bucket lists:', bucketLists?.length || 0, 'lists')
+    console.log('Bucket lists data:', bucketLists)
+    setUserBucketLists(bucketLists)
+    setIsLoadingBucketLists(false)
   }
 
   const loadInteractionCounts = async () => {
@@ -936,23 +873,13 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }
 
-  const fetchReviews = async () => {
+  const loadReviews = async () => {
     if (!location) return
     
     setReviewsLoading(true)
-    try {
-      const response = await fetch(`/api/reviews?locationId=${location.id}&limit=10&page=1`)
-      if (response.ok) {
-        const data = await response.json()
-        setReviews(data.reviews || [])
-      } else {
-        console.error('Failed to fetch reviews:', response.status)
-      }
-    } catch (error) {
-      console.error('Error fetching reviews:', error)
-    } finally {
-      setReviewsLoading(false)
-    }
+    const reviews = await fetchLocationReviews(location.id, 10, 1)
+    setReviews(reviews)
+    setReviewsLoading(false)
   }
 
   const fetchSpecials = async () => {
@@ -975,58 +902,23 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
       return
     }
 
-    try {
-      const response = await fetch(`/api/reviews/${reviewId}/helpful`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId: currentUser.id,
-          helpful
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setHelpfulStates(prev => ({
-          ...prev,
-          [reviewId]: {
-            isHelpful: helpful,
-            helpfulCount: data.helpfulCount,
-            unhelpfulCount: data.unhelpfulCount
-          }
-        }))
-        toast.success(data.message)
-      } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to rate review')
-      }
-    } catch (error) {
-      console.error('Error rating review:', error)
-      toast.error('Failed to rate review')
+    const result = await handleReviewHelpful(reviewId, helpful, currentUser.id)
+    if (result.success && result.data) {
+      setHelpfulStates(prev => ({
+        ...prev,
+        [reviewId]: {
+          isHelpful: helpful,
+          helpfulCount: result.data.helpfulCount,
+          unhelpfulCount: result.data.unhelpfulCount
+        }
+      }))
+      toast.success(result.data.message)
+    } else {
+      toast.error(result.message || 'Failed to rate review')
     }
   }
 
-  const formatDate = (dateString: string | Date) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const getAuthorName = (author: Review['author']): string => {
-    if (typeof author === 'string') return 'Anonymous'
-    return author?.name || 'Anonymous'
-  }
-
-  const getAuthorImage = (author: Review['author']): string => {
-    if (typeof author === 'string') return '/placeholder.svg'
-    return author?.profileImage?.url || '/placeholder.svg'
-  }
+  // Using shared utility functions for date formatting and author helpers
 
   const handleWriteReview = () => {
     if (!currentUser) {
@@ -1048,64 +940,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }
 
-  const formatAddress = (address: any): string => {
-    if (typeof address === 'string') {
-      return address
-    } else if (typeof address === 'object' && address !== null) {
-      const parts = [address.street, address.city, address.state, address.zip].filter(Boolean)
-      return parts.join(', ')
-    }
-    return 'Address not available'
-  }
-
-  const formatPriceRange = (priceRange?: string): string => {
-    const ranges: Record<string, string> = {
-      free: 'Free',
-      budget: '$',
-      moderate: '$$',
-      expensive: '$$$',
-      luxury: '$$$$'
-    }
-    return ranges[priceRange || ''] || 'Price not listed'
-  }
-
-  const getBusinessStatus = () => {
-    if (!location?.businessHours) return { status: 'Unknown', color: 'text-gray-500' }
-
-    const now = new Date()
-    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' })
-    const currentTime = now.toTimeString().slice(0, 5)
-
-    const todayHours = location.businessHours.find(h => h.day === currentDay)
-    if (!todayHours) return { status: 'Unknown', color: 'text-gray-500' }
-
-    if (todayHours.closed) return { status: 'Closed', color: 'text-red-500' }
-
-    const [openHour, openMin] = (todayHours.open || '').split(':').map(Number)
-    const [closeHour, closeMin] = (todayHours.close || '').split(':').map(Number)
-    const [currentHour, currentMin] = currentTime.split(':').map(Number)
-
-    const openTime = openHour * 60 + openMin
-    const closeTime = closeHour * 60 + closeMin
-    const currentTimeMin = currentHour * 60 + currentMin
-
-    if (currentTimeMin >= openTime && currentTimeMin <= closeTime) {
-      return { status: 'Open', color: 'text-green-500' }
-    } else {
-      return { status: 'Closed', color: 'text-red-500' }
-    }
-  }
-
-  const getImageUrl = (loc: Location): string => {
-    if (typeof loc.featuredImage === 'string') {
-      return loc.featuredImage
-    } else if (loc.featuredImage?.url) {
-      return loc.featuredImage.url
-    } else if (loc.imageUrl) {
-      return loc.imageUrl
-    }
-    return '/placeholder.svg'
-  }
+  // Using shared utility functions for formatting and status checking
 
   const handleLike = async () => {
     if (!location || !currentUser) return
@@ -1210,11 +1045,9 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }, 100)
   }
 
-  const handleDirections = () => {
-    if (location?.address) {
-      const address = formatAddress(location.address)
-      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
-      window.open(mapsUrl, '_blank')
+  const handleDirectionsClick = () => {
+    if (location) {
+      handleDirections(location)
     }
   }
 
@@ -1239,10 +1072,8 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     name: getCategoryName(location.categories?.[0])
   }
 
-  const businessStatus = getBusinessStatus()
-  const galleryImages = location.gallery?.map(g => 
-    typeof g.image === 'string' ? g.image : g.image?.url || ''
-  ).filter(Boolean) || [getImageUrl(location)]
+  const businessStatus = getBusinessStatus(location.businessHours)
+  const galleryImages = processGalleryImages(location)
 
   return createPortal(
     <AnimatePresence>
@@ -1309,7 +1140,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
                 <div className="relative bg-gray-100">
                   <div className="absolute inset-0">
                     <Image
-                      src={galleryImages[currentImageIndex] || getImageUrl(location)}
+                      src={galleryImages[currentImageIndex] || getLocationImageUrl(location)}
                       alt={location.name}
                       fill
                       className="object-cover"
@@ -1450,7 +1281,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
                     {/* Action Buttons */}
                     <div className="flex gap-3 pt-2">
                       <Button
-                        onClick={handleDirections}
+                        onClick={handleDirectionsClick}
                         className="flex-1"
                         variant="outline"
                       >
@@ -1724,7 +1555,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
             location={location}
             currentUser={currentUser}
             onSuccess={() => {
-              fetchReviews()
+              loadReviews()
               setIsWriteReviewModalOpen(false)
             }}
           />
@@ -1735,7 +1566,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
             onClose={() => setIsBucketModalOpen(false)}
             location={location}
             userBucketLists={userBucketLists}
-            onSuccess={() => fetchUserBucketLists()}
+            onSuccess={() => loadUserBucketLists()}
           />
         </>
       )}
@@ -1748,12 +1579,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
 export function LocationPreview({ location, onViewDetail }: { location: Location; onViewDetail: () => void }) {
   const categoryColor = getCategoryColor(location.categories?.[0])
 
-  const getImageUrl = (loc: Location): string => {
-    if (loc.featuredImage) {
-      return typeof loc.featuredImage === "string" ? loc.featuredImage : loc.featuredImage.url || "/placeholder.svg"
-    }
-    return "/placeholder.svg"
-  }
+  const getImageUrl = getLocationImageUrl
 
   return (
     <Card 

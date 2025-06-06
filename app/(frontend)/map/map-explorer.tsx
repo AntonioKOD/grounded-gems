@@ -352,6 +352,12 @@ export default function MapExplorer() {
   // Listen for mobile marker events from MapComponent
   useEffect(() => {
     const handleMarkerMobilePreviewEvent = (e: CustomEvent) => {
+      console.log('🎉 MapExplorer: Received markerMobilePreview event', {
+        isMobile,
+        eventDetail: e.detail,
+        hasLocation: !!e.detail?.location
+      })
+      
       const { location: primaryLocationFromEvent, cluster, isCluster, coordinates } = e.detail
       
       if (isMobile && primaryLocationFromEvent) {

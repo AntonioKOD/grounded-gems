@@ -111,7 +111,6 @@ interface MapComponentProps {
   showMobilePreview?: boolean // Add prop to track mobile preview state
   forceRefresh?: number // Add prop to trigger map refresh
   mapPadding?: { top: number; right: number; bottom: number; left: number } // New prop
-  isDetailModalOpen?: boolean // New prop to indicate if the main detail modal is open
 }
 
 const MapComponent = memo<MapComponentProps>(function MapComponent({
@@ -132,7 +131,6 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
   showMobilePreview = true,
   forceRefresh,
   mapPadding = { top: 0, right: 0, bottom: 0, left: 0 }, // Default padding
-  isDetailModalOpen = false, // Default to false
 }: MapComponentProps) {
   
   const mapRef = useRef<any>(null)
@@ -627,8 +625,11 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     
     const marker = new window.mapboxgl.Marker({
       element: el,
-      anchor: 'bottom',
-      offset: [0, 0]
+      anchor: 'center', // Keep center for user location marker
+      offset: [0, 0],
+      draggable: false, // Ensure marker doesn't move
+      rotationAlignment: 'map', // Keep marker aligned with map
+      pitchAlignment: 'map' // Keep marker aligned with map pitch
     })
       .setLngLat([lng, lat])
       .addTo(mapRef.current)
@@ -699,6 +700,14 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     }
   }, [])
 
+  // Let Mapbox handle all positioning - no custom positioning interference
+  const setupMarkerElement = useCallback((element: HTMLElement) => {
+    // Only set properties that don't interfere with Mapbox positioning
+    element.style.pointerEvents = 'auto'
+    element.style.userSelect = 'none'
+    // Let Mapbox control position, transform, left, top, etc.
+  }, [])
+
   // Create marker element
   const createMarkerElement = useCallback((
     location: Location, 
@@ -715,13 +724,16 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       'absolute select-none'
     )
     
-    // Set absolute positioning to prevent movement
-    markerEl.style.position = 'absolute'
-    markerEl.style.transform = 'translate(-50%, -100%)'
-    markerEl.style.transformOrigin = 'center bottom'
-    
-    // Set custom z-index for better layering
+    // Let Mapbox handle positioning - only set basic properties
+    setupMarkerElement(markerEl)
     markerEl.style.zIndex = isSelected ? '60' : isClusterMarker ? '45' : '40'
+    
+    // Apply selection visual effects without interfering with positioning
+    if (isSelected) {
+      markerEl.style.filter = 'drop-shadow(0 0 8px rgba(255, 107, 107, 0.6))'
+      markerEl.style.outline = '2px solid #FF6B6B'
+      markerEl.style.outlineOffset = '2px'
+    }
     
     // Cluster marker (multiple locations)
     if (isClusterMarker && cluster && cluster.locations.length > 1) {
@@ -737,7 +749,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           </div>
           
           <!-- Enhanced cluster preview tooltip - Desktop hover -->
-          <div class="cluster-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''}">
+          <div class="cluster-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-80 max-w-sm">
               <!-- Preview arrow -->
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
@@ -829,7 +841,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           ` : ''}
 
           <!-- Single location preview tooltip - Desktop hover -->
-          <div class="location-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''}">
+          <div class="location-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-72 max-w-sm">
               <!-- Preview arrow -->
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
@@ -946,9 +958,9 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         touchStartPos = { x: touch.clientX, y: touch.clientY }
         hasMoved = false
         
-        // Visual feedback for touch - use scale without changing position
-        markerEl.style.transform = 'translate(-50%, -100%) scale(1.1)'
-        markerEl.style.transition = 'transform 0.1s ease'
+        // Visual feedback for touch - minimal changes to avoid positioning issues
+        markerEl.style.opacity = '0.9'
+        markerEl.style.transition = 'opacity 0.1s ease'
       }
     }, { passive: false })
     
@@ -964,13 +976,24 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         if (moveDistance > 10) {
           hasMoved = true
           // Reset visual feedback if moved
-          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+          markerEl.style.opacity = '1'
         }
       }
     }, { passive: true })
     
     markerEl.addEventListener('touchend', (e) => {
-      if (isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      console.log('📱 Touch end event fired', {
+        isMobile,
+        currentIsMobile,
+        location: location.name,
+        hasMoved,
+        isClusterMarker
+      })
+      
+      if (currentIsMobile) {
         e.preventDefault()
         e.stopPropagation()
         
@@ -978,17 +1001,52 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         
         // Reset visual feedback
         setTimeout(() => {
-          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+          markerEl.style.opacity = '1'
         }, 100)
         
         // Only trigger if it's a tap (not a move) and reasonable duration
         if (!hasMoved && touchDuration < 1000) {
+          const target = e.target as HTMLElement
+          console.log('📱 Mobile touch end - processing tap', {
+            location: location.name,
+            touchDuration,
+            hasMoved,
+            isCluster: isClusterMarker,
+            target: target.className,
+            hasCluster: !!cluster,
+            clusterSize: cluster?.locations?.length || 0
+          })
+          
+          console.log('📱 About to check button handlers...');
+          
+          // Handle preview button clicks on mobile
+          const viewDetailsBtn = target.closest('.view-details-btn')
+          if (viewDetailsBtn) {
+            console.log('📱 Mobile View Details button tapped for:', location.name)
+            onViewDetail?.(location)
+            return
+          }
+          
+          const directionsBtn = target.closest('.directions-btn')
+          if (directionsBtn) {
+            console.log('📱 Mobile Directions button tapped for:', location.name)
+            if (location.address) {
+              const address = typeof location.address === "string"
+                ? location.address
+                : Object.values(location.address).filter(Boolean).join(", ")
+              const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+              window.open(mapsUrl, "_blank")
+            }
+            return
+          }
+          
           // Handle individual location clicks in cluster preview
-          const locationItem = (e.target as HTMLElement).closest('.location-item')
+          const locationItem = target.closest('.location-item')
           if (locationItem && cluster) {
             const locationId = locationItem.getAttribute('data-location-id')
             const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
             if (selectedLocation) {
+              console.log('📱 Mobile cluster item tapped:', selectedLocation.name)
               onViewDetail?.(selectedLocation)
               return
             }
@@ -996,25 +1054,34 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           
           // Handle cluster marker tap for mobile
           if (isClusterMarker && cluster && cluster.locations.length > 1) {
-            console.log('🔥 Mobile cluster tapped, firing markerMobilePreview event', {
+            console.log('🔥🔥 Mobile cluster marker tapped!', {
               clusterSize: cluster.locations.length,
-              locations: cluster.locations.map(l => l.name)
+              locations: cluster.locations.map(l => l.name),
+              center: cluster.center
             })
             
-            // Create and dispatch mobile preview event for cluster
+            // For mobile, ONLY dispatch preview event - don't call onMarkerClick
+            // This ensures the preview opens instead of going straight to detail
             const clusterPreviewEvent = new CustomEvent('markerMobilePreview', {
               detail: {
                 location: cluster.locations[0], // Use first location as primary
-                cluster: cluster,
+                cluster: {
+                  locations: cluster.locations,
+                  isCluster: true
+                },
                 isCluster: true,
                 coordinates: { lat: cluster.center[1], lng: cluster.center[0] } // Note: cluster.center is [lng, lat]
               },
-              bubbles: true
+              bubbles: true,
+              cancelable: true
             })
             
-            // Dispatch cluster preview event
-            markerEl.dispatchEvent(clusterPreviewEvent)
+            // Dispatch cluster preview event on multiple targets
+            document.dispatchEvent(clusterPreviewEvent)
             window.dispatchEvent(clusterPreviewEvent)
+            markerEl.dispatchEvent(clusterPreviewEvent)
+            
+            console.log('🔥 Dispatched cluster mobile preview event (no direct marker click)')
             
             // Trigger vibration for cluster interaction
             if (navigator.vibrate) {
@@ -1023,28 +1090,38 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
             return
           }
           
-          console.log('🔥 Mobile marker tapped, firing markerMobilePreview event', {
+          console.log('🔥🔥 Mobile single marker tapped!', {
             location: location.name,
+            coordinates: { lat: location.latitude, lng: location.longitude },
             isMobile,
-            isCluster: false,
-            touchDuration,
-            hasMoved
+            isCluster: false
           })
           
-          // Create and dispatch mobile preview event for single location
+          // For mobile, ONLY dispatch preview event - don't call onMarkerClick
+          // This ensures the preview opens instead of going straight to detail
           const previewEvent = new CustomEvent('markerMobilePreview', {
             detail: {
               location: location,
-              cluster: cluster,
+              cluster: cluster || null,
               isCluster: false,
               coordinates: { lat: location.latitude, lng: location.longitude }
             },
-            bubbles: true
+            bubbles: true,
+            cancelable: true
           })
           
-          // Dispatch on both the element and window for broader coverage
-          markerEl.dispatchEvent(previewEvent)
+          console.log('🔥 About to dispatch single location mobile preview event', {
+            location: location.name,
+            coordinates: { lat: location.latitude, lng: location.longitude },
+            eventDetail: previewEvent.detail
+          })
+          
+          // Dispatch on multiple targets for broader coverage
+          document.dispatchEvent(previewEvent)
           window.dispatchEvent(previewEvent)
+          markerEl.dispatchEvent(previewEvent)
+          
+          console.log('🔥 Dispatched single location mobile preview event (no direct marker click)')
           
           // Also trigger vibration on supported devices for tactile feedback
           if (navigator.vibrate) {
@@ -1059,52 +1136,58 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         touchStartTime = 0
         hasMoved = false
         // Reset visual feedback
-        markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
+        markerEl.style.opacity = '1'
       }
     })
     
-    // Desktop click handling for preview buttons
+    // Enhanced click handling for both desktop and mobile
     markerEl.addEventListener('click', (e) => {
-      // Only handle desktop clicks if not mobile
-      if (!isMobile) {
+      e.stopPropagation()
+      
+      const target = e.target as HTMLElement
+      console.log('🖱️ Marker clicked, target:', target.className, target.tagName)
+      
+      // Handle preview button clicks (both desktop and mobile)
+      const viewDetailsBtn = target.closest('.view-details-btn')
+      if (viewDetailsBtn) {
+        e.preventDefault()
         e.stopPropagation()
-        
-        const target = e.target as HTMLElement
-        
-        // Handle preview button clicks
-        if (target.classList.contains('view-details-btn')) {
-          e.preventDefault()
-          e.stopPropagation()
-          onViewDetail?.(location)
+        console.log('🔍 View Details button clicked for:', location.name)
+        onViewDetail?.(location)
+        return
+      }
+      
+      const directionsBtn = target.closest('.directions-btn')
+      if (directionsBtn) {
+        e.preventDefault()
+        e.stopPropagation()
+        console.log('🧭 Directions button clicked for:', location.name)
+        if (location.address) {
+          const address = typeof location.address === "string"
+            ? location.address
+            : Object.values(location.address).filter(Boolean).join(", ")
+          const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
+          window.open(mapsUrl, "_blank")
+        }
+        return
+      }
+      
+      // Handle individual location clicks in cluster preview (both desktop and mobile)
+      const locationItem = target.closest('.location-item')
+      if (locationItem && cluster) {
+        e.preventDefault()
+        e.stopPropagation()
+        const locationId = locationItem.getAttribute('data-location-id')
+        const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
+        if (selectedLocation) {
+          console.log(`📍 Cluster item clicked: ${selectedLocation.name}`)
+          onViewDetail?.(selectedLocation)
           return
         }
-        
-        if (target.classList.contains('directions-btn')) {
-          e.preventDefault()
-          e.stopPropagation()
-          if (location.address) {
-            const address = typeof location.address === "string"
-              ? location.address
-              : Object.values(location.address).filter(Boolean).join(", ")
-            const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
-            window.open(mapsUrl, "_blank")
-          }
-          return
-        }
-        
-        // Handle individual location clicks in cluster preview
-        const locationItem = target.closest('.location-item')
-        if (locationItem && cluster) {
-          e.preventDefault()
-          e.stopPropagation()
-          const locationId = locationItem.getAttribute('data-location-id')
-          const selectedLocation = cluster.locations.find(loc => loc.id === locationId)
-          if (selectedLocation) {
-            console.log(`📍 Cluster item clicked: ${selectedLocation.name}`)
-            onViewDetail?.(selectedLocation)
-            return
-          }
-        }
+      }
+      
+      // Only handle marker clicks for desktop (mobile uses touch events)
+      if (!isMobile) {
         
         // Handle cluster marker click (when clicking the cluster marker itself)
         if (isClusterMarker && cluster && cluster.locations.length > 1) {
@@ -1131,12 +1214,20 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         console.log(`Desktop marker clicked for ${location.name} at [${location.longitude}, ${location.latitude}]`)
         onMarkerClick(location)
         
-        // Add click animation without changing position
-        markerEl.style.transform = 'translate(-50%, -100%) scale(0.95)'
+        // Minimal click feedback to avoid positioning interference
+        markerEl.style.opacity = '0.95'
+        markerEl.style.transition = 'opacity 0.1s ease'
         setTimeout(() => {
-          markerEl.style.transform = isSelected ? 'translate(-50%, -100%) scale(1.1)' : 'translate(-50%, -100%) scale(1)'
-        }, 150)
+          markerEl.style.opacity = '1'
+        }, 100)
       }
+    })
+    
+    console.log('📱 Marker element created with touch listeners', {
+      location: location.name,
+      isMobile,
+      currentIsMobile: isMobileDevice(),
+      hasListeners: true
     })
     
     return markerEl
@@ -1240,8 +1331,11 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         
         const marker = new window.mapboxgl.Marker({
           element: markerEl,
-          anchor: 'bottom',
-          offset: [0, 0]
+          anchor: 'bottom', // Use bottom anchor for pin-style markers (tip of pin at coordinates)
+          offset: [0, 0],
+          draggable: false, // Ensure markers don't move
+          rotationAlignment: 'map', // Keep markers aligned with map
+          pitchAlignment: 'map' // Keep markers aligned with map pitch
         })
           .setLngLat([lng, lat])
           .addTo(mapRef.current)
@@ -1270,8 +1364,11 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         
         const marker = new window.mapboxgl.Marker({
           element: markerEl,
-          anchor: 'bottom',
-          offset: [0, 0]
+          anchor: 'center', // Use center anchor for cluster markers (circle shape)
+          offset: [0, 0],
+          draggable: false, // Ensure markers don't move
+          rotationAlignment: 'map', // Keep markers aligned with map
+          pitchAlignment: 'map' // Keep markers aligned with map pitch
         })
           .setLngLat(cluster.center)
           .addTo(mapRef.current)
@@ -1316,20 +1413,25 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
   useEffect(() => {
     if (!mapRef.current || !mapLoaded) return
 
-    const map = mapRef.current
     const markers = markersRef.current
 
-    // Update marker styles based on selection
-    markers.forEach((markerData, locationId) => {
-      const isSelected = selectedLocation?.id === locationId
-      const element = markerData.element
-      
-      if (element) {
-        element.style.zIndex = isSelected ? '1000' : '999'
-        element.style.transform = isSelected ? 'scale(1.2)' : 'scale(1)'
-        element.style.transition = 'all 0.2s ease-in-out'
-      }
-    })
+          // Update marker styles based on selection
+      markers.forEach((markerData, locationId) => {
+        const isSelected = selectedLocation?.id === locationId || 
+          (markerData.location && selectedLocation?.id === markerData.location.id)
+        const element = markerData.element
+        
+        if (element) {
+          element.style.zIndex = isSelected ? '1000' : '999'
+          // Use minimal visual effects that don't interfere with positioning
+          if (isSelected) {
+            element.style.filter = 'drop-shadow(0 0 8px rgba(255, 107, 107, 0.7))'
+          } else {
+            element.style.filter = 'none'
+          }
+          element.style.transition = 'filter 0.2s ease-in-out'
+        }
+      })
   }, [selectedLocation?.id, mapLoaded]) // Simplified dependencies
 
   // Force refresh effect - optimized
@@ -1573,7 +1675,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           minHeight: '200px',
           width: '100%',
           height: '100%',
-          position: 'relative' // Ensure proper positioning for Mapbox
+          position: 'relative'
+           // Ensure proper positioning for Mapbox
         }}
       />
 

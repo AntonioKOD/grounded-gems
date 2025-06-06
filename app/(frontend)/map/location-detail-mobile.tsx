@@ -39,7 +39,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import type { Location, Media as ImportedMedia } from "./map-data"
+import type { Location } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
 import { createLocationShareUrl } from "@/lib/location-sharing"
 import { motion, AnimatePresence } from "framer-motion"
@@ -50,55 +50,36 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-
-// Define User interface
-interface User {
-  id: string;
-  name?: string;
-  // Add other user fields as needed
-}
-
-// Define ReviewItem interface locally if not available from map-data
-interface ReviewItem {
-  id: string;
-  title: string;
-  content: string;
-  rating: number;
-  author?: { 
-    id: string
-    name?: string
-    profileImage?: { url: string }
-  } | string;
-  visitDate?: string | Date;
-  createdAt: string | Date;
-  pros?: Array<{ pro: string }>;
-  cons?: Array<{ con: string }>;
-  tips?: string;
-  helpfulCount?: number;
-  unhelpfulCount?: number;
-  usersWhoMarkedHelpful?: string[];
-  usersWhoMarkedUnhelpful?: string[];
-}
-
-// Use ImportedMedia directly
-type Media = ImportedMedia
-
-interface LocationDetailMobileProps {
-  location: Location | null
-  isOpen: boolean
-  onClose: () => void
-}
-
-interface BucketList {
-  id: string
-  name: string
-  description?: string
-  type: 'personal' | 'shared' | 'ai-generated'
-  stats: {
-    totalItems: number
-    completedItems: number
-  }
-}
+import type { 
+  User, 
+  ReviewItem, 
+  BucketList, 
+  LocationDetailMobileProps,
+  WriteReviewModalProps,
+  AddToBucketListModalProps,
+  Media
+} from "./location-detail-types"
+import {
+  formatAddress,
+  formatPriceRange,
+  formatPhone,
+  formatWebsite,
+  formatDate,
+  getBusinessStatus,
+  getLocationImageUrl,
+  getAuthorName,
+  getAuthorImage,
+  handleDirections,
+  handleCall,
+  handleWebsite,
+  handleLikeLocation,
+  handleSaveLocation,
+  handleReviewHelpful,
+  fetchCurrentUser,
+  fetchUserBucketLists,
+  fetchLocationReviews,
+  processGalleryImages
+} from "./location-detail-utils"
 
 // Enhanced image gallery with better mobile gestures and performance
 function ImageGallery({
@@ -259,115 +240,22 @@ function LocationInfo({
   onAddToBucketList: () => void
   isLoadingBucketLists: boolean
 }) {
-  const formatPhone = (phone: string) => {
-    try {
-      return phone.replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3")
-    } catch (error) {
-      console.warn('Error formatting phone number:', error)
-      return phone
-    }
-  }
+  // Using shared utility functions for formatting
 
-  const formatWebsite = (website: string) => {
-    try {
-      return website.replace(/^https?:\/\/(www\.)?/, "")
-    } catch (error) {
-      console.warn('Error formatting website:', error)
-      return website
-    }
-  }
-
-  const getBusinessStatus = () => {
-    if (!location.businessHours || location.businessHours.length === 0) {
-      return { status: "Unknown", color: "text-muted-foreground" }
-    }
-
-    const now = new Date()
-    const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
-    const currentTime = now.getHours() * 60 + now.getMinutes()
-
-    const todayHours = location.businessHours.find(
-      (hours) => hours.day?.toLowerCase() === currentDay
-    )
-
-    if (!todayHours || todayHours.closed) {
-      return { status: "Closed", color: "text-red-600" }
-    }
-
-    if (todayHours.open && todayHours.close) {
-      const [openHour, openMinute] = todayHours.open.split(":").map(Number)
-      const [closeHour, closeMinute] = todayHours.close.split(":").map(Number)
-      const openTime = openHour * 60 + openMinute
-      const closeTime = closeHour * 60 + closeMinute
-
-      if (currentTime >= openTime && currentTime <= closeTime) {
-        return { status: "Open", color: "text-green-600" }
-      }
-    }
-
-    return { status: "Closed", color: "text-red-600" }
-  }
-
-  const handleDirections = () => {
-    if (location.address) {
-      const addressString = typeof location.address === "string"
-        ? location.address
-        : [
-            location.address.street,
-            location.address.city,
-            location.address.state,
-            location.address.zip,
-            location.address.country
-          ].filter(Boolean).join(", ")
-      
-      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addressString)}`
-      window.open(mapsUrl, "_blank")
-    }
-  }
-
-  const handleCall = () => {
+  const handleDirectionsClick = () => handleDirections(location)
+  const handleCallClick = () => {
     if (location.contactInfo?.phone) {
-      window.location.href = `tel:${location.contactInfo.phone}`
+      handleCall(location.contactInfo.phone)
     }
   }
-
-  const handleWebsite = () => {
+  const handleWebsiteClick = () => {
     if (location.contactInfo?.website) {
-      const website = location.contactInfo.website.startsWith("http")
-        ? location.contactInfo.website
-        : `https://${location.contactInfo.website}`
-      window.open(website, "_blank")
+      handleWebsite(location.contactInfo.website)
     }
   }
 
-  const businessStatus = getBusinessStatus()
+  const businessStatus = getBusinessStatus(location.businessHours)
   const categoryColor = getCategoryColor(location.categories)
-
-  // Format address for display
-  const formatAddress = (address: any): string => {
-    if (typeof address === "string") return address
-    if (!address) return ""
-    
-    return [
-      address.street,
-      address.city,
-      address.state,
-      address.zip,
-      address.country
-    ].filter(Boolean).join(", ")
-  }
-
-  // Format price range
-  const formatPriceRange = (priceRange?: string): string => {
-    const ranges = {
-      free: "Free",
-      budget: "$",
-      moderate: "$$",
-      expensive: "$$$",
-      luxury: "$$$$"
-    }
-    return ranges[priceRange as keyof typeof ranges] || "Price not available"
-  }
 
   return (
     <div className="p-4 space-y-6">
@@ -457,13 +345,7 @@ function LocationInfo({
       {/* Action Buttons */}
       <div className="grid grid-cols-3 gap-3">
         <Button
-          onClick={() => {
-            const address = typeof location.address === 'string' 
-              ? location.address 
-              : Object.values(location.address || {}).filter(Boolean).join(', ')
-            const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
-            window.open(mapsUrl, '_blank')
-          }}
+          onClick={handleDirectionsClick}
           variant="outline"
           className="h-12 rounded-xl border-[#4ecdc4]/30 text-[#4ecdc4] hover:bg-[#4ecdc4]/10 font-medium"
         >
@@ -652,57 +534,20 @@ function ReviewsTab({
       return
     }
 
-    try {
-      const response = await fetch(`/api/reviews/${reviewId}/helpful`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          userId: currentUser.id,
-          helpful
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setHelpfulStates(prev => ({
-          ...prev,
-          [reviewId]: {
-            isHelpful: helpful,
-            helpfulCount: data.helpfulCount,
-            unhelpfulCount: data.unhelpfulCount
-          }
-        }))
-        toast.success(data.message)
-      } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to rate review')
-      }
-    } catch (error) {
-      console.error('Error rating review:', error)
-      toast.error('Failed to rate review')
+    const result = await handleReviewHelpful(reviewId, helpful, currentUser.id)
+    if (result.success && result.data) {
+      setHelpfulStates(prev => ({
+        ...prev,
+        [reviewId]: {
+          isHelpful: helpful,
+          helpfulCount: result.data.helpfulCount,
+          unhelpfulCount: result.data.unhelpfulCount
+        }
+      }))
+      toast.success(result.data.message)
+    } else {
+      toast.error(result.message || 'Failed to rate review')
     }
-  }
-
-  const formatDate = (dateString: string | Date) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const getAuthorName = (author: ReviewItem['author']): string => {
-    if (typeof author === 'string') return 'Anonymous'
-    return author?.name || 'Anonymous'
-  }
-
-  const getAuthorImage = (author: ReviewItem['author']): string => {
-    if (typeof author === 'string') return '/placeholder.svg'
-    return author?.profileImage?.url || '/placeholder.svg'
   }
 
   if (isLoading) {
@@ -904,13 +749,7 @@ function WriteReviewModal({
   location,
   currentUser,
   onSuccess,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  location: Location | null
-  currentUser: User | null
-  onSuccess: () => void
-}) {
+}: WriteReviewModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     content: '',
@@ -1283,13 +1122,7 @@ function AddToBucketListModal({
   location,
   userBucketLists,
   onSuccess,
-}: {
-  isOpen: boolean
-  onClose: () => void
-  location: Location | null
-  userBucketLists: BucketList[]
-  onSuccess: () => void
-}) {
+}: AddToBucketListModalProps) {
   const [selectedListId, setSelectedListId] = useState<string>('')
   const [goal, setGoal] = useState('')
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
@@ -1605,14 +1438,14 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
         })
       }
       
-      fetchCurrentUser()
-      fetchReviews()
+      loadCurrentUser()
+      loadReviews()
     }
   }, [isOpen, location, mounted, isIOS])
 
   useEffect(() => {
     if (user) {
-      fetchUserBucketLists()
+      loadUserBucketLists()
     }
   }, [user])
 
@@ -1632,63 +1465,29 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
   }, [isOpen, isIOS, location?.id])
 
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch('/api/users/me', {
-        credentials: 'include'
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setUser(data.user)
-      }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
-      // Don't set error state for user fetch failure as it's optional
+  const loadCurrentUser = async () => {
+    const user = await fetchCurrentUser()
+    if (user) {
+      setUser(user)
     }
   }
 
-  const fetchUserBucketLists = async () => {
+  const loadUserBucketLists = async () => {
     if (!user) return
     
     setIsLoadingBucketLists(true)
-    try {
-      const response = await fetch(`/api/bucket-lists?userId=${user.id}`, {
-        credentials: 'include'
-      })
-      if (response.ok) {
-        const data = await response.json()
-        setUserBucketLists(data.bucketLists || [])
-      } else {
-        console.error('Failed to fetch bucket lists:', response.status)
-      }
-    } catch (error) {
-      console.error('Error fetching bucket lists:', error)
-      // Don't set error state as bucket lists are not critical for viewing location details
-    } finally {
-      setIsLoadingBucketLists(false)
-    }
+    const bucketLists = await fetchUserBucketLists(user.id)
+    setUserBucketLists(bucketLists)
+    setIsLoadingBucketLists(false)
   }
 
-  const fetchReviews = async () => {
+  const loadReviews = async () => {
     if (!location) return
     
     setIsLoadingReviews(true)
-    try {
-      const response = await fetch(`/api/reviews?locationId=${location.id}&limit=10&page=1`)
-      if (response.ok) {
-        const data = await response.json()
-        setReviewItems(data.reviews || [])
-      } else {
-        console.error('Failed to fetch reviews:', response.status)
-        // Set empty reviews array instead of error to allow modal to still display
-        setReviewItems([])
-      }
-    } catch (error) {
-      console.error('Error fetching reviews:', error)
-      setReviewItems([]) // Set empty array instead of error
-    } finally {
-      setIsLoadingReviews(false)
-    }
+    const reviews = await fetchLocationReviews(location.id, 10, 1)
+    setReviewItems(reviews)
+    setIsLoadingReviews(false)
   }
 
   const shareLocation = () => {
@@ -1809,40 +1608,9 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     )
   }
 
-  const getImageUrl = (loc: Location): string => {
-    try {
-      if (typeof loc.featuredImage === 'string') {
-        return loc.featuredImage
-      } else if (loc.featuredImage?.url) {
-        return loc.featuredImage.url
-      } else if (loc.imageUrl) {
-        return loc.imageUrl
-      }
-      return '/placeholder.svg'
-    } catch (error) {
-      console.warn('Error getting image URL:', error)
-      return '/placeholder.svg'
-    }
-  }
+  // Using shared utility function for image URL
 
-  let galleryImages: string[] = []
-  try {
-    galleryImages = location.gallery?.map(g => 
-      typeof g.image === 'string' ? g.image : g.image?.url || ''
-    ).filter(Boolean) || [getImageUrl(location)]
-
-    if (location.featuredImage) {
-      const featuredUrl = typeof location.featuredImage === 'string' 
-        ? location.featuredImage 
-        : location.featuredImage.url
-      if (featuredUrl && !galleryImages.includes(featuredUrl)) {
-        galleryImages.unshift(featuredUrl)
-      }
-    }
-  } catch (error) {
-    console.warn('Error processing gallery images:', error)
-    galleryImages = ['/placeholder.svg']
-  }
+  const galleryImages = processGalleryImages(location)
 
   return createPortal(
     <AnimatePresence>
@@ -1971,43 +1739,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                   isLoadingBucketLists={isLoadingBucketLists}
                 />
 
-                {/* Enhanced Action Buttons */}
-                <div className="grid grid-cols-3 gap-3">
-                  <Button
-                    onClick={() => {
-                      const address = typeof location.address === 'string' 
-                        ? location.address 
-                        : Object.values(location.address || {}).filter(Boolean).join(', ')
-                      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`
-                      window.open(mapsUrl, '_blank')
-                    }}
-                    variant="outline"
-                    className="h-12 rounded-xl border-[#4ecdc4]/30 text-[#4ecdc4] hover:bg-[#4ecdc4]/10 font-medium"
-                  >
-                    <Navigation className="h-4 w-4 mr-1" />
-                    <span className="text-sm">Directions</span>
-                  </Button>
-                  <Button
-                    onClick={handleWriteReview}
-                    variant="outline"
-                    className="h-12 rounded-xl border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/10 font-medium"
-                  >
-                    <MessageSquare className="h-4 w-4 mr-1" />
-                    <span className="text-sm">Review</span>
-                  </Button>
-                  <Button
-                    onClick={handleAddToBucketList}
-                    disabled={isLoadingBucketLists}
-                    className="h-12 rounded-xl bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    {isLoadingBucketLists ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <Crown className="h-4 w-4 mr-1" />
-                    )}
-                    <span className="text-sm">Add to List</span>
-                  </Button>
-                </div>
+                {/* Action buttons are already included in LocationInfo component - no duplicate needed */}
 
                 {/* Enhanced Tabs */}
                 <Tabs defaultValue="about" className="w-full">
@@ -2038,7 +1770,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                         <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
                           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                             <span className="text-[#4ecdc4]">📍</span>
-                            Description
+                            About This Place
                           </h3>
                           <p className="text-gray-700 leading-relaxed">{location.description}</p>
                         </div>
@@ -2054,22 +1786,108 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                         </div>
                       )}
 
-                      {location.businessHours && location.businessHours.length > 0 && (
+                      {/* Contact Information */}
+                      {(location.contactInfo?.email || location.contactInfo?.socialMedia) && (
                         <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
                           <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <Clock className="h-5 w-5 text-[#4ecdc4]" />
-                            Hours
+                            <Globe className="h-5 w-5 text-[#4ecdc4]" />
+                            Contact & Social
                           </h3>
-                          <div className="space-y-2">
-                            {location.businessHours.map((hours, index) => (
-                              <div key={index} className="flex justify-between items-center text-sm">
-                                <span className="font-medium text-gray-700">{hours.day}</span>
-                                <span className={hours.closed ? 'text-red-500' : 'text-gray-600'}>
-                                  {hours.closed ? 'Closed' : `${hours.open} - ${hours.close}`}
-                                </span>
+                          <div className="space-y-3">
+                            {location.contactInfo?.email && (
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-gray-600">Email:</span>
+                                <a 
+                                  href={`mailto:${location.contactInfo.email}`}
+                                  className="text-sm text-[#ff6b6b] hover:underline"
+                                >
+                                  {location.contactInfo.email}
+                                </a>
                               </div>
-                            ))}
+                            )}
+                            
+                            {location.contactInfo?.socialMedia && (
+                              <div className="grid grid-cols-2 gap-2">
+                                {location.contactInfo.socialMedia.instagram && (
+                                  <a 
+                                    href={location.contactInfo.socialMedia.instagram.startsWith('http') 
+                                      ? location.contactInfo.socialMedia.instagram 
+                                      : `https://instagram.com/${location.contactInfo.socialMedia.instagram}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm"
+                                  >
+                                    📷 Instagram
+                                  </a>
+                                )}
+                                {location.contactInfo.socialMedia.facebook && (
+                                  <a 
+                                    href={location.contactInfo.socialMedia.facebook.startsWith('http') 
+                                      ? location.contactInfo.socialMedia.facebook 
+                                      : `https://facebook.com/${location.contactInfo.socialMedia.facebook}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-2 bg-blue-600 text-white rounded-lg text-sm"
+                                  >
+                                    📘 Facebook
+                                  </a>
+                                )}
+                                {location.contactInfo.socialMedia.twitter && (
+                                  <a 
+                                    href={location.contactInfo.socialMedia.twitter.startsWith('http') 
+                                      ? location.contactInfo.socialMedia.twitter 
+                                      : `https://twitter.com/${location.contactInfo.socialMedia.twitter}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-2 bg-black text-white rounded-lg text-sm"
+                                  >
+                                    🐦 Twitter
+                                  </a>
+                                )}
+                                {location.contactInfo.socialMedia.linkedin && (
+                                  <a 
+                                    href={location.contactInfo.socialMedia.linkedin.startsWith('http') 
+                                      ? location.contactInfo.socialMedia.linkedin 
+                                      : `https://linkedin.com/company/${location.contactInfo.socialMedia.linkedin}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 p-2 bg-blue-700 text-white rounded-lg text-sm"
+                                  >
+                                    💼 LinkedIn
+                                  </a>
+                                )}
+                              </div>
+                            )}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Partnership Info */}
+                      {location.hasBusinessPartnership && location.partnershipDetails && (
+                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+                          <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                            <Crown className="h-5 w-5 text-green-600" />
+                            Verified Business Partner
+                          </h3>
+                          {location.partnershipDetails.partnerName && (
+                            <p className="text-sm font-medium text-green-800 mb-1">
+                              Partner: {location.partnershipDetails.partnerName}
+                            </p>
+                          )}
+                          {location.partnershipDetails.details && (
+                            <p className="text-sm text-green-700">{location.partnershipDetails.details}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Neighborhood Info */}
+                      {location.neighborhood && (
+                        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                            <MapPin className="h-5 w-5 text-[#4ecdc4]" />
+                            Neighborhood
+                          </h3>
+                          <p className="text-gray-700">{location.neighborhood}</p>
                         </div>
                       )}
                     </TabsContent>
@@ -2080,7 +1898,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                         reviewItems={reviewItems}
                         isLoading={isLoadingReviews}
                         onWriteReview={handleWriteReview}
-                        onRefreshReviews={fetchReviews}
+                        onRefreshReviews={loadReviews}
                         currentUser={user}
                       />
                     </TabsContent>
@@ -2101,7 +1919,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
             location={location}
             currentUser={user}
             onSuccess={() => {
-              fetchReviews()
+              loadReviews()
               setIsWriteReviewModalOpen(false)
             }}
           />
@@ -2113,7 +1931,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
             location={location}
             userBucketLists={userBucketLists}
             onSuccess={() => {
-              fetchUserBucketLists()
+              loadUserBucketLists()
               setIsBucketModalOpen(false)
             }}
           />
