@@ -12,7 +12,12 @@ export const metadata: Metadata = {
   description: "Discover and join authentic community gatherings and events. Connect with fellow explorers and create meaningful memories together.",
 }
 
-export default async function EventsPage({ searchParams }: { searchParams: any }) {
+export default async function EventsPage({ 
+  searchParams 
+}: { 
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> 
+}) {
   const savedJourneys = await getSavedGemJourneys()
-  return <EventsContainer savedJourneys={savedJourneys} initialSearchParams={searchParams} />
+  const resolvedSearchParams = await searchParams
+  return <EventsContainer savedJourneys={savedJourneys} initialSearchParams={resolvedSearchParams} />
 }

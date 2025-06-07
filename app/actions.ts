@@ -334,6 +334,13 @@ interface SignupInput {
 export async function signupUser(data: SignupInput){
   const payload = await getPayload({ config: config });
   try{
+    console.log('SignupUser - Input data:', {
+      email: data.email,
+      name: data.name,
+      username: data.additionalData?.username,
+      hasCoords: !!data.coords?.latitude
+    });
+
     // Prepare user data with additional fields
     const userData: any = {
       email: data.email,
@@ -350,7 +357,13 @@ export async function signupUser(data: SignupInput){
     // Add additional data if provided
     if (data.additionalData) {
       if (data.additionalData.username) {
-        userData.username = data.additionalData.username;
+        // Validate username one more time on server side
+        const username = data.additionalData.username.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (username.length < 3 || username.length > 30) {
+          throw new Error(`Invalid username length: ${username.length}. Must be 3-30 characters.`);
+        }
+        userData.username = username;
+        console.log('Setting username:', username);
       }
       if (data.additionalData.interests) {
         userData.interests = data.additionalData.interests;
@@ -359,6 +372,13 @@ export async function signupUser(data: SignupInput){
         userData.onboardingData = data.additionalData.onboardingData;
       }
     }
+
+    console.log('SignupUser - Final userData:', {
+      email: userData.email,
+      name: userData.name,
+      username: userData.username,
+      hasLocation: !!userData.location
+    });
 
     const user = await payload.create({
       collection: 'users',

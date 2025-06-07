@@ -129,12 +129,45 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     }))
   }
 
-
-
   const generateUsername = (name: string) => {
-    const base = name.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9]/g, '')
-    const suffix = Math.floor(Math.random() * 1000)
-    return base + suffix
+    // Clean the name: remove spaces, convert to lowercase, keep only letters and numbers
+    const cleanName = name.toLowerCase()
+      .replace(/\s+/g, '') // Remove spaces
+      .replace(/[^a-z0-9]/g, '') // Remove all non-alphanumeric characters
+      .substring(0, 20) // Limit base length
+    
+    const suffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+    
+    // Create username
+    let username = cleanName + suffix
+    
+    // Ensure minimum length
+    if (username.length < 3) {
+      username = 'user' + suffix
+    }
+    
+    // Ensure maximum length
+    if (username.length > 30) {
+      username = cleanName.substring(0, 26) + suffix
+    }
+    
+    // Final validation - ensure it only contains allowed characters
+    username = username.replace(/[^a-z0-9_-]/g, '')
+    
+    // If somehow it becomes empty or too short, provide fallback
+    if (username.length < 3) {
+      username = 'user' + Date.now().toString().slice(-6)
+    }
+    
+    console.log('Generated username:', username, 'Length:', username.length)
+    return username
+  }
+
+  const cleanUsername = (username: string) => {
+    return username
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '') // Only allow lowercase letters, numbers, hyphens, underscores
+      .substring(0, 30) // Limit length
   }
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,6 +216,24 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         throw new Error("Please enable location to sign up.")
       }
 
+      // Validate username before sending
+      if (!userData.username || userData.username.length < 3) {
+        throw new Error("Username must be at least 3 characters long.")
+      }
+
+      if (userData.username.length > 30) {
+        throw new Error("Username must be less than 30 characters long.")
+      }
+
+      // Validate username format
+      const usernameRegex = /^[a-z0-9_-]+$/
+      if (!usernameRegex.test(userData.username)) {
+        console.error('Invalid username format:', userData.username)
+        throw new Error("Username can only contain lowercase letters, numbers, hyphens, and underscores.")
+      }
+
+      console.log('Username validation passed:', userData.username)
+
       // Transform data for signup
       const signupData = {
         email: userData.email,
@@ -206,9 +257,17 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         }
       }
 
+      console.log('Signup data:', {
+        email: signupData.email,
+        name: signupData.name,
+        username: signupData.additionalData.username,
+        hasCoords: !!signupData.coords.latitude
+      })
+
       await signupUser(signupData)
       setStatus("success")
     } catch (err: any) {
+      console.error('Signup error:', err)
       setError(err.message || "Signup failed. Please try again.")
       setStatus("error")
     }
@@ -380,7 +439,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                     value={userData.name}
                     onChange={(e) => {
                       updateUserData("name", e.target.value)
-                      if (!userData.username) {
+                      if (!userData.username || userData.username.startsWith('user')) {
                         updateUserData("username", generateUsername(e.target.value))
                       }
                     }}
@@ -399,7 +458,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                     id="username"
                     placeholder="your_username"
                     value={userData.username}
-                    onChange={(e) => updateUserData("username", e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                    onChange={(e) => updateUserData("username", cleanUsername(e.target.value))}
                     disabled={status === "loading"}
                     required
                     className="pl-8"
@@ -649,8 +708,6 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
             </Button>
           </div>
         </CardFooter>
-
-
 
         <CardFooter className="flex justify-center border-t p-6">
           <p className="text-sm text-muted-foreground">
