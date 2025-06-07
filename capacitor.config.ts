@@ -5,21 +5,31 @@ const config: CapacitorConfig = {
   appName: 'Sacavia',
   webDir: 'out',
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    iosScheme: 'https',
+    url: isDev ? 'http://localhost:3000' : 'https://www.sacavia.com',
+    cleartext: isDev,
+    allowNavigation: [
+      'https://www.sacavia.com',
+      'http://localhost:3000',
+      'https://api.mapbox.com',
+      'https://resend.com',
+    ],
+    appendUserAgent: 'Sacavia/1.0 Capacitor'
   },
   plugins: {
     SplashScreen: {
       launchShowDuration: 3000,
-      launchAutoHide: true,
+      launchAutoHide: false,
       backgroundColor: "#8B4513",
       androidSplashResourceName: "splash",
       androidScaleType: "CENTER_CROP",
-      showSpinner: false,
-      androidSpinnerStyle: "large",
+      showSpinner: true,
+      androidSpinnerStyle: 'large',
       iosSpinnerStyle: "small",
-      spinnerColor: "#D2B48C",
-      splashFullScreen: true,
-      splashImmersive: true,
+      spinnerColor: '#ff6b6b',
+      splashFullScreen: false,
+      splashImmersive: false,
       layoutName: "launch_screen",
       useDialog: true,
     },
@@ -36,55 +46,69 @@ const config: CapacitorConfig = {
       permissions: ['camera', 'photos']
     },
     Geolocation: {
-      permissions: ['location'],
+      permissions: {
+        ios_location_usage_description: "This app uses location to show you nearby places and events.",
+        android_location_permissions: ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+      },
       timeout: 10000,
       enableHighAccuracy: true
     },
     PushNotifications: {
-      presentationOptions: ['badge', 'sound', 'alert']
+      presentationOptions: ["badge", "sound", "alert"],
     },
     LocalNotifications: {
       smallIcon: 'ic_stat_icon_config_sample',
       iconColor: '#FF6B6B',
       sound: 'beep.wav',
     },
-    // Simplified WebView settings
     CapacitorWebView: {
       allowsInlineMediaPlayback: true,
-      allowsBackForwardNavigationGestures: false, // Disable to prevent web redirects
+      allowsBackForwardNavigationGestures: false,
       allowMultipleWindows: false,
       enableViewportScale: true,
       allowsLinkPreview: false,
       appendUserAgent: 'GroundedGems/1.0 Capacitor'
-    }
+    },
+    Haptics: {},
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
   ios: {
     contentInset: 'automatic',
     scrollEnabled: true,
     backgroundColor: '#ffffff',
-    // Use capacitor scheme for iOS to prevent web redirects
-    scheme: 'capacitor',
-    // Remove conflicting hostname - let server.url handle this
+    scheme: 'sacavia',
     webViewConfiguration: {
       allowsInlineMediaPlayback: true,
       allowsAirPlayForMediaPlayback: true,
       allowsPictureInPictureMediaPlayback: true,
       suppressesIncrementalRendering: false,
-      allowsBackForwardNavigationGestures: false, // Prevent unwanted navigation
+      allowsBackForwardNavigationGestures: false,
       allowsLinkPreview: false,
       mediaTypesRequiringUserActionForPlayback: []
     },
-    appendUserAgent: 'GroundedGems iOS Capacitor',
+    server: {
+      url: isDev ? 'http://localhost:3000' : 'https://www.sacavia.com',
+      cleartext: isDev,
+      allowNavigation: [
+        'https://www.sacavia.com',
+        'http://localhost:3000',
+        'https://api.mapbox.com',
+        'https://resend.com',
+      ],
+    },
+    appendUserAgent: 'Sacavia iOS Capacitor',
     overrideUserAgent: false,
     handleApplicationURL: true,
-    // Allow app-bound domains for the server
-    limitsNavigationsToAppBoundDomains: false // Allow server connections
+    limitsNavigationsToAppBoundDomains: false
   },
   android: {
     backgroundColor: '#ffffff',
-    allowMixedContent: true,
+    allowMixedContent: isDev,
     webContentsDebuggingEnabled: true,
-    appendUserAgent: 'GroundedGems Android Capacitor',
+    scheme: 'https',
+    appendUserAgent: 'Sacavia Android Capacitor',
     overrideUserAgent: false,
     useLegacyBridge: false
   }

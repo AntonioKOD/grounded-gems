@@ -113,6 +113,7 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}): P
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'User-Agent': 'Sacavia/1.0 Capacitor',
       ...options.headers,
     },
   });
@@ -571,20 +572,12 @@ export const capacitorUtils = {
   monitorIOSHistoryUsage
 };
 
-export const isCapacitorApp = async (): Promise<boolean> => {
-  // Server-side rendering check
-  if (typeof window === 'undefined') {
-    return false
-  }
-
-  try {
-    const Capacitor = await getCapacitor()
-    return Capacitor?.isNativePlatform() || false
-  } catch {
-    // Fallback detection
-    return window.navigator.userAgent.includes('Capacitor') ||
-           window.navigator.userAgent.includes('GroundedGems')
-  }
+export const isCapacitorApp = (): boolean => {
+  return (
+    typeof window !== 'undefined' &&
+    (window.navigator.userAgent.includes('Sacavia') ||
+      (window as any).Capacitor !== undefined)
+  )
 }
 
 export const getServerUrl = async (): Promise<string> => {
@@ -619,9 +612,7 @@ export const fetchWithCapacitorSupport = async (
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...((await isCapacitorApp()) && {
-        'User-Agent': 'GroundedGems/1.0 Capacitor'
-      }),
+      'User-Agent': 'Sacavia/1.0 Capacitor',
       ...options?.headers
     }
   }

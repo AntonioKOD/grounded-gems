@@ -6,8 +6,11 @@ export async function sendVerificationEmail(
   name: string,
   token: string
 ): Promise<any> {
-  // 1. Build the verification link
-  const verifyLink = `${process.env.PAYLOAD_SERVER_URL}/verify?token=${token}`
+  // 1. Build the verification link - use sacavia.com domain
+  const baseUrl = process.env.NODE_ENV === 'production' 
+    ? 'https://www.sacavia.com' 
+    : 'http://localhost:3000'
+  const verifyLink = `${baseUrl}/verify?token=${token}`
 
   // 2. Create the HTML email content
   const html = `

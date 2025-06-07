@@ -117,8 +117,8 @@ export const NETWORK_CONFIG = {
   getMobileHeaders: (): HeadersInit => ({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': `GroundedGems/${isIOS() ? 'iOS' : isAndroid() ? 'Android' : 'Web'} 1.0.0`,
-    'X-Requested-With': 'GroundedGems',
+    'User-Agent': `Sacavia/${isIOS() ? 'iOS' : isAndroid() ? 'Android' : 'Web'} 1.0.0`,
+    'X-Requested-With': 'Sacavia',
     ...(isMobile() && {
       'X-Mobile-App': 'true',
       'X-Platform': Capacitor.getPlatform(),

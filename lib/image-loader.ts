@@ -11,7 +11,7 @@ interface ImageLoaderProps {
   quality?: number;
 }
 
-export default function groundedGemsImageLoader({ src, width, quality }: ImageLoaderProps): string {
+export default function sacaviaImageLoader({ src, width, quality }: ImageLoaderProps): string {
   // If it's already a full URL, return as is
   if (src.startsWith('http://') || src.startsWith('https://')) {
     return src;

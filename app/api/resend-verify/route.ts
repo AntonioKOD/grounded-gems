@@ -42,6 +42,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Resend verification email using Payload's built-in method
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://www.sacavia.com' 
+      : 'http://localhost:3000'
+    
     await payload.sendEmail({
       to: email,
       subject: 'Verify Your Sacavia Account',
@@ -50,12 +54,12 @@ export async function POST(request: NextRequest) {
           <h2 style="color: #FF6B6B;">Verify Your Sacavia Account</h2>
           <p>Hi ${user.name},</p>
           <p>Please verify your email address by clicking the link below:</p>
-          <a href="${process.env.FRONTEND_URL}/verify?token=${user._verificationToken}" 
+          <a href="${baseUrl}/verify?token=${user._verificationToken}" 
              style="background-color: #FF6B6B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
             Verify Email
           </a>
           <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-          <p>${process.env.FRONTEND_URL}/verify?token=${user._verificationToken}</p>
+          <p>${baseUrl}/verify?token=${user._verificationToken}</p>
           <p>This link will expire in 24 hours.</p>
           <p>If you didn't create an account with Sacavia, please ignore this email.</p>
         </div>
