@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     let planningInstructions = `
 PLANNING INSTRUCTIONS:
 1. CREATE A SPECIFIC, ACTIONABLE PLAN.
-2. IF VERIFIED LOCATIONS ARE PROVIDED, YOU MUST PRIORITIZE AND INTEGRATE THEM. Clearly label these as "(Verified Grounded Gems Location)".
+2. IF VERIFIED LOCATIONS ARE PROVIDED, YOU MUST PRIORITIZE AND INTEGRATE THEM. Clearly label these as "(Verified Sacavia Location)".
 3. If creating a step for a type of place not in the verified list, clearly label it as "(Find a local spot for this)".
 4. CONSIDER timing, travel between locations, and realistic scheduling.
 5. INCLUDE specific addresses (if known from verified locations), estimated costs (general terms like $, $$, $$$), and timing for each step.
@@ -151,7 +151,7 @@ PLANNING INSTRUCTIONS:
       } else if (nearbyLocations.length <= 4) {
         stepCountGuidance = "Aim for 3-5 detailed steps, integrating several of the provided verified locations."
       }
-      planningInstructions += `\n11. For each step involving a verified location, state its name exactly as provided and append "(Verified Grounded Gems Location)".`
+      planningInstructions += `\n11. For each step involving a verified location, state its name exactly as provided and append "(Verified Sacavia Location)".`
     } else {
       planningInstructions += `
 10. No verified locations found nearby. Create a general plan with location types and suggestions (e.g., "a cozy cafe", "a lively park"). Clearly label these as "(Find a local spot for this)".`
@@ -177,7 +177,7 @@ Respond in the following JSON format:
   "title": "Engaging, specific plan title (include general area if no specific locations used, or a key location if used)",
   "summary": "Brief, exciting description (mention real places if used, otherwise general theme)",
   "steps": [
-    "Step 1: [Time (e.g., 7:00 PM)] - [Specific action] at [Specific location name or type of place] [Label: (Verified Grounded Gems Location) or (Find a local spot for this)] - [Brief description/tip, address if verified, cost estimate like $, $$, $$$]"
+    "Step 1: [Time (e.g., 7:00 PM)] - [Specific action] at [Specific location name or type of place] [Label: (Verified Sacavia Location) or (Find a local spot for this)] - [Brief description/tip, address if verified, cost estimate like $, $$, $$$]"
   ],
   "context": "${context}",
   "usedRealLocations": ${usedRealLocations},

@@ -12,7 +12,7 @@ import { Sparkles, Flame, Clock, BookmarkIcon } from "lucide-react"
 import type { Post } from "@/types/feed"
 
 export const metadata: Metadata = {
-  title: "Feed Algorithms Test | Grounded Gems",
+  title: "Feed Algorithms Test | Sacavia",
   description: "Test page for different feed algorithms",
 }
 

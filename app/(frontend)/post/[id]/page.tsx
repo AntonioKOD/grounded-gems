@@ -19,19 +19,19 @@ export async function generateMetadata({ params }: PostPageProps) {
 
     if (!post) {
       return {
-        title: "Post Not Found | Grounded Gems",
+        title: "Post Not Found | Sacavia",
         description: "The post you're looking for could not be found.",
       }
     }
 
     return {
-      title: post.title ? `${post.title} | Grounded Gems` : `Post by ${post.author.name} | Grounded Gems`,
+      title: post.title ? `${post.title} | Sacavia` : `Post by ${post.author.name} | Sacavia`,
       description: post.content.substring(0, 160),
     }
   } catch (error) {
     console.error("Error generating metadata:", error)
     return {
-      title: "Post | Grounded Gems",
+      title: "Post | Sacavia",
       description: "View post details and comments",
     }
   }

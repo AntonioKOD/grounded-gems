@@ -324,7 +324,7 @@ export default function SimpleMapComponent({
             <div className="w-6 h-6 rounded-full bg-[#FF6B6B] flex items-center justify-center mr-2">
               <span className="text-white font-bold text-xs">GG</span>
             </div>
-            <span className="text-sm font-medium text-gray-800">Grounded Gems</span>
+                            <span className="text-sm font-medium text-gray-800">Sacavia</span>
           </div>
 
           <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-md p-1 text-xs text-gray-600 z-10">

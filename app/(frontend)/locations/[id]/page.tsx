@@ -87,7 +87,7 @@ export async function generateMetadata({ params }: LocationPageProps) {
     
     if (!response.ok) {
       return {
-        title: 'Location Not Found | Grounded Gems',
+        title: 'Location Not Found | Sacavia',
         description: 'The requested location could not be found.',
       }
     }
@@ -114,8 +114,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
     }
 
     return {
-      title: `${location.name} | Grounded Gems`,
-      description: location.shortDescription || location.description || `Discover ${location.name} on Grounded Gems`,
+      title: `${location.name} | Sacavia`,
+      description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
       keywords: [
         location.name,
         ...(location.categories?.map((cat: any) => typeof cat === 'string' ? cat : cat.name) || []),
@@ -125,8 +125,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
         'places to visit'
       ].join(', '),
       openGraph: {
-        title: `${location.name} | Grounded Gems`,
-        description: location.shortDescription || location.description || `Discover ${location.name} on Grounded Gems`,
+        title: `${location.name} | Sacavia`,
+        description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
         images: [
           {
             url: getLocationImageUrl(location),
@@ -139,8 +139,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
       },
       twitter: {
         card: 'summary_large_image',
-        title: `${location.name} | Grounded Gems`,
-        description: location.shortDescription || location.description || `Discover ${location.name} on Grounded Gems`,
+        title: `${location.name} | Sacavia`,
+        description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
         images: [getLocationImageUrl(location)],
       },
       other: {
@@ -152,8 +152,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
   } catch (error) {
     console.error('Error generating metadata:', error)
     return {
-      title: 'Location | Grounded Gems',
-      description: 'Discover amazing places on Grounded Gems',
+      title: 'Location | Sacavia',
+      description: 'Discover amazing places on Sacavia',
     }
   }
 }

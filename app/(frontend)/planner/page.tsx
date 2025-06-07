@@ -22,10 +22,10 @@ const CONTEXTS = [
 function generateMetaTags(plan: any) {
   if (!plan) return null;
   
-  const title = `${plan.title || 'Amazing Hangout Plan'} - Grounded Gems`;
+  const title = `${plan.title || 'Amazing Hangout Plan'} - Sacavia`;
   const description = plan.summary ? 
     `${plan.summary.slice(0, 150)}...` : 
-    `Check out this awesome hangout plan with ${plan.steps?.length || 'amazing'} steps created with Grounded Gems AI Planner!`;
+    `Check out this awesome hangout plan with ${plan.steps?.length || 'amazing'} steps created with Sacavia AI Planner!`;
   
   return (
     <Head>
@@ -38,7 +38,7 @@ function generateMetaTags(plan: any) {
       <meta property="og:type" content="article" />
       <meta property="og:url" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/planner`} />
       <meta property="og:image" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/icon-512.png`} />
-      <meta property="og:site_name" content="Grounded Gems" />
+              <meta property="og:site_name" content="Sacavia" />
       
       {/* Twitter Meta Tags */}
       <meta name="twitter:card" content="summary_large_image" />
@@ -47,7 +47,7 @@ function generateMetaTags(plan: any) {
       <meta name="twitter:image" content={`${typeof window !== 'undefined' ? window.location.origin : ''}/icon-512.png`} />
       
       {/* Additional Meta Tags */}
-      <meta name="author" content="Grounded Gems AI Planner" />
+              <meta name="author" content="Sacavia AI Planner" />
       <meta name="robots" content="index, follow" />
     </Head>
   );
@@ -229,7 +229,7 @@ ${plan.summary ? `✨ ${plan.summary}\n` : ''}
 📋 Your Hangout Timeline:
 ${planSteps}
 
-🤖 Generated with Grounded Gems AI Planner
+              🤖 Generated with Sacavia AI Planner
 👉 Create your own plan: ${window.location.origin}/planner
 
 #GroundedGems #HangoutPlan #AI #Fun`

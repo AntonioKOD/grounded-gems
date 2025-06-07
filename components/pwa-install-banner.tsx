@@ -122,12 +122,12 @@ export default function PWAInstallBanner() {
           
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 mb-1">
-              Install Grounded Gems
+              Install Sacavia
             </h3>
             <p className="text-xs text-gray-600 mb-3">
               {isMobile 
                 ? "Add to your home screen for quick access and a native app experience!"
-                : "Get the full app experience! Install Grounded Gems for faster access and offline features."
+                : "Get the full app experience! Install Sacavia for faster access and offline features."
               }
             </p>
             

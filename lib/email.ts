@@ -38,7 +38,7 @@ export async function sendVerificationEmail(
                     Hi ${name},
                   </p>
                   <p style="font-size:16px;color:#333333;margin:0 0 30px;">
-                    Welcome to Grounded Gems! Please verify your email address by clicking the button below:
+                    Welcome to Sacavia! Please verify your email address by clicking the button below:
                   </p>
                   
                   <!-- CTA Button -->
@@ -61,7 +61,7 @@ export async function sendVerificationEmail(
               <!-- Footer -->
               <tr>
                 <td style="background-color:#f2f2f2;padding:20px;text-align:center;font-size:12px;color:#666666;">
-                  <p style="margin:0;">© ${new Date().getFullYear()} Grounded Gems. All rights reserved.</p>
+                  <p style="margin:0;">© ${new Date().getFullYear()} Sacavia. All rights reserved.</p>
                   <p style="margin:5px 0 0;">This is an automated message. Please do not reply.</p>
                 </td>
               </tr>
@@ -141,7 +141,7 @@ export const eventRequestEmailTemplate = {
         
         <p>You can approve or deny this request from your location dashboard.</p>
         
-        <p>Best regards,<br>The Grounded Gems Team</p>
+        <p>Best regards,<br>The Sacavia Team</p>
       </div>
     `,
   }),
@@ -177,7 +177,7 @@ export const eventRequestEmailTemplate = {
         
         <p>You can now create your event and start inviting guests! You can also contact the location owner directly at ${data.ownerEmail} if you need to coordinate any details.</p>
         
-        <p>Best regards,<br>The Grounded Gems Team</p>
+        <p>Best regards,<br>The Sacavia Team</p>
       </div>
     `,
   }),
@@ -205,9 +205,9 @@ export const eventRequestEmailTemplate = {
         
         <p>If you have questions or would like to discuss alternative arrangements, feel free to contact the location owner directly at ${data.ownerEmail}.</p>
         
-        <p>Don't give up! There are many other great venues on Grounded Gems that might be perfect for your event.</p>
+        <p>Don't give up! There are many other great venues on Sacavia that might be perfect for your event.</p>
         
-        <p>Best regards,<br>The Grounded Gems Team</p>
+        <p>Best regards,<br>The Sacavia Team</p>
       </div>
     `,
   }),
@@ -226,7 +226,7 @@ export const journeyInviteEmailTemplate = (data: {
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #FF6B6B;">You've been invited to a Gem Journey!</h2>
       <p>Hi ${data.inviteeName || data.inviteeEmail},</p>
-      <p><strong>${data.inviterName}</strong> has invited you to join the journey <strong>"${data.journeyTitle}"</strong> on Grounded Gems.</p>
+      <p><strong>${data.inviterName}</strong> has invited you to join the journey <strong>"${data.journeyTitle}"</strong> on Sacavia.</p>
       <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin: 20px 0;">
         <h3 style="margin-top: 0; color: #333;">Journey Details</h3>
         <p><strong>Title:</strong> ${data.journeyTitle}</p>
@@ -239,7 +239,7 @@ export const journeyInviteEmailTemplate = (data: {
         </a>
       </p>
       <p>We hope you enjoy planning and sharing your adventures together!</p>
-      <p style="margin-top: 32px; color: #888; font-size: 13px;">— The Grounded Gems Team</p>
+      <p style="margin-top: 32px; color: #888; font-size: 13px;">— The Sacavia Team</p>
     </div>
   `,
 })

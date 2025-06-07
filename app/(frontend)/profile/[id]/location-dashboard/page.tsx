@@ -331,7 +331,7 @@ export default function LocationDashboard() {
                 <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-xl font-medium text-gray-700 mb-2">No locations yet</h3>
                 <p className="text-gray-500 mb-6">
-                  Create your first location to start building your presence on Grounded Gems
+                  Create your first location to start building your presence on Sacavia
                 </p>
                 <Button asChild className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
                   <Link href="/add-location">

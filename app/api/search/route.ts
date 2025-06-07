@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get("q")
-    const type = searchParams.get("type") // 'users', 'locations', or 'all'
+    const type = searchParams.get("type") // 'users', 'locations', 'categories', or 'all'
     const limit = parseInt(searchParams.get("limit") || "20")
     const sortBy = searchParams.get("sortBy") || "relevance" // 'relevance', 'name', 'recent'
 
@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     let results = {
       users: [],
       locations: [],
+      categories: [],
       total: 0
     }
 
@@ -253,10 +254,94 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.total = results.users.length + results.locations.length
+    // Search categories if requested
+    if (type === "categories" || type === "all" || !type) {
+      try {
+        const categoriesResult = await payload.find({
+          collection: "categories",
+          where: {
+            and: [
+              {
+                isActive: {
+                  equals: true,
+                },
+              },
+              {
+                or: [
+                  // Category name exact match
+                  {
+                    name: {
+                      like: trimmedQuery,
+                    },
+                  },
+                  // Category name starts with
+                  {
+                    name: {
+                      like: `${trimmedQuery}%`,
+                    },
+                  },
+                  // Category name contains
+                  {
+                    name: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Description contains
+                  {
+                    description: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          limit: type === "categories" ? limit : Math.ceil(limit / 3),
+          depth: 1,
+          sort: sortBy === "name" ? "name" : sortBy === "recent" ? "-createdAt" : "order",
+          overrideAccess: true,
+        })
+
+        // Score and sort categories by relevance
+        let scoredCategories = categoriesResult.docs.map((category: any) => {
+          let score = 0
+          const lowerQuery = trimmedQuery.toLowerCase()
+          const categoryName = category.name?.toLowerCase() || ''
+          const categoryDesc = category.description?.toLowerCase() || ''
+
+          // Exact name match gets highest score
+          if (categoryName === lowerQuery) score += 100
+          
+          // Name starts with query
+          if (categoryName.startsWith(lowerQuery)) score += 80
+          
+          // Name contains query
+          if (categoryName.includes(lowerQuery)) score += 60
+          
+          // Description contains query
+          if (categoryDesc.includes(lowerQuery)) score += 40
+          
+          // Boost for categories with lower order (more important)
+          if (category.order <= 5) score += 10
+          else if (category.order <= 10) score += 5
+
+          return { ...category, relevanceScore: score }
+        })
+
+        if (sortBy === "relevance") {
+          scoredCategories.sort((a, b) => b.relevanceScore - a.relevanceScore)
+        }
+
+        results.categories = scoredCategories
+      } catch (error) {
+        console.error("Error searching categories:", error)
+      }
+    }
+
+    results.total = results.users.length + results.locations.length + results.categories.length
 
     // Log search analytics
-    console.log(`Search: "${trimmedQuery}" (${type || 'all'}) -> ${results.total} results (${results.users.length} users, ${results.locations.length} locations)`)
+    console.log(`Search: "${trimmedQuery}" (${type || 'all'}) -> ${results.total} results (${results.users.length} users, ${results.locations.length} locations, ${results.categories.length} categories)`)
 
     return NextResponse.json({
       ...results,
@@ -271,6 +356,7 @@ export async function GET(request: NextRequest) {
         error: "Search temporarily unavailable. Please try again.",
         users: [],
         locations: [],
+        categories: [],
         total: 0
       },
       { status: 500 }

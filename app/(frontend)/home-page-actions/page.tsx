@@ -76,7 +76,7 @@ export default function HomePageActions() {
           <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
             Welcome to{" "}
             <span className="bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] bg-clip-text text-transparent">
-              Grounded Gems
+              Sacavia
             </span>
           </h1>
           <p className="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">

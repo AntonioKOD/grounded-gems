@@ -2478,7 +2478,7 @@ export async function createMultipleTestNotifications(userId: string): Promise<{
       },
       {
         type: 'reminder',
-        title: 'Welcome to Grounded Gems!',
+        title: 'Welcome to Sacavia!',
         message: 'Thanks for joining our community. Start exploring amazing locations!',
         priority: 'low' as const
       }

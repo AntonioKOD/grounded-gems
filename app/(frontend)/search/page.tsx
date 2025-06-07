@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Search | Grounded Gems",
+  title: "Search | Sacavia",
   description: "Search for people, locations, and discover amazing places near you",
   keywords: ["search", "locations", "users", "places", "discover", "find people"],
 }

@@ -52,9 +52,21 @@ interface SearchLocation {
   relevanceScore?: number
 }
 
+interface SearchCategory {
+  id: string
+  name: string
+  description?: string
+  color?: string
+  slug?: string
+  type?: string
+  order?: number
+  relevanceScore?: number
+}
+
 interface SearchResults {
   users: SearchUser[]
   locations: SearchLocation[]
+  categories: SearchCategory[]
   total: number
   query?: string
   searchType?: string
@@ -102,7 +114,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   const [query, setQuery] = useState(initialQuery)
   const [activeTab, setActiveTab] = useState(initialType)
   const [sortBy, setSortBy] = useState("relevance")
-  const [results, setResults] = useState<SearchResults>({ users: [], locations: [], total: 0 })
+  const [results, setResults] = useState<SearchResults>({ users: [], locations: [], categories: [], total: 0 })
   const [loading, setLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(!!initialQuery)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
@@ -143,7 +155,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   // Search function
   const performSearch = useCallback(async (searchQuery: string, searchType: string = "all", sort: string = "relevance") => {
     if (!searchQuery.trim()) {
-      setResults({ users: [], locations: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], total: 0 })
       setHasSearched(false)
       return
     }
@@ -159,11 +171,11 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
         saveRecentSearch(searchQuery)
       } else {
         console.error("Search failed:", response.statusText)
-        setResults({ users: [], locations: [], total: 0 })
+        setResults({ users: [], locations: [], categories: [], total: 0 })
       }
     } catch (error) {
       console.error("Search error:", error)
-      setResults({ users: [], locations: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], total: 0 })
     } finally {
       setLoading(false)
     }
@@ -174,7 +186,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
     if (debouncedQuery.trim() && debouncedQuery.length >= 1) {
       performSearch(debouncedQuery, activeTab, sortBy)
     } else {
-      setResults({ users: [], locations: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], total: 0 })
       setHasSearched(false)
     }
   }, [debouncedQuery, activeTab, sortBy, performSearch])
@@ -197,17 +209,25 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   // Clear search
   const clearSearch = () => {
     setQuery("")
-    setResults({ users: [], locations: [], total: 0 })
+    setResults({ users: [], locations: [], categories: [], total: 0 })
     setHasSearched(false)
     router.push('/search')
+  }
+
+  // Handle category click to show nearby locations
+  const handleCategoryClick = (category: SearchCategory) => {
+    // Navigate to map with category filter
+    router.push(`/map?category=${encodeURIComponent(category.slug || category.name)}`)
   }
 
   // Filter results for current tab
   const filteredResults = useMemo(() => {
     if (activeTab === "users") {
-      return { ...results, locations: [], total: results.users.length }
+      return { ...results, locations: [], categories: [], total: results.users.length }
     } else if (activeTab === "locations") {
-      return { ...results, users: [], total: results.locations.length }
+      return { ...results, users: [], categories: [], total: results.locations.length }
+    } else if (activeTab === "categories") {
+      return { ...results, users: [], locations: [], total: results.categories.length }
     }
     return results
   }, [results, activeTab])
@@ -241,7 +261,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
               name="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search usernames, locations, or categories..."
+              placeholder="Search people, places, categories..."
               className="flex-1 pl-14 pr-20 h-full border-0 bg-transparent text-gray-900 placeholder-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0 text-base font-medium"
             />
 
@@ -318,7 +338,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
       {/* Results */}
       {hasSearched && (
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="all" className="flex items-center gap-2">
               <Search className="h-4 w-4" />
               All ({results.total})
@@ -331,41 +351,62 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
               <MapPin className="h-4 w-4" />
               Places ({results.locations.length})
             </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2">
+              <Filter className="h-4 w-4" />
+              Categories ({results.categories.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
             {filteredResults.total === 0 ? (
               <NoResults query={query} />
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Users column */}
-                <div className="space-y-4">
-                  {results.users.length > 0 && (
-                    <>
-                      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Users className="h-5 w-5 text-[#4ECDC4]" />
-                        People ({results.users.length})
-                      </h2>
-                      {results.users.slice(0, 5).map(user => (
-                        <UserCard key={user.id} user={user} />
+              <div className="space-y-8">
+                {/* Categories section */}
+                {results.categories.length > 0 && (
+                  <div>
+                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Filter className="h-5 w-5 text-[#FFD93D]" />
+                      Categories ({results.categories.length})
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {results.categories.slice(0, 8).map(category => (
+                        <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
                       ))}
-                    </>
-                  )}
-                </div>
-                
-                {/* Locations column */}
-                <div className="space-y-4">
-                  {results.locations.length > 0 && (
-                    <>
-                      <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <MapPin className="h-5 w-5 text-[#FF6B6B]" />
-                        Places ({results.locations.length})
-                      </h2>
-                      {results.locations.slice(0, 5).map(location => (
-                        <LocationCard key={location.id} location={location} />
-                      ))}
-                    </>
-                  )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Users column */}
+                  <div className="space-y-4">
+                    {results.users.length > 0 && (
+                      <>
+                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <Users className="h-5 w-5 text-[#4ECDC4]" />
+                          People ({results.users.length})
+                        </h2>
+                        {results.users.slice(0, 5).map(user => (
+                          <UserCard key={user.id} user={user} />
+                        ))}
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Locations column */}
+                  <div className="space-y-4">
+                    {results.locations.length > 0 && (
+                      <>
+                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <MapPin className="h-5 w-5 text-[#FF6B6B]" />
+                          Places ({results.locations.length})
+                        </h2>
+                        {results.locations.slice(0, 5).map(location => (
+                          <LocationCard key={location.id} location={location} />
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -390,6 +431,18 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {results.locations.map(location => (
                   <LocationCard key={location.id} location={location} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="categories" className="mt-6">
+            {results.categories.length === 0 ? (
+              <NoResults query={query} type="categories" />
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {results.categories.map(category => (
+                  <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
                 ))}
               </div>
             )}
@@ -555,9 +608,47 @@ function LocationCard({ location }: { location: SearchLocation }) {
   )
 }
 
+// Category Card Component
+function CategoryCard({ category, onClick }: { category: SearchCategory; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="group p-4 bg-white rounded-xl border border-gray-100 hover:border-[#FFD93D] hover:shadow-lg transition-all duration-300 text-left w-full"
+    >
+      <div className="flex items-center gap-3 mb-2">
+        <div 
+          className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-semibold text-sm"
+          style={{ backgroundColor: category.color || '#FFD93D' }}
+        >
+          {category.name.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-semibold text-gray-900 truncate group-hover:text-[#FFD93D] transition-colors">
+            {category.name}
+          </h4>
+          {category.type && (
+            <p className="text-xs text-gray-500 capitalize">{category.type}</p>
+          )}
+        </div>
+      </div>
+      
+      {category.description && (
+        <p className="text-sm text-gray-600 line-clamp-2 mb-3">{category.description}</p>
+      )}
+      
+      <div className="flex items-center justify-between">
+        <Badge variant="secondary" className="text-xs">
+          Explore nearby
+        </Badge>
+        <ExternalLink className="h-4 w-4 text-gray-400 group-hover:text-[#FFD93D] transition-colors" />
+      </div>
+    </button>
+  )
+}
+
 // Enhanced No Results Component
 function NoResults({ query, type }: { query: string; type?: string }) {
-  const typeText = type === "locations" ? "places" : type === "users" ? "people" : "results"
+  const typeText = type === "locations" ? "places" : type === "users" ? "people" : type === "categories" ? "categories" : "results"
   
   return (
     <div className="text-center py-16">

@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { useSearchParams } from "next/navigation"
 import { Search, Filter, X, List, Map as MapIcon, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -43,6 +44,8 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function MapExplorer() {
+  const searchParams = useSearchParams()
+  
   // Core states only
   const [allLocations, setAllLocations] = useState<Location[]>([])
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
@@ -135,6 +138,24 @@ export default function MapExplorer() {
       isMounted = false
     }
   }, [])
+
+  // Handle URL category parameter
+  useEffect(() => {
+    const categoryParam = searchParams.get('category')
+    if (categoryParam && categories.length > 0) {
+      // Find the category by slug or name
+      const category = categories.find(cat => 
+        cat.slug === categoryParam || 
+        cat.name?.toLowerCase() === categoryParam.toLowerCase() ||
+        cat.id === categoryParam
+      )
+      
+      if (category) {
+        setSelectedCategories([category.id])
+        console.log(`🏷️ Applied category filter from URL: ${category.name}`)
+      }
+    }
+  }, [searchParams, categories])
 
   // Load current user - simplified and optional
   useEffect(() => {
