@@ -18,25 +18,104 @@ export async function generateMetadata({
 
   if (!event) {
     return {
-      title: "Event Not Found | Events",
-      description: "The event you're looking for could not be found.",
+      title: "Event Not Found | Sacavia",
+      description: "The event you're looking for could not be found on Sacavia.",
+      robots: 'noindex, nofollow'
     }
   }
 
+  // Generate comprehensive event metadata
+  const eventDate = new Date(event.startDate).toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+
+  const locationName = typeof event.location === 'string' 
+    ? event.location 
+    : event.location?.name || 'Event Location'
+
+  const seoTitle = `${event.name} - ${eventDate} | Sacavia Events`
+  const description = event.description.length > 160 
+    ? event.description.substring(0, 157) + '...'
+    : event.description || `Join ${event.name} on ${eventDate}. Discover authentic community events and experiences on Sacavia.`
+
+  const getEventImageUrl = (image: any): string => {
+    if (typeof image === "string") {
+      return image.startsWith('http') ? image : `https://www.sacavia.com${image}`
+    } else if (image?.url) {
+      return image.url.startsWith('http') ? image.url : `https://www.sacavia.com${image.url}`
+    }
+    return 'https://www.sacavia.com/og-image.png'
+  }
+
+  const eventImage = getEventImageUrl(event.image)
+
   return {
-    title: `${event.name} | Events`,
-    description: event.description.substring(0, 160),
-    openGraph: {
-      title: event.name,
-      description: event.description.substring(0, 160),
-      images:
-        typeof event.image === "string"
-          ? [event.image]
-          : event.image?.url
-          ? [event.image.url]
-          : [],
-      type: "website",
+    title: seoTitle,
+    description,
+    keywords: [
+      event.name,
+      'events',
+      'community',
+      'local events',
+      locationName,
+      event.category || 'community event',
+      'authentic experiences',
+      'join event',
+      eventDate
+    ].filter(Boolean).join(', '),
+    authors: [{ name: 'Sacavia Community' }],
+    creator: 'Sacavia',
+    publisher: 'Sacavia',
+    alternates: {
+      canonical: `https://www.sacavia.com/events/${id}`
     },
+    openGraph: {
+      title: seoTitle,
+      description,
+      url: `https://www.sacavia.com/events/${id}`,
+      siteName: 'Sacavia',
+      images: [
+        {
+          url: eventImage,
+          width: 1200,
+          height: 630,
+          alt: `${event.name} - Event photo from Sacavia community`,
+        },
+      ],
+      type: 'website',
+      locale: 'en_US',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: seoTitle,
+      description,
+      site: '@sacavia',
+      creator: '@sacavia',
+      images: [eventImage],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-video-preview': -1,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+      },
+    },
+    other: {
+      'event:start_time': event.startDate,
+      'event:end_time': event.endDate,
+      'event:location': locationName,
+      'article:author': 'Sacavia Community',
+      'article:publisher': 'https://www.sacavia.com',
+      'og:locale': 'en_US',
+      'og:type': 'event',
+    }
   }
 }
 

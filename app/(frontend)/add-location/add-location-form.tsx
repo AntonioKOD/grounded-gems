@@ -170,8 +170,7 @@ export default function AddLocationForm() {
     other: "",
   })
 
-  // Status
-  const [status, setStatus] = useState<"draft" | "review" | "published" | "archived">("draft")
+  // Status (always set to review for verification)
   const [isFeatured, setIsFeatured] = useState(false)
   const [isVerified, setIsVerified] = useState(false)
 
@@ -189,6 +188,23 @@ export default function AddLocationForm() {
     description: "",
     keywords: "",
   })
+
+  // Auto-populate SEO metadata from title and description
+  useEffect(() => {
+    if (locationName && !meta.title) {
+      setMeta(prev => ({ ...prev, title: locationName }))
+    }
+  }, [locationName, meta.title])
+
+  useEffect(() => {
+    if (shortDescription && !meta.description) {
+      setMeta(prev => ({ ...prev, description: shortDescription }))
+    } else if (locationDescription && !meta.description && !shortDescription) {
+      // Use first 160 characters of description for SEO
+      const seoDescription = locationDescription.replace(/<[^>]*>/g, '').substring(0, 160)
+      setMeta(prev => ({ ...prev, description: seoDescription }))
+    }
+  }, [locationDescription, shortDescription, meta.description])
 
   // Add these state variables near the other state declarations
   const [isUploading, setIsUploading] = useState(false)
@@ -379,8 +395,7 @@ export default function AddLocationForm() {
       other: "",
     })
 
-    // Status
-    setStatus("draft")
+    // Status (always review for verification)
     setIsFeatured(false)
     setIsVerified(false)
 
@@ -742,8 +757,8 @@ export default function AddLocationForm() {
           other: accessibility.other || undefined,
         },
 
-        // Status
-        status: saveAsDraft ? "draft" : status,
+        // Status - always set to review for verification
+        status: saveAsDraft ? "draft" : "review",
         isFeatured: isFeatured || undefined,
         isVerified: isVerified || undefined,
 
@@ -1711,25 +1726,12 @@ export default function AddLocationForm() {
                     <h3 className="text-lg font-medium">Status & Visibility</h3>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="location-status" className="text-base font-medium">
-                      Publication Status
-                    </Label>
-                    <Select
-                      value={status}
-                      onValueChange={(value) => setStatus(value as "draft" | "review" | "published" | "archived")}
-                    >
-                      <SelectTrigger id="location-status" className="h-12 text-base">
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="review">Under Review</SelectItem>
-                        <SelectItem value="published">Published</SelectItem>
-                        <SelectItem value="archived">Archived</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Alert className="border-orange-200 bg-orange-50">
+                    <Info className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-orange-800">
+                      All new locations are submitted for review and verification before being published to ensure quality and accuracy.
+                    </AlertDescription>
+                  </Alert>
 
                   <div className="flex items-center space-x-2">
                     <Checkbox
@@ -1838,24 +1840,26 @@ export default function AddLocationForm() {
                     <div className="space-y-2">
                       <Label htmlFor="meta-title" className="text-base font-medium">
                         Meta Title
+                        <span className="text-sm text-gray-500 font-normal ml-2">(Auto-populated from location name)</span>
                       </Label>
                       <Input
                         id="meta-title"
                         value={meta.title}
                         onChange={(e) => setMeta({ ...meta, title: e.target.value })}
-                        placeholder="SEO title (if different from location name)"
+                        placeholder="Auto-populated from location name - customize if needed"
                         className="h-12 text-base"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="meta-description" className="text-base font-medium">
                         Meta Description
+                        <span className="text-sm text-gray-500 font-normal ml-2">(Auto-populated from description)</span>
                       </Label>
                       <Textarea
                         id="meta-description"
                         value={meta.description}
                         onChange={(e) => setMeta({ ...meta, description: e.target.value })}
-                        placeholder="SEO description"
+                        placeholder="Auto-populated from short description or main description - customize if needed"
                         className="min-h-[100px] text-base"
                       />
                     </div>

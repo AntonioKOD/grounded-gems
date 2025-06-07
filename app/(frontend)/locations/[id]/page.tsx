@@ -88,7 +88,8 @@ export async function generateMetadata({ params }: LocationPageProps) {
     if (!response.ok) {
       return {
         title: 'Location Not Found | Sacavia',
-        description: 'The requested location could not be found.',
+        description: 'The requested location could not be found on Sacavia.',
+        robots: 'noindex, nofollow'
       }
     }
 
@@ -96,11 +97,11 @@ export async function generateMetadata({ params }: LocationPageProps) {
     
     const getLocationImageUrl = (loc: any): string => {
       if (typeof loc.featuredImage === "string") {
-        return loc.featuredImage
+        return loc.featuredImage.startsWith('http') ? loc.featuredImage : `${baseUrl}${loc.featuredImage}`
       } else if (loc.featuredImage?.url) {
-        return loc.featuredImage.url
+        return loc.featuredImage.url.startsWith('http') ? loc.featuredImage.url : `${baseUrl}${loc.featuredImage.url}`
       }
-      return "/placeholder.svg"
+      return `${baseUrl}/og-image.png`
     }
 
     const formatAddress = (address: any): string => {
@@ -108,52 +109,100 @@ export async function generateMetadata({ params }: LocationPageProps) {
         return address
       }
       if (address && typeof address === 'object') {
-        return Object.values(address).filter(Boolean).join(', ')
+        const parts = [address.street, address.city, address.state, address.country].filter(Boolean)
+        return parts.join(', ')
       }
       return ''
     }
 
+    // Generate comprehensive title
+    const categories = location.categories?.map((cat: any) => typeof cat === 'string' ? cat : cat.name) || []
+    const primaryCategory = categories[0] || 'Location'
+    const addressPart = formatAddress(location.address)
+    const cityPart = addressPart.split(',')[1]?.trim() || addressPart.split(',')[0]?.trim()
+    
+    const seoTitle = cityPart 
+      ? `${location.name} - ${primaryCategory} in ${cityPart} | Sacavia`
+      : `${location.name} - ${primaryCategory} | Sacavia`
+
+    // Generate rich description
+    const shortDesc = location.shortDescription || 
+      (typeof location.description === 'string' ? location.description.slice(0, 160) : '') ||
+      `Discover ${location.name}, a ${primaryCategory.toLowerCase()} located in ${cityPart || 'your area'}. Join the Sacavia community and explore authentic local experiences.`
+
+    const keywords = [
+      location.name,
+      ...categories,
+      'local discovery',
+      'authentic experiences',
+      'community recommendations',
+      'travel guide',
+      'hidden gems',
+      cityPart,
+      addressPart
+    ].filter(Boolean).join(', ')
+
     return {
-      title: `${location.name} | Sacavia`,
-      description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
-      keywords: [
-        location.name,
-        ...(location.categories?.map((cat: any) => typeof cat === 'string' ? cat : cat.name) || []),
-        'local discovery',
-        'hidden gems',
-        'travel',
-        'places to visit'
-      ].join(', '),
+      title: seoTitle,
+      description: shortDesc,
+      keywords,
+      authors: [{ name: 'Sacavia Community' }],
+      creator: 'Sacavia',
+      publisher: 'Sacavia',
+      alternates: {
+        canonical: `${baseUrl}/locations/${id}`
+      },
       openGraph: {
-        title: `${location.name} | Sacavia`,
-        description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
+        title: seoTitle,
+        description: shortDesc,
+        url: `${baseUrl}/locations/${id}`,
+        siteName: 'Sacavia',
         images: [
           {
             url: getLocationImageUrl(location),
             width: 1200,
             height: 630,
-            alt: location.name,
+            alt: `${location.name} - Photo from Sacavia community`,
           },
         ],
         type: 'website',
+        locale: 'en_US',
       },
       twitter: {
         card: 'summary_large_image',
-        title: `${location.name} | Sacavia`,
-        description: location.shortDescription || location.description || `Discover ${location.name} on Sacavia`,
+        title: seoTitle,
+        description: shortDesc,
+        site: '@sacavia',
+        creator: '@sacavia',
         images: [getLocationImageUrl(location)],
+      },
+      robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-video-preview': -1,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+        },
       },
       other: {
         'geo.position': location.latitude && location.longitude ? `${location.latitude};${location.longitude}` : undefined,
         'geo.placename': location.name,
         'geo.region': formatAddress(location.address),
+        'article:author': 'Sacavia Community',
+        'article:publisher': 'https://www.sacavia.com',
+        'og:locale': 'en_US',
+        'og:type': 'place',
       }
     }
   } catch (error) {
     console.error('Error generating metadata:', error)
     return {
-      title: 'Location | Sacavia',
-      description: 'Discover amazing places on Sacavia',
+      title: 'Location | Sacavia - Guided Discovery & Authentic Journeys',
+      description: 'Discover amazing places and authentic experiences with the Sacavia community.',
+      robots: 'noindex'
     }
   }
 }

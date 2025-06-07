@@ -20,19 +20,125 @@ export async function generateMetadata({ params }: PostPageProps) {
     if (!post) {
       return {
         title: "Post Not Found | Sacavia",
-        description: "The post you're looking for could not be found.",
+        description: "The post you're looking for could not be found on Sacavia.",
+        robots: 'noindex, nofollow'
       }
     }
 
+    // Generate comprehensive post metadata
+    const authorName = post.author?.name || 'Sacavia Community Member'
+    const postTitle = post.title || `Post by ${authorName}`
+    const seoTitle = post.title 
+      ? `${post.title} | Sacavia Community`
+      : `${authorName}'s Post | Sacavia Community`
+
+    const description = post.content && post.content.length > 0
+      ? (post.content.length > 160 ? post.content.substring(0, 157) + '...' : post.content)
+      : `Discover ${authorName}'s latest post on Sacavia. Join our community for authentic local experiences and meaningful connections.`
+
+    // Handle post images for social media cards
+    const getPostImageUrl = (post: any): string => {
+      // Check for post media
+      if (post.media && post.media.length > 0) {
+        const firstMedia = post.media[0]
+        if (typeof firstMedia === 'string') {
+          return firstMedia.startsWith('http') ? firstMedia : `https://www.sacavia.com${firstMedia}`
+        } else if (firstMedia?.url) {
+          return firstMedia.url.startsWith('http') ? firstMedia.url : `https://www.sacavia.com${firstMedia.url}`
+        }
+      }
+      
+      // Check for location image if post is about a location
+      if (post.location?.featuredImage) {
+        const locationImage = post.location.featuredImage
+        if (typeof locationImage === 'string') {
+          return locationImage.startsWith('http') ? locationImage : `https://www.sacavia.com${locationImage}`
+        } else if (locationImage?.url) {
+          return locationImage.url.startsWith('http') ? locationImage.url : `https://www.sacavia.com${locationImage.url}`
+        }
+      }
+
+      return 'https://www.sacavia.com/og-image.png'
+    }
+
+    const postImage = getPostImageUrl(post)
+    const locationName = post.location?.name || null
+    
+    const keywords = [
+      postTitle,
+      authorName,
+      'community',
+      'social',
+      'authentic experiences',
+      'local discovery',
+      locationName,
+      'travel stories',
+      'community posts'
+    ].filter(Boolean).join(', ')
+
     return {
-      title: post.title ? `${post.title} | Sacavia` : `Post by ${post.author.name} | Sacavia`,
-      description: post.content.substring(0, 160),
+      title: seoTitle,
+      description,
+      keywords,
+      authors: [{ name: authorName }],
+      creator: 'Sacavia',
+      publisher: 'Sacavia',
+      alternates: {
+        canonical: `https://www.sacavia.com/post/${id}`
+      },
+      openGraph: {
+        title: seoTitle,
+        description,
+        url: `https://www.sacavia.com/post/${id}`,
+        siteName: 'Sacavia',
+        images: [
+          {
+            url: postImage,
+            width: 1200,
+            height: 630,
+            alt: `${postTitle} - Shared on Sacavia by ${authorName}`,
+          },
+        ],
+        type: 'article',
+        locale: 'en_US',
+        publishedTime: post.createdAt,
+        modifiedTime: post.updatedAt,
+        authors: [authorName],
+      },
+      twitter: {
+        card: 'summary_large_image',
+        title: seoTitle,
+        description,
+        site: '@sacavia',
+        creator: '@sacavia',
+        images: [postImage],
+      },
+      robots: {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          'max-video-preview': -1,
+          'max-image-preview': 'large',
+          'max-snippet': -1,
+        },
+      },
+      other: {
+        'article:author': authorName,
+        'article:publisher': 'https://www.sacavia.com',
+        'article:published_time': post.createdAt,
+        'article:modified_time': post.updatedAt,
+        'og:locale': 'en_US',
+        'og:type': 'article',
+      }
     }
   } catch (error) {
     console.error("Error generating metadata:", error)
     return {
-      title: "Post | Sacavia",
-      description: "View post details and comments",
+      title: "Post | Sacavia - Guided Discovery & Authentic Journeys",
+      description: "Discover authentic stories and experiences shared by the Sacavia community.",
+      robots: 'noindex'
     }
   }
 }

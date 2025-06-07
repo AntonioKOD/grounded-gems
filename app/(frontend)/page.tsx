@@ -5,13 +5,12 @@ import { Users, MapPin, Calendar, Star } from "lucide-react"
 import Hero from "@/components/hero"
 import AnimatedStats from "@/components/animated-stats"
 import GeolocationLocations from "@/components/geolocation-locations"
-
+import { WebsiteStructuredData } from "@/components/seo/structured-data"
 
 // Import server actions and types
 import { getUpcomingEvents, getPublicLocations, getFeaturedCategories, getPlatformStats } from "@/app/(frontend)/home-page-actions/actions"
 import { getCategoryIcon } from "@/components/ui/category-icons"
 import Image from "next/image"
-
 
 // Prevent static generation
 export const dynamic = "force-dynamic"
@@ -26,10 +25,6 @@ export const metadata: Metadata = {
     images: ['/og-image.png'],
   },
 }
-
-
-
-
 
 export default async function HomePage() {
   // Fetch data - get more locations initially
@@ -93,6 +88,7 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <WebsiteStructuredData />
       {/* Hero Section */}
       <Hero />
       
