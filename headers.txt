@@ -1,0 +1,14 @@
+HTTP/2 200 
+age: 0
+cache-control: private, no-cache, no-store, max-age=0, must-revalidate
+content-type: text/html; charset=utf-8
+date: Sat, 07 Jun 2025 01:17:05 GMT
+server: Vercel
+strict-transport-security: max-age=63072000
+x-content-type-options: nosniff
+x-frame-options: DENY
+x-matched-path: /
+x-vercel-cache: MISS
+x-vercel-id: iad1::iad1::nqnmw-1749259025368-7ab08f7f61c1
+x-xss-protection: 1; mode=block
+
