@@ -147,9 +147,6 @@ export default function NavBar({ initialUser }: NavBarProps) {
                 alt="Sacavia"
                 className="rounded-lg"
               />
-              <span className="ml-3 text-xl font-bold text-[#8B4513] hidden sm:block">
-                Sacavia
-              </span>
             </Link>
 
             {/* Desktop Navigation Links */}

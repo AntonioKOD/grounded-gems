@@ -69,6 +69,7 @@ export default function NavigationWrapper({ initialUser }: NavigationWrapperProp
   const [componentsLoaded, setComponentsLoaded] = useState(false);
   const [NavBar, setNavBar] = useState<any>(null);
   const [MobileNavigation, setMobileNavigation] = useState<any>(null);
+  const [MobileTopNavbar, setMobileTopNavbar] = useState<any>(null);
 
   useEffect(() => {
     // Mark as client-side immediately
@@ -80,13 +81,15 @@ export default function NavigationWrapper({ initialUser }: NavigationWrapperProp
         // Preload critical components immediately
         const componentPromises = [
           import('./NavBar'),
-          import('./mobile-navigation')
+          import('./mobile-navigation'),
+          import('./mobile-top-navbar')
         ];
         
-        const [navBarModule, mobileNavModule] = await Promise.all(componentPromises);
+        const [navBarModule, mobileNavModule, mobileTopNavModule] = await Promise.all(componentPromises);
         
         setNavBar(() => navBarModule.default);
         setMobileNavigation(() => mobileNavModule.default);
+        setMobileTopNavbar(() => mobileTopNavModule.default);
         setComponentsLoaded(true);
       } catch (error) {
         console.error('Error loading navigation components:', error);
@@ -104,13 +107,16 @@ export default function NavigationWrapper({ initialUser }: NavigationWrapperProp
   }, []);
 
   // Always show skeleton during SSR and until components are loaded
-  if (!isClient || !componentsLoaded || !NavBar || !MobileNavigation) {
+  if (!isClient || !componentsLoaded || !NavBar || !MobileNavigation || !MobileTopNavbar) {
     return <NavigationSkeleton hasUser={!!initialUser} />;
   }
 
   // Only render actual navigation on client after components are loaded
   return (
     <>
+      {/* Mobile top navbar for unauthenticated users */}
+      <MobileTopNavbar />
+
       {/* Desktop nav (client-only) */}
       <div className="hidden md:block">
         <NavBar initialUser={initialUser} />

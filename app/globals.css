@@ -905,58 +905,98 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Sacavia Earth-Tone Brand Colors */
+    --sacavia-saddle-brown: 25 45% 27%; /* #8B4513 converted to HSL */
+    --sacavia-tan: 34 23% 69%; /* #D2B48C converted to HSL */
+    --sacavia-burnt-sienna: 16 75% 42%; /* #CC5500 */
+    --sacavia-terracotta: 14 60% 55%; /* #CD853F */
+    --sacavia-sage: 120 25% 65%; /* #9CAF88 */
+    --sacavia-clay: 15 50% 45%; /* #B07142 */
+    --sacavia-sand: 45 30% 85%; /* #F4E4BC */
+    --sacavia-stone: 30 10% 50%; /* #8A8680 */
+    --sacavia-copper: 30 60% 40%; /* #B87333 */
+    --sacavia-moss: 100 20% 35%; /* #5F7A61 */
+
+    /* Enhanced Brand Color System */
+    --background: 45 30% 98%; /* Soft cream white with warm undertones */
+    --foreground: 25 45% 15%; /* Deep brown for text */
+    --card: 45 30% 97%; /* Slightly warmer card backgrounds */
+    --card-foreground: 25 45% 18%;
+    --popover: 45 30% 99%;
+    --popover-foreground: 25 45% 15%;
+    
+    /* Primary uses Sacavia saddle brown */
+    --primary: var(--sacavia-saddle-brown);
+    --primary-foreground: 45 30% 98%;
+    
+    /* Secondary uses warm tan tones */
+    --secondary: 34 25% 92%; /* Lightened tan */
+    --secondary-foreground: var(--sacavia-saddle-brown);
+    
+    /* Muted colors with earth undertones */
+    --muted: 30 15% 93%; /* Warm muted background */
+    --muted-foreground: var(--sacavia-stone);
+    
+    /* Accent uses terracotta */
+    --accent: 14 35% 90%; /* Light terracotta */
+    --accent-foreground: 14 60% 35%; /* Darker terracotta */
+    
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    
+    /* Borders with subtle earth tones */
+    --border: 30 20% 88%; /* Warm gray border */
+    --input: 30 20% 90%; /* Slightly warmer input background */
+    --ring: var(--sacavia-saddle-brown); /* Focus rings in brand color */
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    
+    /* Enhanced chart colors with earth tones */
+    --chart-1: var(--sacavia-terracotta); /* Terracotta */
+    --chart-2: var(--sacavia-sage); /* Sage green */
+    --chart-3: var(--sacavia-copper); /* Copper */
+    --chart-4: var(--sacavia-clay); /* Clay */
+    --chart-5: var(--sacavia-burnt-sienna); /* Burnt sienna */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* Dark mode with earth-tone integration */
+    --background: 25 45% 6%; /* Very dark brown */
+    --foreground: 45 30% 95%; /* Warm off-white */
+    --card: 25 40% 8%; /* Dark brown cards */
+    --card-foreground: 45 30% 92%;
+    --popover: 25 40% 7%;
+    --popover-foreground: 45 30% 95%;
+    
+    /* Primary remains brand color but adjusted for dark mode */
+    --primary: 34 40% 75%; /* Lighter tan for dark mode */
+    --primary-foreground: 25 45% 10%;
+    
+    /* Secondary with dark earth tones */
+    --secondary: 25 30% 15%; /* Dark brown secondary */
+    --secondary-foreground: 34 30% 80%;
+    
+    /* Muted with warm dark tones */
+    --muted: 25 25% 12%;
+    --muted-foreground: 30 15% 65%;
+    
+    /* Accent adjusted for dark mode */
+    --accent: 14 40% 20%; /* Dark terracotta */
+    --accent-foreground: 14 60% 80%;
+    
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 45 30% 95%;
+    
+    /* Dark mode borders */
+    --border: 25 25% 18%;
+    --input: 25 25% 16%;
+    --ring: 34 40% 70%; /* Lighter ring for dark mode */
+    
+    /* Dark mode chart colors */
+    --chart-1: 14 70% 65%; /* Brighter terracotta */
+    --chart-2: 120 30% 70%; /* Brighter sage */
+    --chart-3: 30 65% 60%; /* Brighter copper */
+    --chart-4: 15 55% 65%; /* Brighter clay */
+    --chart-5: 16 80% 60%; /* Brighter burnt sienna */
   }
 }
 
@@ -969,36 +1009,181 @@
   }
 }
 
-/* Custom scrollbar */
+/* Sacavia Brand Utility Classes */
+@layer utilities {
+  /* Earth-tone backgrounds */
+  .bg-sacavia-primary {
+    background-color: hsl(var(--sacavia-saddle-brown));
+  }
+  .bg-sacavia-secondary {
+    background-color: hsl(var(--sacavia-tan));
+  }
+  .bg-sacavia-accent {
+    background-color: hsl(var(--sacavia-terracotta));
+  }
+  .bg-sacavia-sage {
+    background-color: hsl(var(--sacavia-sage));
+  }
+  .bg-sacavia-sand {
+    background-color: hsl(var(--sacavia-sand));
+  }
+  .bg-sacavia-stone {
+    background-color: hsl(var(--sacavia-stone));
+  }
+
+  /* Earth-tone text colors */
+  .text-sacavia-primary {
+    color: hsl(var(--sacavia-saddle-brown));
+  }
+  .text-sacavia-secondary {
+    color: hsl(var(--sacavia-tan));
+  }
+  .text-sacavia-accent {
+    color: hsl(var(--sacavia-terracotta));
+  }
+  .text-sacavia-sage {
+    color: hsl(var(--sacavia-sage));
+  }
+  .text-sacavia-copper {
+    color: hsl(var(--sacavia-copper));
+  }
+  .text-sacavia-moss {
+    color: hsl(var(--sacavia-moss));
+  }
+
+  /* Earth-tone borders */
+  .border-sacavia-primary {
+    border-color: hsl(var(--sacavia-saddle-brown));
+  }
+  .border-sacavia-secondary {
+    border-color: hsl(var(--sacavia-tan));
+  }
+  .border-sacavia-accent {
+    border-color: hsl(var(--sacavia-terracotta));
+  }
+
+  /* Branded gradient backgrounds */
+  .bg-gradient-sacavia {
+    background: linear-gradient(135deg, 
+      hsl(var(--sacavia-saddle-brown)) 0%, 
+      hsl(var(--sacavia-terracotta)) 50%, 
+      hsl(var(--sacavia-tan)) 100%);
+  }
+  
+  .bg-gradient-sacavia-warm {
+    background: linear-gradient(135deg, 
+      hsl(var(--sacavia-sand)) 0%, 
+      hsl(var(--sacavia-tan)) 50%, 
+      hsl(var(--sacavia-terracotta)) 100%);
+  }
+
+  .bg-gradient-sacavia-earth {
+    background: linear-gradient(135deg, 
+      hsl(var(--sacavia-moss)) 0%, 
+      hsl(var(--sacavia-sage)) 50%, 
+      hsl(var(--sacavia-sand)) 100%);
+  }
+
+  /* Branded shadow effects */
+  .shadow-sacavia {
+    box-shadow: 0 4px 6px -1px hsl(var(--sacavia-saddle-brown) / 0.1), 
+                0 2px 4px -1px hsl(var(--sacavia-saddle-brown) / 0.06);
+  }
+  
+  .shadow-sacavia-lg {
+    box-shadow: 0 10px 15px -3px hsl(var(--sacavia-saddle-brown) / 0.1), 
+                0 4px 6px -2px hsl(var(--sacavia-saddle-brown) / 0.05);
+  }
+
+  /* Interactive states with earth tones */
+  .hover-sacavia {
+    transition: all 0.2s ease-in-out;
+  }
+  .hover-sacavia:hover {
+    background-color: hsl(var(--sacavia-terracotta) / 0.1);
+    transform: translateY(-1px);
+  }
+
+  /* Focus states with brand colors */
+  .focus-sacavia:focus-visible {
+    outline: 2px solid hsl(var(--sacavia-saddle-brown));
+    outline-offset: 2px;
+  }
+
+  /* Branded button variants */
+  .btn-sacavia-primary {
+    @apply bg-sacavia-primary text-white hover:opacity-90 focus-sacavia;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .btn-sacavia-secondary {
+    @apply bg-sacavia-secondary text-sacavia-primary hover:bg-opacity-80 focus-sacavia;
+    transition: all 0.2s ease-in-out;
+  }
+  
+  .btn-sacavia-outline {
+    @apply border-2 border-sacavia-primary text-sacavia-primary bg-transparent hover:bg-sacavia-primary hover:text-white focus-sacavia;
+    transition: all 0.2s ease-in-out;
+  }
+
+  /* Native American-inspired geometric patterns */
+  .pattern-sacavia-diamonds {
+    background-image: 
+      linear-gradient(45deg, hsl(var(--sacavia-tan) / 0.1) 25%, transparent 25%),
+      linear-gradient(-45deg, hsl(var(--sacavia-tan) / 0.1) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, hsl(var(--sacavia-tan) / 0.1) 75%),
+      linear-gradient(-45deg, transparent 75%, hsl(var(--sacavia-tan) / 0.1) 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+
+  .pattern-sacavia-mountains {
+    background-image: 
+      repeating-linear-gradient(0deg, 
+        hsl(var(--sacavia-sage) / 0.1) 0px, 
+        hsl(var(--sacavia-sage) / 0.1) 1px, 
+        transparent 1px, 
+        transparent 20px),
+      repeating-linear-gradient(90deg, 
+        hsl(var(--sacavia-moss) / 0.05) 0px, 
+        hsl(var(--sacavia-moss) / 0.05) 1px, 
+        transparent 1px, 
+        transparent 20px);
+  }
+}
+
+/* Custom Sacavia-branded scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: hsl(var(--sacavia-sand));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: hsl(var(--sacavia-stone));
   border-radius: 4px;
+  border: 1px solid hsl(var(--sacavia-tan));
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: hsl(var(--sacavia-clay));
 }
 
-/* Dark mode scrollbar */
+/* Dark mode scrollbar with earth tones */
 .dark ::-webkit-scrollbar-track {
-  background: #2f2f2f;
+  background: hsl(25 25% 12%);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #555;
+  background: hsl(25 25% 25%);
+  border: 1px solid hsl(25 30% 20%);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #777;
+  background: hsl(25 30% 35%);
 }
 
 /* Map component styles */

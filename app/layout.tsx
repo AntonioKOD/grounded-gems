@@ -16,19 +16,19 @@ export default function RootLayout({
         <meta name="theme-color" content="#FF6B6B" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="Grounded Gems" />
+        <meta name="apple-mobile-web-app-title" content="Sacavia" />
         <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="description" content="Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places." />
-        <meta name="keywords" content="travel, locations, events, social, discovery, community, local, recommendations, hidden gems" />
-        <meta name="author" content="Grounded Gems Team" />
-        <meta property="og:title" content="Grounded Gems - Discover Hidden Treasures" />
-        <meta property="og:description" content="Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places." />
+        <meta name="description" content="Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories." />
+        <meta name="keywords" content="travel, locations, events, social, discovery, community, local, recommendations, native wisdom, authentic experiences" />
+        <meta name="author" content="Sacavia Team" />
+        <meta property="og:title" content="Sacavia - Guided Discovery & Authentic Journeys" />
+        <meta property="og:description" content="Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/icon-512.png" />
-        <meta property="og:site_name" content="Grounded Gems" />
+        <meta property="og:site_name" content="Sacavia" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Grounded Gems - Discover Hidden Treasures" />
-        <meta name="twitter:description" content="Discover hidden gems and authentic experiences in your local area. Connect with your community through meaningful events and places." />
+        <meta name="twitter:title" content="Sacavia - Guided Discovery & Authentic Journeys" />
+        <meta name="twitter:description" content="Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories." />
         <meta name="twitter:image" content="/icon-192.png" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="152x152" href="/icon-192.png" />

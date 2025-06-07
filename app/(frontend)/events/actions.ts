@@ -1217,3 +1217,135 @@ export async function unsaveGemJourney(journeyId: string) {
   })
   return { success: true }
 }
+
+// Search Functions
+export async function searchUsers(query: string, currentUserId?: string, limit = 10) {
+  try {
+    const payload = await getPayload({ config })
+    
+    const { docs: users } = await payload.find({
+      collection: 'users',
+      where: {
+        or: [
+          {
+            name: {
+              contains: query,
+            },
+          },
+          {
+            email: {
+              contains: query,
+            },
+          },
+          {
+            username: {
+              contains: query,
+            },
+          },
+        ],
+      },
+      limit,
+      depth: 1,
+    })
+    
+    // Filter out current user
+    const filteredUsers = users.filter(user => user.id !== currentUserId)
+    
+    return filteredUsers.map(user => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      avatar: user.profileImage?.url,
+      bio: user.bio,
+    }))
+  } catch (error) {
+    console.error('Error searching users:', error)
+    return []
+  }
+}
+
+export async function searchLocationsAction(query: string, limit = 10) {
+  try {
+    const payload = await getPayload({ config })
+    
+    const { docs: locations } = await payload.find({
+      collection: 'locations',
+      where: {
+        or: [
+          {
+            name: {
+              contains: query,
+            },
+          },
+          {
+            description: {
+              contains: query,
+            },
+          },
+          {
+            'address.city': {
+              contains: query,
+            },
+          },
+        ],
+        status: { equals: 'published' },
+      },
+      limit,
+      depth: 1,
+    })
+    
+    return locations.map(location => ({
+      id: location.id,
+      name: location.name,
+      description: location.description,
+      address: location.address,
+      coordinates: location.coordinates,
+      featuredImage: location.featuredImage,
+      categories: location.categories,
+    }))
+  } catch (error) {
+    console.error('Error searching locations:', error)
+    return []
+  }
+}
+
+export async function searchEventsAction(query: string, limit = 10) {
+  try {
+    const payload = await getPayload({ config })
+    
+    const { docs: events } = await payload.find({
+      collection: 'events',
+      where: {
+        or: [
+          {
+            name: {
+              contains: query,
+            },
+          },
+          {
+            description: {
+              contains: query,
+            },
+          },
+        ],
+        status: { equals: 'published' },
+      },
+      limit,
+      depth: 1,
+    })
+    
+    return events.map(event => ({
+      id: event.id,
+      name: event.name,
+      description: event.description,
+      date: event.date,
+      location: event.location,
+      featuredImage: event.featuredImage,
+      categories: event.categories,
+    }))
+  } catch (error) {
+    console.error('Error searching events:', error)
+    return []
+  }
+}

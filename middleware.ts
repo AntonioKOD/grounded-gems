@@ -7,7 +7,7 @@ export function middleware(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') || ''
   
   // Detect Capacitor mobile apps specifically
-  const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('GroundedGems')
+  const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('Sacavia')
   const isMobile = /Mobile|Android|iOS|iPhone|iPad/.test(userAgent)
   
   // Skip middleware for all static resources and API routes
@@ -24,45 +24,24 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // For Capacitor apps, absolutely NO redirects except for root
-  // This prevents the app from opening external browser
+  // For Capacitor apps, let the home page load naturally
   if (isCapacitorApp) {
-    // Only handle the root path, let client handle everything else
-    if (pathname === '/') {
-      // Simple redirect to login, no auth checking
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-    
-    // For all other routes in Capacitor, let them load directly
+    // Let all routes load directly for Capacitor apps
     // The client-side will handle authentication and navigation
     return NextResponse.next()
   }
 
-  // For mobile browsers (not Capacitor), be more permissive
+  // For mobile browsers (not Capacitor), let home page load
   if (isMobile) {
-    // Only redirect root path
-    if (pathname === '/') {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-    
-    // Let mobile browsers load routes naturally
+    // Let mobile browsers load routes naturally, including home page
     return NextResponse.next()
   }
 
-  // For desktop web browsers, minimal auth checking
-  const authCookie = request.cookies.get('payload-token')
-  const isAuthenticated = !!authCookie?.value
-
-  // Only handle root path redirects for web
-  if (pathname === '/') {
-    if (isAuthenticated) {
-      return NextResponse.redirect(new URL('/feed', request.url))
-    } else {
-      return NextResponse.redirect(new URL('/login', request.url))
-    }
-  }
-
-  // Let all other routes load naturally
+  // For desktop web browsers, let home page load naturally
+  // Only redirect specific auth-protected routes if needed
+  // Remove the automatic redirect from root path to allow home page to load
+  
+  // Let all routes load naturally - the home page should be accessible to everyone
   return NextResponse.next()
 }
 
