@@ -32,7 +32,7 @@ export function getProductionBaseUrl(): string {
     
     // If we're in a mobile app, always use production URL
     if (isCapacitor) {
-      return 'https://groundedgems.com'
+      return 'https://www.sacavia.com'
     }
     
     // For web browsers, use current origin
@@ -41,7 +41,7 @@ export function getProductionBaseUrl(): string {
   
   // Server-side - production
   if (process.env.NODE_ENV === 'production') {
-    return 'https://groundedgems.com'
+    return 'https://www.sacavia.com'
   }
   
   // Check environment variables
@@ -82,7 +82,7 @@ export function safeRedirectURL(path: string, redirectTo?: string): string {
     console.error('Failed to create redirect URL:', { path, redirectTo, error })
     
     // Fallback URL construction
-    const base = 'https://groundedgems.com'
+    const base = 'https://www.sacavia.com'
     const query = redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''
     return `${base}${path}${query}`
   }
@@ -123,4 +123,48 @@ export function safeUpdateURL(params: Record<string, string>): void {
     const newUrl = queryString ? `${currentUrl}?${queryString}` : currentUrl
     window.history.pushState({}, '', newUrl)
   }
+}
+
+export function getBaseUrl(): string {
+  // In a Capacitor app (iOS/Android), always use production URL
+  if (typeof window !== 'undefined') {
+    const isCapacitor = window.location.protocol === 'capacitor:' || 
+                       window.location.protocol === 'ionic:' ||
+                       (window as any).Capacitor !== undefined
+
+    if (isCapacitor) {
+      return 'https://www.sacavia.com'
+    }
+
+    // In development, use localhost
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000'
+    }
+
+    // For production web, use the current origin
+    return window.location.origin || 'https://www.sacavia.com'
+  }
+
+  // Server-side or fallback
+  return process.env.NEXT_PUBLIC_BASE_URL || 'https://www.sacavia.com'
+}
+
+export function getApiBaseUrl(): string {
+  // In a Capacitor app (iOS/Android), always use production URL
+  if (typeof window !== 'undefined') {
+    const isCapacitor = window.location.protocol === 'capacitor:' || 
+                       window.location.protocol === 'ionic:' ||
+                       (window as any).Capacitor !== undefined
+
+    if (isCapacitor) {
+      return 'https://www.sacavia.com'
+    }
+  }
+
+  return getBaseUrl()
+}
+
+export function buildFullUrl(path: string): string {
+  const base = 'https://www.sacavia.com'
+  return `${base}${path.startsWith('/') ? path : `/${path}`}`
 } 

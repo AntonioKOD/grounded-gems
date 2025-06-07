@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { withPayload } from '@payloadcms/next/withPayload';
 
 const nextConfig: NextConfig = {
   eslint: {
@@ -26,13 +27,13 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'groundedgems.com',
+        hostname: 'www.sacavia.com',
         port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
-        hostname: 'www.groundedgems.com',
+        hostname: 'sacavia.com',
         port: '',
         pathname: '/**',
       },
@@ -49,12 +50,12 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
     ],
-    deviceSizes: [320, 420, 768, 1024, 1200],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
     formats: ['image/webp', 'image/avif'],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',
-    contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com groundedgems.com www.groundedgems.com images.unsplash.com localhost:3000 data:; default-src 'self'; script-src 'none'; sandbox;",
+    contentSecurityPolicy: "img-src 'self' lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com www.sacavia.com sacavia.com images.unsplash.com localhost:3000 data:; default-src 'self'; script-src 'none'; sandbox;",
     // Optimize image quality/size balance
     minimumCacheTTL: 31536000, // 1 year cache
   },
@@ -227,13 +228,13 @@ const nextConfig: NextConfig = {
     // Ensure NEXTAUTH_URL is available in production
     NEXT_PUBLIC_SERVER_URL:
       process.env.NODE_ENV === 'production'
-        ? process.env.NEXT_PUBLIC_SERVER_URL || 'https://groundedgems.com'
+        ? process.env.NEXT_PUBLIC_SERVER_URL || 'https://www.sacavia.com'
         : process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000',
     PAYLOAD_PUBLIC_SERVER_URL:
       process.env.NODE_ENV === 'production'
-        ? process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://groundedgems.com'
+        ? process.env.PAYLOAD_PUBLIC_SERVER_URL || 'https://www.sacavia.com'
         : 'http://localhost:3000',
   },
 };
 
-export default nextConfig;
+export default withPayload(nextConfig);

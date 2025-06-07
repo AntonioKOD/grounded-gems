@@ -76,7 +76,7 @@ export async function sendVerificationEmail(
 
   // 3. Send the email via Resend
   return resend.emails.send({
-    from: `Grounded Gems <info@groundedgems.com>`,
+    from: `Sacavia <info@sacavia.com>`,
     to: email,
     subject: `Please verify your email, ${name}`, 
     html,
@@ -93,7 +93,7 @@ interface EmailOptions {
 export const sendEmail = async (options: EmailOptions): Promise<boolean> => {
   try {
     await resend.emails.send({
-      from: `Grounded Gems <info@groundedgems.com>`,
+      from: `Sacavia <info@sacavia.com>`,
       to: options.to,
       subject: options.subject,
       html: options.html,
@@ -243,3 +243,6 @@ export const journeyInviteEmailTemplate = (data: {
     </div>
   `,
 })
+
+
+

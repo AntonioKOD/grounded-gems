@@ -17,7 +17,7 @@ declare global {
 export function createLocationShareUrl(locationId: string, baseUrl?: string): string {
     try {
       // Use provided baseUrl or current URL with fallback
-      const fallbackUrl = typeof window !== "undefined" ? window.location.href : "https://groundedgems.com"
+      const fallbackUrl = typeof window !== "undefined" ? window.location.href : "https://www.sacavia.com"
       const url = new URL(baseUrl || fallbackUrl)
     
       // Remove any existing path segments after the base path
@@ -33,7 +33,7 @@ export function createLocationShareUrl(locationId: string, baseUrl?: string): st
     } catch (error) {
       console.error('Failed to create location share URL:', error)
       // Fallback URL construction
-      return `https://groundedgems.com?locationId=${locationId}`
+      return `https://www.sacavia.com?locationId=${locationId}`
     }
   }
   
@@ -79,4 +79,26 @@ export function createLocationShareUrl(locationId: string, baseUrl?: string): st
       return true
     }
   }
+  
+export function generateLocationShareUrl(locationId: string, locationName?: string): string {
+  // Base URL (use current domain or fallback to production)
+  const fallbackUrl = typeof window !== "undefined" ? window.location.href : "https://www.sacavia.com"
+  const baseUrl = typeof window !== "undefined" 
+    ? window.location.origin 
+    : (process.env.NEXT_PUBLIC_BASE_URL || "https://www.sacavia.com")
+
+  // ... existing code ...
+}
+
+export function generateLocationShareText(locationName: string, locationId: string): string {
+  // ... existing code ...
+  return `Check out ${locationName} on Sacavia! 🌟 Discover amazing places and authentic experiences. ${shareUrl}`
+}
+
+export function generateBasicShareUrl(locationId?: string): string {
+  if (!locationId) {
+    return `https://www.sacavia.com`
+  }
+  return `https://www.sacavia.com?locationId=${locationId}`
+}
   

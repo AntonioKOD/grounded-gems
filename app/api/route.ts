@@ -9,7 +9,7 @@ export async function OPTIONS(request: NextRequest) {
     process.env.FRONTEND_URL || 'http://localhost:3000',
     'http://localhost:3001', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
-    'https://groundedgems.com', // Production web app
+    'https://www.sacavia.com', // Production web app
   ]
   
   // Check if origin is allowed or if it's a mobile app (no origin)
@@ -34,5 +34,18 @@ export async function OPTIONS(request: NextRequest) {
       'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
     },
+  })
+}
+
+export async function GET() {
+  return Response.json({
+    message: 'Sacavia API is running',
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    cors: [
+      'http://localhost:3000',
+      'https://www.sacavia.com', // Production web app
+    ],
   })
 } 

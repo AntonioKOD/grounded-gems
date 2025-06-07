@@ -218,7 +218,7 @@ export default function VideoPlayer({
     if (!src) return true
     // Known broken URL patterns
     const brokenPatterns = [
-      'groundedgems.com/api/media/file/',
+      'sacavia.com/api/media/file/',
               'localhost:', // Development backend that might be down
         '127.0.0.1:', // Local development
         '192.168.', // Local network development

@@ -33,7 +33,7 @@ function getBaseUrlSafely(): string {
   // Server-side logic
   if (isServer) {
     return process.env.NODE_ENV === 'production' 
-      ? 'https://groundedgems.com' 
+      ? 'https://www.sacavia.com' 
       : 'http://localhost:3000'
   }
 
@@ -44,15 +44,15 @@ function getBaseUrlSafely(): string {
 
   // Fallback for client-side
   if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'groundedgems.com') {
-      return 'https://groundedgems.com'
+    if (window.location.hostname === 'www.sacavia.com') {
+      return 'https://www.sacavia.com'
     }
     return window.location.origin
   }
 
   // Final fallback
   return process.env.NODE_ENV === 'production' 
-    ? 'https://groundedgems.com' 
+    ? 'https://www.sacavia.com' 
     : 'http://localhost:3000'
 }
 
@@ -363,5 +363,34 @@ export function getPayloadImageSizes(media: any): { [key: string]: string } {
   })
 
   return sizes
+}
+
+export function getImageBaseUrl(): string {
+  // Server-side
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_MEDIA_URL || 
+           process.env.NEXT_PUBLIC_BASE_URL || 
+           'https://www.sacavia.com'
+  }
+
+  // Client-side
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:3000'
+  }
+  
+  if (window.location.hostname === 'www.sacavia.com') {
+    return 'https://www.sacavia.com'
+  }
+
+  return window.location.origin
+}
+
+export function getMediaUrl(): string {
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_MEDIA_URL || 
+           'https://www.sacavia.com'
+  }
+
+  return getImageBaseUrl()
 }
   

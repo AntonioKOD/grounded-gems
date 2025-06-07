@@ -19,30 +19,26 @@ export default function groundedGemsImageLoader({ src, width, quality }: ImageLo
 
   // Get the base URL based on environment
   const getBaseUrl = (): string => {
+    // Server-side
+    if (typeof window === 'undefined') {
+      return process.env.NODE_ENV === 'production' 
+        ? 'https://www.sacavia.com'
+        : 'http://localhost:3000'
+    }
+
     // Client-side
-    if (typeof window !== 'undefined') {
-      // Check if we're in a Capacitor app
-      const isCapacitor = window.location.protocol === 'capacitor:' || 
-                         window.location.protocol === 'ionic:' ||
-                         window.navigator.userAgent.includes('Capacitor');
-      
-      if (isCapacitor) {
-        return 'https://groundedgems.com';
-      }
-      
-      // Production web
-      if (window.location.hostname === 'groundedgems.com') {
-        return 'https://groundedgems.com';
-      }
-      
-      // Development web
-      return window.location.origin;
+    if (window.location.hostname === 'www.sacavia.com') {
+      return 'https://www.sacavia.com';
     }
     
-    // Server-side fallback
-    return process.env.NODE_ENV === 'production' 
-      ? 'https://groundedgems.com' 
-      : 'http://localhost:3000';
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000';
+    }
+
+    // Default fallback
+    return process.env.NODE_ENV === 'production'
+      ? 'https://www.sacavia.com'
+      : 'http://localhost:3000'
   };
 
   const baseUrl = getBaseUrl();

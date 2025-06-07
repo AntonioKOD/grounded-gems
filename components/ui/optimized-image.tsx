@@ -69,7 +69,7 @@ export default function OptimizedImage({
   // Check if URL is likely broken and set error state immediately
   const isKnownBrokenUrl = useMemo(() => {
     if (!src) return true
-    // Known broken URL patterns - removed groundedgems.com since we're transforming them to blob URLs
+    // Known broken URL patterns - removed old domain since we're transforming them to blob URLs
     const brokenPatterns = [
       'localhost:3001/', // Development backend that might be down
     ]
@@ -201,13 +201,13 @@ export default function OptimizedImage({
                       src.includes('192.168.') ||
                       src.includes('10.0.')
     
-    if (src.includes('://') && !isLocalUrl && !src.includes('groundedgems.com')) {
+    if (src.includes('://') && !isLocalUrl && !src.includes('sacavia.com')) {
       console.log('🖼️ OptimizedImage: Using unoptimized for external URL:', src)
       return true
     }
     
     // Also unoptimize any API media URLs
-    if (src.includes('/api/media/') || src.includes('groundedgems.com') || src.includes('.blob.vercel-storage.com')) {
+    if (src.includes('/api/media/') || src.includes('sacavia.com') || src.includes('.blob.vercel-storage.com')) {
       console.log('🖼️ OptimizedImage: Using unoptimized for API/blob URL:', src)
       return true
     }

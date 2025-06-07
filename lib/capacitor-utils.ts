@@ -81,15 +81,15 @@ export const getApiBaseUrl = async (): Promise<string> => {
   if (typeof window !== 'undefined') {
     const Capacitor = await getCapacitor()
     if (Capacitor?.isNativePlatform()) {
-      return 'https://groundedgems.com';
+      return 'https://www.sacavia.com';
     }
   }
   
   // For web, check environment
   if (typeof window !== 'undefined') {
     // Production web
-    if (window.location.hostname === 'groundedgems.com') {
-      return 'https://groundedgems.com';
+    if (window.location.hostname === 'www.sacavia.com') {
+      return 'https://www.sacavia.com';
     }
     
     // Development web
@@ -98,7 +98,7 @@ export const getApiBaseUrl = async (): Promise<string> => {
   
   // Server-side fallback
   return process.env.NODE_ENV === 'production' 
-    ? 'https://groundedgems.com' 
+    ? 'https://www.sacavia.com' 
     : 'http://localhost:3000';
 };
 
@@ -595,7 +595,7 @@ export const getServerUrl = async (): Promise<string> => {
 
   // For Capacitor apps, use the production server
   if (await isCapacitorApp()) {
-    return 'https://groundedgems.com'
+    return 'https://www.sacavia.com'
   }
   
   // For web browsers, use current origin
@@ -667,4 +667,44 @@ export const initializeCapacitorApp = async (): Promise<void> => {
   } catch (error) {
     console.error('Error initializing Capacitor app:', error)
   }
+}
+
+export function getBaseUrl() {
+  // Always use production URL for Capacitor apps
+  if (typeof window !== 'undefined' && isCapacitorApp()) {
+    return 'https://www.sacavia.com';
+  }
+  
+  // Client-side - check hostname
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'www.sacavia.com') {
+      return 'https://www.sacavia.com';
+    }
+    
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000';
+    }
+    
+    return window.location.origin;
+  }
+  
+  // Server-side fallback
+  return process.env.NEXT_PUBLIC_BASE_URL || 
+         'https://www.sacavia.com'
+}
+
+export function getAppBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    return process.env.NODE_ENV === 'production' 
+      ? 'https://www.sacavia.com'
+      : 'http://localhost:3000'
+  }
+
+  // Capacitor app always uses production
+  if (isCapacitorApp()) {
+    return 'https://www.sacavia.com'
+  }
+
+  // Web app uses current origin
+  return window.location.origin
 } 

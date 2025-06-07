@@ -38,7 +38,7 @@ export const isCapacitor = () => {
 // URL Configuration
 export const API_CONFIG = {
   // Production URL - always HTTPS
-  PRODUCTION_URL: 'https://groundedgems.com',
+  PRODUCTION_URL: 'https://www.sacavia.com',
   
   // Development URLs
   DEV_WEB_URL: 'http://localhost:3000',
@@ -54,7 +54,7 @@ export const API_CONFIG = {
     // For client-side web
     if (isClient) {
       // Production web
-      if (window.location.hostname === 'groundedgems.com') {
+      if (window.location.hostname === 'www.sacavia.com') {
         return API_CONFIG.PRODUCTION_URL;
       }
       

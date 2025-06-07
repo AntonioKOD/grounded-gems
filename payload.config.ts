@@ -23,18 +23,34 @@ import { MatchmakingSessions } from './collections/MatchmakingSessions'
 import { Journeys } from './collections/Journeys'
 import { BucketLists } from './collections/BucketLists'
 import { DeviceTokens } from './collections/DeviceTokens'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 export default buildConfig({
-  
-
-  // Secret for signing tokens and encrypting data
+  admin: {
+    user: Users.slug,
+    buildPath: path.resolve(__dirname, './build'),
+    meta: {
+      titleSuffix: '- Sacavia',
+      favicon: '/favicon.ico',
+      ogImage: '/logo.png',
+    },
+  },
+  collections: [Users, Media, Posts, Locations, Categories, Events, Reviews, LocationInteractions, Journeys, Notifications, BucketLists],
   secret: process.env.PAYLOAD_SECRET || '',
-
-  // Server URL for CSRF protection - simplified without PAYLOAD_PUBLIC_SERVER_URL dependency
-  serverURL: process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:3000'  // Simplified for development
-    : 'https://groundedgems.com', // Production URL
-
+  typescript: {
+    outputFile: path.resolve(__dirname, 'payload-types.ts'),
+  },
+  db: mongooseAdapter({
+    url: process.env.DATABASE_URI || '',
+  }),
+  sharp,
+  serverURL: process.env.NODE_ENV === 'production' 
+    ? 'https://www.sacavia.com' 
+    : 'http://localhost:3000', // Production URL
   // Cookie prefix must match the name your middleware expects (e.g. "payload-token")
   cookiePrefix: 'payload',
 
@@ -43,7 +59,7 @@ export default buildConfig({
     process.env.FRONTEND_URL || 'http://localhost:3000',
     'http://localhost:3001', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
-    'https://groundedgems.com', // Production web app
+    'https://www.sacavia.com', // Production web app
     // Add localhost patterns for development
     ...(process.env.NODE_ENV === 'development' ? [
       'http://localhost:3000',
@@ -57,16 +73,8 @@ export default buildConfig({
     process.env.FRONTEND_URL || 'http://localhost:3000',
     'http://localhost:3001', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
-    'https://groundedgems.com', // Production web app
+    'https://www.sacavia.com', // Production web app
   ],
-
-  // Configure your database adapter
-  db: mongooseAdapter({
-    url: process.env.DATABASE_URI || '',
-  }),
-
-  // Image processing via Sharp
-  sharp,
 
   // Email transport using Resend
   email: resendAdapter({

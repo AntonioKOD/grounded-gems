@@ -2,7 +2,7 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://groundedgems.com/sitemap.xml
+Sitemap: https://www.sacavia.com/sitemap.xml
 
 # Disallow admin and API routes
 Disallow: /admin/

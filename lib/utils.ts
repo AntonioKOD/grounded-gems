@@ -10,42 +10,17 @@ export function cn(...inputs: ClassValue[]) {
  * Enhanced for iOS and mobile Capacitor apps
  */
 export function getBaseUrl(): string {
-  // Client-side - check if we're in a Capacitor app
-  if (typeof window !== 'undefined') {
-    // If we're in a Capacitor app or iOS, always use production URL
-    const isCapacitor = window.location.protocol === 'capacitor:' || 
-                       window.location.protocol === 'ionic:' ||
-                       window.navigator.userAgent.includes('Capacitor') ||
-                       window.location.hostname === 'localhost' && window.navigator.userAgent.includes('Mobile')
-    
-    if (isCapacitor) {
-      return 'https://groundedgems.com'
-    }
-    
-    // For web browsers, use current origin
-    return window.location.origin
+  // Server-side rendering
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_BASE_URL || 'https://www.sacavia.com'
   }
   
-  // Server-side - production URL
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://groundedgems.com'
+  // Client-side
+  if (window.location.hostname === 'localhost') {
+    return 'http://localhost:3000'
   }
   
-  // Server-side - check environment variables
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL
-  }
-  
-  if (process.env.NEXTAUTH_URL) {
-    return process.env.NEXTAUTH_URL
-  }
-  
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
-  }
-  
-  // Fallback for development (web only)
-  return 'http://localhost:3000'
+  return 'https://www.sacavia.com'
 }
 
 /**
