@@ -347,6 +347,14 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         
         window.mapboxgl.accessToken = accessToken
         
+        // Set up global function for view details button in tooltips
+        window.handleLocationDetailClick = (locationId: string) => {
+          const location = locations.find(loc => loc.id === locationId)
+          if (location && onViewDetail) {
+            onViewDetail(location)
+          }
+        }
+        
         // Double-check component is still mounted and container is still available right before map creation
         if (!isMountedRef.current || !mapContainerRef.current) {
           setIsLoading(false)
@@ -854,12 +862,13 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
                 </div>
                 
                 <!-- Action buttons -->
-                <div class="grid grid-cols-2 gap-2 pt-2">
-                  <button class="location-preview-btn view-details-btn px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors">
-                    View Details
-                  </button>
+                <div class="flex justify-between items-center pt-2">
                   <button class="location-preview-btn directions-btn px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium hover:bg-muted/80 transition-colors">
                     Directions
+                  </button>
+                  <button onclick="handleViewDetailsClick('${location.id}')" 
+                     class="location-preview-btn view-details-btn text-xs text-primary hover:text-primary/80 transition-colors font-medium ml-2 underline-offset-2 hover:underline">
+                    View details
                   </button>
                 </div>
               </div>

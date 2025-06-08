@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils"
 import type { Location } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
 
+
 interface LocationBottomSheetProps {
   location: Location | null
   isOpen: boolean

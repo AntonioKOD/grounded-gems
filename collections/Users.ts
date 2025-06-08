@@ -314,7 +314,6 @@ export const Users: CollectionConfig = {
     { 
       name: 'username', 
       type: 'text', 
-      required: true,
       unique: true,
       admin: {
         description: 'Unique username for the user (no spaces, lowercase)'
@@ -497,6 +496,23 @@ export const Users: CollectionConfig = {
           { name: 'timeSlot', type: 'text' },
         ] },
       ],
+    },
+    // Reset password token fields
+    { 
+      name: 'resetPasswordToken', 
+      type: 'text',
+      admin: {
+        hidden: true,
+        description: 'Token for password reset'
+      }
+    },
+    { 
+      name: 'resetPasswordExpiration', 
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Expiration time for password reset token'
+      }
     },
   ],
 };

@@ -23,23 +23,48 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use PayloadCMS's built-in resetPassword method
-    const result = await payload.resetPassword({
+    // Find user with the reset token
+    const users = await payload.find({
       collection: 'users',
-      data: {
-        token,
-        password,
+      where: {
+        resetPasswordToken: {
+          equals: token,
+        },
+        resetPasswordExpiration: {
+          greater_than: new Date(),
+        },
       },
-      req: request,
+      limit: 1,
+    })
+
+    if (users.docs.length === 0) {
+      return NextResponse.json(
+        { error: 'Invalid or expired reset token. Please request a new password reset.' },
+        { status: 400 }
+      )
+    }
+
+    const user = users.docs[0]
+
+    // Update user password and clear reset token
+    const updatedUser = await payload.update({
+      collection: 'users',
+      id: user.id,
+      data: {
+        password,
+        resetPasswordToken: null,
+        resetPasswordExpiration: null,
+      },
+      overrideAccess: true,
     })
 
     return NextResponse.json({
       success: true,
       message: 'Password reset successfully',
       user: {
-        id: result.user.id,
-        email: result.user.email,
-        name: result.user.name,
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
       },
     })
 

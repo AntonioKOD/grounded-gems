@@ -1,10 +1,27 @@
-// middleware.ts - Capacitor Mobile App Optimized
+// middleware.ts - Authentication and Redirect Management
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-export function middleware(request: NextRequest) {
+async function isAuthenticated(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get('payload-token')?.value
+  
+  if (!token) {
+    return false
+  }
+
+  try {
+    // Quick token validation - you could make this more sophisticated
+    // For now, just check if token exists and is not obviously invalid
+    return token.length > 10 // Basic check
+  } catch {
+    return false
+  }
+}
+
+export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const userAgent = request.headers.get('user-agent') || ''
+  const url = request.nextUrl.clone()
   
   console.log(`🔍 [Middleware] Processing: ${pathname}`)
   
@@ -27,27 +44,40 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // For Capacitor apps, let the home page load naturally
+  // Define routes that require authentication
+  const protectedRoutes = ['/feed', '/profile', '/notifications', '/bucket-list', '/planner']
+  const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify', '/', '/map', '/explorer']
+  
+  // Check if current route requires authentication
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
+  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))
+  
+  // For location routes (/locations/[id]), check authentication
+  const isLocationRoute = pathname.startsWith('/locations/') && pathname !== '/locations'
+  
+  // For Capacitor apps, let them handle their own auth
   if (isCapacitorApp) {
     console.log(`📱 [Middleware] Capacitor app - allowing: ${pathname}`)
-    // Let all routes load directly for Capacitor apps
-    // The client-side will handle authentication and navigation
     return NextResponse.next()
   }
 
-  // For mobile browsers (not Capacitor), let home page load
-  if (isMobile) {
-    console.log(`📱 [Middleware] Mobile browser - allowing: ${pathname}`)
-    // Let mobile browsers load routes naturally, including home page
-    return NextResponse.next()
+  // Check authentication for routes that need it
+  if (isProtectedRoute || isLocationRoute) {
+    const authenticated = await isAuthenticated(request)
+    
+    if (!authenticated) {
+      console.log(`🔒 [Middleware] Unauthenticated access to: ${pathname}, redirecting to login`)
+      
+      // Redirect to login with return URL
+      url.pathname = '/login'
+      url.searchParams.set('redirect', pathname)
+      
+      return NextResponse.redirect(url)
+    }
   }
 
-  console.log(`💻 [Middleware] Desktop browser - allowing: ${pathname}`)
-  // For desktop web browsers, let home page load naturally
-  // Only redirect specific auth-protected routes if needed
-  // Remove the automatic redirect from root path to allow home page to load
-  
-  // Let all routes load naturally - the home page should be accessible to everyone
+  // Allow access to public routes and authenticated protected routes
+  console.log(`✅ [Middleware] Allowing access to: ${pathname}`)
   return NextResponse.next()
 }
 
