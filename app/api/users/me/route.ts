@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const fullUser = await payload.findByID({
       collection: 'users',
       id: user.id,
-      depth: 0, // We only need the IDs for savedPosts and likedPosts
+      depth: 2, // Need depth to populate profileImage media relationship
     })
 
     // Extract post IDs from the relationships

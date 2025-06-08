@@ -339,7 +339,23 @@ export const FeedPost = memo(function FeedPost({
                 <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
                   <div className="w-full h-full rounded-full bg-white p-[2px] group-hover:bg-gray-50 transition-colors">
                     <Avatar className="h-full w-full border-0 shadow-xl">
-                      <AvatarImage src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} className="object-cover rounded-full" />
+                      <AvatarImage 
+                        src={(() => {
+                          const src = post.author.profileImage?.url || post.author.avatar || "/placeholder.svg"
+                          if (post.author.profileImage?.url || post.author.avatar) {
+                            console.log('🖼️ [FeedPost] Using profile image:', {
+                              authorId: post.author.id,
+                              authorName: post.author.name,
+                              profileImageUrl: post.author.profileImage?.url,
+                              avatar: post.author.avatar,
+                              usingSource: src
+                            })
+                          }
+                          return src
+                        })()} 
+                        alt={post.author.name} 
+                        className="object-cover rounded-full" 
+                      />
                       <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] via-purple-500 to-pink-500 text-white font-bold text-sm rounded-full">
                         {getInitials(post.author.name)}
                       </AvatarFallback>

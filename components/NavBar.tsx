@@ -59,7 +59,16 @@ export default function NavBar({ initialUser }: NavBarProps) {
   // Reset image error when user changes
   useEffect(() => {
     setImageError(false);
-  }, [user?.profileImage?.url]);
+    if (user) {
+      console.log('🖼️ [NavBar] User data received:', {
+        userId: user.id,
+        userName: user.name,
+        profileImage: user.profileImage,
+        avatar: user.avatar,
+        hasProfileImageUrl: !!user.profileImage?.url
+      })
+    }
+  }, [user?.profileImage?.url, user]);
 
   // Listen for user updates to refresh navbar immediately
   useEffect(() => {
@@ -221,7 +230,10 @@ export default function NavBar({ initialUser }: NavBarProps) {
                             width={44}
                             height={44}
                             className="h-full w-full rounded-full object-cover"
-                            onError={() => setImageError(true)}
+                            onError={(e) => {
+                              console.error('NavBar: Profile image failed to load:', user.profileImage?.url, e)
+                              setImageError(true)
+                            }}
                           />
                         ) : (
                           <div className="h-full w-full rounded-full bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] flex items-center justify-center text-white text-sm lg:text-base font-bold shadow-inner">

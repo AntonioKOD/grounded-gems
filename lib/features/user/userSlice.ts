@@ -99,6 +99,14 @@ export const fetchUser = createAsyncThunk(
 
         const data = await response.json()
         console.log('User fetch successful:', data.user ? 'User found' : 'No user')
+        if (data.user) {
+          console.log('🖼️ [userSlice] Profile image data received:', {
+            profileImage: data.user.profileImage,
+            avatar: data.user.avatar,
+            name: data.user.name,
+            id: data.user.id
+          })
+        }
         return data.user || null
       })()
 

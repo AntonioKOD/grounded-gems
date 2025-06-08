@@ -548,7 +548,19 @@ export default function ProfileContent({
                     <div className="w-24 h-24 sm:w-32 sm:h-32 relative">
                       <Avatar className="w-full h-full border-4 border-white shadow-lg">
                         {profile.profileImage ? (
-                          <AvatarImage src={profile.profileImage.url || "/placeholder.svg"} alt={profile.name || "User"} />
+                          <AvatarImage 
+                            src={(() => {
+                              const src = profile.profileImage.url || "/placeholder.svg"
+                              console.log('🖼️ [ProfileContent] Profile image data:', {
+                                userId: profile.id,
+                                userName: profile.name,
+                                profileImage: profile.profileImage,
+                                imageUrl: src
+                              })
+                              return src
+                            })()} 
+                            alt={profile.name || "User"} 
+                          />
                         ) : (
                           <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white text-2xl font-bold">
                             {getInitials()}
