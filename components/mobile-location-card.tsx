@@ -109,7 +109,7 @@ export default function MobileLocationCard({
     }
   }, [location, onDirectionsClick])
 
-  const handleShare = useCallback((e: React.MouseEvent) => {
+  const handleShare = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation()
     
     if (navigator.vibrate) {
@@ -119,24 +119,26 @@ export default function MobileLocationCard({
     if (onShareClick) {
       onShareClick(location)
     } else {
-      const shareUrl = `${window.location.origin}/map?locationId=${location.id}`
-      
-      if (navigator.share) {
-        navigator.share({
-          title: location.name,
-          text: location.shortDescription || location.description || `Check out ${location.name}!`,
-          url: shareUrl,
-        }).catch((err) => {
-          if (err.name !== "AbortError") {
-            console.error("Error sharing:", err)
-          }
-        })
-      } else {
-        navigator.clipboard.writeText(shareUrl).then(() => {
+      try {
+        const shareUrl = `${window.location.origin}/locations/${location.id}`
+        const title = location.name
+        const text = location.shortDescription || location.description || `Check out ${location.name} on Sacavia!`
+        
+        if (navigator.share) {
+          await navigator.share({
+            title,
+            text,
+            url: shareUrl,
+          })
+        } else {
+          await navigator.clipboard.writeText(shareUrl)
           toast.success("Link copied to clipboard")
-        }).catch(() => {
-          toast.error("Could not copy link")
-        })
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name !== "AbortError") {
+          console.error("Error sharing:", error)
+          toast.error("Could not share location")
+        }
       }
     }
   }, [location, onShareClick])

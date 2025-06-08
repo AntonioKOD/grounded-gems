@@ -176,6 +176,102 @@ export default function MapExplorer() {
     loadCurrentUser()
   }, [])
 
+  // Handle shared location URLs
+  useEffect(() => {
+    const handleSharedLocation = () => {
+      if (typeof window === 'undefined') return
+      
+      const urlParams = new URLSearchParams(window.location.search)
+      const sharedLocationId = urlParams.get('locationId')
+      
+      if (sharedLocationId && allLocations.length > 0) {
+        console.log('🔗 Handling shared location:', sharedLocationId)
+        
+        // Find the location in the current locations
+        const sharedLocation = allLocations.find(loc => loc.id === sharedLocationId)
+        
+        if (sharedLocation) {
+          console.log('✅ Found shared location:', sharedLocation.name)
+          
+          // Open the location detail
+          setSelectedLocation(sharedLocation)
+          setIsDetailOpen(true)
+          
+          // Center map on the location
+          if (sharedLocation.latitude && sharedLocation.longitude) {
+            setMapCenter([sharedLocation.longitude, sharedLocation.latitude])
+            setMapZoom(16) // Zoom in to show the location clearly
+          }
+          
+          // Clean up the URL
+          const newUrl = new URL(window.location.href)
+          newUrl.searchParams.delete('locationId')
+          window.history.replaceState({}, '', newUrl.toString())
+        } else {
+          // Location not found in current view, try to fetch it
+          console.log('🔍 Location not found in current view, fetching...')
+          fetchSharedLocation(sharedLocationId)
+        }
+      }
+    }
+
+    // Run after locations are loaded
+    if (allLocations.length > 0) {
+      handleSharedLocation()
+    }
+  }, [allLocations])
+
+  const fetchSharedLocation = async (locationId: string) => {
+    try {
+      console.log('🌐 Fetching shared location:', locationId)
+      const response = await fetch(`/api/locations/${locationId}`)
+      if (response.ok) {
+        const data = await response.json()
+        const location = data.location
+        
+        if (location) {
+          console.log('✅ Fetched shared location:', location.name)
+          
+          // Add to locations if not already present
+          setAllLocations(prev => {
+            const exists = prev.find(loc => loc.id === locationId)
+            if (!exists) {
+              return [...prev, location]
+            }
+            return prev
+          })
+          
+          setFilteredLocations(prev => {
+            const exists = prev.find(loc => loc.id === locationId)
+            if (!exists) {
+              return [...prev, location]
+            }
+            return prev
+          })
+          
+          // Open the location detail
+          setSelectedLocation(location)
+          setIsDetailOpen(true)
+          
+          // Center map on the location
+          if (location.latitude && location.longitude) {
+            setMapCenter([location.longitude, location.latitude])
+            setMapZoom(16)
+          }
+          
+          // Clean up the URL
+          const newUrl = new URL(window.location.href)
+          newUrl.searchParams.delete('locationId')
+          window.history.replaceState({}, '', newUrl.toString())
+        }
+      } else {
+        console.error('Failed to fetch shared location:', response.status)
+      }
+    } catch (error) {
+      console.error('Error fetching shared location:', error)
+    }
+  }
+
   // Auto-request user location on load
   useEffect(() => {
     console.log('🎯 Auto-requesting user location on page load...')

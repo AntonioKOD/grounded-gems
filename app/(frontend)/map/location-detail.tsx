@@ -51,6 +51,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import type { Location } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
+import { createLocationShareUrl } from "@/lib/location-sharing"
+import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
 import LocationDetailMobile from "./location-detail-mobile"
 import type { 
   User, 
@@ -77,6 +79,7 @@ import {
   fetchLocationReviews,
   processGalleryImages
 } from "./location-detail-utils"
+import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
 
 // Simple responsive hook
 const useResponsive = () => {
@@ -1051,17 +1054,29 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }
 
-  const handleShare = () => {
-    if (navigator.share && location) {
-      navigator.share({
-        title: location.name,
-        text: location.shortDescription || location.description || `Check out ${location.name}`,
-        url: window.location.href,
-      })
-    } else {
-      // Fallback: copy to clipboard
-      navigator.clipboard.writeText(window.location.href)
-      toast.success('Link copied to clipboard!')
+  const handleShare = async () => {
+    if (!location) return
+    
+    try {
+      const shareUrl = createLocationShareUrl(location.id, location.name, location.slug)
+      const title = location.name
+      const text = location.shortDescription || location.description || `Check out ${location.name} on Sacavia!`
+      
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          text,
+          url: shareUrl,
+        })
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success('Link copied to clipboard!')
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Error sharing location:', error)
+        toast.error('Failed to share location')
+      }
     }
   }
 

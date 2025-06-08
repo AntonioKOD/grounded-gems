@@ -1,79 +1,106 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import { parseLocationParam } from '@/lib/slug-utils'
 
 export async function GET(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-    const payload = await getPayload({ config });
+    const payload = await getPayload({ config })
+    const { id: urlParam } = await params
+    const { slug, id, isLegacyId } = parseLocationParam(urlParam)
 
-    const location = await payload.findByID({
-      collection: 'locations',
-      id,
-      depth: 2,
-    });
+    // Try to find location by slug first, then by ID
+    let location
+    
+    if (!isLegacyId && slug) {
+      // Try slug lookup first
+      console.log('🔍 Attempting slug lookup for:', slug)
+      try {
+        const slugResult = await payload.find({
+          collection: 'locations',
+          where: {
+            slug: {
+              equals: slug
+            }
+          },
+          limit: 1
+        })
+        
+        console.log('🔍 Slug lookup result:', {
+          found: slugResult.docs.length > 0,
+          count: slugResult.docs.length,
+          firstResult: slugResult.docs[0]?.slug || 'none'
+        })
+        
+        if (slugResult.docs.length > 0) {
+          location = slugResult.docs[0]
+          console.log('✅ Found location via slug:', location.name)
+        }
+      } catch (error) {
+        console.log('❌ Slug lookup failed:', error)
+      }
+    }
+
+    // If slug lookup failed or this is a legacy ID, try ID lookup
+    if (!location && id) {
+      console.log('🔍 Attempting ID lookup for:', id)
+      try {
+        location = await payload.findByID({
+          collection: 'locations',
+          id: id
+        })
+        console.log('✅ Found location via ID:', location?.name || 'none')
+      } catch (error) {
+        console.log('❌ ID lookup failed:', error)
+      }
+    }
+
+    // If still no location found, try treating the param as a direct ID
+    if (!location) {
+      console.log('🔍 Attempting direct ID lookup for:', urlParam)
+      try {
+        location = await payload.findByID({
+          collection: 'locations',
+          id: urlParam
+        })
+        console.log('✅ Found location via direct ID:', location?.name || 'none')
+      } catch (error) {
+        console.log('❌ Direct ID lookup failed:', error)
+      }
+    }
 
     if (!location) {
-      return NextResponse.json(
-        { error: 'Location not found' },
-        { status: 404 }
-      );
+      console.log('❌ No location found for param:', urlParam)
+      return NextResponse.json({ error: 'Location not found' }, { status: 404 })
     }
 
-    // Determine location type for event handling
-    const locationCategories = location.categories?.map((cat: any) => 
-      typeof cat === 'string' ? cat : cat.name
-    ) || [];
-
-    // Private venues that require event requests (owners need to approve)
-    const privateVenueCategories = [
-      'Restaurants', 'Restaurant', 'Bars', 'Bar', 'Cafes', 'Cafe', 'Coffee Shops', 'Coffee Shop',
-      'Event Venues', 'Event Venue', 'Hotels', 'Hotel', 'Clubs', 'Club', 'Lounges', 'Lounge',
-      'Wineries', 'Winery', 'Breweries', 'Brewery', 'Entertainment Venues', 'Entertainment Venue',
-      'Shopping Centers', 'Shopping Center', 'Malls', 'Mall', 'Retail', 'Stores', 'Store'
-    ];
-
-    // Public spaces that allow direct event creation (no approval needed)
-    const publicSpaceCategories = [
-      'Parks', 'Park', 'Beaches', 'Beach', 'Public Spaces', 'Public Space', 'Recreation Areas', 'Recreation Area',
-      'Trails', 'Trail', 'Gardens', 'Garden', 'Playgrounds', 'Playground', 'Sports Fields', 'Sports Field',
-      'Community Centers', 'Community Center', 'Libraries', 'Library', 'Museums', 'Museum', 'Galleries', 'Gallery'
-    ];
-
-    const isPrivateVenue = privateVenueCategories.some(category => 
-      locationCategories.some(locCat => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
-    );
-
-    const isPublicSpace = publicSpaceCategories.some(category => 
-      locationCategories.some(locCat => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
-    );
-
-    // Determine event capabilities
-    let eventCapability = 'none';
-    if (isPublicSpace && !isPrivateVenue) {
-      eventCapability = 'direct_creation'; // Can create events directly
-    } else if (isPrivateVenue || location.createdBy) {
-      eventCapability = 'request_required'; // Need to request from owner
+    // Only return published locations (unless in development)
+    if (location.status !== 'published' && process.env.NODE_ENV === 'production') {
+      console.log('❌ Location not published:', location.name)
+      return NextResponse.json({ error: 'Location not available' }, { status: 404 })
     }
 
-    const locationWithEventInfo = {
+    console.log('✅ Successfully found location:', location.name)
+
+    // Add flag to indicate if this was found via legacy ID (for potential redirects)
+    const responseData = {
       ...location,
-      eventCapability,
-      isPrivateVenue,
-      isPublicSpace,
-      hasOwner: !!location.createdBy,
-    };
+      _meta: {
+        foundViaLegacyId: isLegacyId && location.slug,
+        canonicalSlug: location.slug
+      }
+    }
 
-    return NextResponse.json({ location: locationWithEventInfo });
+    return NextResponse.json(responseData)
   } catch (error) {
-    console.error('Error fetching location:', error);
+    console.error('❌ Error fetching location:', error)
     return NextResponse.json(
       { error: 'Failed to fetch location' },
       { status: 500 }
-    );
+    )
   }
 }
 

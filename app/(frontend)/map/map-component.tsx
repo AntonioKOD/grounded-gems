@@ -702,7 +702,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           </div>
           
           <!-- Enhanced cluster preview tooltip - Desktop hover -->
-          <div class="cluster-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
+          <div class="cluster-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobileDevice() ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-80 max-w-sm">
               <!-- Preview arrow -->
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
@@ -794,7 +794,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           ` : ''}
 
           <!-- Single location preview tooltip - Desktop hover -->
-          <div class="location-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobile ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
+          <div class="location-preview absolute bottom-full left-1/2 transform -translate-x-1/2 mb-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50 ${isMobileDevice() ? 'hidden' : ''} pointer-events-none group-hover:pointer-events-auto">
             <div class="bg-background rounded-xl shadow-2xl border border-border p-4 w-72 max-w-sm">
               <!-- Preview arrow -->
               <div class="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-background"></div>
@@ -876,7 +876,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     
     // Mouse/touch events for better interaction
     markerEl.addEventListener('mouseenter', (e) => {
-      if (!isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (!currentIsMobile) {
         e.stopPropagation()
         markerEl.style.zIndex = '65'
         const preview = markerEl.querySelector('.location-preview, .cluster-preview');
@@ -890,7 +893,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     })
     
     markerEl.addEventListener('mouseleave', (e) => {
-      if (!isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (!currentIsMobile) {
         e.stopPropagation()
         markerEl.style.zIndex = isSelected ? '60' : isClusterMarker ? '45' : '40'
          const preview = markerEl.querySelector('.location-preview, .cluster-preview');
@@ -904,7 +910,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     
     // Enhanced touch handling for mobile
     markerEl.addEventListener('touchstart', (e) => {
-      if (isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (currentIsMobile) {
         e.stopPropagation()
         touchStartTime = Date.now()
         const touch = e.touches[0]
@@ -918,7 +927,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     }, { passive: false })
     
     markerEl.addEventListener('touchmove', (e) => {
-      if (isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (currentIsMobile) {
         const touch = e.touches[0]
         const moveDistance = Math.sqrt(
           Math.pow(touch.clientX - touchStartPos.x, 2) + 
@@ -1040,7 +1052,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     }, { passive: false })
     
     markerEl.addEventListener('touchcancel', () => {
-      if (isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (currentIsMobile) {
         touchStartTime = 0
         hasMoved = false
         // Reset visual feedback
@@ -1095,7 +1110,10 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       }
       
       // Only handle marker clicks for desktop (mobile uses touch events)
-      if (!isMobile) {
+      // Check mobile status dynamically instead of using captured variable
+      const currentIsMobile = isMobileDevice()
+      
+      if (!currentIsMobile) {
         
         // Handle cluster marker click (when clicking the cluster marker itself)
         if (isClusterMarker && cluster && cluster.locations.length > 1) {
@@ -1132,7 +1150,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     })
     
     return markerEl
-  }, [onMarkerClick, onViewDetail, isMobile])
+  }, [onMarkerClick, onViewDetail])
 
   // Detect overlapping markers and create clusters
   const detectMarkerClusters = useCallback((locations: Location[], zoomLevel: number): MarkerCluster[] => {

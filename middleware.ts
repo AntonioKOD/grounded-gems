@@ -6,6 +6,8 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const userAgent = request.headers.get('user-agent') || ''
   
+  console.log(`🔍 [Middleware] Processing: ${pathname}`)
+  
   // Detect Capacitor mobile apps specifically
   const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('Sacavia')
   const isMobile = /Mobile|Android|iOS|iPhone|iPad/.test(userAgent)
@@ -21,11 +23,13 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/admin') || // Payload admin
     pathname.startsWith('/media/') // Media files
   ) {
+    console.log(`✅ [Middleware] Skipping static resource: ${pathname}`)
     return NextResponse.next()
   }
 
   // For Capacitor apps, let the home page load naturally
   if (isCapacitorApp) {
+    console.log(`📱 [Middleware] Capacitor app - allowing: ${pathname}`)
     // Let all routes load directly for Capacitor apps
     // The client-side will handle authentication and navigation
     return NextResponse.next()
@@ -33,10 +37,12 @@ export function middleware(request: NextRequest) {
 
   // For mobile browsers (not Capacitor), let home page load
   if (isMobile) {
+    console.log(`📱 [Middleware] Mobile browser - allowing: ${pathname}`)
     // Let mobile browsers load routes naturally, including home page
     return NextResponse.next()
   }
 
+  console.log(`💻 [Middleware] Desktop browser - allowing: ${pathname}`)
   // For desktop web browsers, let home page load naturally
   // Only redirect specific auth-protected routes if needed
   // Remove the automatic redirect from root path to allow home page to load

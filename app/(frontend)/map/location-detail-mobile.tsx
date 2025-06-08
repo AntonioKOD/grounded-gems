@@ -256,205 +256,233 @@ function LocationInfo({
 
   const businessStatus = getBusinessStatus(location.businessHours)
   const categoryColor = getCategoryColor(location.categories)
+  const categoryName = getCategoryName(location.categories)
 
   return (
-    <div className="p-4 space-y-6">
-      {/* Basic Info */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground mb-2">{location.name}</h1>
-        
-        {/* Category and verification badges */}
-        <div className="flex items-center gap-2 mb-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <div 
-              className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: categoryColor }}
-            />
-            <span className="text-sm text-muted-foreground font-medium">
-              {getCategoryName(location.categories)}
-            </span>
-          </div>
-          {location.isVerified && (
-            <span className="text-xs bg-[#4ecdc4]/10 text-[#4ecdc4] px-2 py-1 rounded-full font-medium">
-              ✓ Verified
-            </span>
-          )}
-          {location.isFeatured && (
-            <span className="text-xs bg-[#ffe66d]/20 text-[#b8860b] px-2 py-1 rounded-full font-medium">
-              ⭐ Featured
-            </span>
-          )}
-        </div>
-
-        {/* Rating */}
-        {location.averageRating && (
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center">
-              {Array.from({ length: 5 }, (_, i) => (
-                <Star
-                  key={i}
-                  className={`w-4 h-4 ${
-                    i < Math.floor(location.averageRating || 0)
-                      ? "text-[#ffe66d] fill-current"
-                      : "text-gray-300"
-                  }`}
-                />
-              ))}
+    <div className="space-y-6">
+      {/* Enhanced Header Section */}
+      <div className="space-y-4">
+        {/* Title and Category - Moved category to be more subtle */}
+        <div>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1">
+              <h1 className="text-3xl font-bold text-gray-900 leading-tight mb-2">{location.name}</h1>
+              {/* Only show category if it's not "Uncategorized" */}
+              {categoryName && categoryName.toLowerCase() !== 'uncategorized' && (
+                <div className="flex items-center gap-2">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: categoryColor }}
+                  />
+                  <span className="text-sm font-medium text-gray-600">
+                    {categoryName}
+                  </span>
+                </div>
+              )}
             </div>
-            <span className="text-sm font-medium text-foreground">
-              {location.averageRating.toFixed(1)}
-            </span>
-            {location.reviewCount && (
-              <span className="text-sm text-muted-foreground">
-                ({location.reviewCount} reviews)
+            
+            {/* Only show meaningful badges */}
+            <div className="flex flex-col gap-2 ml-4">
+              {location.isFeatured && (
+                <span className="text-xs bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-700 px-3 py-1.5 rounded-full font-medium border border-amber-200 shadow-sm">
+                  ⭐ Featured
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Enhanced Rating Section */}
+          {location.averageRating && (
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-1">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Star
+                    key={i}
+                    className={`w-5 h-5 ${
+                      i < Math.floor(location.averageRating || 0)
+                        ? "text-amber-400 fill-current"
+                        : "text-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+              <span className="text-lg font-semibold text-gray-900">
+                {location.averageRating.toFixed(1)}
               </span>
-            )}
-          </div>
-        )}
+              {location.reviewCount && (
+                <>
+                  <span className="text-gray-400">•</span>
+                  <span className="text-sm font-medium text-gray-600">
+                    {location.reviewCount} {location.reviewCount === 1 ? 'review' : 'reviews'}
+                  </span>
+                </>
+              )}
+            </div>
+          )}
 
-        {/* Price Range */}
-        {location.priceRange && (
-          <div className="mb-3">
-            <span className="text-sm text-muted-foreground">
-              Price: <span className="font-medium text-foreground">{formatPriceRange(location.priceRange)}</span>
-            </span>
-          </div>
-        )}
-
-        {/* Description */}
-        {(location.shortDescription || location.description) && (
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {location.shortDescription || location.description}
-          </p>
-        )}
-
-        {/* Insider Tips */}
-        {location.insiderTips && (
-          <div className="mt-4 p-3 bg-[#ffe66d]/10 border border-[#ffe66d]/30 rounded-lg">
-            <div className="flex items-start gap-2">
-              <span className="text-[#b8860b] text-sm">💡</span>
-              <div>
-                <p className="text-sm font-medium text-[#b8860b] mb-1">Insider Tip</p>
-                <p className="text-sm text-muted-foreground">{location.insiderTips}</p>
+          {/* Enhanced Price Range */}
+          {location.priceRange && (
+            <div className="mb-4">
+              <div className="inline-flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">Price Range:</span>
+                <span className="text-base font-bold text-gray-900">{formatPriceRange(location.priceRange)}</span>
               </div>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Enhanced Description with Better Typography */}
+          {(location.shortDescription || location.description) && (
+            <div className="prose prose-sm max-w-none">
+              <p className="text-base text-gray-700 leading-relaxed font-medium">
+                {location.shortDescription || location.description}
+              </p>
+            </div>
+          )}
+
+
+        </div>
       </div>
 
-      {/* Action Buttons */}
+      {/* Enhanced Action Buttons */}
       <div className="grid grid-cols-3 gap-3">
         <Button
           onClick={handleDirectionsClick}
           variant="outline"
-          className="h-12 rounded-xl border-[#4ecdc4]/30 text-[#4ecdc4] hover:bg-[#4ecdc4]/10 font-medium"
+          className="h-14 rounded-xl border-2 border-teal-200 text-teal-600 hover:bg-teal-50 hover:border-teal-300 font-semibold transition-all duration-200"
         >
-          <Navigation className="h-4 w-4 mr-1" />
+          <Navigation className="h-5 w-5 mr-2" />
           <span className="text-sm">Directions</span>
         </Button>
         <Button
           onClick={onWriteReview}
           variant="outline"
-          className="h-12 rounded-xl border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/10 font-medium"
+          className="h-14 rounded-xl border-2 border-pink-200 text-pink-600 hover:bg-pink-50 hover:border-pink-300 font-semibold transition-all duration-200"
         >
-          <MessageSquare className="h-4 w-4 mr-1" />
+          <MessageSquare className="h-5 w-5 mr-2" />
           <span className="text-sm">Review</span>
         </Button>
         <Button
           onClick={onAddToBucketList}
           disabled={isLoadingBucketLists}
-          className="h-12 rounded-xl bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
+          className="h-14 rounded-xl bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 border-0"
         >
           {isLoadingBucketLists ? (
-            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
           ) : (
-            <Crown className="h-4 w-4 mr-1" />
+            <Crown className="h-5 w-5 mr-2" />
           )}
           <span className="text-sm">Add to List</span>
         </Button>
       </div>
 
-      {/* Contact & Details Info */}
-      <div className="space-y-4">
-        {/* Address */}
+      {/* Enhanced Contact & Details Info */}
+      <div className="space-y-5">
+        {/* Enhanced Address Section */}
         {location.address && (
-          <div className="flex items-start gap-3">
-            <MapPin className="h-4 w-4 text-[#4ecdc4] mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm text-foreground">{formatAddress(location.address)}</p>
-              {location.neighborhood && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Neighborhood: {location.neighborhood}
-                </p>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-teal-100 rounded-full flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-teal-600" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-base font-bold text-gray-900 mb-2">Location</h4>
+                <p className="text-base text-gray-700 font-medium leading-relaxed">{formatAddress(location.address)}</p>
+                {location.neighborhood && (
+                  <p className="text-sm text-gray-500 mt-2 font-medium">
+                    <span className="font-semibold">Neighborhood:</span> {location.neighborhood}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Business Hours */}
+        {location.businessHours && location.businessHours.length > 0 && (
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Clock className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3">
+                  <h4 className="text-base font-bold text-gray-900">Hours</h4>
+                  <span className={`text-sm font-bold px-3 py-1 rounded-full ${businessStatus.color === 'text-green-600' ? 'bg-green-100 text-green-700' : businessStatus.color === 'text-red-600' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                    {businessStatus.status}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {location.businessHours.map((hours, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-gray-700 capitalize">{hours.day}</span>
+                      <span className="text-sm font-medium text-gray-600">
+                        {hours.closed ? "Closed" : `${hours.open} - ${hours.close}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Contact Info */}
+        {(location.contactInfo?.phone || location.contactInfo?.website) && (
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <h4 className="text-base font-bold text-gray-900 mb-3">Contact Information</h4>
+            <div className="space-y-3">
+              {location.contactInfo?.phone && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Phone className="h-4 w-4 text-green-600" />
+                  </div>
+                  <a 
+                    href={`tel:${location.contactInfo.phone}`}
+                    className="text-base font-medium text-gray-900 hover:text-green-600 transition-colors"
+                  >
+                    {location.contactInfo.phone}
+                  </a>
+                </div>
+              )}
+
+              {location.contactInfo?.website && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Globe className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <a
+                    href={location.contactInfo.website.startsWith("http") ? location.contactInfo.website : `https://${location.contactInfo.website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-base font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                  >
+                    {location.contactInfo.website.replace(/^https?:\/\//, "")}
+                  </a>
+                </div>
               )}
             </div>
           </div>
         )}
 
-        {/* Business Hours */}
-        {location.businessHours && location.businessHours.length > 0 && (
-          <div className="flex items-start gap-3">
-            <Clock className="h-4 w-4 text-[#4ecdc4] mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm text-foreground">Hours</span>
-                <span className={`text-sm font-medium ${businessStatus.color}`}>
-                  {businessStatus.status}
-                </span>
-              </div>
-              <div className="space-y-1">
-                {location.businessHours.map((hours, index) => (
-                  <div key={index} className="flex justify-between text-xs text-muted-foreground">
-                    <span className="capitalize font-medium">{hours.day}</span>
-                    <span>
-                      {hours.closed ? "Closed" : `${hours.open} - ${hours.close}`}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Contact Info */}
-        {location.contactInfo?.phone && (
-          <div className="flex items-center gap-3">
-            <Phone className="h-4 w-4 text-[#4ecdc4] flex-shrink-0" />
-            <span className="text-sm text-foreground">{location.contactInfo.phone}</span>
-          </div>
-        )}
-
-        {location.contactInfo?.website && (
-          <div className="flex items-center gap-3">
-            <Globe className="h-4 w-4 text-[#4ecdc4] flex-shrink-0" />
-            <a
-              href={location.contactInfo.website.startsWith("http") ? location.contactInfo.website : `https://${location.contactInfo.website}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-[#ff6b6b] hover:underline"
-            >
-              {location.contactInfo.website.replace(/^https?:\/\//, "")}
-            </a>
-          </div>
-        )}
-
-        {/* Accessibility Features */}
+        {/* Enhanced Accessibility Features */}
         {location.accessibility && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-medium text-foreground">Accessibility</h4>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <h4 className="text-base font-bold text-gray-900 mb-3">Accessibility</h4>
             <div className="flex flex-wrap gap-2">
               {location.accessibility.wheelchairAccess && (
-                <span className="text-xs bg-[#4ecdc4]/10 text-[#4ecdc4] px-2 py-1 rounded-full">
-                  ♿ Wheelchair Accessible
+                <span className="inline-flex items-center gap-2 text-sm bg-teal-50 text-teal-700 px-3 py-2 rounded-lg font-medium border border-teal-200">
+                  <span>♿</span>
+                  Wheelchair Accessible
                 </span>
               )}
               {location.accessibility.parking && (
-                <span className="text-xs bg-[#ffe66d]/20 text-[#b8860b] px-2 py-1 rounded-full">
-                  🅿️ Parking Available
+                <span className="inline-flex items-center gap-2 text-sm bg-blue-50 text-blue-700 px-3 py-2 rounded-lg font-medium border border-blue-200">
+                  <span>🅿️</span>
+                  Parking Available
                 </span>
               )}
               {location.accessibility.other && (
-                <span className="text-xs bg-gray-100 text-gray-800 px-2 py-1 rounded-full">
+                <span className="text-sm bg-gray-50 text-gray-700 px-3 py-2 rounded-lg font-medium border border-gray-200">
                   {location.accessibility.other}
                 </span>
               )}
@@ -462,13 +490,13 @@ function LocationInfo({
           </div>
         )}
 
-        {/* Best Time to Visit */}
+        {/* Enhanced Best Time to Visit */}
         {location.bestTimeToVisit && location.bestTimeToVisit.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-foreground mb-2">Best Time to Visit</h4>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <h4 className="text-base font-bold text-gray-900 mb-3">Best Time to Visit</h4>
             <div className="flex flex-wrap gap-2">
               {location.bestTimeToVisit.map((time, index) => (
-                <span key={index} className="text-xs bg-[#ffe66d]/20 text-[#b8860b] px-2 py-1 rounded-full">
+                <span key={index} className="text-sm bg-amber-50 text-amber-700 px-3 py-2 rounded-lg font-medium border border-amber-200">
                   {time.season}
                 </span>
               ))}
@@ -476,14 +504,14 @@ function LocationInfo({
           </div>
         )}
 
-        {/* Tags */}
+        {/* Enhanced Tags */}
         {location.tags && location.tags.length > 0 && (
-          <div>
-            <h4 className="text-sm font-medium text-foreground mb-2">Tags</h4>
+          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+            <h4 className="text-base font-bold text-gray-900 mb-3">Tags</h4>
             <div className="flex flex-wrap gap-2">
               {location.tags.map((tag, index) => (
-                <span key={index} className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                  {tag.tag}
+                <span key={index} className="text-sm bg-gray-50 text-gray-600 px-3 py-2 rounded-lg font-medium border border-gray-200">
+                  #{tag.tag}
                 </span>
               ))}
             </div>
@@ -1490,18 +1518,29 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     setIsLoadingReviews(false)
   }
 
-  const shareLocation = () => {
+  const shareLocation = async () => {
     if (!location) return
     
-    if (navigator.share) {
-      navigator.share({
-        title: location.name,
-        text: location.shortDescription || location.description || `Check out ${location.name}`,
-        url: window.location.href,
-      })
-    } else {
-      navigator.clipboard.writeText(window.location.href)
-      toast.success('Link copied to clipboard!')
+    try {
+      const shareUrl = createLocationShareUrl(location.id, location.name, location.slug)
+      const title = location.name
+      const text = location.shortDescription || location.description || `Check out ${location.name} on Sacavia!`
+      
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          text,
+          url: shareUrl,
+        })
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        toast.success('Link copied to clipboard!')
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'AbortError') {
+        console.error('Error sharing location:', error)
+        toast.error('Failed to share location')
+      }
     }
   }
 
@@ -1731,7 +1770,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
               )}
 
               {/* Enhanced Location Info */}
-              <div className="p-4 space-y-6">
+              <div className="p-6 space-y-6">
                 <LocationInfo 
                   location={location} 
                   onWriteReview={handleWriteReview}
@@ -1765,129 +1804,240 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                   </TabsList>
                   
                   <div className="mt-6">
-                    <TabsContent value="about" className="space-y-4">
+                    <TabsContent value="about" className="space-y-5">
                       {location.description && (
-                        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-                          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <span className="text-[#4ecdc4]">📍</span>
+                        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-teal-100 rounded-full flex items-center justify-center">
+                              <span className="text-teal-600 text-lg">📍</span>
+                            </div>
                             About This Place
                           </h3>
-                          <p className="text-gray-700 leading-relaxed">{location.description}</p>
+                          <div className="prose prose-sm max-w-none">
+                            <p className="text-base text-gray-700 leading-relaxed font-medium">{location.description}</p>
+                          </div>
                         </div>
                       )}
 
                       {location.insiderTips && (
-                        <div className="bg-gradient-to-r from-amber-50 to-yellow-50 rounded-xl p-4 border border-amber-200">
-                          <h3 className="font-semibold text-amber-900 mb-3 flex items-center gap-2">
-                            <AlertTriangle className="h-5 w-5 text-amber-500" />
-                            Insider Tips
-                          </h3>
-                          <p className="text-amber-800 leading-relaxed">{location.insiderTips}</p>
+                        <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-6 border border-emerald-200 shadow-lg relative overflow-hidden">
+                          {/* Enhanced decorative background pattern */}
+                          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-100/40 rounded-full -translate-y-12 translate-x-12 animate-pulse"></div>
+                          <div className="absolute bottom-0 left-0 w-20 h-20 bg-teal-100/40 rounded-full translate-y-10 -translate-x-10 animate-pulse"></div>
+                          <div className="absolute top-1/2 right-8 w-3 h-3 bg-cyan-400/60 rounded-full animate-bounce"></div>
+                          <div className="absolute top-8 left-8 w-2 h-2 bg-emerald-400/60 rounded-full animate-ping"></div>
+                          
+                          <div className="relative">
+                            <div className="flex items-start gap-4 mb-5">
+                              <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-xl transform rotate-3 hover:rotate-0 transition-transform duration-300">
+                                <span className="text-white text-2xl">💎</span>
+                              </div>
+                              <div className="flex-1 pt-1">
+                                <h3 className="text-xl font-bold text-emerald-900 mb-2">
+                                  Hidden Gem Alert
+                                </h3>
+                                <div className="flex items-center gap-2 mb-3">
+                                  <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
+                                    🏆 LOCAL INSIDER
+                                  </span>
+                                  <span className="text-xs font-medium text-teal-600 bg-teal-100 px-2 py-1 rounded-full">
+                                    Exclusive Tip
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-5 border border-emerald-100 shadow-inner relative">
+                              <div className="absolute top-3 right-3 text-emerald-300/40 text-4xl font-serif">"</div>
+                              <div className="prose prose-sm max-w-none relative z-10">
+                                <p className="text-lg text-emerald-900 leading-relaxed font-medium">
+                                  {location.insiderTips}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* Call-to-action footer */}
+                            <div className="mt-4 text-center">
+                              <p className="text-xs text-emerald-700 font-medium bg-emerald-50 py-2 px-4 rounded-lg border border-emerald-200">
+                                💡 Pro tip from locals who know this place best
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       )}
 
-                      {/* Contact Information */}
+                      {/* Enhanced Contact Information */}
                       {(location.contactInfo?.email || location.contactInfo?.socialMedia) && (
-                        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-                          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <Globe className="h-5 w-5 text-[#4ecdc4]" />
-                            Contact & Social
+                        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <Globe className="h-5 w-5 text-blue-600" />
+                            </div>
+                            Contact & Social Media
                           </h3>
-                          <div className="space-y-3">
+                          <div className="space-y-4">
                             {location.contactInfo?.email && (
-                              <div className="flex items-center gap-3">
-                                <span className="text-sm text-gray-600">Email:</span>
-                                <a 
-                                  href={`mailto:${location.contactInfo.email}`}
-                                  className="text-sm text-[#ff6b6b] hover:underline"
-                                >
-                                  {location.contactInfo.email}
-                                </a>
+                              <div className="flex items-center gap-4">
+                                <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                                  <span className="text-gray-600 text-xs font-bold">@</span>
+                                </div>
+                                <div>
+                                  <span className="text-sm font-semibold text-gray-700 block">Email</span>
+                                  <a 
+                                    href={`mailto:${location.contactInfo.email}`}
+                                    className="text-base font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                                  >
+                                    {location.contactInfo.email}
+                                  </a>
+                                </div>
                               </div>
                             )}
                             
                             {location.contactInfo?.socialMedia && (
-                              <div className="grid grid-cols-2 gap-2">
-                                {location.contactInfo.socialMedia.instagram && (
-                                  <a 
-                                    href={location.contactInfo.socialMedia.instagram.startsWith('http') 
-                                      ? location.contactInfo.socialMedia.instagram 
-                                      : `https://instagram.com/${location.contactInfo.socialMedia.instagram}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm"
-                                  >
-                                    📷 Instagram
-                                  </a>
-                                )}
-                                {location.contactInfo.socialMedia.facebook && (
-                                  <a 
-                                    href={location.contactInfo.socialMedia.facebook.startsWith('http') 
-                                      ? location.contactInfo.socialMedia.facebook 
-                                      : `https://facebook.com/${location.contactInfo.socialMedia.facebook}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-2 bg-blue-600 text-white rounded-lg text-sm"
-                                  >
-                                    📘 Facebook
-                                  </a>
-                                )}
-                                {location.contactInfo.socialMedia.twitter && (
-                                  <a 
-                                    href={location.contactInfo.socialMedia.twitter.startsWith('http') 
-                                      ? location.contactInfo.socialMedia.twitter 
-                                      : `https://twitter.com/${location.contactInfo.socialMedia.twitter}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-2 bg-black text-white rounded-lg text-sm"
-                                  >
-                                    🐦 Twitter
-                                  </a>
-                                )}
-                                {location.contactInfo.socialMedia.linkedin && (
-                                  <a 
-                                    href={location.contactInfo.socialMedia.linkedin.startsWith('http') 
-                                      ? location.contactInfo.socialMedia.linkedin 
-                                      : `https://linkedin.com/company/${location.contactInfo.socialMedia.linkedin}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-2 p-2 bg-blue-700 text-white rounded-lg text-sm"
-                                  >
-                                    💼 LinkedIn
-                                  </a>
-                                )}
+                              <div>
+                                <div className="grid grid-cols-1 gap-3">
+                                  {location.contactInfo.socialMedia.instagram && (
+                                    <a 
+                                      href={location.contactInfo.socialMedia.instagram.startsWith('http') 
+                                        ? location.contactInfo.socialMedia.instagram 
+                                        : `https://instagram.com/${location.contactInfo.socialMedia.instagram}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-pink-200 hover:bg-gradient-to-r hover:from-pink-50 hover:to-purple-50 transition-all duration-300 shadow-sm hover:shadow-md"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 rounded-xl flex items-center justify-center shadow-sm">
+                                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <div className="font-semibold text-gray-900 text-sm">Instagram</div>
+                                          <div className="text-xs text-gray-500">@{location.contactInfo.socialMedia.instagram.replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/$/, '')}</div>
+                                        </div>
+                                      </div>
+                                      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-pink-500 transition-colors duration-200" />
+                                    </a>
+                                  )}
+                                  
+                                  {location.contactInfo.socialMedia.facebook && (
+                                    <a 
+                                      href={location.contactInfo.socialMedia.facebook.startsWith('http') 
+                                        ? location.contactInfo.socialMedia.facebook 
+                                        : `https://facebook.com/${location.contactInfo.socialMedia.facebook}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-all duration-300 shadow-sm hover:shadow-md"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+                                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <div className="font-semibold text-gray-900 text-sm">Facebook</div>
+                                          <div className="text-xs text-gray-500">Follow us on Facebook</div>
+                                        </div>
+                                      </div>
+                                      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors duration-200" />
+                                    </a>
+                                  )}
+                                  
+                                  {location.contactInfo.socialMedia.twitter && (
+                                    <a 
+                                      href={location.contactInfo.socialMedia.twitter.startsWith('http') 
+                                        ? location.contactInfo.socialMedia.twitter 
+                                        : `https://twitter.com/${location.contactInfo.socialMedia.twitter}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all duration-300 shadow-sm hover:shadow-md"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center shadow-sm">
+                                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <div className="font-semibold text-gray-900 text-sm">X (Twitter)</div>
+                                          <div className="text-xs text-gray-500">@{location.contactInfo.socialMedia.twitter.replace(/^https?:\/\/(www\.)?(twitter\.com|x\.com)\//, '').replace(/\/$/, '')}</div>
+                                        </div>
+                                      </div>
+                                      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-gray-600 transition-colors duration-200" />
+                                    </a>
+                                  )}
+                                  
+                                  {location.contactInfo.socialMedia.linkedin && (
+                                    <a 
+                                      href={location.contactInfo.socialMedia.linkedin.startsWith('http') 
+                                        ? location.contactInfo.socialMedia.linkedin 
+                                        : `https://linkedin.com/company/${location.contactInfo.socialMedia.linkedin}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="group flex items-center justify-between p-4 bg-white border border-gray-200 rounded-xl hover:border-blue-200 hover:bg-blue-50 transition-all duration-300 shadow-sm hover:shadow-md"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 bg-blue-700 rounded-xl flex items-center justify-center shadow-sm">
+                                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <div className="font-semibold text-gray-900 text-sm">LinkedIn</div>
+                                          <div className="text-xs text-gray-500">Professional network</div>
+                                        </div>
+                                      </div>
+                                      <ExternalLink className="w-4 h-4 text-gray-400 group-hover:text-blue-700 transition-colors duration-200" />
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
                         </div>
                       )}
 
-                      {/* Partnership Info */}
+                      {/* Enhanced Partnership Info */}
                       {location.hasBusinessPartnership && location.partnershipDetails && (
-                        <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
-                          <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
-                            <Crown className="h-5 w-5 text-green-600" />
+                        <div className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 rounded-xl p-5 border border-green-200 shadow-sm">
+                          <h3 className="text-lg font-bold text-green-900 mb-4 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <Crown className="h-5 w-5 text-green-600" />
+                            </div>
                             Verified Business Partner
                           </h3>
-                          {location.partnershipDetails.partnerName && (
-                            <p className="text-sm font-medium text-green-800 mb-1">
-                              Partner: {location.partnershipDetails.partnerName}
-                            </p>
-                          )}
-                          {location.partnershipDetails.details && (
-                            <p className="text-sm text-green-700">{location.partnershipDetails.details}</p>
-                          )}
+                          <div className="space-y-2">
+                            {location.partnershipDetails.partnerName && (
+                              <div>
+                                <span className="text-sm font-semibold text-green-800">Partner Name</span>
+                                <p className="text-base font-medium text-green-800">{location.partnershipDetails.partnerName}</p>
+                              </div>
+                            )}
+                            {location.partnershipDetails.details && (
+                              <div>
+                                <span className="text-sm font-semibold text-green-800">Partnership Details</span>
+                                <div className="prose prose-sm max-w-none">
+                                  <p className="text-base text-green-700 font-medium leading-relaxed">{location.partnershipDetails.details}</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 
-                      {/* Neighborhood Info */}
+                      {/* Enhanced Neighborhood Info */}
                       {location.neighborhood && (
-                        <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-                          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                            <MapPin className="h-5 w-5 text-[#4ecdc4]" />
+                        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                          <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                              <MapPin className="h-5 w-5 text-purple-600" />
+                            </div>
                             Neighborhood
                           </h3>
-                          <p className="text-gray-700">{location.neighborhood}</p>
+                          <div className="prose prose-sm max-w-none">
+                            <p className="text-base text-gray-700 font-medium leading-relaxed">{location.neighborhood}</p>
+                          </div>
                         </div>
                       )}
                     </TabsContent>

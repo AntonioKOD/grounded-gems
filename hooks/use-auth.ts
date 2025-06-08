@@ -56,16 +56,20 @@ export function useAuth() {
 
   // Controlled user fetch with circuit breaker
   useEffect(() => {
+    console.log('🔐 [useAuth] Auth state check:', { user: !!user, isLoading, fetchAttempted: fetchAttempted.current })
+    
     if (!user && !isLoading && !fetchAttempted.current && circuitBreaker.canExecute()) {
+      console.log('🔐 [useAuth] Attempting to fetch user')
       fetchAttempted.current = true
       
       dispatch(fetchUser())
         .unwrap()
         .then(() => {
+          console.log('🔐 [useAuth] User fetch successful')
           circuitBreaker.onSuccess()
         })
         .catch((error) => {
-          console.error('Auth fetch failed:', error)
+          console.error('🔐 [useAuth] Auth fetch failed:', error)
           circuitBreaker.onFailure()
           
           // Reset attempt flag after a delay to allow retry
