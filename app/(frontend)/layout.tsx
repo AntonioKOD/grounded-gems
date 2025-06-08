@@ -8,6 +8,7 @@ import Script from "next/script"
 import NavigationWrapper from "@/components/navigation-wrapper"
 import ClientFloatingActionButtonMenu from "@/components/ui/ClientFloatingActionButtonMenu"
 import MainContentWrapper from "@/components/ui/MainContentWrapper"
+import { GoogleAnalytics } from "@next/third-parties/google"
 
 import MobileAppWrapper from '@/components/MobileAppWrapper'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -75,6 +76,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
         <MobileAppWrapper>
           <StoreProvider initialUser={initialUser}>
             <NavigationWrapper initialUser={initialUser} />
+            <GoogleAnalytics gaId="G-QB3W2CL6T7" />
             <MainContentWrapper>
               {children}
             </MainContentWrapper>
