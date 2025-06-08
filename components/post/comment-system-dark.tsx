@@ -33,6 +33,7 @@ import {
   fetchCommentsAsync, 
   likeCommentAsync
 } from "@/lib/features/posts/postsSlice"
+import { getImageUrl } from "@/lib/image-utils"
 
 // Analyze sentiment of comment text
 const analyzeSentiment = (text: string): "positive" | "neutral" | "negative" => {
@@ -405,7 +406,7 @@ export function CommentSystemDark({
           {/* Author info */}
           <div className="flex items-start gap-3 mb-3">
             <Avatar className="h-8 w-8 ring-2 ring-white/20 shadow-sm">
-              <AvatarImage src={comment.author.avatar} alt={comment.author.name} />
+              <AvatarImage src={getImageUrl(comment.author.avatar)} alt={comment.author.name} />
               <AvatarFallback className="text-xs bg-white/10 text-white">
                 {getInitials(comment.author.name)}
               </AvatarFallback>
@@ -540,7 +541,7 @@ export function CommentSystemDark({
                 <div className="mb-6">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 ring-2 ring-[#FF6B6B]/20">
-                      <AvatarImage src={user.avatar} alt={user.name} />
+                      <AvatarImage src={getImageUrl(user.avatar)} alt={user.name} />
                       <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
                         {getInitials(user.name)}
                       </AvatarFallback>

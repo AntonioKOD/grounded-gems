@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils"
 import { useAuth } from "@/hooks/use-auth"
 import Image from 'next/image'
 import NotificationCenter from "@/components/notifications/notification-center"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface NavBarProps {
   initialUser?: any;
@@ -225,7 +226,7 @@ export default function NavBar({ initialUser }: NavBarProps) {
                       >
                         {user?.profileImage?.url && !imageError ? (
                           <Image
-                            src={user.profileImage.url} 
+                            src={getImageUrl(user.profileImage.url)} 
                             alt={user.profileImage?.alt || user.name || 'User avatar'}
                             width={44}
                             height={44}

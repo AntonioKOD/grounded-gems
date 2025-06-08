@@ -1059,13 +1059,9 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     
     try {
       const shareUrl = createLocationShareUrl(location.id, location.name, location.slug)
-      const title = location.name
-      const text = location.shortDescription || location.description || `Check out ${location.name} on Sacavia!`
       
       if (navigator.share) {
         await navigator.share({
-          title,
-          text,
           url: shareUrl,
         })
       } else {

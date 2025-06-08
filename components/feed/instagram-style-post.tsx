@@ -215,11 +215,10 @@ const SocialMediaPost = memo(function SocialMediaPost({
   const isSaving = loadingSaves.includes(post.id)
 
   // User profile helpers
-  const getAuthorProfileImageUrl = () => {
-    if (post.author.profileImage?.url) return post.author.profileImage.url
-    if (post.author.avatar) return post.author.avatar
-    return "/placeholder.svg"
-  }
+  const getAuthorProfileImageUrl = useCallback(() => {
+    const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
+    return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
+  }, [post.author.profileImage?.url, post.author.avatar])
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)

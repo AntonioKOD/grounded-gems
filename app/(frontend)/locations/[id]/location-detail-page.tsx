@@ -30,6 +30,8 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/use-auth"
+import { cn } from "@/lib/utils"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface Location {
   id: string
@@ -180,11 +182,10 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
   // Interaction handlers
   const handleShare = useCallback(async () => {
     const url = window.location.href
-    const title = location?.name || "Check out this location"
     
     if (navigator.share) {
       try {
-        await navigator.share({ title, url })
+        await navigator.share({ url })
       } catch (err) {
         console.log("Share cancelled")
       }
@@ -192,7 +193,7 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
       await navigator.clipboard.writeText(url)
       toast.success("Link copied to clipboard!")
     }
-  }, [location?.name])
+  }, [])
 
   const handleGetDirections = useCallback(() => {
     const coords = getCoordinates(location!)
@@ -618,7 +619,7 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
                 <CardContent>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={location.createdBy.profileImage?.url || "/placeholder.svg"} />
+                                                    <AvatarImage src={getImageUrl(location.createdBy.profileImage?.url) || "/placeholder.svg"} />
                       <AvatarFallback>
                         {location.createdBy.name?.charAt(0) || 'U'}
                       </AvatarFallback>

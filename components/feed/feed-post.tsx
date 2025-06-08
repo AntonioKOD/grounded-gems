@@ -271,6 +271,12 @@ export const FeedPost = memo(function FeedPost({
       .substring(0, 2)
   }
 
+  // Get author profile image URL using proper image utility
+  const getAuthorProfileImageUrl = useCallback(() => {
+    const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
+    return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
+  }, [post.author.profileImage?.url, post.author.avatar])
+
   // Video player controls
   const handleVideoPlay = useCallback(() => {
     if (videoRef.current) {
@@ -340,19 +346,7 @@ export const FeedPost = memo(function FeedPost({
                   <div className="w-full h-full rounded-full bg-white p-[2px] group-hover:bg-gray-50 transition-colors">
                     <Avatar className="h-full w-full border-0 shadow-xl">
                       <AvatarImage 
-                        src={(() => {
-                          const src = post.author.profileImage?.url || post.author.avatar || "/placeholder.svg"
-                          if (post.author.profileImage?.url || post.author.avatar) {
-                            console.log('🖼️ [FeedPost] Using profile image:', {
-                              authorId: post.author.id,
-                              authorName: post.author.name,
-                              profileImageUrl: post.author.profileImage?.url,
-                              avatar: post.author.avatar,
-                              usingSource: src
-                            })
-                          }
-                          return src
-                        })()} 
+                        src={getAuthorProfileImageUrl()} 
                         alt={post.author.name} 
                         className="object-cover rounded-full" 
                       />

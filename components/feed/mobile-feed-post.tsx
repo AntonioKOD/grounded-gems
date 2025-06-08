@@ -158,15 +158,17 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  // Get author profile image URL with robust fallbacks
-  const getAuthorProfileImageUrl = () => {
-    // Match the exact priority from the web app's EnhancedFeedPost component
-    if (post.author.profileImage?.url) return post.author.profileImage.url;
-    if (post.author.avatar) return post.author.avatar;
-    if (typeof post.author.profilePicture === 'string') return post.author.profilePicture;
-    if (post.author.profilePicture?.url) return post.author.profilePicture.url;
-    return "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=400&fit=facearea&facepad=2&q=80";
-  };
+  // Get author profile image URL with robust fallbacks using proper image utility
+  const getAuthorProfileImageUrl = useCallback(() => {
+    const profileImageUrl = getImageUrl(
+      post.author.profileImage?.url || 
+      post.author.avatar || 
+      post.author.profilePicture?.url || 
+      post.author.profilePicture
+    )
+    // Fallback to placeholder if getImageUrl returns placeholder
+    return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
+  }, [post.author.profileImage?.url, post.author.avatar, post.author.profilePicture])
   
   // Auto-hide actions after 4 seconds, longer than before for better UX
   useEffect(() => {

@@ -51,6 +51,8 @@ import ViewListModal from '@/components/bucket-list/view-list-modal'
 import EditListModal from '@/components/bucket-list/edit-list-modal'
 import ShareListModal from '@/components/bucket-list/share-list-modal'
 import ItemCompletionModal from '@/components/bucket-list/item-completion-modal'
+import { cn } from "@/lib/utils"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface BucketListItem {
   id: string
@@ -348,7 +350,7 @@ function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemSta
                 {list.collaborators.map((collaborator) => (
                   <div key={collaborator.id} className="flex items-center gap-2 bg-gray-50 rounded-full px-3 py-2">
                     <Avatar className="h-6 w-6">
-                      <AvatarImage src={collaborator.profileImage?.url} />
+                                                    <AvatarImage src={getImageUrl(collaborator.profileImage?.url)} />
                       <AvatarFallback className="text-xs">
                         {collaborator.name.charAt(0)}
                       </AvatarFallback>

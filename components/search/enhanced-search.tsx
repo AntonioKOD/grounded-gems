@@ -12,6 +12,9 @@ import Link from "next/link"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
+import { motion, AnimatePresence } from "framer-motion"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface SearchUser {
   id: string
@@ -105,7 +108,7 @@ const getLocationImageUrl = (location: SearchLocation): string => {
 
 const getUserAvatarUrl = (user: SearchUser): string => {
   if (user.profileImage?.url) {
-    return user.profileImage.url
+    return getImageUrl(user.profileImage.url)
   }
   return ""
 }

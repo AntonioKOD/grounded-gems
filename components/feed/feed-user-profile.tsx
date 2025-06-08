@@ -5,6 +5,7 @@ import Link from "next/link"
 import { MoreVertical, Settings, User, LogOut, Bell, Edit, Bookmark } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { getImageUrl } from "@/lib/image-utils"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { logoutUser } from "@/lib/auth"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 
 interface FeedUserProfileProps {
   user: any
@@ -77,7 +81,7 @@ export default function FeedUserProfile({
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={user.avatar} alt={user.name} />
+                <AvatarImage src={getImageUrl(user.avatar)} alt={user.name} />
                 <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
               </Avatar>
             </Button>
@@ -112,7 +116,7 @@ export default function FeedUserProfile({
     <div className={`flex items-center justify-between p-4 ${className}`}>
       <Link href={`/profile/${user.id}`} className="flex items-center group">
         <Avatar className="h-10 w-10 mr-3 group-hover:ring-2 ring-[#FF6B6B]/20 transition-all">
-          <AvatarImage src={user.avatar} alt={user.name} />
+                          <AvatarImage src={getImageUrl(user.avatar)} alt={user.name} />
           <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
         </Avatar>
         <div>

@@ -351,6 +351,12 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       .substring(0, 2)
   }
 
+  // Get author profile image URL using proper image utility
+  const getAuthorProfileImageUrl = useCallback(() => {
+    const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
+    return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
+  }, [post.author.profileImage?.url, post.author.avatar])
+
   return (
     <>
       <motion.div
@@ -532,7 +538,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10 ring-2 ring-white/20 shadow-lg">
                 <AvatarImage 
-                  src={getImageUrl(post.author.profileImage?.url || post.author.avatar)} 
+                  src={getAuthorProfileImageUrl()} 
                   alt={post.author.name} 
                 />
                 <AvatarFallback className="bg-gray-800 text-white text-sm font-medium">

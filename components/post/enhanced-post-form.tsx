@@ -19,6 +19,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createPost } from "@/app/actions"
 import { useLocationSearch, type LocationResult } from "@/hooks/useLocationSearch"
 import Image from "next/image"
+import { cn } from "@/lib/utils"
+import { isValidUrl } from "@/lib/validation"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface EnhancedPostFormProps {
   user: {
@@ -920,7 +923,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           {/* Author info */}
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={user.profileImage?.url || user.avatar} alt={user.name} />
+              <AvatarImage src={getImageUrl(user.profileImage?.url || user.avatar)} alt={user.name} />
               <AvatarFallback className="bg-blue-500 text-white">
                 {userInitials}
               </AvatarFallback>
@@ -980,7 +983,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={user.profileImage?.url || user.avatar} alt={user.name} />
+              <AvatarImage src={getImageUrl(user.profileImage?.url || user.avatar)} alt={user.name} />
               <AvatarFallback className="bg-blue-500 text-white">
                 {userInitials}
               </AvatarFallback>

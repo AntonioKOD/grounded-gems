@@ -54,6 +54,7 @@ import EnhancedPostsGrid from "./enhanced-posts-grid"
 import type { UserProfile } from "@/types/user"
 import Link from "next/link"
 import { logoutUser } from "@/lib/auth"
+import { getImageUrl } from "@/lib/image-utils"
 
 export default function ProfileContent({
   initialUserData,
@@ -378,6 +379,13 @@ export default function ProfileContent({
         }
   }
 
+  // Get profile image URL using proper image utility
+  const getProfileImageUrl = () => {
+    if (!profile?.profileImage?.url) return "/placeholder.svg"
+    const imageUrl = getImageUrl(profile.profileImage.url)
+    return imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder.svg"
+  }
+
   // Get social icon
   const getSocialIcon = useCallback((platform: string) => {
     switch (platform) {
@@ -549,16 +557,7 @@ export default function ProfileContent({
                       <Avatar className="w-full h-full border-4 border-white shadow-lg">
                         {profile.profileImage ? (
                           <AvatarImage 
-                            src={(() => {
-                              const src = profile.profileImage.url || "/placeholder.svg"
-                              console.log('🖼️ [ProfileContent] Profile image data:', {
-                                userId: profile.id,
-                                userName: profile.name,
-                                profileImage: profile.profileImage,
-                                imageUrl: src
-                              })
-                              return src
-                            })()} 
+                            src={getProfileImageUrl()} 
                             alt={profile.name || "User"} 
                           />
                         ) : (

@@ -253,8 +253,6 @@ const LocationInteractions = memo(function LocationInteractions({
     try {
       if (navigator.share) {
         await navigator.share({
-          title: location.name,
-          text: `Check out ${location.name}!`,
           url: window.location.href,
         })
       } else {
@@ -269,7 +267,7 @@ const LocationInteractions = memo(function LocationInteractions({
     } finally {
       setIsLoading(prev => ({ ...prev, share: false }))
     }
-  }, [location.name, debouncedInteraction])
+  }, [debouncedInteraction])
 
   const submitEventRequest = useCallback(async () => {
     if (!currentUserId) {

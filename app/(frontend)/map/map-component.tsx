@@ -370,7 +370,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           logoPosition: 'bottom-left',
           pitchWithRotate: false,
           dragRotate: false,
-          touchZoomRotate: false,
+          // Enhanced mobile touch interactions
+          touchZoomRotate: isMobile ? { around: 'center' } : false, // Enable touch zoom with center focus on mobile
           // Enhanced mobile optimizations
           cooperativeGestures: false, // Allow normal scrolling for easier mobile use
           touchPitch: false,
@@ -389,6 +390,9 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           fadeDuration: isMobile ? 100 : 300,
           // Better touch handling
           clickTolerance: isMobile ? 8 : 3,
+          // Enhanced mobile zoom settings
+          minZoom: isMobile ? 1 : 2, // Allow more zoom out on mobile
+          maxZoom: isMobile ? 20 : 18, // Allow more zoom in on mobile
         })
         
         console.log('🗺️ Map instance created with center:', center, 'zoom:', zoom)
@@ -1604,8 +1608,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           width: '100%',
           height: '100%',
           position: 'relative',
-          // Mobile touch optimizations
-          touchAction: isMobile ? 'pan-x pan-y' : 'none',
+          // Mobile touch optimizations - enable all gestures for map
+          touchAction: isMobile ? 'manipulation' : 'none',
           WebkitTouchCallout: 'none',
           WebkitUserSelect: 'none',
           userSelect: 'none',

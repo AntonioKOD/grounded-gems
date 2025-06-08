@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MapPin, Calendar, LinkIcon, UserPlus, UserCheck } from "lucide-react"
 import { followUser, unfollowUser } from "@/app/actions"
 import { toast } from "sonner"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface ProfileHeaderProps {
   profileUser: any
@@ -74,6 +75,13 @@ export default function ProfileHeader({
       .substring(0, 2)
   }
 
+  // Get profile image URL using proper image utility
+  const getProfileImageUrl = () => {
+    if (!profileUser?.profileImage?.url) return "/placeholder.svg"
+    const imageUrl = getImageUrl(profileUser.profileImage.url)
+    return imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder.svg"
+  }
+
   return (
     <div className="space-y-6">
       {/* Cover image */}
@@ -85,7 +93,7 @@ export default function ProfileHeader({
       <div className="flex flex-col md:flex-row gap-6 items-start md:items-end -mt-16 md:-mt-20 px-4">
         <Avatar className="h-32 w-32 border-4 border-white">
           {profileUser.profileImage?.url ? (
-            <AvatarImage src={profileUser.profileImage.url || "/placeholder.svg"} alt={profileUser.name} />
+            <AvatarImage src={getProfileImageUrl()} alt={profileUser.name} />
           ) : (
             <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B] text-4xl">
               {getInitials(profileUser.name || "")}

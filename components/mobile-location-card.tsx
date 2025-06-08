@@ -121,13 +121,9 @@ export default function MobileLocationCard({
     } else {
       try {
         const shareUrl = `${window.location.origin}/locations/${location.id}`
-        const title = location.name
-        const text = location.shortDescription || location.description || `Check out ${location.name} on Sacavia!`
         
         if (navigator.share) {
           await navigator.share({
-            title,
-            text,
             url: shareUrl,
           })
         } else {

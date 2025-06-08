@@ -31,6 +31,11 @@ import {
 // Define the form schema with Zod
 const profileFormSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  username: z.string()
+    .min(3, { message: "Username must be at least 3 characters." })
+    .max(30, { message: "Username must be less than 30 characters." })
+    .regex(/^[a-z0-9_-]+$/, { message: "Username can only contain lowercase letters, numbers, hyphens, and underscores." })
+    .optional(),
   bio: z.string().optional(),
   location: z.object({
     city: z.string().optional(),
@@ -62,6 +67,7 @@ interface ProfileEditFormProps {
   user: {
     id: string
     name?: string
+    username?: string
     bio?: string
     location?: {
       city?: string
@@ -113,6 +119,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
     resolver: zodResolver(profileFormSchema),
     defaultValues: {
       name: user.name || "",
+      username: user.username || "",
       bio: user.bio || "",
       location: {
         city: user.location?.city || "",
@@ -257,6 +264,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
       // First update the basic profile information
       const profileData: ProfileUpdateData = {
         name: data.name,
+        username: data.username,
         bio: data.bio,
         location: data.location,
         interests: data.interests,
@@ -413,6 +421,30 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                     <Input placeholder="Your name" {...field} />
                   </FormControl>
                   <FormDescription>This is your public display name.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Username Field */}
+            <FormField
+              control={form.control}
+              name="username"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Username</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="your_username" 
+                      {...field} 
+                      value={field.value || ""}
+                      onChange={(e) => {
+                        const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+                        field.onChange(value)
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>Your unique username (letters, numbers, hyphens, and underscores only).</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

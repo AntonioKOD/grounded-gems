@@ -1265,16 +1265,23 @@
   
   /* Improve touch performance */
   .mapboxgl-map {
-    touch-action: pan-x pan-y !important;
+    touch-action: manipulation !important; /* Enable pinch-zoom on mobile */
     -webkit-touch-callout: none !important;
     -webkit-user-select: none !important;
     user-select: none !important;
+    /* Improve scrolling performance */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: none;
   }
   
   /* Better mobile scrolling */
   .map-container {
+    touch-action: manipulation !important; /* Allow all touch gestures for map interaction */
     overscroll-behavior: none !important;
     -webkit-overflow-scrolling: touch !important;
+    /* Prevent page bounce while allowing map gestures */
+    overscroll-behavior-y: none;
+    overscroll-behavior-x: none;
   }
   
   /* Enhanced toggle button for mobile */

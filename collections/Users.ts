@@ -318,7 +318,13 @@ export const Users: CollectionConfig = {
       admin: {
         description: 'Unique username for the user (no spaces, lowercase)'
       },
-      validate: (value: any) => {
+      validate: (value: any, { operation }: any) => {
+        // For update operations, allow empty username if it's not being changed
+        if (operation === 'update' && (!value || value === '')) {
+          return true
+        }
+        
+        // For create operations or when username is being set, validate
         if (!value) return 'Username is required'
         if (!/^[a-z0-9_-]+$/.test(value)) {
           return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'

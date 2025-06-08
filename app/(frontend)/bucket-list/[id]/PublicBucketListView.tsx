@@ -9,15 +9,12 @@ import {
   MapPin, 
   CheckCircle2, 
   Clock, 
-  Star,
   Share2,
   Target,
   Trophy,
   Copy,
   Check,
-  ChevronLeft,
-  ExternalLink,
-  Heart
+  ChevronLeft
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,6 +29,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface BucketListItem {
   id: string
@@ -253,7 +251,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
               {/* Owner Info */}
               <div className="flex items-center gap-3 mb-4">
                 <Avatar>
-                  <AvatarImage src={bucketList.owner.profileImage?.url} />
+                                          <AvatarImage src={getImageUrl(bucketList.owner.profileImage?.url)} />
                   <AvatarFallback className="bg-[#4ecdc4]/20 text-[#4ecdc4]">
                     {bucketList.owner.name?.charAt(0) || 'U'}
                   </AvatarFallback>
@@ -293,7 +291,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
                   <div className="flex -space-x-2">
                     {bucketList.collaborators.slice(0, 5).map((collaborator) => (
                       <Avatar key={collaborator.id} className="border-2 border-white">
-                        <AvatarImage src={collaborator.profileImage?.url} />
+                                                      <AvatarImage src={getImageUrl(collaborator.profileImage?.url)} />
                         <AvatarFallback className="bg-[#4ecdc4]/20 text-[#4ecdc4]">
                           {collaborator.name?.charAt(0) || 'C'}
                         </AvatarFallback>

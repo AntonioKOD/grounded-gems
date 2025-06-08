@@ -29,7 +29,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { useAppDispatch, useAppSelector } from "@/lib/hooks"
-import { addCommentAsync, fetchCommentsAsync } from "@/lib/features/posts/postsSlice"
+import { 
+  addCommentAsync, 
+  fetchCommentsAsync, 
+  likeCommentAsync
+} from "@/lib/features/posts/postsSlice"
+import { getImageUrl } from "@/lib/image-utils"
 
 // Analyze sentiment of comment text
 const analyzeSentiment = (text: string): "positive" | "neutral" | "negative" => {
@@ -479,7 +484,7 @@ export function CommentSystem({ postId, user, initialComments = [], className }:
                 <div className="mb-6">
                   <div className="flex gap-3">
                     <Avatar className="h-8 w-8 ring-2 ring-[#FF6B6B]/20">
-                      <AvatarImage src={user.avatar} alt={user.name} />
+                      <AvatarImage src={getImageUrl(user.avatar)} alt={user.name} />
                       <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
                         {getInitials(user.name)}
                       </AvatarFallback>

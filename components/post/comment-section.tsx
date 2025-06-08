@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { formatDistanceToNow } from "date-fns"
-import { Heart, AlertCircle } from 'lucide-react'
+import { Heart, AlertCircle, MessageCircle, MoreHorizontal, Send, Reply } from 'lucide-react'
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { getCommentsByPostId, addComment, likeComment } from "@/app/actions"
 import type { Comment } from "@/types/feed"
+import { getImageUrl } from "@/lib/image-utils"
 
 interface CommentSectionProps {
   postId: string
@@ -167,7 +168,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
         <div className="flex gap-3">
           <Avatar className="h-10 w-10">
             {currentUser?.profileImage?.url ? (
-              <AvatarImage src={currentUser.profileImage.url || "/placeholder.svg"} alt={currentUser.name} />
+                                    <AvatarImage src={getImageUrl(currentUser.profileImage?.url) || "/placeholder.svg"} alt={currentUser.name} />
             ) : (
               <AvatarFallback className="bg-[#FF6B6B]/10 text-[#FF6B6B]">
                 {currentUser?.name?.charAt(0).toUpperCase() || "?"}
