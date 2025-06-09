@@ -334,6 +334,14 @@ export const Users: CollectionConfig = {
         return true
       }
     },
+    { 
+      name: 'lastUsernameChange', 
+      type: 'date',
+      admin: {
+        description: 'When the user last changed their username (7-day cooldown)',
+        readOnly: true
+      }
+    },
     { name: 'profileImage', type: 'upload', relationTo: 'media' },
     { name: 'bio', type: 'textarea' },
     {

@@ -14,12 +14,63 @@ export interface ProfileUpdateData {
     state?: string
     country?: string
   }
-  interests?: { interest: string }[]
+  interests?: string[]
   socialLinks?: {
     platform: "instagram" | "twitter" | "tiktok" | "youtube" | "website"
     url: string
   }[]
   profileImage?: string | null // ID of the uploaded media
+}
+
+/**
+ * Checks if a user can change their username (7-day cooldown)
+ * @param userId - The ID of the user
+ * @returns Object with canChange boolean and nextChangeDate if applicable
+ */
+export async function checkUsernameChangeCooldown(userId: string) {
+  if (!userId) {
+    throw new Error("User ID is required")
+  }
+
+  try {
+    const payload = await getPayload({ config })
+
+    const user = await payload.findByID({
+      collection: "users",
+      id: userId,
+    })
+
+    if (!user) {
+      throw new Error("User not found")
+    }
+
+    // If user has never changed username, they can change it
+    if (!user.lastUsernameChange) {
+      return {
+        canChange: true,
+        nextChangeDate: null,
+        daysRemaining: 0
+      }
+    }
+
+    const lastChange = new Date(user.lastUsernameChange)
+    const now = new Date()
+    const daysSinceLastChange = Math.floor((now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24))
+    const daysRemaining = Math.max(0, 7 - daysSinceLastChange)
+    
+    const nextChangeDate = new Date(lastChange)
+    nextChangeDate.setDate(nextChangeDate.getDate() + 7)
+
+    return {
+      canChange: daysSinceLastChange >= 7,
+      nextChangeDate: daysRemaining > 0 ? nextChangeDate : null,
+      daysRemaining,
+      lastChangeDate: lastChange
+    }
+  } catch (error) {
+    console.error("Error checking username change cooldown:", error)
+    throw error
+  }
 }
 
 /**
@@ -81,12 +132,27 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
     if (data.name !== undefined) updateData.name = data.name
     if (data.bio !== undefined) updateData.bio = data.bio
 
-    // Handle username with validation - only if explicitly provided
+    // Handle username with validation and cooldown check - only if explicitly provided
     if (data.username !== undefined && data.username !== null) {
       const username = data.username.trim().toLowerCase()
       
       // If username is provided and not empty, validate it
       if (username) {
+        // Get current user to check existing username
+        const currentUser = await payload.findByID({
+          collection: "users",
+          id: userId,
+        })
+
+        // Only check cooldown if username is actually being changed
+        if (currentUser.username && currentUser.username !== username) {
+          const cooldownCheck = await checkUsernameChangeCooldown(userId)
+          
+          if (!cooldownCheck.canChange) {
+            throw new Error(`You can change your username again in ${cooldownCheck.daysRemaining} day(s). Next change available: ${cooldownCheck.nextChangeDate?.toLocaleDateString()}`)
+          }
+        }
+
         // Validate username format
         if (!/^[a-z0-9_-]+$/.test(username)) {
           throw new Error("Username can only contain lowercase letters, numbers, hyphens, and underscores")
@@ -115,6 +181,14 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
         }
         
         updateData.username = username
+        
+        // If username is actually being changed, update the lastUsernameChange timestamp
+        if (currentUser.username && currentUser.username !== username) {
+          updateData.lastUsernameChange = new Date().toISOString()
+        } else if (!currentUser.username) {
+          // First time setting username, also update the timestamp
+          updateData.lastUsernameChange = new Date().toISOString()
+        }
       }
       // If username is provided but empty, we'll let Payload handle it according to the validation rules
       else if (data.username === '') {
@@ -134,9 +208,9 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
 
     // Handle interests as an array field
     if (data.interests) {
-      updateData.interests = data.interests.map((interest) => ({
-        interest: interest.interest,
-      }))
+      updateData.interests = data.interests.map((interest) => 
+        typeof interest === 'string' ? interest : interest.interest
+      )
     }
 
     // Handle social links as an array field

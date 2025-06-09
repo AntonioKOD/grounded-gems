@@ -52,8 +52,6 @@ export async function GET(req: NextRequest) {
         completedAt: item.completedAt || null,
         completionData: item.completionData || null,
         addedAt: item.addedAt || new Date().toISOString(),
-        isAiGenerated: item.isAiGenerated || false,
-        aiLocationText: item.aiLocationText || null,
         notes: item.notes || null,
       })),
       stats: {
@@ -115,13 +113,11 @@ export async function POST(req: NextRequest) {
         collaborators: type === 'shared' ? collaborators : [],
         isPublic,
         items: items.map((item: any) => {
-          // Handle both AI-generated and regular items
           const bucketListItem: any = {
             goal: item.goal || '',
             priority: item.priority || 'medium',
             status: item.status || 'not_started',
-            addedAt: item.addedAt || new Date().toISOString(),
-            isAiGenerated: item.isAiGenerated || false
+            addedAt: item.addedAt || new Date().toISOString()
           }
 
           // Add location reference if available
@@ -129,16 +125,11 @@ export async function POST(req: NextRequest) {
             bucketListItem.location = item.location
           }
 
-          // Add AI-specific fields if present
-          if (item.isAiGenerated) {
-            if (item.aiLocationText) bucketListItem.aiLocationText = item.aiLocationText
-            if (item.notes) bucketListItem.notes = item.notes
-          }
-
-          // Add other optional fields
+          // Add optional fields
           if (item.dueDate) bucketListItem.dueDate = item.dueDate
           if (item.completedAt) bucketListItem.completedAt = item.completedAt
           if (item.completionData) bucketListItem.completionData = item.completionData
+          if (item.notes) bucketListItem.notes = item.notes
 
           return bucketListItem
         })
@@ -169,8 +160,6 @@ export async function POST(req: NextRequest) {
         completedAt: item.completedAt || null,
         completionData: item.completionData || null,
         addedAt: item.addedAt || new Date().toISOString(),
-        isAiGenerated: item.isAiGenerated || false,
-        aiLocationText: item.aiLocationText || null,
         notes: item.notes || null,
       })),
       stats: {

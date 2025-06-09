@@ -3,7 +3,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -25,6 +25,7 @@ import {
   updateUserProfile,
   updateCreatorStatus,
   updateProfileImage,
+  checkUsernameChangeCooldown,
   type ProfileUpdateData,
 } from "@/app/(frontend)/profile/actions"
 
@@ -42,13 +43,7 @@ const profileFormSchema = z.object({
     state: z.string().optional(),
     country: z.string().optional(),
   }),
-  interests: z
-    .array(
-      z.object({
-        interest: z.string(),
-      }),
-    )
-    .optional(),
+  interests: z.array(z.string()).optional(),
   socialLinks: z
     .array(
       z.object({
@@ -74,7 +69,7 @@ interface ProfileEditFormProps {
       state?: string
       country?: string
     }
-    interests?: { interest: string }[]
+    interests?: string[]
     socialLinks?: {
       platform: "instagram" | "twitter" | "tiktok" | "youtube" | "website"
       url: string
@@ -98,6 +93,40 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(user.profileImage?.url || null)
   const [profileImageId, setProfileImageId] = useState<string | null>(null)
+
+  // Username cooldown states
+  const [usernameCooldown, setUsernameCooldown] = useState<{
+    canChange: boolean
+    daysRemaining: number
+    nextChangeDate: Date | null
+    lastChangeDate?: Date
+  } | null>(null)
+  const [isCheckingCooldown, setIsCheckingCooldown] = useState(false)
+
+  // Check username cooldown on component mount
+  useEffect(() => {
+    const checkCooldown = async () => {
+      if (!user.id) return
+      
+      try {
+        setIsCheckingCooldown(true)
+        const cooldownInfo = await checkUsernameChangeCooldown(user.id)
+        setUsernameCooldown(cooldownInfo)
+      } catch (error) {
+        console.error("Error checking username cooldown:", error)
+        // If there's an error, assume they can change it
+        setUsernameCooldown({
+          canChange: true,
+          daysRemaining: 0,
+          nextChangeDate: null
+        })
+      } finally {
+        setIsCheckingCooldown(false)
+      }
+    }
+
+    checkCooldown()
+  }, [user.id])
 
   // Simulate progress during upload
   const simulateProgress = () => {
@@ -218,7 +247,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
   // Add a new interest field
   const addInterest = () => {
     const currentInterests = form.getValues("interests") || []
-    form.setValue("interests", [...currentInterests, { interest: "" }])
+    form.setValue("interests", [...currentInterests, ""])
   }
 
   // Remove an interest field
@@ -267,7 +296,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
         username: data.username,
         bio: data.bio,
         location: data.location,
-        interests: data.interests,
+        interests: data.interests?.filter(interest => interest.trim() !== ""), // Filter out empty interests
         socialLinks: data.socialLinks,
       }
 
@@ -438,13 +467,32 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                       placeholder="your_username" 
                       {...field} 
                       value={field.value || ""}
+                      disabled={isCheckingCooldown || (usernameCooldown && !usernameCooldown.canChange)}
                       onChange={(e) => {
                         const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
                         field.onChange(value)
                       }}
                     />
                   </FormControl>
-                  <FormDescription>Your unique username (letters, numbers, hyphens, and underscores only).</FormDescription>
+                  <FormDescription>
+                    Your unique username (letters, numbers, hyphens, and underscores only).
+                    {isCheckingCooldown && (
+                      <span className="block text-sm text-gray-500 mt-1">
+                        Checking username change availability...
+                      </span>
+                    )}
+                    {usernameCooldown && !usernameCooldown.canChange && (
+                      <span className="block text-sm text-orange-600 mt-1">
+                        You can change your username again in {usernameCooldown.daysRemaining} day(s). 
+                        Next change available: {usernameCooldown.nextChangeDate?.toLocaleDateString()}
+                      </span>
+                    )}
+                    {usernameCooldown && usernameCooldown.canChange && usernameCooldown.lastChangeDate && (
+                      <span className="block text-sm text-green-600 mt-1">
+                        Username can be changed. Last changed: {usernameCooldown.lastChangeDate.toLocaleDateString()}
+                      </span>
+                    )}
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -533,7 +581,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                 <div key={index} className="flex items-center gap-2">
                   <FormField
                     control={form.control}
-                    name={`interests.${index}.interest`}
+                    name={`interests.${index}`}
                     render={({ field }) => (
                       <FormItem className="flex-1">
                         <FormControl>

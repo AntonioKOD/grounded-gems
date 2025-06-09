@@ -34,7 +34,7 @@ export interface BucketList {
   id: string
   name: string
   description?: string
-  type: 'personal' | 'shared' | 'ai-generated'
+  type: 'personal' | 'shared'
   stats: {
     totalItems: number
     completedItems: number

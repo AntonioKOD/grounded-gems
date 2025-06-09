@@ -6,7 +6,6 @@ import {
   Plus, 
   Sparkles, 
   Users, 
-  Brain, 
   Calendar, 
   MapPin, 
   CheckCircle2, 
@@ -51,6 +50,7 @@ import ViewListModal from '@/components/bucket-list/view-list-modal'
 import EditListModal from '@/components/bucket-list/edit-list-modal'
 import ShareListModal from '@/components/bucket-list/share-list-modal'
 import ItemCompletionModal from '@/components/bucket-list/item-completion-modal'
+import AddItemModal from '@/components/bucket-list/add-item-modal'
 import { cn } from "@/lib/utils"
 import { getImageUrl } from "@/lib/image-utils"
 
@@ -75,9 +75,6 @@ interface BucketListItem {
     xpEarned?: number
   }
   addedAt: string
-  // AI-generated item fields
-  isAiGenerated?: boolean
-  aiLocationText?: string
   notes?: string
 }
 
@@ -85,7 +82,7 @@ interface BucketList {
   id: string
   name: string
   description?: string
-  type: 'personal' | 'shared' | 'ai-generated'
+  type: 'personal' | 'shared'
   owner: {
     id: string
     name: string
@@ -139,31 +136,51 @@ interface ViewListModalProps {
   onOpenCompletionModal: (item: BucketListItem, listId: string) => void
   onItemStatusUpdate: (listId: string, itemId: string, newStatus: BucketListItem['status']) => void
   isUpdatingItemStatus: boolean
+  onItemAdded?: (item: BucketListItem) => void
 }
 
-function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemStatusUpdate, isUpdatingItemStatus }: ViewListModalProps) {
+function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemStatusUpdate, isUpdatingItemStatus, onItemAdded }: ViewListModalProps) {
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false)
+
   if (!list) return null
 
   const TypeIcon = getTypeIcon(list.type)
+
+  const handleItemAdded = (newItem: BucketListItem) => {
+    onItemAdded?.(newItem)
+    setIsAddItemModalOpen(false)
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden border-[#4ecdc4]/20">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] rounded-full flex items-center justify-center shadow-lg">
-              <TypeIcon className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">{list.name}</h2>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge className={`${getTypeColor(list.type)} border-0 shadow-sm text-xs px-2 py-0.5`}>
-                  <TypeIcon className="h-3 w-3 mr-1" />
-                  {list.type.charAt(0).toUpperCase() + list.type.slice(1)}
-                </Badge>
-                <p className="text-sm text-gray-500 font-normal">{list.description}</p>
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] rounded-full flex items-center justify-center shadow-lg">
+                <TypeIcon className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{list.name}</h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge className={`${getTypeColor(list.type)} border-0 shadow-sm text-xs px-2 py-0.5`}>
+                    <TypeIcon className="h-3 w-3 mr-1" />
+                    {list.type.charAt(0).toUpperCase() + list.type.slice(1)}
+                  </Badge>
+                  <p className="text-sm text-gray-500 font-normal">{list.description}</p>
+                </div>
               </div>
             </div>
+            
+            {/* Add Item Button */}
+            <Button
+              onClick={() => setIsAddItemModalOpen(true)}
+              size="sm"
+              className="bg-gradient-to-r from-[#4ecdc4] to-[#ff6b6b] hover:from-[#3dbdb4] hover:to-[#ff5555] text-white border-0 shadow-lg"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
           </DialogTitle>
         </DialogHeader>
 
@@ -195,15 +212,34 @@ function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemSta
 
           {/* Bucket List Items */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Target className="h-5 w-5 text-[#ff6b6b]" />
-              Bucket List Items
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Target className="h-5 w-5 text-[#ff6b6b]" />
+                Bucket List Items
+              </h3>
+              <Button
+                onClick={() => setIsAddItemModalOpen(true)}
+                size="sm"
+                variant="outline"
+                className="text-[#4ecdc4] border-[#4ecdc4]/30 hover:bg-[#4ecdc4]/10"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Item
+              </Button>
+            </div>
             
             {list.items.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Target className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No items in this list yet</p>
+                <p className="mb-4">No items in this list yet</p>
+                <Button
+                  onClick={() => setIsAddItemModalOpen(true)}
+                  size="sm"
+                  className="bg-gradient-to-r from-[#4ecdc4] to-[#ff6b6b] hover:from-[#3dbdb4] hover:to-[#ff5555] text-white border-0 shadow-lg"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Item
+                </Button>
               </div>
             ) : (
               <ul className="space-y-3">
@@ -226,9 +262,7 @@ function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemSta
                         <div className="flex items-center justify-between mb-1">
                           <h4 className={`font-medium text-gray-900 truncate ${isCompleted ? 'line-through' : ''}`}>{displayText}</h4>
                           <div className="flex items-center gap-2">
-                            {item.isAiGenerated && (
-                              <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">AI</Badge>
-                            )}
+
                             <Badge className={`text-xs ${PRIORITY_COLORS[item.priority]}`}>
                               {item.priority}
                             </Badge>
@@ -243,12 +277,7 @@ function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemSta
                           <p className={`text-xs text-gray-500 mt-1 italic ${isCompleted ? 'line-through' : ''}`}>{item.notes}</p>
                         )}
                         
-                        {item.aiLocationText && (
-                          <p className="text-xs text-blue-600 mt-1 flex items-center">
-                            <MapPin className="h-3 w-3 mr-1" />
-                            {item.aiLocationText}
-                          </p>
-                        )}
+
 
                         {item.dueDate && (
                           <div className={`text-xs mt-1 flex items-center ${new Date(item.dueDate) < new Date() && !isCompleted ? 'text-red-500' : 'text-gray-500'}`}>
@@ -363,9 +392,14 @@ function ViewListModal({ list, isOpen, onClose, onOpenCompletionModal, onItemSta
           )}
         </div>
 
-        <div className="mt-auto p-6 border-t bg-gray-50">
-          <Button onClick={onClose} variant="outline" className="w-full">Close</Button>
-        </div>
+        {/* Add Item Modal */}
+        <AddItemModal
+          isOpen={isAddItemModalOpen}
+          onClose={() => setIsAddItemModalOpen(false)}
+          bucketListId={list.id}
+          bucketListName={list.name}
+          onItemAdded={handleItemAdded}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -562,7 +596,6 @@ const getTypeIcon = (type: string) => {
   switch (type) {
     case 'personal': return Target
     case 'shared': return Users
-    case 'ai-generated': return Brain
     default: return Target
   }
 }
@@ -571,7 +604,6 @@ const getTypeColor = (type: string) => {
   switch (type) {
     case 'personal': return 'bg-[#4ecdc4]/20 text-[#3a9d96]'
     case 'shared': return 'bg-[#ffe66d]/20 text-[#b8860b]'
-    case 'ai-generated': return 'bg-[#ff6b6b]/20 text-[#cc5555]'
     default: return 'bg-gray-100 text-gray-700'
   }
 }
@@ -600,17 +632,6 @@ const getItemDisplayText = (item: BucketListItem): string => {
   // Prioritize location name if available
   if (item.location?.name) {
     return item.location.name
-  }
-  
-  // For AI-generated items, use AI location text or goal
-  if (item.isAiGenerated) {
-    if (item.aiLocationText) {
-      return item.aiLocationText
-    }
-    if (item.goal) {
-      return item.goal
-    }
-    return 'AI-generated experience'
   }
   
   // Fallback for regular items without location
@@ -990,6 +1011,30 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
     }
   }
 
+  // Handle when a new item is added to a bucket list
+  const handleItemAdded = (bucketListId: string, newItem: BucketListItem) => {
+    setBucketLists(prev => prev.map(list => {
+      if (list.id === bucketListId) {
+        const updatedItems = [...list.items, newItem]
+        const completedItems = updatedItems.filter(item => item.status === 'completed').length
+        const progressPercentage = updatedItems.length > 0 ? Math.round((completedItems / updatedItems.length) * 100) : 0
+        
+        return {
+          ...list,
+          items: updatedItems,
+          stats: {
+            ...list.stats,
+            totalItems: updatedItems.length,
+            completedItems,
+            progressPercentage,
+            lastActivity: new Date().toISOString()
+          }
+        }
+      }
+      return list
+    }))
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -1065,24 +1110,25 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <BucketListCreateModal
-                  userId={userId}
-                  onBucketListCreated={handleBucketListCreated}
-                  trigger={
-                    <Button size="lg" className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg px-8 py-3 text-lg rounded-full transition-all duration-300 hover:scale-105 hover:shadow-xl">
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Create Personal List
-                    </Button>
-                  }
-                />
-                <Button size="lg" variant="outline" className="border-[#4ecdc4]/30 text-[#4ecdc4] hover:bg-[#4ecdc4]/10">
-                  <Brain className="h-5 w-5 mr-2" />
-                  AI-Generated List
+                <Button 
+                  size="lg" 
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg px-8 py-3 text-lg rounded-full transition-all duration-300 hover:scale-105 hover:shadow-xl"
+                >
+                  <Sparkles className="h-5 w-5 mr-2" />
+                  Create My Bucket List
                 </Button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Create Modal */}
+        <BucketListCreateModal
+          isOpen={isCreateModalOpen}
+          onClose={() => setIsCreateModalOpen(false)}
+          onSuccess={handleBucketListCreated}
+        />
       </ProtectedRoute>
     )
   }
@@ -1091,301 +1137,263 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
     <ProtectedRoute>
       <div className="min-h-screen bg-gradient-to-br from-[#fdecd7] via-white to-[#fdecd7]">
         <div className="max-w-6xl mx-auto px-4 py-8">
-          {/* Create Your First List - Empty State */}
-          {bucketLists.length === 0 ? (
-            <div className="text-center py-16 px-6">
-              <div className="mb-6">
-                <div className="w-24 h-24 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-                  <Crown className="h-12 w-12 text-white" />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Your First Bucket List</h2>
-                <p className="text-gray-600 max-w-xs mx-auto">
-                  Start tracking your dreams and adventures. Whether it's places to visit, 
-                  experiences to have, or goals to achieve - let's make it happen!
-                </p>
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 bg-gradient-to-r from-[#fdecd7] to-white border-b border-[#4ecdc4]/20">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] rounded-full flex items-center justify-center shadow-lg">
+                <Crown className="h-6 w-6 text-white" />
               </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <BucketListCreateModal
-                  userId={userId}
-                  onBucketListCreated={handleBucketListCreated}
-                  trigger={
-                    <Button size="lg" className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg">
-                      <Sparkles className="h-5 w-5 mr-2" />
-                      Create Personal List
-                    </Button>
-                  }
-                />
-                <Button size="lg" variant="outline" className="border-[#4ecdc4]/30 text-[#4ecdc4] hover:bg-[#4ecdc4]/10">
-                  <Brain className="h-5 w-5 mr-2" />
-                  AI-Generated List
-                </Button>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">My Bucket Lists</h1>
+                <p className="text-gray-600">Track your dreams and adventures</p>
               </div>
             </div>
-          ) : (
-            <>
-              {/* Header */}
-              <div className="flex items-center justify-between p-6 bg-gradient-to-r from-[#fdecd7] to-white border-b border-[#4ecdc4]/20">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] rounded-full flex items-center justify-center shadow-lg">
-                    <Crown className="h-6 w-6 text-white" />
-                  </div>
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-900">My Bucket Lists</h1>
-                    <p className="text-gray-600">Track your dreams and adventures</p>
-                  </div>
-                </div>
-                
-                {/* Create New List Button */}
-                <BucketListCreateModal
-                  userId={userId}
-                  onBucketListCreated={handleBucketListCreated}
-                  trigger={
-                    <Button className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg transition-all duration-300">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create New List
-                    </Button>
-                  }
-                />
-              </div>
+            
+            {/* Create New List Button */}
+            <Button 
+              onClick={() => setIsCreateModalOpen(true)}
+              className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg transition-all duration-300"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create New List
+            </Button>
+          </div>
 
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-                <Card className="border-0 shadow-lg border border-[#4ecdc4]/20">
-                  <CardContent className="p-6 text-center">
-                    <div className="text-2xl font-bold text-[#4ecdc4]">{userStats.totalLists}</div>
-                    <div className="text-sm text-gray-500">Active Lists</div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-lg border border-[#ffe66d]/30">
-                  <CardContent className="p-6 text-center">
-                    <div className="text-2xl font-bold text-[#b8860b]">{userStats.totalItems}</div>
-                    <div className="text-sm text-gray-500">Total Items</div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-lg border border-green-200">
-                  <CardContent className="p-6 text-center">
-                    <div className="text-2xl font-bold text-green-600">{userStats.completedItems}</div>
-                    <div className="text-sm text-gray-500">Completed</div>
-                  </CardContent>
-                </Card>
-                <Card className="border-0 shadow-lg border border-[#ff6b6b]/20">
-                  <CardContent className="p-6 text-center">
-                    <div className="text-2xl font-bold text-[#ff6b6b]">{userStats.totalXP}</div>
-                    <div className="text-sm text-gray-500">XP Earned</div>
-                  </CardContent>
-                </Card>
-              </div>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <Card className="border-0 shadow-lg border border-[#4ecdc4]/20">
+              <CardContent className="p-6 text-center">
+                <div className="text-2xl font-bold text-[#4ecdc4]">{userStats.totalLists}</div>
+                <div className="text-sm text-gray-500">Active Lists</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg border border-[#ffe66d]/30">
+              <CardContent className="p-6 text-center">
+                <div className="text-2xl font-bold text-[#b8860b]">{userStats.totalItems}</div>
+                <div className="text-sm text-gray-500">Total Items</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg border border-green-200">
+              <CardContent className="p-6 text-center">
+                <div className="text-2xl font-bold text-green-600">{userStats.completedItems}</div>
+                <div className="text-sm text-gray-500">Completed</div>
+              </CardContent>
+            </Card>
+            <Card className="border-0 shadow-lg border border-[#ff6b6b]/20">
+              <CardContent className="p-6 text-center">
+                <div className="text-2xl font-bold text-[#ff6b6b]">{userStats.totalXP}</div>
+                <div className="text-sm text-gray-500">XP Earned</div>
+              </CardContent>
+            </Card>
+          </div>
 
-              {/* Bucket Lists Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {bucketLists.map((list) => {
-                  const TypeIcon = getTypeIcon(list.type)
-                  
-                  return (
-                    <Card key={list.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group border border-[#4ecdc4]/20">
-                      {/* Cover Image */}
-                      <div className="relative h-48 bg-gradient-to-br from-gray-100 to-gray-200">
-                        {list.coverImage?.url ? (
-                          <Image
-                            src={list.coverImage.url}
-                            alt={`Cover image for ${list.name}`}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                        ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-[#ff6b6b]/20 to-[#4ecdc4]/20 flex items-center justify-center">
-                            <Crown className="h-16 w-16 text-[#ff6b6b]/60" />
-                          </div>
-                        )}
-                        
-                        {/* Overlay */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                        
-                        {/* Type Badge */}
-                        <div className="absolute top-3 left-3">
-                          <Badge className={`${getTypeColor(list.type)} border-0 shadow-sm text-xs px-2.5 py-1`}>
-                            <TypeIcon className="h-3 w-3 mr-1.5" />
-                            {list.type === 'ai-generated' ? 'AI-Generated' : list.type.charAt(0).toUpperCase() + list.type.slice(1)}
+          {/* Bucket Lists Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {bucketLists.map((list) => {
+              const TypeIcon = getTypeIcon(list.type)
+              
+              return (
+                <Card key={list.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group border border-[#4ecdc4]/20">
+                  {/* Cover Image */}
+                  <div className="relative h-48 bg-gradient-to-br from-gray-100 to-gray-200">
+                    {list.coverImage?.url ? (
+                      <Image
+                        src={list.coverImage.url}
+                        alt={`Cover image for ${list.name}`}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#ff6b6b]/20 to-[#4ecdc4]/20 flex items-center justify-center">
+                        <Crown className="h-16 w-16 text-[#ff6b6b]/60" />
+                      </div>
+                    )}
+                    
+                    {/* Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                    
+                    {/* Type Badge */}
+                    <div className="absolute top-3 left-3">
+                      <Badge className={`${getTypeColor(list.type)} border-0 shadow-sm text-xs px-2.5 py-1`}>
+                        <TypeIcon className="h-3 w-3 mr-1.5" />
+                        {list.type.charAt(0).toUpperCase() + list.type.slice(1)}
+                      </Badge>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="absolute top-3 right-3">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 p-2 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white rounded-md"
+                            aria-label={`More options for ${list.name}`}
+                          >
+                            <MoreHorizontal className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="border-[#4ecdc4]/20">
+                          <DropdownMenuItem onClick={() => handleViewList(list)} className="text-sm hover:bg-[#4ecdc4]/10">
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditList(list)} className="text-sm hover:bg-[#ffe66d]/10">
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit List
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleShareList(list)} className="text-sm hover:bg-[#ff6b6b]/10">
+                            <Share2 className="h-4 w-4 mr-2" />
+                            Share List
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteList(list)}
+                            className="text-red-600 focus:text-red-700 focus:bg-red-50 text-sm"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete List
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    
+                    {/* Progress */}
+                    <div className="absolute bottom-3 left-3 right-3">
+                      <div className="bg-white/20 backdrop-blur-sm rounded-lg p-2">
+                        <div className="flex items-center justify-between text-white text-sm mb-1">
+                          <span>Progress</span>
+                          <span className="font-medium">{list.stats.progressPercentage}%</span>
+                        </div>
+                        <Progress 
+                          value={list.stats.progressPercentage} 
+                          className="h-2 bg-white/20"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <CardContent className="p-6">
+                    {/* Card Header with Type Icon */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          list.type === 'personal' ? 'bg-[#4ecdc4]/20 text-[#4ecdc4]' :
+                          list.type === 'shared' ? 'bg-[#ffe66d]/20 text-[#b8860b]' :
+                          'bg-[#ff6b6b]/20 text-[#ff6b6b]'
+                        }`}>
+                          <TypeIcon className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-lg text-gray-900 truncate">
+                            {list.name}
+                          </h3>
+                          <Badge className={`${getTypeColor(list.type)} border-0 text-xs`}>
+                            <TypeIcon className="h-3 w-3 mr-1" />
+                            {list.type.charAt(0).toUpperCase() + list.type.slice(1)}
                           </Badge>
                         </div>
-                        
-                        {/* Actions */}
-                        <div className="absolute top-3 right-3">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 p-2 bg-white/20 backdrop-blur-sm hover:bg-white/30 text-white rounded-md"
-                                aria-label={`More options for ${list.name}`}
-                              >
-                                <MoreHorizontal className="h-5 w-5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="border-[#4ecdc4]/20">
-                              <DropdownMenuItem onClick={() => handleViewList(list)} className="text-sm hover:bg-[#4ecdc4]/10">
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleEditList(list)} className="text-sm hover:bg-[#ffe66d]/10">
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit List
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleShareList(list)} className="text-sm hover:bg-[#ff6b6b]/10">
-                                <Share2 className="h-4 w-4 mr-2" />
-                                Share List
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteList(list)}
-                                className="text-red-600 focus:text-red-700 focus:bg-red-50 text-sm"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete List
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        
-                        {/* Progress */}
-                        <div className="absolute bottom-3 left-3 right-3">
-                          <div className="bg-white/20 backdrop-blur-sm rounded-lg p-2">
-                            <div className="flex items-center justify-between text-white text-sm mb-1">
-                              <span>Progress</span>
-                              <span className="font-medium">{list.stats.progressPercentage}%</span>
-                            </div>
-                            <Progress 
-                              value={list.stats.progressPercentage} 
-                              className="h-2 bg-white/20"
-                            />
-                          </div>
-                        </div>
                       </div>
-
-                      <CardContent className="p-6">
-                        {/* Card Header with Type Icon */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              list.type === 'personal' ? 'bg-[#4ecdc4]/20 text-[#4ecdc4]' :
-                              list.type === 'shared' ? 'bg-[#ffe66d]/20 text-[#b8860b]' :
-                              'bg-[#ff6b6b]/20 text-[#ff6b6b]'
-                            }`}>
-                              <TypeIcon className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-semibold text-lg text-gray-900 truncate">
-                                {list.name}
-                              </h3>
-                              <Badge className={`${getTypeColor(list.type)} border-0 text-xs`}>
-                                <TypeIcon className="h-3 w-3 mr-1" />
-                                {list.type.charAt(0).toUpperCase() + list.type.slice(1)}
-                              </Badge>
-                            </div>
-                          </div>
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="hover:bg-[#4ecdc4]/10">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="border-[#4ecdc4]/20">
-                              <DropdownMenuItem 
-                                onClick={() => handleViewList(list)}
-                                className="hover:bg-[#4ecdc4]/10 cursor-pointer"
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleEditList(list)}
-                                className="hover:bg-[#ffe66d]/10 cursor-pointer"
-                              >
-                                <Edit className="h-4 w-4 mr-2" />
-                                Edit List
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleShareList(list)}
-                                className="hover:bg-[#ff6b6b]/10 cursor-pointer"
-                              >
-                                <Share2 className="h-4 w-4 mr-2" />
-                                Share List
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                onClick={() => handleDeleteList(list)}
-                                className="text-red-600 hover:bg-red-50 cursor-pointer"
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete List
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-
-                        {list.description && (
-                          <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                            {list.description}
-                          </p>
-                        )}
-
-                        {/* Stats */}
-                        <div className="grid grid-cols-3 gap-3 mb-4">
-                          <div className="text-center p-2 bg-[#4ecdc4]/10 rounded-lg">
-                            <div className="text-lg font-bold text-[#4ecdc4]">{list.stats.totalItems}</div>
-                            <div className="text-xs text-gray-500">Items</div>
-                          </div>
-                          <div className="text-center p-2 bg-green-50 rounded-lg">
-                            <div className="text-lg font-bold text-green-600">{list.stats.completedItems}</div>
-                            <div className="text-xs text-gray-500">Done</div>
-                          </div>
-                          <div className="text-center p-2 bg-[#ffe66d]/10 rounded-lg">
-                            <div className="text-lg font-bold text-[#b8860b]">{list.stats.progressPercentage}%</div>
-                            <div className="text-xs text-gray-500">Progress</div>
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="mb-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm text-gray-700">Progress</span>
-                            <span className="text-sm font-semibold text-[#ff6b6b]">{list.stats.progressPercentage}%</span>
-                          </div>
-                          <Progress value={list.stats.progressPercentage} className="h-2 bg-gray-200" />
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex gap-2">
-                          <Button 
-                            onClick={() => handleViewList(list)} 
-                            size="sm" 
-                            className="flex-1 bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"
-                          >
-                            <Eye className="h-4 w-4 mr-1" />
-                            View
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="hover:bg-[#4ecdc4]/10">
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                          {list.isPublic && (
-                            <Button 
-                              onClick={() => handleShareList(list)} 
-                              size="sm" 
-                              variant="outline"
-                              className="border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/10"
-                            >
-                              <Share2 className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )
-                })}
-              </div>
-            </>
-          )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="border-[#4ecdc4]/20">
+                          <DropdownMenuItem 
+                            onClick={() => handleViewList(list)}
+                            className="hover:bg-[#4ecdc4]/10 cursor-pointer"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleEditList(list)}
+                            className="hover:bg-[#ffe66d]/10 cursor-pointer"
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit List
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleShareList(list)}
+                            className="hover:bg-[#ff6b6b]/10 cursor-pointer"
+                          >
+                            <Share2 className="h-4 w-4 mr-2" />
+                            Share List
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteList(list)}
+                            className="text-red-600 hover:bg-red-50 cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete List
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    {list.description && (
+                      <p className="text-gray-600 text-sm mb-4 line-clamp-2">
+                        {list.description}
+                      </p>
+                    )}
+
+                    {/* Stats */}
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="text-center p-2 bg-[#4ecdc4]/10 rounded-lg">
+                        <div className="text-lg font-bold text-[#4ecdc4]">{list.stats.totalItems}</div>
+                        <div className="text-xs text-gray-500">Items</div>
+                      </div>
+                      <div className="text-center p-2 bg-green-50 rounded-lg">
+                        <div className="text-lg font-bold text-green-600">{list.stats.completedItems}</div>
+                        <div className="text-xs text-gray-500">Done</div>
+                      </div>
+                      <div className="text-center p-2 bg-[#ffe66d]/10 rounded-lg">
+                        <div className="text-lg font-bold text-[#b8860b]">{list.stats.progressPercentage}%</div>
+                        <div className="text-xs text-gray-500">Progress</div>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-700">Progress</span>
+                        <span className="text-sm font-semibold text-[#ff6b6b]">{list.stats.progressPercentage}%</span>
+                      </div>
+                      <Progress value={list.stats.progressPercentage} className="h-2 bg-gray-200" />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => handleViewList(list)} 
+                        size="sm" 
+                        className="flex-1 bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        View
+                      </Button>
+                      {list.isPublic && (
+                        <Button 
+                          onClick={() => handleShareList(list)} 
+                          size="sm" 
+                          variant="outline"
+                          className="border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/10"
+                        >
+                          <Share2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Modals */}
+        {/* Create Modal */}
         <BucketListCreateModal
           isOpen={isCreateModalOpen}
           onClose={() => setIsCreateModalOpen(false)}
@@ -1396,10 +1404,18 @@ export default function BucketListClient({ userId }: BucketListClientProps) {
         <ViewListModal
           list={selectedListForAction}
           isOpen={isViewModalOpen}
-          onClose={() => setIsViewModalOpen(false)}
+          onClose={() => {
+            setIsViewModalOpen(false)
+            setSelectedListForAction(null)
+          }}
           onOpenCompletionModal={handleOpenCompletionModal}
           onItemStatusUpdate={handleItemStatusUpdate}
           isUpdatingItemStatus={isUpdatingItemStatus}
+          onItemAdded={(item) => {
+            if (selectedListForAction) {
+              handleItemAdded(selectedListForAction.id, item)
+            }
+          }}
         />
 
         {/* Edit List Modal */}

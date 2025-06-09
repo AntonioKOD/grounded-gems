@@ -21,15 +21,18 @@ export async function POST(req: NextRequest, { params }: PostParams) {
     const { id: listId } = params
     const body = await req.json()
 
-    const { location, goal, priority = 'medium', status = 'not_started', dueDate } = body
+    const { location, goal, priority = 'medium', status = 'not_started', dueDate, notes } = body
 
     // Validate input
     if (!listId) {
       return NextResponse.json({ error: 'Missing listId' }, { status: 400 })
     }
-    if (!location) {
-      return NextResponse.json({ error: 'Location is required' }, { status: 400 })
+    
+    // Either location OR goal is required (but not both)
+    if (!location && !goal?.trim()) {
+      return NextResponse.json({ error: 'Either location or goal is required' }, { status: 400 })
     }
+    
     if (priority && !['low', 'medium', 'high'].includes(priority)) {
       return NextResponse.json({ error: 'Invalid priority value' }, { status: 400 })
     }
@@ -55,29 +58,41 @@ export async function POST(req: NextRequest, { params }: PostParams) {
       return NextResponse.json({ error: 'Forbidden: You do not have permission to edit this list.' }, { status: 403 })
     }
 
-    // Check if location already exists in the bucket list
-    const existingItem = originalList.items?.find((item: any) => {
-      if (typeof item.location === 'string') {
-        return item.location === location
-      } else if (typeof item.location === 'object' && item.location?.id) {
-        return item.location.id === location
-      }
-      return false
-    })
+    // For location-based items, check if location already exists in the bucket list
+    if (location) {
+      const existingItem = originalList.items?.find((item: any) => {
+        if (typeof item.location === 'string') {
+          return item.location === location
+        } else if (typeof item.location === 'object' && item.location?.id) {
+          return item.location.id === location
+        }
+        return false
+      })
 
-    if (existingItem) {
-      return NextResponse.json({ error: 'This location is already in your bucket list' }, { status: 400 })
+      if (existingItem) {
+        return NextResponse.json({ error: 'This location is already in your bucket list' }, { status: 400 })
+      }
     }
 
     // Create new item
-    const newItem = {
-      location,
-      goal: goal?.trim() || '',
+    const newItem: any = {
       priority,
       status,
       addedAt: new Date().toISOString(),
       ...(dueDate && { dueDate }),
       ...(status === 'completed' && { completedAt: new Date().toISOString() })
+    }
+
+    // Add location-specific or goal-specific fields
+    if (location) {
+      newItem.location = location
+      newItem.goal = goal?.trim() || ''
+    } else {
+      // For manual goal-based items
+      newItem.goal = goal.trim()
+      if (notes?.trim()) {
+        newItem.notes = notes.trim()
+      }
     }
 
     const updatedItems = [...(originalList.items || []), newItem]

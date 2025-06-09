@@ -4,7 +4,6 @@ import React, { useState } from "react"
 import { 
   Crown, 
   Users, 
-  Brain, 
   Calendar, 
   MapPin, 
   CheckCircle2, 
@@ -43,8 +42,6 @@ interface BucketListItem {
   status: 'not_started' | 'planned' | 'completed'
   completedAt?: string
   addedAt: string
-  isAiGenerated?: boolean
-  aiLocationText?: string
   notes?: string
 }
 
@@ -52,7 +49,7 @@ interface BucketList {
   id: string
   name: string
   description?: string
-  type: 'personal' | 'shared' | 'ai-generated'
+  type: 'personal' | 'shared'
   owner: {
     id: string
     name: string
@@ -98,7 +95,6 @@ const getTypeIcon = (type: string) => {
   switch (type) {
     case 'personal': return Target
     case 'shared': return Users
-    case 'ai-generated': return Brain
     default: return Target
   }
 }
@@ -107,7 +103,6 @@ const getTypeColor = (type: string) => {
   switch (type) {
     case 'personal': return 'bg-[#4ecdc4]/20 text-[#4ecdc4]'
     case 'shared': return 'bg-[#ffe66d]/20 text-[#b8860b]'
-    case 'ai-generated': return 'bg-[#ff6b6b]/20 text-[#ff6b6b]'
     default: return 'bg-gray-100 text-gray-700'
   }
 }
@@ -154,16 +149,6 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
   const getItemDisplayText = (item: BucketListItem): string => {
     if (item.location?.name) {
       return item.location.name
-    }
-    
-    if (item.isAiGenerated) {
-      if (item.aiLocationText) {
-        return item.aiLocationText
-      }
-      if (item.goal) {
-        return item.goal
-      }
-      return 'AI-generated experience'
     }
     
     if (item.goal) {
@@ -230,8 +215,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
               <div className="absolute top-4 left-4">
                 <Badge className={`${getTypeColor(bucketList.type)} border-0 shadow-sm px-3 py-1`}>
                   <TypeIcon className="h-4 w-4 mr-1.5" />
-                  {bucketList.type === 'ai-generated' ? 'AI-Generated' : 
-                   bucketList.type.charAt(0).toUpperCase() + bucketList.type.slice(1)}
+                  {bucketList.type.charAt(0).toUpperCase() + bucketList.type.slice(1)}
                 </Badge>
               </div>
 
@@ -364,12 +348,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
                             {item.completedAt && (
                               <span>Completed {getRelativeTime(item.completedAt)}</span>
                             )}
-                            {item.isAiGenerated && (
-                              <Badge className="bg-[#ff6b6b]/10 text-[#ff6b6b] border-0 text-xs">
-                                <Brain className="h-3 w-3 mr-1" />
-                                AI Generated
-                              </Badge>
-                            )}
+
                           </div>
                         </div>
 

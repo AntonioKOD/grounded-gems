@@ -39,7 +39,7 @@ export default function RootLayout({
         {children}
         
         {/* Google Analytics */}
-        <GoogleAnalytics gaId="G-DM1Y9WQP6" />
+        <GoogleAnalytics gaId="G-QB3W2CL6T7" />
         
         {/* Service Worker Registration */}
         <Script id="sw-registration" strategy="afterInteractive">
