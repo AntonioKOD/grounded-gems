@@ -99,7 +99,7 @@ export async function middleware(request: NextRequest) {
   const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('Sacavia')
   const isMobile = /Mobile|Android|iOS|iPhone|iPad/.test(userAgent)
   
-  // Skip middleware for all static resources and API routes
+  // Skip middleware for most static resources and API routes
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
@@ -107,11 +107,61 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/sw.js') ||
     pathname.startsWith('/manifest.webmanifest') ||
     pathname.includes('.') || // Any file with extension
-    pathname.startsWith('/admin') || // Payload admin
     pathname.startsWith('/media/') // Media files
   ) {
     console.log(`✅ [Middleware] Skipping static resource: ${pathname}`)
     return response
+  }
+
+  // Special handling for admin routes - restrict to specific email
+  if (pathname.startsWith('/admin')) {
+    console.log(`🔒 [Middleware] Admin access attempt: ${pathname}`)
+    
+    try {
+      const token = request.cookies.get('payload-token')?.value
+      
+      if (!token) {
+        console.log(`🚫 [Middleware] No token found for admin access`)
+        return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
+      }
+
+      // Decode token to get user email
+      const parts = token.split('.')
+      if (parts.length !== 3) {
+        console.log(`🚫 [Middleware] Invalid token format for admin access`)
+        return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
+      }
+
+      let payload
+      try {
+        payload = JSON.parse(atob(parts[1]))
+      } catch {
+        console.log(`🚫 [Middleware] Invalid token payload for admin access`)
+        return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
+      }
+
+      // Check if token is expired
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        console.log(`🚫 [Middleware] Expired token for admin access`)
+        return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
+      }
+
+      // Check if user email matches the allowed admin email
+      const userEmail = payload.email
+      const allowedAdminEmail = 'antonio_kodheli@icloud.com' // Centralized in security config
+      
+      if (userEmail !== allowedAdminEmail) {
+        console.log(`🚫 [Middleware] Unauthorized admin access attempt from: ${userEmail}`)
+        return new NextResponse('Access Denied: Admin access restricted', { status: 403 })
+      }
+
+      console.log(`✅ [Middleware] Admin access granted to: ${userEmail}`)
+      return response
+
+    } catch (error) {
+      console.error(`❌ [Middleware] Error checking admin access:`, error)
+      return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
+    }
   }
 
   // Define routes that require authentication

@@ -264,6 +264,57 @@ export function isIPLockedOut(ip: string): boolean {
   return record.count >= SECURITY_CONFIG.AUTH.MAX_LOGIN_ATTEMPTS
 }
 
+// Admin access middleware - restricts access to specific email
+export function withAdminAccess() {
+  return function (handler: Function) {
+    return async function (request: NextRequest, ...args: any[]) {
+      try {
+        const payload = await getPayload({ config })
+        const result = await payload.auth({ headers: request.headers })
+
+        if (!result.user) {
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: 'Authentication required for admin access',
+              code: 'ADMIN_AUTH_REQUIRED'
+            },
+            { status: 401 }
+          )
+        }
+
+        // Check if user email matches the allowed admin email
+        const allowedAdminEmail = SECURITY_CONFIG.AUTH.ADMIN_EMAIL
+        if (result.user.email !== allowedAdminEmail) {
+          console.warn(`Unauthorized admin API access attempt from: ${result.user.email}`)
+          return NextResponse.json(
+            { 
+              success: false, 
+              error: 'Admin access restricted to authorized users only',
+              code: 'ADMIN_ACCESS_DENIED'
+            },
+            { status: 403 }
+          )
+        }
+
+        // Add user to request context
+        ;(request as any).user = result.user
+        return handler(request, ...args)
+      } catch (error) {
+        console.error('Admin access verification error:', error)
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Admin access verification failed',
+            code: 'ADMIN_ACCESS_ERROR'
+          },
+          { status: 500 }
+        )
+      }
+    }
+  }
+}
+
 // Compose multiple middlewares
 export function createSecureHandler(...middlewares: any[]) {
   return function (handler: Function) {
@@ -348,6 +399,7 @@ export default {
   withCORS,
   withSecurityHeaders,
   withErrorHandling,
+  withAdminAccess,
   createSecureHandler,
   trackLoginAttempt,
   isIPLockedOut,
