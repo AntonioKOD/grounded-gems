@@ -202,16 +202,54 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Define public routes that don't require authentication
+  const publicRoutes = [
+    '/',                    // Home page
+    '/login',              // Login page
+    '/signup',             // Signup page (including enhanced flow)
+    '/forgot-password',    // Forgot password
+    '/reset-password',     // Reset password
+    '/verify',             // Email verification
+    '/map',                // Public map
+    '/explorer',           // Public explorer
+    '/locations',          // Public locations listing
+    '/post',               // Public post viewing
+    '/search',             // Public search
+    '/events',             // Public events
+    '/home-page-actions',  // Public home actions
+    '/test-feed',          // Test feed pages
+    '/test-feed-algorithms', // Test feed algorithms
+    '/test-upload'         // Test upload page
+  ]
+  
   // Define routes that require authentication
-  const protectedRoutes = ['/feed', '/profile', '/notifications', '/bucket-list', '/planner']
-  const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/verify', '/', '/map', '/explorer']
+  const protectedRoutes = [
+    '/feed',               // Personal feed
+    '/profile',            // User profiles (viewing and editing)
+    '/notifications',      // User notifications
+    '/bucket-list',        // Personal bucket lists
+    '/planner',            // Trip planner
+    '/add-location',       // Adding locations
+    '/post/create',        // Creating posts
+    '/events/create'       // Creating events
+  ]
+  
+  // Check if current route is explicitly public
+  const isPublicRoute = publicRoutes.some(route => {
+    if (route === '/') {
+      return pathname === '/'
+    }
+    return pathname === route || pathname.startsWith(route + '/')
+  })
+  
+  // If it's a public route, allow access without authentication
+  if (isPublicRoute) {
+    console.log(`✅ [Middleware] Allowing public access to: ${pathname}`)
+    return NextResponse.next()
+  }
   
   // Check if current route requires authentication
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
-  const isPublicRoute = publicRoutes.some(route => pathname === route || pathname.startsWith(route + '/'))
-  
-  // For location routes (/locations/[id]), check authentication
-  const isLocationRoute = pathname.startsWith('/locations/') && pathname !== '/locations'
   
   // For Capacitor apps, let them handle their own auth
   if (isCapacitorApp) {
@@ -220,11 +258,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check authentication for routes that need it
-  if (isProtectedRoute || isLocationRoute) {
+  if (isProtectedRoute) {
     const authenticated = await isAuthenticated(request)
     
     if (!authenticated) {
-      console.log(`🔒 [Middleware] Unauthenticated access to: ${pathname}, redirecting to login`)
+      console.log(`🔒 [Middleware] Unauthenticated access to protected route: ${pathname}, redirecting to login`)
       
       // Redirect to login with return URL
       url.pathname = '/login'
@@ -234,7 +272,8 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Allow access to public routes and authenticated protected routes
+  // For all other routes (not explicitly public or protected), allow access
+  // This includes dynamic routes like /locations/[id], /events/[id], etc.
   console.log(`✅ [Middleware] Allowing access to: ${pathname}`)
   return NextResponse.next()
 }
