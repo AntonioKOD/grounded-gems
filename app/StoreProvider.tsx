@@ -54,11 +54,12 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
   const storeRef = useRef<AppStore | null>(null)
   const persistorRef = useRef<any>(null)
   const [isReady, setIsReady] = useState(false)
-  const [shouldSkipLoading, setShouldSkipLoading] = useState(false)
+  const [shouldSkipPersistence, setShouldSkipPersistence] = useState(true) // Default to skip on server
+  const pathname = usePathname()
   
-  // Check if we're on a public route that doesn't need to wait for persistence
+  // Handle persistence logic after hydration to avoid SSR mismatch
   useEffect(() => {
-    const pathname = window.location.pathname
+    // Check if current route needs persistence after hydration
     const publicRoutes = [
       '/', 
       '/search', 
@@ -75,16 +76,19 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
       '/home-page-actions',
       '/test-feed'
     ]
+    
     const isPublicRoute = publicRoutes.some(route => 
-      pathname === route || pathname.startsWith(`${route}/`)
+      pathname === route || pathname.startsWith(route + '/')
     )
     
+    // Skip persistence for public routes
+    setShouldSkipPersistence(isPublicRoute)
+    
+    // If we're skipping persistence, mark as ready immediately
     if (isPublicRoute) {
-      // For public routes, skip the loading and let persistence happen in background
-      setShouldSkipLoading(true)
       setIsReady(true)
     }
-  }, [])
+  }, [pathname])
   
   if (!storeRef.current) {
     // Create the store instance the first time this renders
@@ -157,14 +161,8 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     }
   }, [])
 
-  // Always skip loading unless specifically needed for authenticated routes
-  const needsPersistence = typeof window !== 'undefined' && 
-    (window.location.pathname.startsWith('/feed') || 
-     window.location.pathname.startsWith('/profile') || 
-     window.location.pathname.startsWith('/bucket-list') ||
-     window.location.pathname.startsWith('/planner'))
-
-  if (!needsPersistence || shouldSkipLoading) {
+  // Always skip persistence for public routes to avoid hydration issues
+  if (shouldSkipPersistence) {
     return (
       <Provider store={storeRef.current}>
         {children}
