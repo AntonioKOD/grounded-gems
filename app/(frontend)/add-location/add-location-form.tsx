@@ -826,24 +826,25 @@ export default function AddLocationForm() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
-      {/* Form progress indicator */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h1 className="text-2xl font-bold text-gray-800">Add New Location</h1>
-          <Badge variant={formProgress >= 75 ? "default" : formProgress >= 50 ? "secondary" : "outline"}>
+    <div className="max-w-4xl mx-auto pb-20 md:pb-12">
+      {/* Mobile-optimized Form progress indicator */}
+      <div className="mb-4 md:mb-6 px-4 md:px-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Add New Location</h1>
+          <Badge variant={formProgress >= 75 ? "default" : formProgress >= 50 ? "secondary" : "outline"} className="text-sm font-medium">
             {formProgress}% Complete
           </Badge>
         </div>
-        <Progress value={formProgress} className="h-2" />
+        <Progress value={formProgress} className="h-3 md:h-2 rounded-full" />
+        <p className="text-sm text-gray-600 mt-2 md:hidden">Fill out the required fields to complete your location</p>
       </div>
 
-      <Card className="shadow-lg border-0 overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-[#FF6B6B]/10 to-white border-b">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl">Location Details</CardTitle>
-              <CardDescription>Share a location with the community</CardDescription>
+      <Card className="shadow-lg border-0 overflow-hidden mx-4 md:mx-0">
+        <CardHeader className="bg-gradient-to-r from-[#FF6B6B]/10 to-white border-b px-4 md:px-6 py-4 md:py-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div className="mb-3 md:mb-0">
+              <CardTitle className="text-xl md:text-2xl mb-1">Location Details</CardTitle>
+              <CardDescription className="text-sm md:text-base">Share a location with the community</CardDescription>
             </div>
             <TooltipProvider>
               <Tooltip>
@@ -851,11 +852,11 @@ export default function AddLocationForm() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-gray-500 hover:text-[#FF6B6B]"
+                    className="text-gray-500 hover:text-[#FF6B6B] self-start md:self-auto h-10 px-3"
                     onClick={() => setResetDialogOpen(true)}
                   >
                     <Trash2 className="h-4 w-4 mr-1" />
-                    <span className="hidden sm:inline">Reset Form</span>
+                    <span className="text-sm">Reset</span>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -873,39 +874,40 @@ export default function AddLocationForm() {
           }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="px-6 pt-6 border-b overflow-x-auto">
-              <TabsList className="grid grid-cols-3 md:grid-cols-6 w-full">
-                <TabsTrigger value="basic" className="flex items-center gap-2">
-                  <Building className="h-4 w-4" />
-                  <span className="hidden md:inline">Basic Info</span>
+            {/* Mobile-optimized sticky tab navigation */}
+            <div className="sticky top-0 z-10 bg-white px-4 md:px-6 pt-4 md:pt-6 border-b overflow-x-auto">
+              <TabsList className="grid grid-cols-6 md:grid-cols-6 w-full min-w-[600px] md:min-w-0 h-auto p-1 mb-4">
+                <TabsTrigger value="basic" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <Building className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Basic</span>
                 </TabsTrigger>
-                <TabsTrigger value="media" className="flex items-center gap-2">
-                  <ImageIcon className="h-4 w-4" />
-                  <span className="hidden md:inline">Media</span>
+                <TabsTrigger value="media" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <ImageIcon className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Media</span>
                 </TabsTrigger>
-                <TabsTrigger value="location" className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  <span className="hidden md:inline">Location</span>
+                <TabsTrigger value="location" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <MapPin className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Location</span>
                 </TabsTrigger>
-                <TabsTrigger value="contact" className="flex items-center gap-2">
-                  <Users className="h-4 w-4" />
-                  <span className="hidden md:inline">Contact</span>
+                <TabsTrigger value="contact" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <Users className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Contact</span>
                 </TabsTrigger>
-                <TabsTrigger value="details" className="flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  <span className="hidden md:inline">Details</span>
+                <TabsTrigger value="details" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <Tag className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Details</span>
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden md:inline">Settings</span>
+                <TabsTrigger value="settings" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <Settings className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Settings</span>
                 </TabsTrigger>
               </TabsList>
             </div>
 
             {/* Basic Information Tab */}
             <TabsContent value="basic" className="p-0">
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-5">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
+                <div className="space-y-6 md:space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="location-name" className="text-base font-medium flex items-center">
                       Location Name <span className="text-red-500 ml-1">*</span>
@@ -925,7 +927,7 @@ export default function AddLocationForm() {
                       value={locationName}
                       onChange={handleNameChange}
                       placeholder="Enter location name"
-                      className={`h-12 text-base ${formErrors.name ? "border-red-500" : ""}`}
+                      className={`h-14 md:h-12 text-base ${formErrors.name ? "border-red-500" : ""}`}
                     />
                     {formErrors.name && <p className="text-red-500 text-sm">{formErrors.name}</p>}
                   </div>
@@ -956,7 +958,7 @@ export default function AddLocationForm() {
                         onFocus={handleSlugFocus}
                         onBlur={handleSlugBlur}
                         placeholder="url-friendly-slug"
-                        className={`h-12 text-base pl-[5.5rem] ${formErrors.slug ? "border-red-500" : ""}`}
+                        className={`h-14 md:h-12 text-base pl-[5.5rem] md:pl-[5.5rem] ${formErrors.slug ? "border-red-500" : ""}`}
                       />
                       <div className="absolute inset-y-0 right-0 flex items-center pr-3">
                         <Link2 className="h-4 w-4 text-gray-400" />
@@ -992,7 +994,7 @@ export default function AddLocationForm() {
                       Category
                     </Label>
                     <Select value={locationCategory} onValueChange={setLocationCategory}>
-                      <SelectTrigger id="location-category" className="h-12 text-base">
+                      <SelectTrigger id="location-category" className="h-14 md:h-12 text-base">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1018,7 +1020,7 @@ export default function AddLocationForm() {
                       onChange={(e) => setShortDescription(e.target.value)}
                       placeholder="Brief summary of this location"
                       maxLength={100}
-                      className="h-12 text-base"
+                      className="h-14 md:h-12 text-base"
                     />
                   </div>
 
@@ -1030,7 +1032,7 @@ export default function AddLocationForm() {
                       <Textarea
                         id="location-description"
                         placeholder="Write a detailed description of the location"
-                        className="min-h-[150px] p-4 text-base"
+                        className="min-h-[120px] md:min-h-[150px] p-4 text-base"
                         onChange={(e) => setLocationDescription(e.target.value)}
                         value={locationDescription}
                       />
@@ -1062,7 +1064,7 @@ export default function AddLocationForm() {
                         value={newTag}
                         onChange={(e) => setNewTag(e.target.value)}
                         placeholder="Add a tag"
-                        className="flex-1 h-12 text-base"
+                        className="flex-1 h-14 md:h-12 text-base"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault()
@@ -1070,7 +1072,7 @@ export default function AddLocationForm() {
                           }
                         }}
                       />
-                      <Button type="button" onClick={addTag} size="sm" variant="secondary" className="h-12 px-4">
+                      <Button type="button" onClick={addTag} size="sm" variant="secondary" className="h-14 md:h-12 px-4 min-w-[60px]">
                         Add
                       </Button>
                     </div>
@@ -1081,14 +1083,14 @@ export default function AddLocationForm() {
 
             {/* Media Tab */}
             <TabsContent value="media" className="p-0">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
                 <div className="space-y-5">
                   <div className="space-y-3">
                     <Label className="text-base font-medium">Featured Image</Label>
 
                     {!locationImage ? (
                       <div
-                        className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer"
+                        className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-6 md:p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer min-h-[200px] md:min-h-auto"
                         onClick={triggerFileInput}
                       >
                         <div className="bg-[#FF6B6B]/10 rounded-full p-3 mb-3">
@@ -1112,10 +1114,9 @@ export default function AddLocationForm() {
                         <Button
                           variant="outline"
                           size="lg"
-                          className="cursor-pointer"
+                          className="cursor-pointer h-12 md:h-10 px-6 text-base"
                           type="button"
                           disabled={isUploading}
-                          
                         >
                           {isUploading ? (
                             <>
@@ -1302,7 +1303,7 @@ export default function AddLocationForm() {
 
             {/* Location Tab */}
             <TabsContent value="location" className="p-0">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="location-address" className="text-base font-medium flex items-center">
@@ -1314,7 +1315,7 @@ export default function AddLocationForm() {
                         value={address.street}
                         onChange={(e) => setAddress({ ...address, street: e.target.value })}
                         placeholder="Enter address"
-                        className={`h-12 text-base ${formErrors.street ? "border-red-500" : ""}`}
+                        className={`h-14 md:h-12 text-base ${formErrors.street ? "border-red-500" : ""}`}
                       />
                       <MapPin className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#FF6B6B]" />
                       {formErrors.street && <p className="text-red-500 text-sm">{formErrors.street}</p>}
@@ -1330,35 +1331,35 @@ export default function AddLocationForm() {
                       value={address.neighborhood}
                       onChange={(e) => setAddress({ ...address, neighborhood: e.target.value })}
                       placeholder="e.g., Downtown, West Side"
-                      className="h-12 text-base"
+                      className="h-14 md:h-12 text-base"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="location-city" className="text-base font-medium flex items-center">
                         City <span className="text-red-500 ml-1">*</span>
                       </Label>
-                      <Input
-                        id="location-city"
-                        value={address.city}
-                        onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                        placeholder="City"
-                        className={`h-12 text-base ${formErrors.city ? "border-red-500" : ""}`}
-                      />
+                                              <Input
+                          id="location-city"
+                          value={address.city}
+                          onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                          placeholder="City"
+                          className={`h-14 md:h-12 text-base ${formErrors.city ? "border-red-500" : ""}`}
+                        />
                       {formErrors.city && <p className="text-red-500 text-sm">{formErrors.city}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="location-state" className="text-base font-medium flex items-center">
                         State/Province <span className="text-red-500 ml-1">*</span>
                       </Label>
-                      <Input
-                        id="location-state"
-                        value={address.state}
-                        onChange={(e) => setAddress({ ...address, state: e.target.value })}
-                        placeholder="State"
-                        className={`h-12 text-base ${formErrors.state ? "border-red-500" : ""}`}
-                      />
+                                              <Input
+                          id="location-state"
+                          value={address.state}
+                          onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                          placeholder="State"
+                          className={`h-14 md:h-12 text-base ${formErrors.state ? "border-red-500" : ""}`}
+                        />
                       {formErrors.state && <p className="text-red-500 text-sm">{formErrors.state}</p>}
                     </div>
                     <div className="space-y-2">
@@ -1370,7 +1371,7 @@ export default function AddLocationForm() {
                         value={address.zip}
                         onChange={(e) => setAddress({ ...address, zip: e.target.value })}
                         placeholder="ZIP Code"
-                        className={`h-12 text-base ${formErrors.zip ? "border-red-500" : ""}`}
+                        className={`h-14 md:h-12 text-base ${formErrors.zip ? "border-red-500" : ""}`}
                       />
                       {formErrors.zip && <p className="text-red-500 text-sm">{formErrors.zip}</p>}
                     </div>
@@ -1383,7 +1384,7 @@ export default function AddLocationForm() {
                         value={address.country}
                         onChange={(e) => setAddress({ ...address, country: e.target.value })}
                         placeholder="Country"
-                        className={`h-12 text-base ${formErrors.country ? "border-red-500" : ""}`}
+                        className={`h-14 md:h-12 text-base ${formErrors.country ? "border-red-500" : ""}`}
                       />
                       {formErrors.country && <p className="text-red-500 text-sm">{formErrors.country}</p>}
                     </div>
@@ -1410,7 +1411,7 @@ export default function AddLocationForm() {
 
             {/* Contact & Hours Tab */}
             <TabsContent value="contact" className="p-0">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
                 <div className="space-y-5">
                   <div className="flex items-center mb-2">
                     <Users className="h-5 w-5 text-[#FF6B6B] mr-2" />
@@ -1428,7 +1429,7 @@ export default function AddLocationForm() {
                         value={contactInfo.phone}
                         onChange={(e) => setContactInfo({ ...contactInfo, phone: e.target.value })}
                         placeholder="Enter phone number"
-                        className="h-12 text-base"
+                        className="h-14 md:h-12 text-base"
                       />
                     </div>
                     <div className="space-y-2">
@@ -1441,7 +1442,7 @@ export default function AddLocationForm() {
                         value={contactInfo.email}
                         onChange={(e) => setContactInfo({ ...contactInfo, email: e.target.value })}
                         placeholder="Enter email address"
-                        className="h-12 text-base"
+                        className="h-14 md:h-12 text-base"
                       />
                     </div>
                   </div>
@@ -1456,7 +1457,7 @@ export default function AddLocationForm() {
                       value={contactInfo.website}
                       onChange={(e) => setContactInfo({ ...contactInfo, website: e.target.value })}
                       placeholder="https://"
-                      className="h-12 text-base"
+                      className="h-14 md:h-12 text-base"
                     />
                   </div>
 
@@ -1613,7 +1614,7 @@ export default function AddLocationForm() {
 
             {/* Details Tab */}
             <TabsContent value="details" className="p-0">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
                 <div className="space-y-5">
                   <div className="flex items-center mb-2">
                     <Tag className="h-5 w-5 text-[#FF6B6B] mr-2" />
@@ -1644,7 +1645,7 @@ export default function AddLocationForm() {
                         value={newSeason}
                         onChange={(e) => setNewSeason(e.target.value)}
                         placeholder="e.g., Summer, Weekday mornings"
-                        className="flex-1 h-12 text-base"
+                        className="flex-1 h-14 md:h-12 text-base"
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault()
@@ -1652,7 +1653,7 @@ export default function AddLocationForm() {
                           }
                         }}
                       />
-                      <Button type="button" onClick={addSeason} size="sm" variant="secondary" className="h-12 px-4">
+                      <Button type="button" onClick={addSeason} size="sm" variant="secondary" className="h-14 md:h-12 px-4">
                         Add
                       </Button>
                     </div>
@@ -1719,7 +1720,7 @@ export default function AddLocationForm() {
 
             {/* Settings Tab */}
             <TabsContent value="settings" className="p-0">
-              <CardContent className="p-6 space-y-6">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
                 <div className="space-y-5">
                   <div className="flex items-center mb-2">
                     <Settings className="h-5 w-5 text-[#FF6B6B] mr-2" />
@@ -1881,10 +1882,11 @@ export default function AddLocationForm() {
             </TabsContent>
           </Tabs>
 
-          <CardFooter className="p-6 flex flex-col sm:flex-row gap-3 border-t bg-muted/5">
+          {/* Mobile-optimized sticky footer */}
+          <CardFooter className="sticky bottom-0 bg-white border-t border-gray-200 p-4 md:p-6 flex flex-col gap-3 md:flex-row md:gap-3 shadow-lg md:shadow-none">
             <Button
               type="submit"
-              className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 transition-all duration-300 h-12 text-base font-medium"
+              className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 transition-all duration-300 h-14 md:h-12 text-base font-medium w-full md:w-auto order-1"
               disabled={isSubmitting}
             >
               {isSubmitting ? (
@@ -1902,7 +1904,7 @@ export default function AddLocationForm() {
             <Button
               type="button"
               variant="outline"
-              className="border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5 h-12 text-base font-medium"
+              className="border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5 h-14 md:h-12 text-base font-medium w-full md:w-auto order-2"
               onClick={(e) => {
                 e.preventDefault()
                 prepareSubmission(true)
@@ -1912,26 +1914,54 @@ export default function AddLocationForm() {
               <Save className="mr-2 h-5 w-5" />
               Save as Draft
             </Button>
-            <div className="flex-1 flex justify-end">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-12 text-base font-medium text-gray-500"
-                      onClick={() => setResetDialogOpen(true)}
-                      disabled={isSubmitting}
-                    >
-                      <Trash2 className="h-5 w-5 mr-2" />
-                      <span className="hidden sm:inline">Reset Form</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Clear all form fields</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+            <div className="flex-1 flex justify-center md:justify-end order-3">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-12 md:h-12 text-base font-medium text-gray-500 px-4"
+                onClick={() => setResetDialogOpen(true)}
+                disabled={isSubmitting}
+              >
+                <Trash2 className="h-5 w-5 mr-2" />
+                <span className="text-sm">Reset</span>
+              </Button>
+            </div>
+            
+            {/* Mobile tab navigation helper */}
+            <div className="flex md:hidden justify-between items-center px-4 py-2 text-sm border-t border-gray-100">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const tabs = ["basic", "media", "location", "contact", "details", "settings"]
+                  const currentIndex = tabs.indexOf(activeTab)
+                  if (currentIndex > 0) {
+                    setActiveTab(tabs[currentIndex - 1])
+                  }
+                }}
+                disabled={activeTab === "basic"}
+                className="h-10 px-3 text-[#FF6B6B]"
+              >
+                ← Previous
+              </Button>
+              <span className="text-gray-500 font-medium capitalize">{activeTab}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const tabs = ["basic", "media", "location", "contact", "details", "settings"]
+                  const currentIndex = tabs.indexOf(activeTab)
+                  if (currentIndex < tabs.length - 1) {
+                    setActiveTab(tabs[currentIndex + 1])
+                  }
+                }}
+                disabled={activeTab === "settings"}
+                className="h-10 px-3 text-[#FF6B6B]"
+              >
+                Next →
+              </Button>
             </div>
           </CardFooter>
         </form>
