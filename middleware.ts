@@ -239,33 +239,57 @@ export async function middleware(request: NextRequest) {
     '/events/create'       // Creating events
   ]
   
-  // Check if current route is explicitly public
-  const isPublicRoute = publicRoutes.some(route => {
-    if (route === '/') {
-      return pathname === '/'
+  // Enhanced public route checking function
+  function isPublicRoute(pathname: string): boolean {
+    // Home page exact match
+    if (pathname === '/') return true
+    
+    // Check each public route
+    for (const route of publicRoutes) {
+      if (route === '/') continue // Already handled above
+      
+      // Exact match
+      if (pathname === route) return true
+      
+      // Route with sub-paths (e.g., /signup/enhanced)
+      if (pathname.startsWith(route + '/')) return true
     }
-    return pathname === route || pathname.startsWith(route + '/')
-  })
-  
-  // Enhanced debug logging for route matching
-  if (pathname.includes('reset-password') || pathname.includes('forgot-password')) {
-    console.log(`🔍 [DEBUG] Route matching for ${pathname}:`)
-    console.log(`🔍 [DEBUG] - isPublicRoute: ${isPublicRoute}`)
-    console.log(`🔍 [DEBUG] - publicRoutes:`, publicRoutes)
-    publicRoutes.forEach(route => {
-      const matches = pathname === route || pathname.startsWith(route + '/')
-      console.log(`🔍 [DEBUG] - ${route}: ${matches}`)
-    })
+    
+    // Special handling for reset-password with tokens
+    if (pathname.startsWith('/reset-password')) return true
+    if (pathname.startsWith('/forgot-password')) return true
+    if (pathname.startsWith('/verify')) return true
+    
+    return false
   }
   
+  // Enhanced protected route checking function
+  function isProtectedRoute(pathname: string): boolean {
+    for (const route of protectedRoutes) {
+      // Exact match
+      if (pathname === route) return true
+      
+      // Route with sub-paths (e.g., /profile/edit)
+      if (pathname.startsWith(route + '/')) return true
+    }
+    
+    return false
+  }
+  
+  // Check if current route is explicitly public
+  const routeIsPublic = isPublicRoute(pathname)
+  const routeIsProtected = isProtectedRoute(pathname)
+  
+  // Enhanced debug logging for route matching
+  console.log(`🔍 [DEBUG] Route analysis for ${pathname}:`)
+  console.log(`🔍 [DEBUG] - routeIsPublic: ${routeIsPublic}`)
+  console.log(`🔍 [DEBUG] - routeIsProtected: ${routeIsProtected}`)
+  
   // If it's a public route, allow access without authentication
-  if (isPublicRoute) {
+  if (routeIsPublic) {
     console.log(`✅ [Middleware] Allowing public access to: ${pathname}`)
     return NextResponse.next()
   }
-  
-  // Check if current route requires authentication
-  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
   
   // For Capacitor apps, let them handle their own auth
   if (isCapacitorApp) {
@@ -273,8 +297,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check authentication for routes that need it
-  if (isProtectedRoute) {
+  // Check authentication ONLY for explicitly protected routes
+  if (routeIsProtected) {
     const authenticated = await isAuthenticated(request)
     
     if (!authenticated) {
@@ -286,11 +310,14 @@ export async function middleware(request: NextRequest) {
       
       return NextResponse.redirect(url)
     }
+    
+    console.log(`✅ [Middleware] Authenticated access to protected route: ${pathname}`)
+    return NextResponse.next()
   }
 
-  // For all other routes (not explicitly public or protected), allow access
+  // For all other routes (not explicitly public or protected), allow access by default
   // This includes dynamic routes like /locations/[id], /events/[id], etc.
-  console.log(`✅ [Middleware] Allowing access to: ${pathname}`)
+  console.log(`✅ [Middleware] Allowing access to unspecified route (default allow): ${pathname}`)
   return NextResponse.next()
 }
 

@@ -54,22 +54,41 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
   const storeRef = useRef<AppStore | null>(null)
   const persistorRef = useRef<any>(null)
   const [isReady, setIsReady] = useState(false)
-  const [shouldSkipLoading, setShouldSkipLoading] = useState(false)
+  const [shouldSkipPersistence, setShouldSkipPersistence] = useState(true) // Default to skip on server
+  const pathname = usePathname()
   
-  // Check if we're on a public route that doesn't need to wait for persistence
+  // Handle persistence logic after hydration to avoid SSR mismatch
   useEffect(() => {
-    const pathname = window.location.pathname
-    const publicRoutes = ['/', '/search', '/map', '/locations', '/events']
+    // Check if current route needs persistence after hydration
+    const publicRoutes = [
+      '/', 
+      '/search', 
+      '/map', 
+      '/locations', 
+      '/events',
+      '/login',
+      '/signup',
+      '/forgot-password',
+      '/reset-password',
+      '/verify',
+      '/explorer',
+      '/post',
+      '/home-page-actions',
+      '/test-feed'
+    ]
+    
     const isPublicRoute = publicRoutes.some(route => 
-      pathname === route || pathname.startsWith(`${route}/`)
+      pathname === route || pathname.startsWith(route + '/')
     )
     
+    // Skip persistence for public routes
+    setShouldSkipPersistence(isPublicRoute)
+    
+    // If we're skipping persistence, mark as ready immediately
     if (isPublicRoute) {
-      // For public routes, skip the loading and let persistence happen in background
-      setShouldSkipLoading(true)
       setIsReady(true)
     }
-  }, [])
+  }, [pathname])
   
   if (!storeRef.current) {
     // Create the store instance the first time this renders
@@ -94,14 +113,14 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     }
   }
 
-  // Force ready state after 3 seconds to prevent infinite loading (reduced from 5)
+  // Force ready state after 1 second to prevent infinite loading
   useEffect(() => {
     const forceReadyTimeout = setTimeout(() => {
       if (!isReady) {
         console.warn('[StoreProvider] Forcing ready state after timeout')
         setIsReady(true)
       }
-    }, 3000)
+    }, 1000) // Reduced to 1 second
 
     return () => clearTimeout(forceReadyTimeout)
   }, [isReady])
@@ -142,8 +161,8 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     }
   }, [])
 
-  // Skip loading for public routes to improve UX
-  if (shouldSkipLoading) {
+  // Always skip persistence for public routes to avoid hydration issues
+  if (shouldSkipPersistence) {
     return (
       <Provider store={storeRef.current}>
         {children}
