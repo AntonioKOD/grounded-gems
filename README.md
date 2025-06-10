@@ -82,15 +82,39 @@ cd sacavia
 # Install dependencies
 npm install
 
-# Copy environment variables
-cp .env.example .env.local
+# Create environment variables file
+touch .env.local
 
 # Configure your environment variables in .env.local
 # PAYLOAD_SECRET, MONGODB_URI, RESEND_API_KEY, etc.
+# FOURSQUARE_API_KEY (optional - for place discovery features)
 
 # Run development server
 npm run dev
 ```
+
+### Foursquare Integration (Optional)
+
+To enable the Foursquare place discovery features:
+
+1. **Get a Foursquare API Key**:
+   - Visit [Foursquare Developer Portal](https://developer.foursquare.com/)
+   - Create an account and register a new app
+   - Copy your API key
+
+2. **Configure Environment Variables**:
+   ```bash
+   # Add to your .env.local file
+   FOURSQUARE_API_KEY=your_foursquare_api_key_here
+   ```
+
+3. **Features Enabled**:
+   - Admin place import from Foursquare database
+   - Discovery of nearby places for users
+   - Rich place data including hours, ratings, and tips
+   - Automatic location data mapping
+
+> **Note**: The app will work without Foursquare integration, but place discovery features will be disabled.
 
 **Sacavia** - *Your Guide to Authentic Discovery* 🏔️
 

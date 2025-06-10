@@ -6,13 +6,14 @@ import Link from "next/link"
 import { 
   Eye, EyeOff, Loader2, CheckCircle, AlertCircle, ArrowRight, 
   MapPin, User, Mail, Lock, Coffee, Utensils, TreePine, Camera,
-  Building2, Users, Calendar, Clock, DollarSign
+  Building2, Users, Calendar, Clock, DollarSign, Bell
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 
 type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
@@ -30,6 +31,7 @@ interface UserData {
       longitude: number
     }
   }
+  receiveUpdates: boolean
   
   // Step 2: Interests
   interests: string[]
@@ -55,7 +57,8 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     password: "",
     name: "",
     username: "",
-    interests: []
+    interests: [],
+    receiveUpdates: true // Default to true for better user experience
   })
 
   const totalSteps = 3
@@ -247,6 +250,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         additionalData: {
           username: userData.username,
           interests: userData.interests,
+          receiveUpdates: userData.receiveUpdates,
           onboardingData: {
             primaryUseCase: userData.primaryUseCase,
             travelRadius: userData.travelRadius || '5',
@@ -484,6 +488,26 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                   />
                 </div>
                 <p className="text-xs text-gray-500">Helps us show relevant nearby places</p>
+              </div>
+
+              <div className="space-y-3 border-t pt-4">
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id="receiveUpdates"
+                    checked={userData.receiveUpdates}
+                    onCheckedChange={(value) => updateUserData("receiveUpdates", value)}
+                    disabled={status === "loading"}
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="receiveUpdates" className="text-sm font-medium cursor-pointer">
+                      Receive updates from Sacavia
+                    </Label>
+                    <p className="text-xs text-gray-500">
+                      Get notified about new features, local events, and community highlights. You can unsubscribe anytime.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
