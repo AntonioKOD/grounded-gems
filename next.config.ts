@@ -10,8 +10,9 @@ const nextConfig: NextConfig = {
     // Don't run TypeScript checking during build for faster builds 
     ignoreBuildErrors: true,
   },
-  // Use standalone for both web and mobile builds to support API routes
-  // output: 'standalone', // Temporarily disable standalone to fix build issues
+  
+  // Enable output standalone for better performance
+  output: 'standalone',
   
   images: {
     // Use custom loader for better mobile and Payload CMS compatibility
@@ -85,7 +86,14 @@ const nextConfig: NextConfig = {
       'react-redux',
       'date-fns',
     ],
-
+    // Enable turbo for faster development
+    turbo: {
+      rules: {
+        '*.svg': ['@svgr/webpack'],
+      },
+    },
+    // Enable server-side rendering improvements
+    serverComponentsExternalPackages: ['payload'],
   },
   
   // Disable static generation to fix build issues
@@ -99,7 +107,7 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   
-  // Headers for better mobile performance and caching
+  // Enhanced headers for security and performance
   async headers() {
     return [
       {
@@ -118,8 +126,16 @@ const nextConfig: NextConfig = {
             value: '1; mode=block',
           },
           {
-            key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(), microphone=(), geolocation=(self)',
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=31536000; includeSubDomains',
           },
         ],
       },
@@ -130,10 +146,27 @@ const nextConfig: NextConfig = {
             key: 'Cache-Control',
             value: 'no-store, no-cache, must-revalidate',
           },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
         ],
       },
       {
         source: '/_next/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/media/(.*)',
         headers: [
           {
             key: 'Cache-Control',

@@ -263,7 +263,7 @@ export const Users: CollectionConfig = {
     read: () => true,
     create: () => true,
     update: () => true,
-    delete: ({ req, id }) => req.user?.id === id,
+    delete: () => true,
   },
   hooks: {
     afterChange: [
