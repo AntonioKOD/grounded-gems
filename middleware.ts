@@ -117,11 +117,22 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith('/admin')) {
     console.log(`🔒 [Middleware] Admin access attempt: ${pathname}`)
     
+    // Check if this is an initial page load vs navigation
+    const referer = request.headers.get('referer')
+    const isInitialLoad = !referer || !referer.includes(request.nextUrl.origin)
+    
     try {
       const token = request.cookies.get('payload-token')?.value
       
       if (!token) {
         console.log(`🚫 [Middleware] No token found for admin access`)
+        // For initial loads, let the page handle authentication client-side
+        if (isInitialLoad) {
+          const response = NextResponse.next()
+          response.headers.set('x-admin-auth-required', 'true')
+          response.headers.set('x-admin-no-token', 'true')
+          return response
+        }
         return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
       }
 
@@ -129,6 +140,12 @@ export async function middleware(request: NextRequest) {
       const parts = token.split('.')
       if (parts.length !== 3) {
         console.log(`🚫 [Middleware] Invalid token format for admin access`)
+        if (isInitialLoad) {
+          const response = NextResponse.next()
+          response.headers.set('x-admin-auth-required', 'true')
+          response.headers.set('x-admin-invalid-token', 'true')
+          return response
+        }
         return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
       }
 
@@ -137,12 +154,24 @@ export async function middleware(request: NextRequest) {
         payload = JSON.parse(atob(parts[1]))
       } catch {
         console.log(`🚫 [Middleware] Invalid token payload for admin access`)
+        if (isInitialLoad) {
+          const response = NextResponse.next()
+          response.headers.set('x-admin-auth-required', 'true')
+          response.headers.set('x-admin-invalid-token', 'true')
+          return response
+        }
         return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
       }
 
       // Check if token is expired
       if (payload.exp && payload.exp * 1000 < Date.now()) {
         console.log(`🚫 [Middleware] Expired token for admin access`)
+        if (isInitialLoad) {
+          const response = NextResponse.next()
+          response.headers.set('x-admin-auth-required', 'true')
+          response.headers.set('x-admin-token-expired', 'true')
+          return response
+        }
         return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
       }
 
@@ -152,14 +181,23 @@ export async function middleware(request: NextRequest) {
       
       if (userEmail !== allowedAdminEmail) {
         console.log(`🚫 [Middleware] Unauthorized admin access attempt from: ${userEmail}`)
+        // For unauthorized access, always show access denied (regardless of initial load)
         return new NextResponse('Access Denied: Admin access restricted', { status: 403 })
       }
 
       console.log(`✅ [Middleware] Admin access granted to: ${userEmail}`)
+      const response = NextResponse.next()
+      response.headers.set('x-admin-auth-verified', 'true')
       return response
 
     } catch (error) {
       console.error(`❌ [Middleware] Error checking admin access:`, error)
+      if (isInitialLoad) {
+        const response = NextResponse.next()
+        response.headers.set('x-admin-auth-required', 'true')
+        response.headers.set('x-admin-auth-error', 'true')
+        return response
+      }
       return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
     }
   }
@@ -206,6 +244,6 @@ export const config = {
     /*
      * Match only essential paths, exclude static resources
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|media|admin|.*\\..*).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|sw.js|manifest.webmanifest|media|.*\\..*).*)',
   ],
 }
