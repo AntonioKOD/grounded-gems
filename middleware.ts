@@ -62,6 +62,11 @@ export async function middleware(request: NextRequest) {
   
   console.log(`🔍 [Middleware] Processing: ${pathname}`)
   
+  // Special debug logging for reset-password and other auth-related routes
+  if (pathname.includes('reset-password') || pathname.includes('forgot-password') || pathname.includes('login') || pathname.includes('signup')) {
+    console.log(`🚨 [DEBUG] Auth route detected: ${pathname}`)
+  }
+  
   // Security checks first
   
   // 1. Rate limiting check
@@ -241,6 +246,17 @@ export async function middleware(request: NextRequest) {
     }
     return pathname === route || pathname.startsWith(route + '/')
   })
+  
+  // Enhanced debug logging for route matching
+  if (pathname.includes('reset-password') || pathname.includes('forgot-password')) {
+    console.log(`🔍 [DEBUG] Route matching for ${pathname}:`)
+    console.log(`🔍 [DEBUG] - isPublicRoute: ${isPublicRoute}`)
+    console.log(`🔍 [DEBUG] - publicRoutes:`, publicRoutes)
+    publicRoutes.forEach(route => {
+      const matches = pathname === route || pathname.startsWith(route + '/')
+      console.log(`🔍 [DEBUG] - ${route}: ${matches}`)
+    })
+  }
   
   // If it's a public route, allow access without authentication
   if (isPublicRoute) {
