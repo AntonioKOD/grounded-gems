@@ -59,7 +59,22 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
   // Check if we're on a public route that doesn't need to wait for persistence
   useEffect(() => {
     const pathname = window.location.pathname
-    const publicRoutes = ['/', '/search', '/map', '/locations', '/events']
+    const publicRoutes = [
+      '/', 
+      '/search', 
+      '/map', 
+      '/locations', 
+      '/events',
+      '/login',
+      '/signup',
+      '/forgot-password',
+      '/reset-password',
+      '/verify',
+      '/explorer',
+      '/post',
+      '/home-page-actions',
+      '/test-feed'
+    ]
     const isPublicRoute = publicRoutes.some(route => 
       pathname === route || pathname.startsWith(`${route}/`)
     )
