@@ -109,14 +109,14 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     }
   }
 
-  // Force ready state after 3 seconds to prevent infinite loading (reduced from 5)
+  // Force ready state after 1 second to prevent infinite loading
   useEffect(() => {
     const forceReadyTimeout = setTimeout(() => {
       if (!isReady) {
         console.warn('[StoreProvider] Forcing ready state after timeout')
         setIsReady(true)
       }
-    }, 3000)
+    }, 1000) // Reduced to 1 second
 
     return () => clearTimeout(forceReadyTimeout)
   }, [isReady])
@@ -157,8 +157,14 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     }
   }, [])
 
-  // Skip loading for public routes to improve UX
-  if (shouldSkipLoading) {
+  // Always skip loading unless specifically needed for authenticated routes
+  const needsPersistence = typeof window !== 'undefined' && 
+    (window.location.pathname.startsWith('/feed') || 
+     window.location.pathname.startsWith('/profile') || 
+     window.location.pathname.startsWith('/bucket-list') ||
+     window.location.pathname.startsWith('/planner'))
+
+  if (!needsPersistence || shouldSkipLoading) {
     return (
       <Provider store={storeRef.current}>
         {children}
