@@ -1,6 +1,27 @@
-// middleware.ts - Authentication and Redirect Management
+// middleware.ts - Enhanced Authentication, Security and Performance Management
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+
+// Rate limiting store (simple in-memory for basic protection)
+const rateLimitStore = new Map<string, { count: number; timestamp: number }>()
+
+// Check rate limiting
+function checkRateLimit(ip: string, maxRequests: number = 100, windowMs: number = 15 * 60 * 1000): boolean {
+  const now = Date.now()
+  const record = rateLimitStore.get(ip)
+  
+  if (!record || (now - record.timestamp) > windowMs) {
+    rateLimitStore.set(ip, { count: 1, timestamp: now })
+    return true
+  }
+  
+  if (record.count >= maxRequests) {
+    return false
+  }
+  
+  record.count++
+  return true
+}
 
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
   const token = request.cookies.get('payload-token')?.value
@@ -10,9 +31,24 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
   }
 
   try {
-    // Quick token validation - you could make this more sophisticated
-    // For now, just check if token exists and is not obviously invalid
-    return token.length > 10 // Basic check
+    // Enhanced token validation
+    if (token.length < 10) return false
+    
+    // Check if token has proper JWT structure (basic check)
+    const parts = token.split('.')
+    if (parts.length !== 3) return false
+    
+    // Decode payload to check expiration (basic validation)
+    try {
+      const payload = JSON.parse(atob(parts[1]))
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return false
+      }
+    } catch {
+      return false
+    }
+    
+    return true
   } catch {
     return false
   }
@@ -21,9 +57,43 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const userAgent = request.headers.get('user-agent') || ''
+  const ip = request.ip || request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
   const url = request.nextUrl.clone()
   
   console.log(`🔍 [Middleware] Processing: ${pathname}`)
+  
+  // Security checks first
+  
+  // 1. Rate limiting check
+  if (!checkRateLimit(ip)) {
+    console.log(`🚫 [Middleware] Rate limit exceeded for IP: ${ip}`)
+    return new NextResponse('Rate limit exceeded', { status: 429 })
+  }
+  
+  // 2. Security headers for all requests
+  const response = NextResponse.next()
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-XSS-Protection', '1; mode=block')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  
+  // 3. Block suspicious requests
+  const suspiciousPatterns = [
+    /\.php$/,
+    /\.asp$/,
+    /\.jsp$/,
+    /wp-admin/,
+    /wp-login/,
+    /\.env$/,
+    /\.git/,
+    /admin\.php/,
+    /phpmyadmin/,
+  ]
+  
+  if (suspiciousPatterns.some(pattern => pattern.test(pathname))) {
+    console.log(`🚫 [Middleware] Blocking suspicious request: ${pathname}`)
+    return new NextResponse('Not Found', { status: 404 })
+  }
   
   // Detect Capacitor mobile apps specifically
   const isCapacitorApp = userAgent.includes('Capacitor') || userAgent.includes('Sacavia')
@@ -41,7 +111,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/media/') // Media files
   ) {
     console.log(`✅ [Middleware] Skipping static resource: ${pathname}`)
-    return NextResponse.next()
+    return response
   }
 
   // Define routes that require authentication

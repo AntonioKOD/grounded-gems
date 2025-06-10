@@ -12,8 +12,38 @@ interface ImageLoaderProps {
 }
 
 export default function sacaviaImageLoader({ src, width, quality }: ImageLoaderProps): string {
-  // If it's already a full URL, return as is
+  // Set default quality if not provided (85 for good balance of quality/size)
+  const q = quality || 85;
+
+  // If it's already a full URL, optimize if possible
   if (src.startsWith('http://') || src.startsWith('https://')) {
+    // For blob storage URLs, add optimization parameters
+    if (src.includes('blob.vercel-storage.com')) {
+      try {
+        const url = new URL(src);
+        url.searchParams.set('w', width.toString());
+        url.searchParams.set('q', q.toString());
+        url.searchParams.set('fm', 'webp');
+        return url.toString();
+      } catch {
+        return src; // Fallback if URL parsing fails
+      }
+    }
+    
+    // For Unsplash images, add optimization
+    if (src.includes('images.unsplash.com')) {
+      try {
+        const url = new URL(src);
+        url.searchParams.set('w', width.toString());
+        url.searchParams.set('q', q.toString());
+        url.searchParams.set('fm', 'webp');
+        url.searchParams.set('auto', 'format,compress');
+        return url.toString();
+      } catch {
+        return src;
+      }
+    }
+    
     return src;
   }
 
@@ -43,16 +73,53 @@ export default function sacaviaImageLoader({ src, width, quality }: ImageLoaderP
 
   const baseUrl = getBaseUrl();
   
-  // Handle Payload media URLs
+  // Handle Payload media URLs with optimization
   if (src.startsWith('/api/media/') || src.startsWith('/media/')) {
-    return `${baseUrl}${src}`;
+    const optimizedSrc = `${baseUrl}${src}`;
+    
+    // Add optimization parameters for media files
+    try {
+      const url = new URL(optimizedSrc);
+      url.searchParams.set('width', width.toString());
+      url.searchParams.set('quality', q.toString());
+      url.searchParams.set('format', 'webp');
+      return url.toString();
+    } catch {
+      return optimizedSrc;
+    }
   }
   
-  // Handle relative URLs
+  // Handle relative URLs with optimization
   if (src.startsWith('/')) {
-    return `${baseUrl}${src}`;
+    const optimizedSrc = `${baseUrl}${src}`;
+    
+    // Add optimization for image files
+    if (src.match(/\.(jpg|jpeg|png|webp|avif)$/i)) {
+      try {
+        const url = new URL(optimizedSrc);
+        url.searchParams.set('w', width.toString());
+        url.searchParams.set('q', q.toString());
+        url.searchParams.set('fm', 'webp');
+        return url.toString();
+      } catch {
+        return optimizedSrc;
+      }
+    }
+    
+    return optimizedSrc;
   }
   
   // For Payload media files without path
-  return `${baseUrl}/api/media/${src}`;
+  const fallbackSrc = `${baseUrl}/api/media/${src}`;
+  
+  // Try to add optimization parameters
+  try {
+    const url = new URL(fallbackSrc);
+    url.searchParams.set('width', width.toString());
+    url.searchParams.set('quality', q.toString());
+    url.searchParams.set('format', 'webp');
+    return url.toString();
+  } catch {
+    return fallbackSrc;
+  }
 } 
