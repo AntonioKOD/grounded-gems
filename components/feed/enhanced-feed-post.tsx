@@ -448,25 +448,26 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
               {currentMedia.type === 'image' && (
                 <div className="relative w-full rounded-2xl overflow-hidden bg-gray-100">
                   <div className="relative" style={{ aspectRatio: '16/10' }}>
-                    <Image
-                      src={currentMedia.url}
-                      alt={post.title || "Post image"}
-                      fill
-                      sizes="(max-width: 768px) 100vw, 50vw"
-                      className="object-cover"
-                      priority={priority <= 2}
-                      quality={85}
-                      unoptimized={true}
-                      onLoad={() => {
-                        setImageLoadStates(prev => ({
-                          ...prev,
-                          [currentImageIndex]: true
-                        }))
-                      }}
-                      onError={() => {
-                        console.error(`Failed to load image: ${currentMedia.url}`)
-                      }}
-                    />
+                                      <Image
+                    src={currentMedia.url}
+                    alt={post.title || "Post image"}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    className="object-cover"
+                    priority={priority <= 2}
+                    quality={85}
+                    placeholder="blur"
+                    blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8A0XGARt12BhtuKCo2ARCh1w7Lg1iCgQIU/9k="
+                    onLoad={() => {
+                      setImageLoadStates(prev => ({
+                        ...prev,
+                        [currentImageIndex]: true
+                      }))
+                    }}
+                    onError={() => {
+                      console.error(`Failed to load image: ${currentMedia.url}`)
+                    }}
+                  />
                     
                     {/* Image navigation for multiple images */}
                     {photos.length > 1 && (
