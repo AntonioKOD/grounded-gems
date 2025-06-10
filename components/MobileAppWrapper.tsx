@@ -8,16 +8,23 @@ interface MobileAppWrapperProps {
 }
 
 export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
+  const [isMounted, setIsMounted] = useState(false)
   const [isReady, setIsReady] = useState(false)
   const [isIOS, setIsIOS] = useState(false)
-  const [isMounted, setIsMounted] = useState(false)
   const [isCapacitor, setIsCapacitor] = useState(false)
   const router = useRouter()
   const initRef = useRef(false)
 
-  // Prevent SSR issues
+  // Simple mount check for hydration safety
   useEffect(() => {
     setIsMounted(true)
+    
+    // Simple ready state - no auth checks needed since middleware handles this
+    const readyTimer = setTimeout(() => {
+      setIsReady(true)
+    }, 100)
+
+    return () => clearTimeout(readyTimer)
   }, [])
 
   useEffect(() => {
@@ -41,7 +48,6 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
         if (isCapacitorDevice) {
           // Use the new Capacitor utilities
           await initializeCapacitorApp()
-          await handleAuthState()
         }
 
         setIsReady(true)
@@ -59,48 +65,12 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
 
 
 
-  const handleAuthState = async () => {
-    try {
-      // Quick auth check with simple fetch
-      const response = await fetch('/api/users/me', {
-        credentials: 'include',
-        signal: AbortSignal.timeout(3000) // 3 second timeout
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.user) {
-          console.log('👤 User authenticated')
-          // Only redirect if we're on login page
-          if (window.location.pathname === '/login') {
-            router.replace('/feed')
-          }
-        } else {
-          console.log('👤 No user found')
-          // Only redirect if we're on a protected page
-          const protectedPaths = ['/feed', '/profile', '/map', '/notifications']
-          if (protectedPaths.some(path => window.location.pathname.startsWith(path))) {
-            router.replace('/login')
-          }
-        }
-      } else {
-        console.log('👤 Auth check failed:', response.status)
-        if (response.status === 401 && window.location.pathname !== '/login') {
-          router.replace('/login')
-        }
-      }
-    } catch (error) {
-      console.error('👤 Auth check error:', error)
-      // Don't redirect on error, let user stay where they are
-    }
-  }
-
   // Prevent flash during SSR
   if (!isMounted) {
     return <>{children}</>
   }
 
-  // Show minimal loading for mobile apps
+  // Show minimal loading for mobile apps only if needed
   if (!isReady && isCapacitor) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#ff6b6b] to-[#4ecdc4]">

@@ -3,7 +3,6 @@ import { notFound } from "next/navigation"
 import { getUserbyId } from "@/app/actions"
 import ProfileContent from "@/components/profile/profile-content"
 import ProfileSkeleton from "@/components/profile/profile-skeleton"
-import ProtectedRoute from '@/components/auth/protected-route'
 import type { UserProfile } from "@/types/user"
 
 // 1. Async function so we can await params  
@@ -32,11 +31,9 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     console.log(`Successfully loaded profile for user: ${initialUserData.name || 'Unknown'} (ID: ${id})`)
 
     return (
-      <ProtectedRoute>
-        <Suspense fallback={<ProfileSkeleton />}>
-          <ProfileContent initialUserData={initialUserData} userId={id} />
-        </Suspense>
-      </ProtectedRoute>
+      <Suspense fallback={<ProfileSkeleton />}>
+        <ProfileContent initialUserData={initialUserData} userId={id} />
+      </Suspense>
     )
   } catch (error) {
     console.error(`Error fetching user profile for ID ${id}:`, error)
