@@ -29,6 +29,7 @@ import {
   Target,
   AlertTriangle,
   MessageSquare,
+  Camera,
 } from "lucide-react"
 import { Capacitor } from '@capacitor/core'
 import { trackIOSModal, logIOSEvent } from '@/lib/ios-crash-debug'
@@ -50,6 +51,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
+import { UserPhotosSection } from "@/components/location/user-photos-section"
 import type { 
   User, 
   ReviewItem, 
@@ -233,11 +236,13 @@ function LocationInfo({
   location, 
   onWriteReview, 
   onAddToBucketList,
+  onAddPhoto,
   isLoadingBucketLists 
 }: { 
   location: Location
   onWriteReview: () => void
   onAddToBucketList: () => void
+  onAddPhoto: () => void
   isLoadingBucketLists: boolean
 }) {
   // Using shared utility functions for formatting
@@ -344,7 +349,7 @@ function LocationInfo({
       </div>
 
       {/* Enhanced Action Buttons */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <Button
           onClick={handleDirectionsClick}
           variant="outline"
@@ -361,6 +366,8 @@ function LocationInfo({
           <MessageSquare className="h-5 w-5 mr-2" />
           <span className="text-sm">Review</span>
         </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <Button
           onClick={onAddToBucketList}
           disabled={isLoadingBucketLists}
@@ -372,6 +379,14 @@ function LocationInfo({
             <Crown className="h-5 w-5 mr-2" />
           )}
           <span className="text-sm">Add to List</span>
+        </Button>
+        <Button
+          onClick={onAddPhoto}
+          variant="outline"
+          className="h-14 rounded-xl border-2 border-green-200 text-green-600 hover:bg-green-50 hover:border-green-300 font-semibold transition-all duration-200"
+        >
+          <Camera className="h-5 w-5 mr-2" />
+          <span className="text-sm">Add Photo</span>
         </Button>
       </div>
 
@@ -1428,6 +1443,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
+  const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isIOS, setIsIOS] = useState(false)
@@ -1560,6 +1576,15 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
     
     setIsBucketModalOpen(true)
+  }
+
+  const handleAddPhoto = () => {
+    if (!user) {
+      toast.error('Please log in to add photos')
+      return
+    }
+    
+    setIsPhotoSubmissionModalOpen(true)
   }
 
   const handleInteraction = async (interactionType: string) => {
@@ -1771,6 +1796,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                   location={location} 
                   onWriteReview={handleWriteReview}
                   onAddToBucketList={handleAddToBucketList}
+                  onAddPhoto={handleAddPhoto}
                   isLoadingBucketLists={isLoadingBucketLists}
                 />
 
@@ -1778,22 +1804,28 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
 
                 {/* Enhanced Tabs */}
                 <Tabs defaultValue="about" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 bg-gray-100 rounded-xl p-1">
+                  <TabsList className="grid w-full grid-cols-4 bg-gray-100 rounded-xl p-1">
                     <TabsTrigger 
                       value="about" 
-                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm"
+                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm text-xs"
                     >
                       About
                     </TabsTrigger>
                     <TabsTrigger 
+                      value="photos" 
+                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm text-xs"
+                    >
+                      Photos
+                    </TabsTrigger>
+                    <TabsTrigger 
                       value="reviews" 
-                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm"
+                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm text-xs"
                     >
                       Reviews ({reviewItems.length})
                     </TabsTrigger>
                     <TabsTrigger 
                       value="events" 
-                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm"
+                      className="rounded-lg font-medium data-[state=active]:bg-white data-[state=active]:text-[#ff6b6b] data-[state=active]:shadow-sm text-xs"
                     >
                       Events
                     </TabsTrigger>
@@ -1814,6 +1846,13 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                           </div>
                         </div>
                       )}
+
+                    <TabsContent value="photos" className="p-0">
+                      <UserPhotosSection 
+                        locationId={location.id} 
+                        locationName={location.name}
+                      />
+                    </TabsContent>
 
                       {location.insiderTips && (
                         <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-6 border border-emerald-200 shadow-lg relative overflow-hidden">
@@ -2079,6 +2118,29 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
             onSuccess={() => {
               loadUserBucketLists()
               setIsBucketModalOpen(false)
+            }}
+          />
+
+          {/* Photo Submission Modal */}
+          <PhotoSubmissionModal
+            isOpen={isPhotoSubmissionModalOpen}
+            onClose={() => {
+              console.log('🔴 MOBILE: Closing photo submission modal')
+              setIsPhotoSubmissionModalOpen(false)
+            }}
+            location={location ? {
+              id: location.id,
+              name: location.name
+            } : null}
+            user={user ? {
+              id: user.id,
+              name: user.name || '',
+              avatar: user.avatar
+            } : null}
+            onSuccess={() => {
+              console.log('🔴 MOBILE: Photo submission successful')
+              setIsPhotoSubmissionModalOpen(false)
+              toast.success('Photo submitted for review!')
             }}
           />
         </div>

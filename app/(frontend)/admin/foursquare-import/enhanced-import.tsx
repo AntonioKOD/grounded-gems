@@ -30,6 +30,7 @@ import {
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getCategories, createLocation, type LocationFormData, type DayOfWeek } from '@/app/actions'
+import { HierarchicalCategorySelector } from '@/components/ui/hierarchical-category-selector'
 
 interface FoursquarePlace {
   foursquareId: string
@@ -57,7 +58,19 @@ export default function EnhancedFoursquareImport() {
   const [isLoading, setIsLoading] = useState(false)
   
   // Categories from Payload CMS
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
+  const [categories, setCategories] = useState<{
+    id: string
+    name: string
+    slug: string
+    description?: string
+    source: 'manual' | 'foursquare' | 'imported'
+    foursquareIcon?: {
+      prefix: string
+      suffix: string
+    }
+    subcategories?: any[]
+    parent?: string
+  }[]>([])
   
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -93,7 +106,36 @@ export default function EnhancedFoursquareImport() {
     const fetchCategories = async () => {
       try {
         const result = await getCategories()
-        setCategories(result.docs.map((doc: any) => ({ id: doc.id, name: doc.name })))
+        
+        // Transform categories to include hierarchical structure
+        const transformedCategories = result.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,
+          slug: doc.slug,
+          description: doc.description,
+          source: doc.source || 'manual',
+          foursquareIcon: doc.foursquareIcon,
+          parent: doc.parent?.id || doc.parent,
+          subcategories: []
+        }))
+
+        // Build hierarchical structure
+        const categoryMap = new Map(transformedCategories.map(cat => [cat.id, cat]))
+        const rootCategories: any[] = []
+
+        transformedCategories.forEach(category => {
+          if (category.parent) {
+            const parent = categoryMap.get(category.parent)
+            if (parent) {
+              if (!parent.subcategories) parent.subcategories = []
+              parent.subcategories.push(category)
+            }
+          } else {
+            rootCategories.push(category)
+          }
+        })
+
+        setCategories(rootCategories)
       } catch (error) {
         console.error("Error fetching categories:", error)
         toast.error('Failed to load categories')

@@ -400,7 +400,7 @@ export default function LocationDashboard() {
                           color: 'var(--color-info)'
                         }}
                         className="flex-1 hover:bg-blue-50"
-                        onClick={() => window.open(`/locations/${location.id}/edit`, '_blank')}
+                        onClick={() => router.push(`/profile/${userId}/location-dashboard/${location.id}/edit`)}
                       >
                         <Edit3 className="h-4 w-4 mr-1" />
                         Edit

@@ -144,7 +144,7 @@ export function CommentSystemDark({
     }
   }, [showComments, hasLoadedComments, isLoadingComments, dispatch, postId, user?.id])
 
-  // Update local comments when real comments are loaded
+        // Update local comments when real comments are loaded
   useEffect(() => {
     if (realComments.length > 0) {
       // Convert real comments to the Comment interface format
@@ -164,17 +164,17 @@ export function CommentSystemDark({
           reactions: { like: reply.likeCount || 0, love: 0, laugh: 0 },
           replies: [],
           likeCount: reply.likeCount || 0,
-          isLiked: likedComments.includes(reply.id), // Use Redux state for like status
+          isLiked: reply.isLiked || false, // Use the isLiked field from server
           parentCommentId: comment.id,
           isReply: true,
         })) : [],
         likeCount: comment.likeCount || 0,
-        isLiked: likedComments.includes(comment.id), // Use Redux state for like status
+        isLiked: comment.isLiked || false, // Use the isLiked field from server
         replyCount: comment.replyCount || 0,
       }))
       setComments(formattedComments)
     }
-  }, [realComments, likedComments])
+  }, [realComments])
 
   // Get sentiment styling for dark theme
   const getSentimentStyling = (sentiment: string) => {
@@ -264,8 +264,16 @@ export function CommentSystemDark({
       return
     }
 
-    // Check if comment is currently liked from Redux state
-    const isCurrentlyLiked = likedComments.includes(commentId)
+    // Find comment in current state to get like status
+    let isCurrentlyLiked = false
+    if (isReply && parentCommentId) {
+      const parentComment = comments.find(c => c.id === parentCommentId)
+      const reply = parentComment?.replies?.find(r => r.id === commentId)
+      isCurrentlyLiked = reply?.isLiked || false
+    } else {
+      const comment = comments.find(c => c.id === commentId)
+      isCurrentlyLiked = comment?.isLiked || false
+    }
 
     try {
       // Update local state immediately for better UX
@@ -348,7 +356,7 @@ export function CommentSystemDark({
         ))
       }
     }
-  }, [user, likedComments, dispatch, postId])
+  }, [user, comments, dispatch, postId])
 
   // Toggle reply expansion
   const toggleReplies = useCallback((commentId: string) => {
@@ -375,7 +383,7 @@ export function CommentSystemDark({
     const hasReplies = comment.replies && comment.replies.length > 0
     const isExpanded = expandedReplies.has(comment.id)
     const isLikingComment = loadingCommentLikes.includes(comment.id)
-    const isCommentLiked = likedComments.includes(comment.id)
+    const isCommentLiked = comment.isLiked || false
 
     return (
       <motion.div

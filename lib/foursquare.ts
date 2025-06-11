@@ -187,7 +187,7 @@ class FoursquareAPI {
   }
 
   /**
-   * Get high-quality photos for a place with detailed metadata
+   * Get place photos for a place with detailed metadata
    */
   async getPlacePhotosDetailed(fsqId: string, limit: number = 20): Promise<{
     photos: Array<{
@@ -198,7 +198,6 @@ class FoursquareAPI {
       thumbnailUrl: string
       width: number
       height: number
-      createdAt: string
       caption?: string
       user?: string
     }>
@@ -207,37 +206,28 @@ class FoursquareAPI {
     try {
       const response = await this.getPlacePhotos(fsqId, limit)
       
-      // Handle case where photos array doesn't exist or is empty
-      if (!response || !response.photos || !Array.isArray(response.photos)) {
-        console.log(`No photos found for place ${fsqId}`)
-        return {
-          photos: [],
-          total: 0
-        }
+      if (!response.photos || response.photos.length === 0) {
+        return { photos: [], total: 0 }
       }
-      
-      const processedPhotos = response.photos.map(photo => {
-        const baseUrl = `${photo.prefix}${photo.suffix}`
-        return {
-          id: photo.id,
-          url: baseUrl,
-          highResUrl: `${photo.prefix}original${photo.suffix}`,
-          mediumResUrl: `${photo.prefix}800x600${photo.suffix}`,
-          thumbnailUrl: `${photo.prefix}300x300${photo.suffix}`,
-          width: photo.width,
-          height: photo.height,
-          createdAt: photo.created_at,
-          caption: photo.tip?.text || `Photo of ${fsqId}`,
-          user: photo.user ? `${photo.user.first_name || ''} ${photo.user.last_name || ''}`.trim() : undefined
-        }
-      })
+
+      const detailedPhotos = response.photos.map(photo => ({
+        id: photo.id,
+        url: `${photo.prefix}original${photo.suffix}`,
+        highResUrl: `${photo.prefix}1000x1000${photo.suffix}`,
+        mediumResUrl: `${photo.prefix}500x500${photo.suffix}`,
+        thumbnailUrl: `${photo.prefix}200x200${photo.suffix}`,
+        width: photo.width,
+        height: photo.height,
+        caption: photo.tip?.text,
+        user: photo.user ? `${photo.user.first_name} ${photo.user.last_name}`.trim() : undefined
+      }))
 
       return {
-        photos: processedPhotos,
-        total: processedPhotos.length
+        photos: detailedPhotos,
+        total: detailedPhotos.length
       }
     } catch (error) {
-      console.error(`Error fetching photos for ${fsqId}:`, error)
+      console.error('Error fetching detailed photos:', error)
       return { photos: [], total: 0 }
     }
   }
@@ -457,6 +447,104 @@ class FoursquareAPI {
       
       // Visit verification
       visitVerificationCount: 0
+    }
+  }
+
+  /**
+   * Get Foursquare venue categories (for Personalization API)
+   */
+  async getVenueCategories(): Promise<{
+    categories: Array<{
+      id: string
+      name: string
+      pluralName: string
+      shortName: string
+      icon: {
+        prefix: string
+        suffix: string
+      }
+      parents?: string[]
+      mapIcon?: string
+    }>
+  }> {
+    return this.makeRequest<{
+      categories: Array<{
+        id: string
+        name: string
+        pluralName: string
+        shortName: string
+        icon: {
+          prefix: string
+          suffix: string
+        }
+        parents?: string[]
+        mapIcon?: string
+      }>
+    }>('/venues/categories')
+  }
+
+  /**
+   * Fetch all categories and organize them hierarchically
+   */
+  async getCategoriesHierarchical(): Promise<{
+    mainCategories: Array<{
+      id: string
+      name: string
+      pluralName: string
+      shortName: string
+      icon: {
+        prefix: string
+        suffix: string
+      }
+      subcategories: Array<{
+        id: string
+        name: string
+        pluralName: string
+        shortName: string
+        icon: {
+          prefix: string
+          suffix: string
+        }
+      }>
+    }>
+  }> {
+    try {
+      const response = await this.getVenueCategories()
+      
+      // Create a map for quick lookup
+      const categoryMap = new Map(response.categories.map(cat => [cat.id, cat]))
+      
+      // Group categories by their parents
+      const mainCategories: any[] = []
+      const subcategoriesMap = new Map<string, any[]>()
+      
+      response.categories.forEach(category => {
+        if (!category.parents || category.parents.length === 0) {
+          // This is a main category
+          mainCategories.push({
+            ...category,
+            subcategories: []
+          })
+        } else {
+          // This is a subcategory
+          category.parents.forEach(parentId => {
+            if (!subcategoriesMap.has(parentId)) {
+              subcategoriesMap.set(parentId, [])
+            }
+            subcategoriesMap.get(parentId)!.push(category)
+          })
+        }
+      })
+      
+      // Attach subcategories to their parents
+      mainCategories.forEach(mainCategory => {
+        mainCategory.subcategories = subcategoriesMap.get(mainCategory.id) || []
+      })
+      
+      return { mainCategories }
+    } catch (error) {
+      console.error('Error fetching hierarchical categories:', error)
+      return { mainCategories: [] }
     }
   }
 }

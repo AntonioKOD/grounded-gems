@@ -386,13 +386,15 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
                     )}
                   </div>
 
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {categoryNames.map((category, index) => (
-                      <Badge key={index} variant="secondary">
-                        {category}
-                      </Badge>
-                    ))}
-                  </div>
+                  {categoryNames.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {categoryNames.map((category, index) => (
+                        <Badge key={index} variant="secondary" className="bg-[#FF6B6B]/10 text-[#FF6B6B] border-[#FF6B6B]/20">
+                          {category}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
 
                   {location.averageRating && (
                     <div className="flex items-center gap-2 mb-4">

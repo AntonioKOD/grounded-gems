@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { getCategories, type LocationFormData, type DayOfWeek } from "@/app/actions"
+import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
 
 interface Location {
   id: string
@@ -81,16 +82,30 @@ interface Location {
 interface EditLocationFormProps {
   location: Location
   currentUser: { id: string; name?: string; email?: string } | null
+  onSuccess?: () => void
+  onCancel?: () => void
 }
 
-export default function EditLocationForm({ location, currentUser }: EditLocationFormProps) {
+export default function EditLocationForm({ location, currentUser, onSuccess, onCancel }: EditLocationFormProps) {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const galleryFileInputRef = useRef<HTMLInputElement>(null)
 
   // State for categories
   const [isLoading, setIsLoading] = useState(false)
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
+  const [categories, setCategories] = useState<{
+    id: string
+    name: string
+    slug: string
+    description?: string
+    source: 'manual' | 'foursquare' | 'imported'
+    foursquareIcon?: {
+      prefix: string
+      suffix: string
+    }
+    subcategories?: any[]
+    parent?: string
+  }[]>([])
 
   // Form state
   const [activeTab, setActiveTab] = useState("basic")
@@ -99,7 +114,7 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
   // Basic info - pre-populate with existing data
   const [locationName, setLocationName] = useState(location.name || "")
   const [locationSlug, setLocationSlug] = useState(location.slug || "")
-  const [locationCategory, setLocationCategory] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [locationDescription, setLocationDescription] = useState(location.description || "")
   const [shortDescription, setShortDescription] = useState(location.shortDescription || "")
 
@@ -239,17 +254,44 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const data = await getCategories()
-        setCategories(data.docs as Array<{ id: string; name: string }>)
+        const result = await getCategories()
+        
+        // Transform categories to include hierarchical structure
+        const transformedCategories = result.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,
+          slug: doc.slug,
+          description: doc.description,
+          source: doc.source || 'manual',
+          foursquareIcon: doc.foursquareIcon,
+          parent: doc.parent?.id || doc.parent,
+          subcategories: []
+        }))
 
-        // Set the initial category selection
-        if (location.categories && location.categories.length > 0) {
-          const firstCategory = location.categories[0]
-          if (typeof firstCategory === 'string') {
-            setLocationCategory(firstCategory)
-          } else if (firstCategory && typeof firstCategory === 'object' && 'id' in firstCategory) {
-            setLocationCategory(firstCategory.id)
+        // Build hierarchical structure
+        const categoryMap = new Map(transformedCategories.map(cat => [cat.id, cat]))
+        const rootCategories: any[] = []
+
+        transformedCategories.forEach(category => {
+          if (category.parent) {
+            const parent = categoryMap.get(category.parent)
+            if (parent) {
+              if (!parent.subcategories) parent.subcategories = []
+              parent.subcategories.push(category)
+            }
+          } else {
+            rootCategories.push(category)
           }
+        })
+
+        setCategories(rootCategories)
+
+        // Set the initial category selection - now supports multiple categories
+        if (location.categories && location.categories.length > 0) {
+          const categoryIds = location.categories.map(cat => 
+            typeof cat === 'string' ? cat : cat.id
+          ).filter(Boolean)
+          setSelectedCategories(categoryIds)
         }
       } catch (error) {
         console.error('Error fetching categories:', error)
@@ -376,7 +418,7 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
     if (!locationName.trim()) errors.name = "Location name is required"
     if (!locationSlug.trim()) errors.slug = "Slug is required"
     if (!locationDescription.trim()) errors.description = "Description is required"
-    if (!locationCategory) errors.category = "Category is required"
+    if (!selectedCategories || selectedCategories.length === 0) errors.categories = "At least one category is required"
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
@@ -394,7 +436,7 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
         shortDescription,
         featuredImage: locationImage || undefined,
         gallery,
-        categories: locationCategory ? [locationCategory] : undefined,
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
         tags,
         address,
         contactInfo,
@@ -416,8 +458,8 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
         status: saveAsDraft ? 'draft' : 'published',
       }
 
-      const response = await fetch(`/api/locations/${location.id}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/locations/${location.id}/edit`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -425,13 +467,18 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
       })
 
       if (response.ok) {
-        const updatedLocation = await response.json()
+        const result = await response.json()
         toast.success(`Location ${saveAsDraft ? 'saved as draft' : 'updated'} successfully!`)
         
-        // Redirect back to dashboard
-        router.push(`/profile/${currentUser?.id}/location-dashboard`)
+        // Call success callback if provided, otherwise redirect
+        if (onSuccess) {
+          onSuccess()
+        } else {
+          router.push(`/profile/${currentUser?.id}/location-dashboard`)
+        }
       } else {
-        throw new Error('Failed to update location')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to update location')
       }
     } catch (error) {
       console.error('Error updating location:', error)
@@ -487,22 +534,22 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
               {formErrors.slug && <p className="text-sm text-red-500">{formErrors.slug}</p>}
             </div>
 
-            {/* Category */}
+            {/* Categories */}
             <div className="space-y-2">
-              <Label htmlFor="category">Category *</Label>
-              <Select value={locationCategory} onValueChange={setLocationCategory}>
-                <SelectTrigger className={formErrors.category ? "border-red-500" : ""}>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.category && <p className="text-sm text-red-500">{formErrors.category}</p>}
+              <Label className="text-base font-medium">
+                Categories (Select up to 3) *
+              </Label>
+              <HierarchicalCategorySelector
+                categories={categories}
+                selectedCategories={selectedCategories}
+                onSelectionChange={setSelectedCategories}
+                maxSelections={3}
+                placeholder="Choose categories that best describe your location"
+                showSearch={true}
+                showBadges={true}
+                allowSubcategorySelection={true}
+              />
+              {formErrors.categories && <p className="text-sm text-red-500">{formErrors.categories}</p>}
             </div>
 
             {/* Short Description */}
@@ -1021,7 +1068,7 @@ export default function EditLocationForm({ location, currentUser }: EditLocation
       <CardFooter className="flex justify-between pt-6">
         <Button
           variant="outline"
-          onClick={() => router.back()}
+          onClick={() => onCancel ? onCancel() : router.back()}
           disabled={isLoading}
         >
           Cancel

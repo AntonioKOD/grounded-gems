@@ -19,8 +19,7 @@ import {
   Users,
   Camera,
   CheckCircle,
-  ExternalLink,
-  Share2
+  ExternalLink
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,6 +29,7 @@ import {
   LocationHeroButtons
 } from './location-interactions'
 import { ContactActions } from './contact-actions'
+import { UserPhotosSection } from '@/components/location/user-photos-section'
 
 export const dynamic = 'force-dynamic'
 
@@ -550,6 +550,16 @@ export default async function LocationPage({ params }: PageProps) {
                   </CardContent>
                 </Card>
               )}
+
+              {/* User Photos Section */}
+              <Card>
+                <CardContent className="p-8">
+                  <UserPhotosSection 
+                    locationId={location.id} 
+                    locationName={location.name}
+                  />
+                </CardContent>
+              </Card>
 
               {/* Business Hours */}
               {location.businessHours && location.businessHours.length > 0 && (

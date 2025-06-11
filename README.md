@@ -113,8 +113,26 @@ To enable the Foursquare place discovery features:
    - Discovery of nearby places for users
    - Rich place data including hours, ratings, and tips
    - Automatic location data mapping
+   - **Hierarchical Category System** with 600+ venue categories
+   - Foursquare venue icons and branding integration
 
-> **Note**: The app will work without Foursquare integration, but place discovery features will be disabled.
+4. **Category Synchronization**:
+   ```bash
+   # Sync Foursquare categories (run after setup)
+   npm run sync-categories
+   
+   # Or test the sync endpoint
+   node test-category-sync.js
+   ```
+
+5. **Category Features**:
+   - **Multiple Category Selection**: Users can select up to 3-5 categories per location
+   - **Hierarchical Structure**: Main categories with subcategories (e.g., Food > Restaurants > Italian)
+   - **Smart Search**: Search across category names and descriptions
+   - **Visual Icons**: Foursquare-provided icons for better UX
+   - **Source Tracking**: Categories marked as manual, foursquare, or imported
+
+> **Note**: The app will work without Foursquare integration, but enhanced categorization and place discovery features will be disabled.
 
 **Sacavia** - *Your Guide to Authentic Discovery* 🏔️
 

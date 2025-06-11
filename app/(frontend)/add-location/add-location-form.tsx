@@ -67,6 +67,7 @@ import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { createLocation, type LocationFormData, type DayOfWeek } from "@/app/actions"
 import { getCategories } from "@/app/actions"
+import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
 
 interface UserData {
   id: string
@@ -82,7 +83,19 @@ export default function AddLocationForm() {
   const galleryFileInputRef = useRef<HTMLInputElement>(null)
 
   // State for categories and user data
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([])
+  const [categories, setCategories] = useState<{
+    id: string
+    name: string
+    slug: string
+    description?: string
+    source: 'manual' | 'foursquare' | 'imported'
+    foursquareIcon?: {
+      prefix: string
+      suffix: string
+    }
+    subcategories?: any[]
+    parent?: string
+  }[]>([])
   const {user, isLoading} = useAuth()
   const [formProgress, setFormProgress] = useState(0)
 
@@ -102,7 +115,7 @@ export default function AddLocationForm() {
   // Basic info
   const [locationName, setLocationName] = useState("")
   const [locationSlug, setLocationSlug] = useState("")
-  const [locationCategory, setLocationCategory] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [locationDescription, setLocationDescription] = useState("")
   const [shortDescription, setShortDescription] = useState("")
 
@@ -220,7 +233,36 @@ export default function AddLocationForm() {
     const fetchCategories = async () => {
       try {
         const result = await getCategories()
-        setCategories(result.docs.map((doc: any) => ({ id: doc.id, name: doc.name })))
+        
+        // Transform categories to include hierarchical structure
+        const transformedCategories = result.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,
+          slug: doc.slug,
+          description: doc.description,
+          source: doc.source || 'manual',
+          foursquareIcon: doc.foursquareIcon,
+          parent: doc.parent?.id || doc.parent,
+          subcategories: []
+        }))
+
+        // Build hierarchical structure
+        const categoryMap = new Map(transformedCategories.map(cat => [cat.id, cat]))
+        const rootCategories: any[] = []
+
+        transformedCategories.forEach(category => {
+          if (category.parent) {
+            const parent = categoryMap.get(category.parent)
+            if (parent) {
+              if (!parent.subcategories) parent.subcategories = []
+              parent.subcategories.push(category)
+            }
+          } else {
+            rootCategories.push(category)
+          }
+        })
+
+        setCategories(rootCategories)
       } catch (error) {
         console.error("Error fetching categories:", error)
         toast({
@@ -248,7 +290,7 @@ export default function AddLocationForm() {
     totalFields += 5
     if (locationName) completedFields++
     if (locationSlug) completedFields++
-    if (locationCategory) completedFields++
+    if (selectedCategories.length > 0) completedFields++
     if (shortDescription) completedFields++
     if (locationDescription) completedFields++
 
@@ -277,7 +319,7 @@ export default function AddLocationForm() {
   }, [
     locationName,
     locationSlug,
-    locationCategory,
+    selectedCategories,
     shortDescription,
     locationDescription,
     locationImage,
@@ -333,7 +375,7 @@ export default function AddLocationForm() {
     // Basic info
     setLocationName("")
     setLocationSlug("")
-    setLocationCategory("")
+    setSelectedCategories([])
     setLocationDescription("")
     setShortDescription("")
     setSlugEdited(false)
@@ -715,8 +757,8 @@ export default function AddLocationForm() {
               }))
             : undefined,
 
-        // Rest of your form data remains the same
-        categories: locationCategory ? [locationCategory] : undefined,
+        // Categories - now supports multiple categories
+        categories: selectedCategories.length > 0 ? selectedCategories : undefined,
         tags: tags.length > 0 ? tags : undefined,
 
         // Address
@@ -990,21 +1032,19 @@ export default function AddLocationForm() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="location-category" className="text-base font-medium">
-                      Category
+                    <Label className="text-base font-medium">
+                      Categories (Select up to 3)
                     </Label>
-                    <Select value={locationCategory} onValueChange={setLocationCategory}>
-                      <SelectTrigger id="location-category" className="h-14 md:h-12 text-base">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id}>
-                            {category.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <HierarchicalCategorySelector
+                      categories={categories}
+                      selectedCategories={selectedCategories}
+                      onSelectionChange={setSelectedCategories}
+                      maxSelections={3}
+                      placeholder="Choose categories that best describe your location"
+                      showSearch={true}
+                      showBadges={true}
+                      allowSubcategorySelection={true}
+                    />
                   </div>
 
                   <div className="space-y-2">

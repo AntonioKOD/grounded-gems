@@ -35,6 +35,7 @@ import {
   Check,
   ExternalLink,
   Edit3,
+  Camera,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -53,6 +54,7 @@ import type { Location } from "./map-data"
 import { getCategoryColor, getCategoryName } from "./category-utils"
 import { createLocationShareUrl } from "@/lib/location-sharing"
 import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
+import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
 import LocationDetailMobile from "./location-detail-mobile"
 import type { 
   User, 
@@ -782,6 +784,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
   const [userBucketLists, setUserBucketLists] = useState<BucketList[]>([])
   const [isBucketModalOpen, setIsBucketModalOpen] = useState(false)
   const [isLoadingBucketLists, setIsLoadingBucketLists] = useState(false)
+  const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
 
   console.log('🔴 DESKTOP: LocationDetailDesktop rendered:', {
     locationName: location?.name,
@@ -1290,25 +1293,39 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex gap-3 pt-2">
+                    <div className="grid grid-cols-2 gap-3 pt-2">
                       <Button
                         onClick={handleDirectionsClick}
-                        className="flex-1"
-                        variant="outline"
+                        className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white border-0"
                       >
                         <Navigation className="h-4 w-4 mr-2" />
                         Directions
                       </Button>
                       <Button
+                        onClick={() => {
+                          console.log('🔴 Add Photo clicked, currentUser:', currentUser)
+                          if (!currentUser) {
+                            toast.error('Please log in to add photos')
+                            return
+                          }
+                          console.log('🔴 Opening photo submission modal')
+                          setIsPhotoSubmissionModalOpen(true)
+                        }}
+                        className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white border-0"
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Add Photo
+                      </Button>
+                      <Button
                         onClick={handleWriteReview}
-                        className="flex-1 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0"
+                        className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0"
                       >
                         <Edit3 className="h-4 w-4 mr-2" />
                         Write Review
                       </Button>
                       <Button
                         onClick={handleAddToBucketList}
-                        className="flex-1 bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFEB3B] hover:to-[#FF7043] text-gray-800 border-0"
+                        className="bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFEB3B] hover:to-[#FF7043] text-gray-800 border-0"
                       >
                         <Crown className="h-4 w-4 mr-2" />
                         Add to List
@@ -1578,6 +1595,29 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
             location={location}
             userBucketLists={userBucketLists}
             onSuccess={() => loadUserBucketLists()}
+          />
+
+          {/* Photo Submission Modal */}
+          <PhotoSubmissionModal
+            isOpen={isPhotoSubmissionModalOpen}
+            onClose={() => {
+              console.log('🔴 Closing photo submission modal')
+              setIsPhotoSubmissionModalOpen(false)
+            }}
+            location={location ? {
+              id: location.id,
+              name: location.name
+            } : null}
+            user={currentUser ? {
+              id: currentUser.id,
+              name: currentUser.name || '',
+              avatar: currentUser.avatar
+            } : null}
+            onSuccess={() => {
+              console.log('🔴 Photo submission successful')
+              setIsPhotoSubmissionModalOpen(false)
+              toast.success('Photo submitted for review!')
+            }}
           />
         </>
       )}

@@ -170,7 +170,28 @@ export const addCommentAsync = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      await addComment(params.postId, params.content, params.userId)
+      const response = await fetch('/api/posts/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId: params.postId,
+          content: params.content,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to add comment')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add comment')
+      }
+      
       return params
     } catch (error) {
       console.error('Error adding comment:', error)
@@ -187,8 +208,30 @@ export const addCommentReplyAsync = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const reply = await addCommentReply(params.postId, params.parentCommentId, params.content, params.userId)
-      return { ...params, reply }
+      const response = await fetch('/api/v1/mobile/posts/comments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId: params.postId,
+          content: params.content,
+          parentCommentId: params.parentCommentId,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to add reply')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add reply')
+      }
+      
+      return { ...params, reply: result.data.comment }
     } catch (error) {
       console.error('Error adding comment reply:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to add reply')
@@ -204,7 +247,30 @@ export const likeCommentAsync = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      await likeCommentOrReply(params.postId, params.commentId, params.shouldLike, params.userId, params.isReply)
+      const response = await fetch('/api/posts/comments/like', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          postId: params.postId,
+          commentId: params.commentId,
+          shouldLike: params.shouldLike,
+          isReply: params.isReply || false,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to like comment')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to like comment')
+      }
+      
       return params
     } catch (error) {
       console.error('Error liking comment:', error)
@@ -221,8 +287,22 @@ export const fetchCommentsAsync = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const comments = await getCommentsWithReplies(params.postId, params.currentUserId)
-      return { postId: params.postId, comments }
+      const response = await fetch(`/api/posts/comments?postId=${params.postId}`, {
+        method: 'GET',
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch comments')
+      }
+
+      const result = await response.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch comments')
+      }
+      
+      return { postId: params.postId, comments: result.data.comments }
     } catch (error) {
       console.error('Error fetching comments:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch comments')

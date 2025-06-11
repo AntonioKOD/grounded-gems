@@ -30,7 +30,9 @@
     "security:fix": "npm audit fix",
     "perf:lighthouse": "npx lighthouse http://localhost:3000 --output html --output-path ./lighthouse-report.html",
     "perf:bundle-analyzer": "ANALYZE=true npm run build",
-    "test:load": "npx autocannon -c 10 -d 30 http://localhost:3000"
+    "test:load": "npx autocannon -c 10 -d 30 http://localhost:3000",
+    "sync-categories": "node scripts/sync-foursquare-categories.js",
+    "test-categories": "node test-category-sync.js"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
