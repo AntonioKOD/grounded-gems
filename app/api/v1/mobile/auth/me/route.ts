@@ -104,14 +104,73 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
       console.log(`📱   ${key}: ${value}`)
     })
     
-    // Extract token from Authorization header
-    const authHeader = request.headers.get('authorization')
-    console.log('🔍 Authorization header:', authHeader ? `"${authHeader}"` : 'null')
+    // Extract token from Authorization header - try multiple header names
+    let authHeader = request.headers.get('authorization')
+    console.log('🔍 Authorization header (lowercase):', authHeader ? `"${authHeader}"` : 'null')
+    
+    // Try alternative header names
+    if (!authHeader) {
+      authHeader = request.headers.get('Authorization')
+      console.log('🔍 Authorization header (capitalized):', authHeader ? `"${authHeader}"` : 'null')
+    }
+    
+    if (!authHeader) {
+      authHeader = request.headers.get('x-authorization')
+      console.log('🔍 X-Authorization header:', authHeader ? `"${authHeader}"` : 'null')
+    }
+    
+    if (!authHeader) {
+      authHeader = request.headers.get('x-mobile-auth')
+      console.log('🔍 X-Mobile-Auth header:', authHeader ? `"${authHeader}"` : 'null')
+    }
+    
+    if (!authHeader) {
+      const rawToken = request.headers.get('x-auth-token')
+      console.log('🔍 X-Auth-Token header (raw token):', rawToken ? `"${rawToken}"` : 'null')
+      if (rawToken) {
+        authHeader = `Bearer ${rawToken}`
+        console.log('🔍 Constructed auth header from raw token')
+      }
+    }
+    
+    // Check for forwarded authorization headers
+    if (!authHeader) {
+      const forwardedHeaders = request.headers.get('x-forwarded-authorization')
+      console.log('🔍 X-Forwarded-Authorization header:', forwardedHeaders ? `"${forwardedHeaders}"` : 'null')
+      authHeader = forwardedHeaders
+    }
+    
+    // Check if authorization is nested in other headers
+    if (!authHeader) {
+      const scHeaders = request.headers.get('x-vercel-sc-headers')
+      if (scHeaders) {
+        try {
+          const parsed = JSON.parse(scHeaders)
+          if (parsed.Authorization && parsed.Authorization.startsWith('Bearer eyJ')) {
+            console.log('🔍 Found Authorization in x-vercel-sc-headers')
+            authHeader = parsed.Authorization
+          }
+        } catch (e) {
+          console.log('🔍 Could not parse x-vercel-sc-headers')
+        }
+      }
+    }
+    
+    console.log('🔍 Final Authorization header:', authHeader ? `"${authHeader}"` : 'null')
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('❌ No valid authorization header found')
       console.log('❌ AuthHeader exists:', !!authHeader)
       console.log('❌ AuthHeader starts with Bearer:', authHeader?.startsWith('Bearer '))
+      
+      // For debugging, let's see if there are any headers that might contain tokens
+      console.log('🔍 Debugging - looking for any headers with "Bearer" or token-like content:')
+      request.headers.forEach((value, key) => {
+        if (value.includes('Bearer') || value.includes('eyJ') || key.toLowerCase().includes('auth') || key.toLowerCase().includes('token')) {
+          console.log(`🔍   ${key}: ${value.substring(0, 50)}...`)
+        }
+      })
+      
       return NextResponse.json({
         success: false,
         message: 'Authentication token required',
