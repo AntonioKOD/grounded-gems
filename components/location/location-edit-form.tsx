@@ -152,7 +152,7 @@ export function LocationEditForm({
     acceptsReservations: false,
     hasDelivery: false,
     hasTakeout: false,
-    metadata: {} as Record<string, any>,
+    metadata: {} as Record<string, unknown>,
   })
 
   const [isLoading, setIsLoading] = useState(false)
