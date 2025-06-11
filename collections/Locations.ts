@@ -13,6 +13,42 @@ export const Locations: CollectionConfig = {
     delete: () => true,
   },
   hooks: {
+    beforeChange: [
+      async ({ data, operation }) => {
+        // Ensure proper image ordering and primary image management
+        if (data.gallery && Array.isArray(data.gallery)) {
+          // Sort gallery by order
+          data.gallery.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+          
+          // Check if any gallery image is marked as primary
+          const primaryGalleryImage = data.gallery.find((item: any) => item.isPrimary);
+          
+          // If a gallery image is marked as primary, set it as featuredImage
+          if (primaryGalleryImage) {
+            data.featuredImage = primaryGalleryImage.image;
+            // Ensure only one image is marked as primary
+            data.gallery = data.gallery.map((item: any, index: number) => ({
+              ...item,
+              isPrimary: item === primaryGalleryImage,
+              order: item.order !== undefined ? item.order : index
+            }));
+          } else if (data.gallery.length > 0 && !data.featuredImage) {
+            // If no featured image is set and no gallery image is primary, use first gallery image
+            data.featuredImage = data.gallery[0].image;
+            data.gallery[0].isPrimary = true;
+            data.gallery[0].order = 0;
+          }
+          
+          // Ensure all gallery items have proper order values
+          data.gallery = data.gallery.map((item: any, index: number) => ({
+            ...item,
+            order: item.order !== undefined ? item.order : index
+          }));
+        }
+        
+        return data;
+      },
+    ],
     afterChange: [
       async ({ req, doc, previousDoc, operation }) => {
         if (!req.payload) return doc;
@@ -209,14 +245,75 @@ export const Locations: CollectionConfig = {
     { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },
     { name: 'description', type: 'text', required: true },
     { name: 'shortDescription', type: 'text' },
-    { name: 'featuredImage', type: 'relationship', relationTo: 'media' },
+    {
+      name: 'featuredImage',
+      type: 'upload',
+      relationTo: 'media',
+      required: false,
+      admin: {
+        description: 'Primary image that will be displayed first across the platform'
+      }
+    },
     {
       name: 'gallery',
       type: 'array',
       fields: [
-        { name: 'image', type: 'upload', relationTo: 'media', required: true },
-        { name: 'caption', type: 'text' },
+        {
+          name: 'image',
+          type: 'upload',
+          relationTo: 'media',
+          required: true,
+        },
+        {
+          name: 'caption',
+          type: 'text',
+        },
+        {
+          name: 'isPrimary',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Mark as primary image (will override featuredImage)'
+          }
+        },
+        {
+          name: 'order',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            description: 'Display order (0 = first, 1 = second, etc.)'
+          }
+        },
+        {
+          name: 'altText',
+          type: 'text',
+          admin: {
+            description: 'Alternative text for accessibility'
+          }
+        },
+        {
+          name: 'tags',
+          type: 'array',
+          fields: [
+            {
+              name: 'tag',
+              type: 'select',
+              options: [
+                { label: 'Exterior', value: 'exterior' },
+                { label: 'Interior', value: 'interior' },
+                { label: 'Food', value: 'food' },
+                { label: 'Menu', value: 'menu' },
+                { label: 'Staff', value: 'staff' },
+                { label: 'Atmosphere', value: 'atmosphere' },
+                { label: 'Event', value: 'event' },
+              ]
+            }
+          ]
+        }
       ],
+      admin: {
+        description: 'Gallery images will be automatically ordered with the first image as primary'
+      }
     },
     { name: 'categories', type: 'relationship', relationTo: 'categories', hasMany: true },
     { name: 'tags', type: 'array', fields: [{ name: 'tag', type: 'text' }] },
@@ -287,7 +384,67 @@ export const Locations: CollectionConfig = {
       ],
     },
     { name: 'bestTimeToVisit', type: 'array', fields: [{ name: 'season', type: 'text' }] },
-    { name: 'insiderTips', type: 'text' },
+    {
+      name: 'insiderTips',
+      type: 'array',
+      admin: {
+        description: 'Structured insider tips that only locals would know'
+      },
+      fields: [
+        {
+          name: 'category',
+          type: 'select',
+          required: true,
+          options: [
+            { label: '⏰ Best Times to Visit', value: 'timing' },
+            { label: '🍽️ Food & Drinks', value: 'food' },
+            { label: '💡 Local Secrets', value: 'secrets' },
+            { label: '🎯 Pro Tips', value: 'protips' },
+            { label: '🚗 Getting There', value: 'access' },
+            { label: '💰 Money Saving', value: 'savings' },
+            { label: '📱 What to Order/Try', value: 'recommendations' },
+            { label: '🎪 Hidden Features', value: 'hidden' },
+          ]
+        },
+        {
+          name: 'tip',
+          type: 'text',
+          required: true,
+          admin: {
+            description: 'The actual tip (keep it concise and actionable)'
+          }
+        },
+        {
+          name: 'priority',
+          type: 'select',
+          defaultValue: 'medium',
+          options: [
+            { label: '🔥 Essential', value: 'high' },
+            { label: '⭐ Helpful', value: 'medium' },
+            { label: '💡 Nice to Know', value: 'low' },
+          ]
+        },
+        {
+          name: 'isVerified',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Has this tip been verified by locals/staff?'
+          }
+        },
+        {
+          name: 'source',
+          type: 'select',
+          defaultValue: 'ai_generated',
+          options: [
+            { label: '🤖 AI Generated', value: 'ai_generated' },
+            { label: '👥 User Submitted', value: 'user_submitted' },
+            { label: '🏢 Business Provided', value: 'business_provided' },
+            { label: '✅ Staff Verified', value: 'staff_verified' },
+          ]
+        }
+      ]
+    },
     {
       name: 'accessibility',
       type: 'group',

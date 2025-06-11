@@ -24,6 +24,8 @@ import { Journeys } from './collections/Journeys'
 import { BucketLists } from './collections/BucketLists'
 import { DeviceTokens } from './collections/DeviceTokens'
 import { LocationPhotoSubmissions } from './collections/LocationPhotoSubmissions'
+import { BusinessClaims } from './collections/BusinessClaims'
+import { UserSubscriptions } from './collections/UserSubscriptions'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -121,5 +123,7 @@ export default buildConfig({
     BucketLists,
     DeviceTokens,
     LocationPhotoSubmissions,
+    BusinessClaims,
+    UserSubscriptions,
   ],
 })

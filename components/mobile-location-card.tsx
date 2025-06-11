@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useState, useCallback } from "react"
 import { toast } from "sonner"
+import { getPrimaryImageUrl, getOptimizedImageUrl, generateImageAltText } from "@/lib/image-utils"
 
 interface MobileLocationCardProps {
   location: {
@@ -150,13 +151,17 @@ export default function MobileLocationCard({
   }, [location, onLocationClick])
 
   const getImageUrl = useCallback(() => {
-    if (typeof location.featuredImage === "string") {
-      return location.featuredImage
-    } else if (location.featuredImage?.url) {
-      return location.featuredImage.url
-    }
-    return "/placeholder.svg"
-  }, [location.featuredImage])
+    // Use the new image utilities for consistent primary image handling
+    const primaryImageUrl = getPrimaryImageUrl({
+      id: location.id,
+      name: location.name,
+      featuredImage: location.featuredImage,
+      gallery: (location as any).gallery, // Gallery might not be in type but could exist
+      imageUrl: (location as any).imageUrl // Legacy support
+    })
+    
+    return getOptimizedImageUrl(primaryImageUrl, 'card')
+  }, [location])
 
   const getPriceDisplay = useCallback(() => {
     switch (location.priceRange) {

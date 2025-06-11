@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateInsiderTipsFromWebsite, generateLocationInsights, generateBusinessDescriptionFromWebsite } from '@/lib/ai-insights'
+import { generateStructuredInsiderTips, structuredTipsToLegacyFormat } from '@/lib/structured-insider-tips'
 
 export async function POST(request: NextRequest) {
   try {
@@ -140,12 +141,22 @@ async function handleInsiderTips(params: {
     let result
     
     if (website) {
-      // Generate tips from website content
-      result = await generateInsiderTipsFromWebsite(
+      // Generate structured tips from website content
+      const structuredResult = await generateStructuredInsiderTips(
         website,
         locationName,
         categories && categories.length > 0 ? categories[0] : undefined
       )
+      
+      // Return structured tips directly for new frontend, or convert to legacy format if needed
+      return NextResponse.json({
+        success: true,
+        insights: structuredResult.tips, // Return structured array
+        structuredTips: structuredResult.tips, // Explicit structured format
+        legacyFormat: structuredTipsToLegacyFormat(structuredResult.tips), // Backward compatibility
+        confidence: structuredResult.confidence,
+        error: structuredResult.error
+      })
     } else {
       // Generate basic tips from location info only
       const category = categories && categories.length > 0 ? categories[0] : 'general'

@@ -5,8 +5,16 @@ const openai = new OpenAI({
   apiKey: process.env.OPEN_AI_KEY,
 })
 
+export interface StructuredTip {
+  category: 'timing' | 'food' | 'secrets' | 'protips' | 'access' | 'savings' | 'recommendations' | 'hidden'
+  tip: string
+  priority: 'high' | 'medium' | 'low'
+  isVerified: boolean
+  source: 'ai_generated' | 'user_submitted' | 'business_provided' | 'staff_verified'
+}
+
 export interface InsiderTipsResult {
-  tips: string
+  tips: StructuredTip[]
   confidence: number
   error?: string
 }
@@ -18,7 +26,7 @@ export interface BusinessDescriptionResult {
 }
 
 export interface LocationInsights {
-  insiderTips: string
+  insiderTips: StructuredTip[]
   enhancedDescription: string
   bestTimeToVisit: string[]
   tags: string[]
@@ -76,29 +84,26 @@ export async function generateInsiderTipsFromWebsite(
     
     if (!generatedTips) {
       return {
-        tips: '',
+        tips: [],
         confidence: 0,
         error: 'AI failed to generate insider tips'
       }
     }
 
-    // Clean up the generated tips by removing extra characters and formatting
-    const cleanedTips = cleanAIResponse(generatedTips)
+    // Parse and structure the AI response
+    const structuredTips = parseAIResponseToStructuredTips(generatedTips)
     
-    // Format the tips for better readability
-    const formattedTips = formatInsiderTips(cleanedTips)
-
     // Calculate confidence based on content quality
-    const confidence = calculateTipsConfidence(formattedTips, websiteContent)
+    const confidence = calculateStructuredTipsConfidence(structuredTips, websiteContent)
 
     return {
-      tips: formattedTips,
+      tips: structuredTips,
       confidence,
     }
   } catch (error) {
     console.error('Error generating insider tips:', error)
     return {
-      tips: '',
+      tips: [],
       confidence: 0,
       error: `Failed to generate tips: ${error instanceof Error ? error.message : 'Unknown error'}`
     }

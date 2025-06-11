@@ -530,9 +530,16 @@ export default function EnhancedFoursquareImport() {
       
       if (data.success && data.insights) {
         // Update the current editing location with the generated tips
-        updateCurrentLocationData({ 
-          insiderTips: data.insights 
-        })
+        // Handle both structured and legacy format
+        if (data.structuredTips && Array.isArray(data.structuredTips)) {
+          updateCurrentLocationData({ 
+            insiderTips: data.structuredTips 
+          })
+        } else {
+          updateCurrentLocationData({ 
+            insiderTips: data.insights 
+          })
+        }
         
         toast.success('✨ AI insider tips generated successfully!')
         console.log('✅ Generated tips:', data.insights)

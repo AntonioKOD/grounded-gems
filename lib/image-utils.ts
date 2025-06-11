@@ -393,4 +393,282 @@ export function getMediaUrl(): string {
 
   return getImageBaseUrl()
 }
+
+/**
+ * Image utilities for consistent primary image handling across Sacavia
+ * Ensures the first/primary image is always displayed consistently
+ */
+
+interface MediaItem {
+  id: string
+  url: string
+  alt?: string
+  filename?: string
+  width?: number
+  height?: number
+}
+
+interface GalleryItem {
+  image: MediaItem | string
+  caption?: string
+  isPrimary?: boolean
+  order?: number
+  altText?: string
+  tags?: Array<{ tag: string }>
+}
+
+interface LocationWithImages {
+  id: string
+  name: string
+  featuredImage?: MediaItem | string
+  gallery?: GalleryItem[]
+  imageUrl?: string // Legacy field for backward compatibility
+}
+
+/**
+ * Get the primary/featured image URL for a location
+ * Priority: featuredImage > first gallery image marked as primary > first gallery image > fallback
+ */
+export function getPrimaryImageUrl(location: LocationWithImages, fallbackUrl?: string): string {
+  // First, check if there's a featuredImage
+  if (location.featuredImage) {
+    const imageUrl = typeof location.featuredImage === 'string' 
+      ? location.featuredImage 
+      : location.featuredImage.url
+    if (imageUrl) return imageUrl
+  }
+
+  // Check for primary gallery image
+  if (location.gallery && location.gallery.length > 0) {
+    // Sort gallery by order first
+    const sortedGallery = [...location.gallery].sort((a, b) => (a.order || 0) - (b.order || 0))
+    
+    // Look for image marked as primary
+    const primaryImage = sortedGallery.find(item => item.isPrimary)
+    if (primaryImage) {
+      const imageUrl = typeof primaryImage.image === 'string' 
+        ? primaryImage.image 
+        : primaryImage.image.url
+      if (imageUrl) return imageUrl
+    }
+
+    // Fall back to first image in sorted gallery
+    const firstImage = sortedGallery[0]
+    if (firstImage) {
+      const imageUrl = typeof firstImage.image === 'string' 
+        ? firstImage.image 
+        : firstImage.image.url
+      if (imageUrl) return imageUrl
+    }
+  }
+
+  // Legacy support for imageUrl field
+  if (location.imageUrl) {
+    return location.imageUrl
+  }
+
+  // Return fallback or default placeholder
+  return fallbackUrl || '/images/location-placeholder.jpg'
+}
+
+/**
+ * Get all images for a location in proper order
+ */
+export function getLocationImages(location: LocationWithImages): Array<{
+  url: string
+  caption?: string
+  altText?: string
+  isPrimary: boolean
+  order: number
+  tags?: string[]
+}> {
+  const images: Array<{
+    url: string
+    caption?: string
+    altText?: string
+    isPrimary: boolean
+    order: number
+    tags?: string[]
+  }> = []
+
+  // Add featured image if it exists and isn't already in gallery
+  if (location.featuredImage) {
+    const featuredUrl = typeof location.featuredImage === 'string' 
+      ? location.featuredImage 
+      : location.featuredImage.url
+
+    if (featuredUrl) {
+      const isInGallery = location.gallery?.some(item => {
+        const galleryUrl = typeof item.image === 'string' ? item.image : item.image.url
+        return galleryUrl === featuredUrl
+      })
+
+      if (!isInGallery) {
+        images.push({
+          url: featuredUrl,
+          altText: typeof location.featuredImage === 'object' ? location.featuredImage.alt : undefined,
+          isPrimary: true,
+          order: -1, // Featured image always comes first
+          tags: []
+        })
+      }
+    }
+  }
+
+  // Add gallery images
+  if (location.gallery && location.gallery.length > 0) {
+    const sortedGallery = [...location.gallery].sort((a, b) => (a.order || 0) - (b.order || 0))
+    
+    sortedGallery.forEach((item, index) => {
+      const imageUrl = typeof item.image === 'string' ? item.image : item.image.url
+      if (imageUrl) {
+        images.push({
+          url: imageUrl,
+          caption: item.caption,
+          altText: item.altText || (typeof item.image === 'object' ? item.image.alt : undefined),
+          isPrimary: item.isPrimary || false,
+          order: item.order !== undefined ? item.order : index,
+          tags: item.tags?.map(t => t.tag) || []
+        })
+      }
+    })
+  }
+
+  // Sort by order (featured image will be first due to order: -1)
+  return images.sort((a, b) => a.order - b.order)
+}
+
+/**
+ * Get optimized image URL with size parameters for different use cases
+ */
+export function getOptimizedImageUrl(
+  imageUrl: string, 
+  size: 'thumbnail' | 'card' | 'hero' | 'full' = 'card'
+): string {
+  if (!imageUrl) return '/images/location-placeholder.jpg'
+
+  // If it's already a full URL, return as is for now
+  // In production, you might want to add Vercel Image Optimization or similar
+  if (imageUrl.startsWith('http')) {
+    return imageUrl
+  }
+
+  // Size parameters for different use cases
+  const sizeParams = {
+    thumbnail: '?w=150&h=150&fit=crop&q=80',
+    card: '?w=400&h=300&fit=crop&q=85',
+    hero: '?w=1200&h=600&fit=crop&q=90',
+    full: '?q=95'
+  }
+
+  return `${imageUrl}${sizeParams[size]}`
+}
+
+/**
+ * Generate alt text for location images
+ */
+export function generateImageAltText(
+  location: LocationWithImages, 
+  imageIndex: number = 0,
+  customAltText?: string
+): string {
+  if (customAltText) return customAltText
+
+  const baseAltText = `${location.name} - Image ${imageIndex + 1}`
+  
+  if (imageIndex === 0) {
+    return `${location.name} - Main view`
+  }
+  
+  return baseAltText
+}
+
+/**
+ * Validate and sanitize image data
+ */
+export function validateLocationImages(location: LocationWithImages): {
+  isValid: boolean
+  errors: string[]
+  hasPrimaryImage: boolean
+  imageCount: number
+} {
+  const errors: string[] = []
+  let hasPrimaryImage = false
+  let imageCount = 0
+
+  // Check featured image
+  if (location.featuredImage) {
+    const featuredUrl = typeof location.featuredImage === 'string' 
+      ? location.featuredImage 
+      : location.featuredImage.url
+    
+    if (featuredUrl) {
+      hasPrimaryImage = true
+      imageCount++
+    } else {
+      errors.push('Featured image URL is missing')
+    }
+  }
+
+  // Check gallery images
+  if (location.gallery && location.gallery.length > 0) {
+    location.gallery.forEach((item, index) => {
+      const imageUrl = typeof item.image === 'string' ? item.image : item.image?.url
+      
+      if (!imageUrl) {
+        errors.push(`Gallery image ${index + 1} is missing URL`)
+      } else {
+        imageCount++
+        if (item.isPrimary) {
+          hasPrimaryImage = true
+        }
+      }
+    })
+  }
+
+  // If no featured image but gallery exists, first gallery image should be primary
+  if (!location.featuredImage && location.gallery && location.gallery.length > 0) {
+    const firstGalleryImage = location.gallery[0]
+    if (firstGalleryImage && !firstGalleryImage.isPrimary) {
+      errors.push('First gallery image should be marked as primary when no featured image exists')
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    hasPrimaryImage,
+    imageCount
+  }
+}
+
+/**
+ * Helper function to ensure consistent image handling in components
+ */
+export function useLocationImage(location: LocationWithImages) {
+  const primaryImage = getPrimaryImageUrl(location)
+  const allImages = getLocationImages(location)
+  const validation = validateLocationImages(location)
+
+  return {
+    primaryImage,
+    allImages,
+    validation,
+    getOptimized: (size: 'thumbnail' | 'card' | 'hero' | 'full' = 'card') => 
+      getOptimizedImageUrl(primaryImage, size),
+    getAltText: (index: number = 0, customAlt?: string) => 
+      generateImageAltText(location, index, customAlt)
+  }
+}
+
+// Export default placeholder image
+export const DEFAULT_LOCATION_PLACEHOLDER = '/images/location-placeholder.jpg'
+
+// Export common image sizes
+export const IMAGE_SIZES = {
+  THUMBNAIL: { width: 150, height: 150 },
+  CARD: { width: 400, height: 300 },
+  HERO: { width: 1200, height: 600 },
+  MOBILE_CARD: { width: 300, height: 225 }
+} as const
   
