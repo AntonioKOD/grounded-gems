@@ -826,16 +826,37 @@ export async function unfollowUser(userId: string, currentUserId: string) {
 }
 
 export async function getFollowing(userId: string) {
+  // Simple cache to prevent rapid repeated calls
+  const cacheKey = `following-${userId}`
+  if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+    const cached = globalThis._followCache.get(cacheKey)
+    if (cached && (Date.now() - cached.timestamp) < 30000) { // 30 second cache
+      console.log('Using cached following data for', userId)
+      return cached.data
+    }
+  }
+
   const payload = await getPayload({ config });
 
   try {
+    console.log('Fetching following data for user:', userId)
     const user = await payload.findByID({
       collection: 'users',
       id: userId,
       depth: 1,
     });
 
-    return user?.following || [];
+    const result = user?.following || [];
+    
+    // Cache the result
+    if (typeof globalThis !== 'undefined') {
+      if (!globalThis._followCache) {
+        globalThis._followCache = new Map()
+      }
+      globalThis._followCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    }
+
+    return result;
   } catch (error) {
     console.error('Error fetching following:', error);
     throw error;
@@ -843,16 +864,37 @@ export async function getFollowing(userId: string) {
 }
 
 export async function getFollowers(userId: string) {
+  // Simple cache to prevent rapid repeated calls
+  const cacheKey = `followers-${userId}`
+  if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+    const cached = globalThis._followCache.get(cacheKey)
+    if (cached && (Date.now() - cached.timestamp) < 30000) { // 30 second cache
+      console.log('Using cached followers data for', userId)
+      return cached.data
+    }
+  }
+
   const payload = await getPayload({ config });
 
   try {
+    console.log('Fetching followers data for user:', userId)
     const user = await payload.findByID({
       collection: 'users',
       id: userId,
       depth: 1,
     });
 
-    return user?.followers || [];
+    const result = user?.followers || [];
+    
+    // Cache the result
+    if (typeof globalThis !== 'undefined') {
+      if (!globalThis._followCache) {
+        globalThis._followCache = new Map()
+      }
+      globalThis._followCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    }
+
+    return result;
   } catch (error) {
     console.error('Error fetching followers:', error);
     throw error;

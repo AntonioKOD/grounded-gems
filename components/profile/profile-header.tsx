@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import Image from "next/image"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -33,12 +33,25 @@ export default function ProfileHeader({
 }: ProfileHeaderProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [activeTab, setActiveTab] = useState("posts")
+  const lastFollowActionRef = useRef<number>(0)
 
   const handleFollowToggle = async () => {
     if (isProcessing || !currentUser) return
 
+    // Rate limit follow actions to prevent spam
+    const now = Date.now()
+    const timeSinceLastAction = now - lastFollowActionRef.current
+    if (timeSinceLastAction < 2000) { // Minimum 2 seconds between actions
+      toast.error("Please wait before performing another follow action")
+      return
+    }
+
     setIsProcessing(true)
+    lastFollowActionRef.current = now
+
     try {
+      console.log(`${isFollowing ? 'Unfollowing' : 'Following'} user:`, profileUser.id)
+      
       if (isFollowing) {
         await unfollowUser(profileUser.id, currentUser.id)
         toast.success(`Unfollowed ${profileUser.name}`)
@@ -57,11 +70,22 @@ export default function ProfileHeader({
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling follow:", error)
-      toast.error("Failed to update follow status")
+      
+      // Handle specific error types
+      if (error.message?.includes('429')) {
+        toast.error("Too many requests. Please wait a moment before trying again.")
+      } else if (error.message?.includes('Rate limit')) {
+        toast.error("Please wait before performing another action")
+      } else {
+        toast.error("Failed to update follow status")
+      }
     } finally {
-      setIsProcessing(false)
+      // Add delay before re-enabling button
+      setTimeout(() => {
+        setIsProcessing(false)
+      }, 1000)
     }
   }
 

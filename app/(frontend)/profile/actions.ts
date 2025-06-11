@@ -429,3 +429,18 @@ export async function generateAndSetUsername(userId: string) {
     }
   }
 }
+
+
+export async function getCategories(){
+  const payload = await getPayload({ config })
+
+  const categories = await payload.find({
+    collection: "categories",
+    limit: 100,
+  })
+
+  console.log(categories.docs)
+
+  return categories.docs
+}
+

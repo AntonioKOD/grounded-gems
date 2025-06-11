@@ -10,104 +10,103 @@ interface MobileLogoutResponse {
   code?: string
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse<MobileLogoutResponse>> {
+// Helper function to verify JWT token using Payload's verification
+async function verifyPayloadToken(token: string) {
   try {
     const payload = await getPayload({ config })
     
-    // Get authorization header
-    const authHeader = request.headers.get('Authorization')
-    const token = authHeader?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'No token provided',
-          error: 'Authentication token required',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    try {
-      // Verify and logout using Payload's method
-      await payload.logout({
-        collection: 'users',
-        req: request,
-      })
-
-      // Update user's last seen if we can identify the user
-      try {
-        // Decode the token to get user info (optional)
-        const user = await payload.forgotPassword({
-          collection: 'users',
-          data: { email: '' }, // This is just to test token validity
-          req: request,
-        })
-        // Note: This approach isn't ideal for token validation
-        // In production, you'd want a proper token validation method
-      } catch (tokenError) {
-        // Token might be invalid or expired, which is fine for logout
-        console.log('Token validation failed during logout (expected):', tokenError)
-      }
-
-      const response: MobileLogoutResponse = {
-        success: true,
-        message: 'Logout successful',
-        data: null,
-      }
-
-      return NextResponse.json(response, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
-        }
-      })
-
-    } catch (logoutError) {
-      console.warn('Logout API call failed:', logoutError)
-      
-      // Even if server logout fails, we consider it successful
-      // The client should clear local storage regardless
-      const response: MobileLogoutResponse = {
-        success: true,
-        message: 'Logout completed (client should clear local storage)',
-        data: null,
-      }
-
-      return NextResponse.json(response, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
-        }
-      })
-    }
-
-  } catch (error) {
-    console.error('Mobile logout error:', error)
+    // Use Payload's JWT verification method
+    const decoded = payload.jwt.verify(token)
     
-    // For logout, we generally want to succeed even if there are errors
-    // The client needs to clear its local storage regardless
-    const response: MobileLogoutResponse = {
-      success: true,
-      message: 'Logout completed (client should clear local storage)',
-      data: null,
-    }
-
-    return NextResponse.json(response, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
+    if (decoded && typeof decoded === 'object' && 'id' in decoded && 'email' in decoded) {
+      return {
+        id: decoded.id as string,
+        email: decoded.email as string
       }
-    })
+    }
+    
+    return null
+  } catch (error) {
+    console.error('JWT verification failed:', error)
+    return null
   }
 }
 
-// Handle preflight requests for CORS
+export async function POST(request: NextRequest): Promise<NextResponse<MobileLogoutResponse>> {
+  try {
+    console.log('📱 Mobile logout endpoint called')
+
+    // Extract token from Authorization header
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ No valid authorization header found for logout')
+      return NextResponse.json({
+        success: false,
+        message: 'Authentication token required',
+        error: 'MISSING_TOKEN',
+        code: 'AUTH_001'
+      }, { status: 401 })
+    }
+
+    const token = authHeader.replace('Bearer ', '')
+    console.log('🔑 Extracted token for logout:', token.substring(0, 20) + '...')
+
+    // Verify the JWT token using Payload's verification
+    const tokenData = await verifyPayloadToken(token)
+    if (!tokenData) {
+      console.log('❌ Token verification failed during logout')
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid or expired authentication token',
+        error: 'INVALID_TOKEN',
+        code: 'AUTH_002'
+      }, { status: 401 })
+    }
+
+    console.log('✅ Token verified for logout, user:', tokenData.id)
+
+    // Get Payload instance
+    const payload = await getPayload({ config })
+
+    // Verify user exists
+    const user = await payload.findByID({
+      collection: 'users',
+      id: tokenData.id
+    })
+
+    if (!user) {
+      console.log('❌ User not found during logout:', tokenData.id)
+      return NextResponse.json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND',
+        code: 'AUTH_003'
+      }, { status: 404 })
+    }
+
+    console.log('✅ User logout successful for:', user.email)
+
+    // For mobile logout, we typically just acknowledge the logout
+    // The client is responsible for clearing the token
+    // In a more sophisticated system, you might invalidate the token server-side
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Logout successful',
+      data: null
+    })
+
+  } catch (error) {
+    console.error('❌ Mobile logout endpoint error:', error)
+    return NextResponse.json({
+      success: false,
+      message: 'Internal server error',
+      error: 'INTERNAL_ERROR',
+      code: 'AUTH_500'
+    }, { status: 500 })
+  }
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -115,7 +114,6 @@ export async function OPTIONS() {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
     },
   })
 } 

@@ -1,9 +1,10 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
-import { getUserbyId } from "@/app/actions"
+import { getCategories, getUserbyId } from "@/app/actions"
 import ProfileContent from "@/components/profile/profile-content"
 import ProfileSkeleton from "@/components/profile/profile-skeleton"
 import type { UserProfile } from "@/types/user"
+import { Button } from "@/components/ui/button"
 
 // 1. Async function so we can await params  
 export default async function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -34,6 +35,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
       <Suspense fallback={<ProfileSkeleton />}>
         <ProfileContent initialUserData={initialUserData} userId={id} />
       </Suspense>
+      
     )
   } catch (error) {
     console.error(`Error fetching user profile for ID ${id}:`, error)

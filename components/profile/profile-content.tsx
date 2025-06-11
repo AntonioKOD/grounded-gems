@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useEffect, useState, useCallback, useTransition, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, Suspense } from "react"
+import { useEffect, useState, useCallback, useTransition, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, Suspense, useRef, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import {
   Mail,
@@ -43,7 +43,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { followUser, unfollowUser, getFeedPostsByUser, getFollowers, getFollowing, getUserbyId } from "@/app/actions"
+import { followUser, unfollowUser, getFeedPostsByUser, getFollowers, getFollowing, getUserbyId, getCategories } from "@/app/actions"
 import { PostCard } from "@/components/post/post-card"
 import type { Post } from "@/types/feed"
 import { useAuth } from "@/hooks/use-auth"
@@ -55,6 +55,19 @@ import type { UserProfile } from "@/types/user"
 import Link from "next/link"
 import { logoutUser } from "@/lib/auth"
 import { getImageUrl } from "@/lib/image-utils"
+
+// Helper to debounce API calls
+const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
+  let timeout: NodeJS.Timeout
+  return ((...args: any[]) => {
+    const later = () => {
+      clearTimeout(timeout)
+      func(...args)
+    }
+    clearTimeout(timeout)
+    timeout = setTimeout(later, wait)
+  }) as T
+}
 
 export default function ProfileContent({
   initialUserData,
@@ -84,6 +97,12 @@ export default function ProfileContent({
   const [hasLoadedPosts, setHasLoadedPosts] = useState(false)
   const [hasLoadedSavedPosts, setHasLoadedSavedPosts] = useState(false)
 
+  // Rate limiting and caching refs
+  const lastFetchTime = useRef<number>(0)
+  const fetchCache = useRef<Map<string, { data: any; timestamp: number }>>(new Map())
+  const isDataStale = useRef<boolean>(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
   // Helper function to normalize post data
   const normalizePost = useCallback((post: any): any => {
     const normalizedImage =
@@ -97,134 +116,244 @@ export default function ProfileContent({
     }
   }, [])
 
+  // Rate-limited API call helper
+  const rateLimitedApiCall = useCallback(async (
+    key: string, 
+    apiCall: () => Promise<any>, 
+    minInterval: number = 2000
+  ) => {
+    const now = Date.now()
+    const cached = fetchCache.current.get(key)
+    
+    // Return cached data if it's fresh (less than 30 seconds old)
+    if (cached && (now - cached.timestamp) < 30000) {
+      console.log(`Using cached data for ${key}`)
+      return cached.data
+    }
+
+    // Rate limit: prevent calls more frequent than minInterval
+    if ((now - lastFetchTime.current) < minInterval) {
+      console.log(`Rate limiting API call for ${key}`)
+      return null
+    }
+
+    try {
+      // Abort any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      
+      abortControllerRef.current = new AbortController()
+      lastFetchTime.current = now
+      
+      const result = await apiCall()
+      
+      // Cache the result
+      fetchCache.current.set(key, { data: result, timestamp: now })
+      
+      return result
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log(`Request aborted for ${key}`)
+        return null
+      }
+      console.error(`Rate-limited API call failed for ${key}:`, error)
+      throw error
+    }
+  }, [])
+
+  // Debounced follow data fetcher
+  const debouncedFetchFollowData = useMemo(
+    () => debounce(async (profileId: string, currentUserId?: string) => {
+      if (!profileId || isProcessingFollow) return
+
+      try {
+        console.log(`Fetching follow data for profile ${profileId}`)
+        
+        const followersData = await rateLimitedApiCall(
+          `followers-${profileId}`,
+          () => getFollowers(profileId),
+          3000 // 3 second minimum interval
+        )
+        
+        const followingData = await rateLimitedApiCall(
+          `following-${profileId}`,
+          () => getFollowing(profileId),
+          3000
+        )
+
+        if (followersData && followingData) {
+          setFollowers(followersData || [])
+          setFollowing(followingData || [])
+
+          if (currentUserId && followersData) {
+            const isUserFollowing = followersData.some((follower: any) => follower.id === currentUserId)
+            setIsFollowing(isUserFollowing)
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching follow data:", error)
+        if (error instanceof Error && error.message.includes('429')) {
+          toast.error("Too many requests. Please wait a moment.")
+        }
+      }
+    }, 1000), // 1 second debounce
+    [rateLimitedApiCall, isProcessingFollow]
+  )
+
+  // Debounced posts fetcher
+  const debouncedFetchUserPosts = useMemo(
+    () => debounce(async (profileId: string) => {
+      if (!profileId || hasLoadedPosts || activeTab !== "posts") return
+
+      setIsLoadingPosts(true)
+      try {
+        console.log(`Fetching posts for profile ${profileId}`)
+        
+        const posts = await rateLimitedApiCall(
+          `posts-${profileId}`,
+          () => getFeedPostsByUser(profileId),
+          5000 // 5 second minimum interval for posts
+        )
+
+        if (posts) {
+          const formattedPosts = posts.map((post: any) => {
+            const normalizedPost = normalizePost(post)
+
+            return {
+              id: post.id,
+              author: post.author || {
+                id: profileId,
+                name: profile?.name || "Unknown",
+                avatar: profile?.profileImage?.url || "/placeholder.svg",
+              },
+              title: post.title || "",
+              content: post.content || "",
+              createdAt: post.createdAt || new Date().toISOString(),
+              updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
+              image: normalizedPost.image,
+              likeCount: post.likes?.length || 0,
+              commentCount: post.comments?.length || 0,
+              isLiked: false,
+              type: post.type || "post",
+              rating: post.rating || null,
+              location: post.location
+                ? {
+                    id: post.location.id,
+                    name: post.location.name,
+                  }
+                : undefined,
+              likes: post.likes?.length || 0,
+            }
+          })
+
+          setUserPosts(formattedPosts)
+          setHasLoadedPosts(true)
+        }
+      } catch (error) {
+        console.error("Error fetching user posts:", error)
+        if (error instanceof Error && error.message.includes('429')) {
+          toast.error("Too many requests. Please wait a moment.")
+        } else {
+          toast.error("Failed to load user posts")
+        }
+      } finally {
+        setIsLoadingPosts(false)
+      }
+    }, 1500), // 1.5 second debounce
+    [rateLimitedApiCall, hasLoadedPosts, activeTab, normalizePost, profile]
+  )
+
   // Check if current user is viewing their own profile
   useEffect(() => {
     if (currentUser && profile) {
-      setIsCurrentUser(currentUser.id === profile.id)
+      const isOwn = currentUser.id === profile.id
+      if (isCurrentUser !== isOwn) {
+        setIsCurrentUser(isOwn)
+      }
 
+      // Only update following status if we have followers data and it's different
       if (followers.length > 0) {
-        setIsFollowing(followers.some((follower) => follower.id === currentUser.id))
+        const shouldBeFollowing = followers.some((follower) => follower.id === currentUser.id)
+        if (isFollowing !== shouldBeFollowing) {
+          setIsFollowing(shouldBeFollowing)
+        }
       }
     }
-  }, [currentUser, profile, followers])
+  }, [currentUser, profile, followers, isCurrentUser, isFollowing])
 
   // Fetch profile data if not provided or incomplete
   useEffect(() => {
     const fetchProfileData = async () => {
-      if (initialUserData) return
+      if (initialUserData || !userId) return
 
       setIsLoading(true)
       setError(null)
 
       try {
-        const userData = await getUserbyId(userId)
+        const userData = await rateLimitedApiCall(
+          `profile-${userId}`,
+          () => getUserbyId(userId),
+          2000
+        )
 
-        if (!userData) {
+        if (userData) {
+          const mappedProfile: UserProfile = {
+            id: userData.id as string,
+            email: userData.email || '',
+            name: userData.name || '',
+            bio: userData.bio || '',
+            location: userData.location || null,
+            profileImage: userData.profileImage || null,
+            createdAt: userData.createdAt || '',
+            followerCount: userData.followerCount || 0,
+            followingCount: userData.followingCount || 0,
+            isCreator: userData.isCreator || false,
+            creatorLevel: userData.creatorLevel || undefined,
+            interests: userData.interests || [],
+            socialLinks: userData.socialLinks || []
+          }
+
+          setProfile(mappedProfile)
+          isDataStale.current = false
+        } else {
           setError("Could not load this profile. It may not exist or you may not have permission to view it.")
-          return
         }
-
-        const mappedProfile: UserProfile = {
-          id: userData.id as string,
-          email: userData.email || '',
-          name: userData.name || '',
-          bio: userData.bio || '',
-          location: userData.location || null,
-          profileImage: userData.profileImage || null,
-          createdAt: userData.createdAt || '',
-          followerCount: userData.followerCount || 0,
-          followingCount: userData.followingCount || 0,
-          isCreator: userData.isCreator || false,
-          creatorLevel: userData.creatorLevel || undefined,
-          interests: userData.interests || [],
-          socialLinks: userData.socialLinks || []
-        }
-
-        setProfile(mappedProfile)
       } catch (err) {
         console.error("Error fetching profile:", err)
-        setError("Failed to load profile data")
+        if (err instanceof Error && err.message.includes('429')) {
+          setError("Too many requests. Please refresh the page in a moment.")
+        } else {
+          setError("Failed to load profile data")
+        }
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchProfileData()
-  }, [userId, initialUserData])
+  }, [userId, initialUserData, rateLimitedApiCall])
 
-  // Fetch followers and following data
+  // Fetch followers and following data - with proper dependencies
   useEffect(() => {
-    const fetchFollowData = async () => {
-      if (!profile?.id) return
-
-      try {
-        const [followersData, followingData] = await Promise.all([getFollowers(profile.id), getFollowing(profile.id)])
-
-        setFollowers(followersData || [])
-        setFollowing(followingData || [])
-
-        if (currentUser && followersData) {
-          setIsFollowing(followersData.some((follower: any) => follower.id === currentUser.id))
-        }
-      } catch (error) {
-        console.error("Error fetching follow data:", error)
-      }
+    if (!profile?.id || !currentUser) return
+    
+    // Only fetch if we don't have data or data is stale
+    if (followers.length === 0 || following.length === 0 || isDataStale.current) {
+      console.log('Triggering follow data fetch')
+      debouncedFetchFollowData(profile.id, currentUser.id)
     }
+  }, [profile?.id, currentUser?.id, debouncedFetchFollowData, followers.length, following.length])
 
-    fetchFollowData()
-  }, [profile?.id, currentUser])
-
-  // Lazy load posts only when posts tab is active
+  // Lazy load posts only when posts tab is active - with proper dependencies
   useEffect(() => {
-    const fetchUserPosts = async () => {
-      if (!profile?.id || hasLoadedPosts || activeTab !== "posts") return
-
-      setIsLoadingPosts(true)
-      try {
-        const posts = await getFeedPostsByUser(profile.id)
-
-        const formattedPosts = posts.map((post: any) => {
-          const normalizedPost = normalizePost(post)
-
-          return {
-            id: post.id,
-            author: post.author || {
-              id: profile.id,
-              name: profile.name || "Unknown",
-              avatar: profile.profileImage?.url || "/placeholder.svg",
-            },
-            title: post.title || "",
-            content: post.content || "",
-            createdAt: post.createdAt || new Date().toISOString(),
-            updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
-            image: normalizedPost.image,
-            likeCount: post.likes?.length || 0,
-            commentCount: post.comments?.length || 0,
-            isLiked: false,
-            type: post.type || "post",
-            rating: post.rating || null,
-            location: post.location
-              ? {
-                  id: post.location.id,
-                  name: post.location.name,
-                }
-              : undefined,
-            likes: post.likes?.length || 0,
-          }
-        })
-
-        setUserPosts(formattedPosts)
-        setHasLoadedPosts(true)
-      } catch (error) {
-        console.error("Error fetching user posts:", error)
-        toast.error("Failed to load user posts")
-      } finally {
-        setIsLoadingPosts(false)
-      }
+    if (!profile?.id) return
+    
+    if (activeTab === "posts" && !hasLoadedPosts) {
+      console.log('Triggering posts fetch for tab:', activeTab)
+      debouncedFetchUserPosts(profile.id)
     }
-
-    fetchUserPosts()
-  }, [profile?.id, activeTab, hasLoadedPosts, normalizePost])
+  }, [profile?.id, activeTab, hasLoadedPosts, debouncedFetchUserPosts])
 
   // Lazy load saved posts only when saved tab is active
   useEffect(() => {
@@ -252,8 +381,21 @@ export default function ProfileContent({
       }
     }
 
-    fetchSavedPosts()
+    // Debounce saved posts fetch as well
+    const timeoutId = setTimeout(fetchSavedPosts, 500)
+    return () => clearTimeout(timeoutId)
   }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      // Clear cache on unmount
+      fetchCache.current.clear()
+    }
+  }, [])
 
   const handleLogout = async () => {
     try {
@@ -300,6 +442,7 @@ export default function ProfileContent({
       }
 
       setIsFollowing(!isFollowing)
+      isDataStale.current = true // Mark data as stale
 
       if (navigator.vibrate) {
         navigator.vibrate(50)
@@ -451,6 +594,7 @@ export default function ProfileContent({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+
       {/* Modern Header Section */}
       <div className="relative bg-gradient-to-r from-[#FF6B6B] via-[#FF8E53] to-[#FFD93D] pb-32">
         {/* Navigation */}
@@ -512,6 +656,7 @@ export default function ProfileContent({
                       <LogOut className="h-4 w-4 mr-3" />
                       <span>Log Out</span>
                     </DropdownMenuItem>
+                   
                   </>
                 ) : (
                   <>

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import ProfileHeader from "@/components/profile/profile-header"
 import ProfileContent from "@/components/profile/profile-content"
@@ -10,6 +10,7 @@ import ProfileSkeleton from "@/components/profile/profile-skeleton"
 import { getUserbyId, getFollowers, getFollowing } from "@/app/actions"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 
 interface ProfileContainerProps {
   userId: string
@@ -26,72 +27,165 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
   const [following, setFollowing] = useState<any[]>([])
   const [isFollowing, setIsFollowing] = useState(false)
 
+  // Rate limiting and caching
+  const lastFetchTime = useRef<number>(0)
+  const fetchCache = useRef<Map<string, { data: any; timestamp: number }>>(new Map())
+  const hasInitialized = useRef<boolean>(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Rate-limited API call helper
+  const rateLimitedApiCall = useCallback(async (
+    key: string, 
+    apiCall: () => Promise<any>, 
+    minInterval: number = 3000
+  ) => {
+    const now = Date.now()
+    const cached = fetchCache.current.get(key)
+    
+    // Return cached data if it's fresh (less than 60 seconds old)
+    if (cached && (now - cached.timestamp) < 60000) {
+      console.log(`Using cached data for ${key}`)
+      return cached.data
+    }
+
+    // Rate limit: prevent calls more frequent than minInterval
+    if ((now - lastFetchTime.current) < minInterval) {
+      console.log(`Rate limiting API call for ${key}, waiting...`)
+      return cached?.data || null
+    }
+
+    try {
+      // Abort any previous request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      
+      abortControllerRef.current = new AbortController()
+      lastFetchTime.current = now
+      
+      const result = await apiCall()
+      
+      // Cache the result
+      if (result) {
+        fetchCache.current.set(key, { data: result, timestamp: now })
+      }
+      
+      return result
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log(`Request aborted for ${key}`)
+        return cached?.data || null
+      }
+      
+      if (error.message?.includes('429')) {
+        console.warn(`Rate limited for ${key}`)
+        toast.error("Too many requests. Please wait a moment.")
+        return cached?.data || null
+      }
+      
+      console.error(`Rate-limited API call failed for ${key}:`, error)
+      throw error
+    }
+  }, [])
+
   useEffect(() => {
+    // Prevent multiple initializations
+    if (hasInitialized.current) {
+      console.log('ProfileContainer already initialized, skipping')
+      return
+    }
+
     const fetchUsers = async () => {
       setIsLoading(true)
       setError(null)
+      hasInitialized.current = true
 
       try {
+        console.log('ProfileContainer: Starting data fetch')
+        
         // 1. First fetch the current user to check if logged in
         let currentUserData = null
         try {
           console.log("Fetching current user from /api/users/me")
-          const currentUserResponse = await fetch("/api/users/me", {
-            method: "GET",
-            credentials: "include",
-          })
+          
+          const response = await rateLimitedApiCall(
+            'current-user',
+            async () => {
+              const res = await fetch("/api/users/me", {
+                method: "GET",
+                credentials: "include",
+              })
+              if (res.ok) {
+                const data = await res.json()
+                return data.user
+              }
+              return null
+            },
+            2000
+          )
 
-          if (currentUserResponse.ok) {
-            const data = await currentUserResponse.json()
-            currentUserData = data.user
+          if (response) {
+            currentUserData = response
             setCurrentUser(currentUserData)
-            console.log("Current user fetched:", currentUserData)
+            console.log("Current user fetched:", currentUserData?.id)
           } else {
-            console.log("Failed to fetch current user, status:", currentUserResponse.status)
+            console.log("No current user found or failed to fetch")
           }
         } catch (error) {
           console.error("Error fetching current user:", error)
         }
 
-        // 2. Determine which profile to show
-        if (userId === "me") {
-          // If URL is /profile/me, show current user's profile
-          if (currentUserData) {
-            console.log("Using current user data for 'me' route")
-            setProfileUser(currentUserData)
-            setIsCurrentUser(true)
-          } else {
-            // Not logged in but trying to access /profile/me
-            setError("Please log in to view your profile")
-            console.log("Not logged in but trying to access /profile/me")
-          }
-        } else if (currentUserData && userId === currentUserData.id) {
-          // If URL is /profile/[current-user-id], still show current user's profile
-          console.log("URL matches current user ID, using current user data")
+        // 2. Check if viewing own profile
+        if (currentUserData && currentUserData.id === userId) {
+          console.log("User is viewing their own profile")
           setProfileUser(currentUserData)
           setIsCurrentUser(true)
-        } else {
-          // Otherwise, fetch the specific user profile from the ID in the URL
-          try {
-            console.log(`Fetching profile for user ID: ${userId} from getUserById`)
-            const profileData = await getUserbyId(userId)
+          setIsLoading(false)
+          return
+        }
 
-            if (profileData) {
-              console.log("Profile data fetched:", profileData)
-              setProfileUser(profileData)
-              setIsCurrentUser(false)
+        // 3. Fetch the specific user profile from the ID in the URL
+        try {
+          console.log(`Fetching profile for user ID: ${userId}`)
+          
+          const profileData = await rateLimitedApiCall(
+            `profile-${userId}`,
+            () => getUserbyId(userId),
+            3000
+          )
 
-              // Fetch followers and following
+          if (profileData) {
+            console.log("Profile data fetched:", profileData.id)
+            setProfileUser(profileData)
+            setIsCurrentUser(false)
+
+            // 4. Fetch followers and following with delay
+            setTimeout(async () => {
               try {
-                console.log(`Fetching followers for user ID: ${profileData.id}`)
-                const fetchedFollowers = await getFollowers(profileData.id as string)
-                setFollowers(fetchedFollowers || [])
-                console.log(`Fetched ${fetchedFollowers?.length || 0} followers`)
+                console.log(`Fetching follow data for user ID: ${profileData.id}`)
+                
+                const [fetchedFollowers, fetchedFollowing] = await Promise.all([
+                  rateLimitedApiCall(
+                    `followers-${profileData.id}`,
+                    () => getFollowers(profileData.id as string),
+                    4000
+                  ),
+                  rateLimitedApiCall(
+                    `following-${profileData.id}`,
+                    () => getFollowing(profileData.id as string),
+                    4000
+                  )
+                ])
 
-                console.log(`Fetching following for user ID: ${profileData.id}`)
-                const fetchedFollowing = await getFollowing(profileData.id as string)
-                setFollowing(fetchedFollowing || [])
-                console.log(`Fetched ${fetchedFollowing?.length || 0} following`)
+                if (fetchedFollowers) {
+                  setFollowers(fetchedFollowers || [])
+                  console.log(`Fetched ${fetchedFollowers?.length || 0} followers`)
+                }
+
+                if (fetchedFollowing) {
+                  setFollowing(fetchedFollowing || [])
+                  console.log(`Fetched ${fetchedFollowing?.length || 0} following`)
+                }
 
                 // Check if current user is following this profile
                 if (currentUserData && fetchedFollowers) {
@@ -103,15 +197,17 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
                 }
               } catch (error) {
                 console.error("Error fetching followers/following:", error)
+                // Don't set error state for follow data failures
               }
-            } else {
-              setError("User not found")
-              console.log("User not found from getUserById")
-            }
-          } catch (error) {
-            console.error("Error fetching profile user:", error)
-            setError("Failed to load user profile")
+            }, 1000) // 1 second delay
+
+          } else {
+            setError("User not found")
+            console.log("User not found from getUserById")
           }
+        } catch (error) {
+          console.error("Error fetching profile user:", error)
+          setError("Failed to load user profile")
         }
       } catch (error) {
         console.error("Error in fetchUsers:", error)
@@ -121,8 +217,26 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
       }
     }
 
-    fetchUsers()
-  }, [userId])
+    // Add a small delay before starting to prevent rapid re-renders
+    const timeoutId = setTimeout(fetchUsers, 300)
+    
+    return () => {
+      clearTimeout(timeoutId)
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
+  }, [userId, rateLimitedApiCall]) // Only depend on userId
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+      fetchCache.current.clear()
+    }
+  }, [])
 
   if (isLoading) {
     return <ProfileSkeleton />

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import jwt from 'jsonwebtoken'
 
 interface MobileUserResponse {
   success: boolean
@@ -46,171 +47,214 @@ interface MobileUserResponse {
   code?: string
 }
 
+// Helper function to verify JWT token using direct jsonwebtoken library
+async function verifyPayloadToken(token: string) {
+  try {
+    console.log('🔍 JWT verification starting...')
+    
+    // Get the secret from environment variable
+    const secret = process.env.PAYLOAD_SECRET
+    if (!secret) {
+      console.error('❌ PAYLOAD_SECRET not found in environment variables')
+      return null
+    }
+    
+    console.log('🔑 Using PAYLOAD_SECRET for verification')
+    console.log('🔑 Secret exists:', !!secret)
+    console.log('🔑 Secret length:', secret.length)
+    console.log('🔑 Token to verify:', token.substring(0, 20) + '...')
+    
+    // Use jsonwebtoken directly instead of payload.jwt.verify
+    const decoded = jwt.verify(token, secret) as any
+    
+    console.log('✅ JWT verification successful')
+    console.log('👤 Decoded token contains:', Object.keys(decoded))
+    
+    if (decoded && typeof decoded === 'object' && 'id' in decoded && 'email' in decoded) {
+      console.log('✅ Token has required fields (id, email)')
+      console.log('👤 User ID from token:', decoded.id)
+      console.log('📧 User email from token:', decoded.email)
+      return {
+        id: decoded.id as string,
+        email: decoded.email as string
+      }
+    }
+    
+    console.error('❌ Token missing required fields')
+    return null
+  } catch (error) {
+    console.error('❌ JWT verification failed:', error)
+    if (error instanceof jwt.JsonWebTokenError) {
+      console.error('❌ JWT Error type:', error.name)
+      console.error('❌ JWT Error message:', error.message)
+    }
+    return null
+  }
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse<MobileUserResponse>> {
   try {
-    const payload = await getPayload({ config })
+    console.log('📱 Mobile /me endpoint called')
+    console.log('📱 Request method:', request.method)
+    console.log('📱 Request URL:', request.url)
     
-    // Get authorization header
-    const authHeader = request.headers.get('Authorization')
-    const token = authHeader?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
+    // Log all headers for debugging
+    console.log('📱 Request headers:')
+    request.headers.forEach((value, key) => {
+      console.log(`📱   ${key}: ${value}`)
+    })
+    
+    // Extract token from Authorization header
+    const authHeader = request.headers.get('authorization')
+    console.log('🔍 Authorization header:', authHeader ? `"${authHeader}"` : 'null')
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('❌ No valid authorization header found')
+      console.log('❌ AuthHeader exists:', !!authHeader)
+      console.log('❌ AuthHeader starts with Bearer:', authHeader?.startsWith('Bearer '))
+      return NextResponse.json({
+        success: false,
+        message: 'Authentication token required',
+        error: 'MISSING_TOKEN',
+        code: 'AUTH_001'
+      }, { status: 401 })
     }
 
-    // Verify token and get current user
-    const { user } = await payload.auth({ headers: request.headers })
+    const token = authHeader.replace('Bearer ', '')
+    console.log('🔑 Extracted token:', token.substring(0, 20) + '...')
+    console.log('🔑 Token length:', token.length)
 
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
-        },
-        { status: 401 }
-      )
+    // Verify the JWT token using Payload's verification
+    const tokenData = await verifyPayloadToken(token)
+    if (!tokenData) {
+      console.log('❌ Token verification failed')
+      return NextResponse.json({
+        success: false,
+        message: 'Invalid or expired authentication token',
+        error: 'INVALID_TOKEN',
+        code: 'AUTH_002'
+      }, { status: 401 })
     }
 
-    // Get detailed user information
-    const detailedUser = await payload.findByID({
+    console.log('✅ Token verified for user:', tokenData.id)
+
+    // Get Payload instance
+    const payload = await getPayload({ config })
+
+    // Fetch user data from database
+    const user = await payload.findByID({
       collection: 'users',
-      id: user.id,
-      depth: 2,
+      id: tokenData.id
     })
 
-    if (!detailedUser) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'User not found',
-          error: 'User account no longer exists',
-          code: 'USER_NOT_FOUND'
-        },
-        { status: 404 }
-      )
+    if (!user) {
+      console.log('❌ User not found in database:', tokenData.id)
+      return NextResponse.json({
+        success: false,
+        message: 'User not found',
+        error: 'USER_NOT_FOUND',
+        code: 'AUTH_003'
+      }, { status: 404 })
     }
 
-    // Get user statistics (optional - these might need separate queries depending on your schema)
-    let stats = {
+    console.log('✅ User found:', user.email)
+
+    // Get user stats (optional, can be cached)
+    let userStats = {
       postsCount: 0,
       followersCount: 0,
       followingCount: 0,
       savedPostsCount: 0,
-      likedPostsCount: 0,
+      likedPostsCount: 0
     }
 
     try {
       // Get posts count
-      const postsResult = await payload.find({
+      const posts = await payload.find({
         collection: 'posts',
         where: {
-          author: { equals: user.id }
+          author: {
+            equals: user.id
+          }
         },
-        limit: 0, // Just get count
+        limit: 0 // Just get count
       })
-      stats.postsCount = postsResult.totalDocs
+      userStats.postsCount = posts.totalDocs
 
-      // Get saved posts count
-      if (detailedUser.savedPosts && Array.isArray(detailedUser.savedPosts)) {
-        stats.savedPostsCount = detailedUser.savedPosts.length
-      }
-
-      // Get liked posts count  
-      if (detailedUser.likedPosts && Array.isArray(detailedUser.likedPosts)) {
-        stats.likedPostsCount = detailedUser.likedPosts.length
-      }
-
-      // Get followers count
-      const followersResult = await payload.find({
-        collection: 'users',
+      // Get saved locations count (bucket lists)
+      const bucketLists = await payload.find({
+        collection: 'bucket-lists',
         where: {
-          following: { contains: user.id }
+          user: {
+            equals: user.id
+          }
         },
-        limit: 0,
+        limit: 0
       })
-      stats.followersCount = followersResult.totalDocs
-
-      // Get following count
-      if (detailedUser.following && Array.isArray(detailedUser.following)) {
-        stats.followingCount = detailedUser.following.length
-      }
+      userStats.savedPostsCount = bucketLists.totalDocs
 
     } catch (statsError) {
-      console.warn('Failed to fetch user stats:', statsError)
+      console.warn('Warning: Could not fetch user stats:', statsError)
+      // Continue without stats rather than failing
     }
 
-    // Prepare mobile-optimized response
-    const response: MobileUserResponse = {
+    // Extract user preferences
+    const preferences = {
+      categories: user.interests || [],
+      notifications: user.receiveUpdates !== false,
+      radius: 5 // Default radius, could be from user preferences
+    }
+
+    // Prepare response data
+    const responseData = {
+      user: {
+        id: user.id,
+        name: user.name || '',
+        email: user.email,
+        profileImage: user.profileImage ? {
+          url: typeof user.profileImage === 'object' && 'url' in user.profileImage 
+            ? user.profileImage.url 
+            : null
+        } : null,
+        location: user.location ? {
+          coordinates: user.location.coordinates ? {
+            latitude: user.location.coordinates.latitude,
+            longitude: user.location.coordinates.longitude
+          } : undefined,
+          address: user.location.city || user.location.address || undefined
+        } : undefined,
+        role: user.role || 'user',
+        preferences,
+        stats: userStats,
+        deviceInfo: {
+          platform: 'ios',
+          appVersion: '1.0.0',
+          lastSeen: new Date().toISOString()
+        },
+        joinedAt: user.createdAt || new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      }
+    }
+
+    console.log('✅ Returning user data for:', user.email)
+
+    return NextResponse.json({
       success: true,
       message: 'User profile retrieved successfully',
-      data: {
-        user: {
-          id: detailedUser.id,
-          name: detailedUser.name || '',
-          email: detailedUser.email,
-          profileImage: detailedUser.profileImage ? {
-            url: typeof detailedUser.profileImage === 'object' && detailedUser.profileImage.url
-              ? detailedUser.profileImage.url
-              : typeof detailedUser.profileImage === 'string' 
-              ? detailedUser.profileImage 
-              : '' // Fallback for unexpected types
-          } : null,
-          location: detailedUser.location ? {
-            coordinates: detailedUser.location.coordinates,
-            address: detailedUser.location.address,
-          } : undefined,
-          role: detailedUser.role || 'user',
-          preferences: {
-            categories: detailedUser.interests || [],
-            notifications: detailedUser.notificationSettings?.enabled ?? true,
-            radius: detailedUser.searchRadius || 25,
-          },
-          stats,
-          deviceInfo: detailedUser.deviceInfo ? {
-            platform: detailedUser.deviceInfo.platform,
-            appVersion: detailedUser.deviceInfo.appVersion,
-            lastSeen: detailedUser.deviceInfo.lastSeen,
-          } : undefined,
-          joinedAt: detailedUser.createdAt,
-          lastLogin: detailedUser.lastLogin,
-        },
-      },
-    }
-
-    return NextResponse.json(response, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'private, max-age=300', // Cache for 5 minutes
-        'X-Content-Type-Options': 'nosniff',
-      }
+      data: responseData
     })
 
   } catch (error) {
-    console.error('Mobile profile error:', error)
-    
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-        error: 'Profile service unavailable',
-        code: 'SERVER_ERROR'
-      },
-      { status: 500 }
-    )
+    console.error('❌ Mobile /me endpoint error:', error)
+    return NextResponse.json({
+      success: false,
+      message: 'Internal server error',
+      error: 'INTERNAL_ERROR',
+      code: 'AUTH_500'
+    }, { status: 500 })
   }
 }
 
-// Handle preflight requests for CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -218,7 +262,6 @@ export async function OPTIONS() {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Max-Age': '86400',
     },
   })
 } 
