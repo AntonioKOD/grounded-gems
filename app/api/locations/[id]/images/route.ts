@@ -72,7 +72,7 @@ export async function PATCH(
     let updateData: any = {}
 
     switch (action) {
-      case 'reorder':
+      case 'reorder': {
         // Handle image reordering
         if (gallery && Array.isArray(gallery)) {
           const sortedGallery = gallery.map((item, index) => ({
@@ -88,8 +88,9 @@ export async function PATCH(
           }
         }
         break
+      }
 
-      case 'set_primary':
+      case 'set_primary': {
         // Handle setting primary image
         const { imageId } = body
         if (gallery && Array.isArray(gallery) && imageId) {
@@ -105,8 +106,9 @@ export async function PATCH(
           }
         }
         break
+      }
 
-      case 'update_metadata':
+      case 'update_metadata': {
         // Handle updating image metadata (captions, alt text, tags)
         const { imageId, metadata } = body
         if (gallery && Array.isArray(gallery) && imageId && metadata) {
@@ -118,13 +120,14 @@ export async function PATCH(
           updateData.gallery = updatedGallery
         }
         break
+      }
 
-      case 'delete_image':
+      case 'delete_image': {
         // Handle deleting an image
-        const { imageId: deleteImageId } = body
-        if (gallery && Array.isArray(gallery) && deleteImageId) {
-          const imageToDelete = gallery.find(item => item.id === deleteImageId)
-          const updatedGallery = gallery.filter(item => item.id !== deleteImageId)
+        const { imageId } = body
+        if (gallery && Array.isArray(gallery) && imageId) {
+          const imageToDelete = gallery.find(item => item.id === imageId)
+          const updatedGallery = gallery.filter(item => item.id !== imageId)
           
           // If deleted image was primary, make first remaining image primary
           if (imageToDelete?.isPrimary && updatedGallery.length > 0) {
@@ -137,8 +140,9 @@ export async function PATCH(
           updateData.gallery = updatedGallery
         }
         break
+      }
 
-      case 'bulk_update':
+      case 'bulk_update': {
         // Handle bulk update of images
         if (featuredImage !== undefined) {
           updateData.featuredImage = featuredImage
@@ -147,6 +151,7 @@ export async function PATCH(
           updateData.gallery = gallery
         }
         break
+      }
 
       default:
         return NextResponse.json(
