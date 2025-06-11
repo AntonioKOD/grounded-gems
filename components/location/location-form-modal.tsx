@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
-import { Loader2 } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,13 +19,16 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { createLocation } from "@/app/(frontend)/events/actions"
 import { toast } from "sonner"
+import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
 
-// Define the form schema
+// Define the form schema - enhanced with categories
 const locationFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   description: z.string().optional(),
+  categories: z.array(z.string()).min(1, "At least one category is required").max(3, "Maximum 3 categories allowed"),
   address: z.object({
     street: z.string().min(2, "Street address is required"),
     city: z.string().min(2, "City is required"),
@@ -58,6 +61,20 @@ interface LocationFormModalProps {
   initialSearchTerm?: string
 }
 
+interface Category {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  source: 'manual' | 'foursquare' | 'imported'
+  foursquareIcon?: {
+    prefix: string
+    suffix: string
+  }
+  subcategories?: Category[]
+  parent?: string
+}
+
 export function LocationFormModal({
   open,
   onOpenChange,
@@ -65,6 +82,8 @@ export function LocationFormModal({
   initialSearchTerm = "",
 }: LocationFormModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
 
   // Initialize the form
   const form = useForm<LocationFormValues>({
@@ -72,6 +91,7 @@ export function LocationFormModal({
     defaultValues: {
       name: "",
       description: "",
+      categories: [],
       address: {
         street: "",
         city: "",
@@ -92,9 +112,63 @@ export function LocationFormModal({
     },
   })
 
+  // Fetch categories when component mounts
+  useEffect(() => {
+    const fetchCategories = async () => {
+      if (!open) return
+      
+      setIsLoadingCategories(true)
+      try {
+        const response = await fetch('/api/categories')
+        if (response.ok) {
+          const data = await response.json()
+          
+          // Transform categories to include hierarchical structure
+          const transformedCategories = data.docs.map((doc: any) => ({
+            id: doc.id,
+            name: doc.name,
+            slug: doc.slug,
+            description: doc.description,
+            source: doc.source || 'manual',
+            foursquareIcon: doc.foursquareIcon,
+            parent: doc.parent?.id || doc.parent,
+            subcategories: []
+          }))
+
+          // Build hierarchical structure
+          const categoryMap = new Map(transformedCategories.map((cat: Category) => [cat.id, cat]))
+          const rootCategories: Category[] = []
+
+          transformedCategories.forEach((category: Category) => {
+            if (category.parent) {
+              const parent = categoryMap.get(category.parent)
+              if (parent) {
+                if (!parent.subcategories) parent.subcategories = []
+                parent.subcategories.push(category)
+              }
+            } else {
+              rootCategories.push(category)
+            }
+          })
+
+          setCategories(rootCategories)
+        } else {
+          toast.error('Failed to load categories')
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error)
+        toast.error('Failed to load categories')
+      } finally {
+        setIsLoadingCategories(false)
+      }
+    }
+
+    fetchCategories()
+  }, [open])
+
   // Pre-fill city or name if initialSearchTerm is provided
-  useState(() => {
-    if (initialSearchTerm) {
+  useEffect(() => {
+    if (initialSearchTerm && open) {
       // If it looks like a city name, pre-fill the city field
       if (initialSearchTerm.length > 2 && !initialSearchTerm.includes(" ")) {
         form.setValue("address.city", initialSearchTerm)
@@ -103,7 +177,7 @@ export function LocationFormModal({
         form.setValue("name", initialSearchTerm)
       }
     }
-  })
+  }, [initialSearchTerm, open, form])
 
   // Handle form submission
   const onSubmit = async (values: LocationFormValues) => {
@@ -113,20 +187,15 @@ export function LocationFormModal({
 
       if (result.success) {
         onLocationCreated(result.location)
+        toast.success('Location created successfully!')
+        form.reset()
+        onOpenChange(false)
       } else {
-        toast("error creating location", {
-         
-          description: result.error || "Failed to create location",
-          
-        })
+        toast.error(result.error || "Failed to create location")
       }
     } catch (error) {
       console.error("Error creating location:", error)
-      toast("error creating location", {
-        
-        description: error instanceof Error ? error.message : "An unexpected error occurred",
-
-      })
+      toast.error(error instanceof Error ? error.message : "An unexpected error occurred")
     } finally {
       setIsSubmitting(false)
     }
@@ -134,7 +203,7 @@ export function LocationFormModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Location</DialogTitle>
           <DialogDescription>
@@ -170,6 +239,37 @@ export function LocationFormModal({
                     <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea placeholder="Brief description of the location" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Categories Section */}
+              <FormField
+                control={form.control}
+                name="categories"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categories (Select 1-3) *</FormLabel>
+                    <FormControl>
+                      {isLoadingCategories ? (
+                        <div className="flex items-center justify-center p-4 border rounded-lg">
+                          <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                          <span className="text-sm text-gray-600">Loading categories...</span>
+                        </div>
+                      ) : (
+                        <HierarchicalCategorySelector
+                          categories={categories}
+                          selectedCategories={field.value}
+                          onSelectionChange={field.onChange}
+                          maxSelections={3}
+                          placeholder="Choose categories that best describe your location"
+                          showSearch={true}
+                          showBadges={true}
+                          allowSubcategorySelection={true}
+                        />
+                      )}
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -358,7 +458,7 @@ export function LocationFormModal({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting || isLoadingCategories}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

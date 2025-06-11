@@ -37,6 +37,7 @@ import {
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getCategories, createLocation, type LocationFormData, type DayOfWeek } from '@/app/actions'
+import { HierarchicalCategorySelector } from '@/components/ui/hierarchical-category-selector'
 
 interface FoursquarePlace {
   foursquareId: string
@@ -100,12 +101,73 @@ export default function EnhancedFoursquareImport() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false)
 
+  // Helper function to find category by ID in hierarchical structure
+  const findCategoryById = (categoryId: string, categoriesList: any[]): any => {
+    for (const category of categoriesList) {
+      if (category.id === categoryId) {
+        return category
+      }
+      if (category.subcategories) {
+        const found = findCategoryById(categoryId, category.subcategories)
+        if (found) return found
+      }
+    }
+    return null
+  }
+
+  // Helper function to find category by name in flat structure
+  const findCategoryInFlat = (categoryName: string, categoriesList: any[]): any => {
+    const searchInCategories = (cats: any[]): any => {
+      for (const category of cats) {
+        if (category.name.toLowerCase().includes(categoryName.toLowerCase()) ||
+            categoryName.toLowerCase().includes(category.name.toLowerCase())) {
+          return category
+        }
+        if (category.subcategories) {
+          const found = searchInCategories(category.subcategories)
+          if (found) return found
+        }
+      }
+      return null
+    }
+    return searchInCategories(categoriesList)
+  }
+
   // Load categories on mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const result = await getCategories()
-        setCategories(result.docs.map((doc: any) => ({ id: doc.id, name: doc.name })))
+        
+        // Transform categories to include hierarchical structure
+        const transformedCategories = result.docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,
+          slug: doc.slug,
+          description: doc.description,
+          source: doc.source || 'manual',
+          foursquareIcon: doc.foursquareIcon,
+          parent: doc.parent?.id || doc.parent,
+          subcategories: []
+        }))
+
+        // Build hierarchical structure
+        const categoryMap = new Map(transformedCategories.map(cat => [cat.id, cat]))
+        const rootCategories: any[] = []
+
+        transformedCategories.forEach(category => {
+          if (category.parent) {
+            const parent = categoryMap.get(category.parent)
+            if (parent) {
+              if (!parent.subcategories) parent.subcategories = []
+              parent.subcategories.push(category)
+            }
+          } else {
+            rootCategories.push(category)
+          }
+        })
+
+        setCategories(rootCategories)
       } catch (error) {
         console.error("Error fetching categories:", error)
         toast.error('Failed to load categories')
@@ -124,18 +186,15 @@ export default function EnhancedFoursquareImport() {
       description: preview.description || '',
       shortDescription: preview.shortDescription || '',
       
-      // Try to map to existing categories
+      // Try to map to existing categories (support multiple)
       categories: preview.categories && categories.length > 0 
         ? preview.categories
           .map((catName: string) => {
-            const match = categories.find(cat => 
-              cat.name.toLowerCase().includes(catName.toLowerCase()) ||
-              catName.toLowerCase().includes(cat.name.toLowerCase())
-            )
+            const match = findCategoryInFlat(catName, categories)
             return match?.id
           })
           .filter(Boolean)
-          .slice(0, 1) // Take first match
+          .slice(0, 3) // Take up to 3 matches
         : undefined,
       
       address: {
@@ -886,22 +945,29 @@ export default function EnhancedFoursquareImport() {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-category">Category</Label>
-                      <Select 
-                        value={currentEdit.locationData.categories?.[0] || ''} 
-                        onValueChange={(value) => updateCurrentLocationData({ categories: value ? [value] : undefined })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label>Categories</Label>
+                      <HierarchicalCategorySelector
+                        categories={categories}
+                        selectedCategories={currentEdit.locationData.categories || []}
+                        onSelectionChange={(selectedIds) => 
+                          updateCurrentLocationData({ categories: selectedIds })
+                        }
+                        placeholder="Select categories for this location"
+                        maxSelections={5}
+                        showSearch={true}
+                      />
+                      {currentEdit.locationData.categories && currentEdit.locationData.categories.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {currentEdit.locationData.categories.map((categoryId) => {
+                            const category = findCategoryById(categoryId, categories)
+                            return category ? (
+                              <Badge key={categoryId} variant="secondary" className="text-xs">
+                                {category.name}
+                              </Badge>
+                            ) : null
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                   

@@ -1113,9 +1113,11 @@ export async function createLocation(data: LocationFormData) {
       description: data.description || "",
       address: data.address,
       coordinates,
+      categories: data.categories || [],  // Include categories
       contactInfo: data.contactInfo || {},
       businessHours: data.businessHours || [],
       accessibility: data.accessibility || {},
+      status: 'review', // Set as review by default for new locations
     }
 
     console.log("Creating location in Payload CMS")
