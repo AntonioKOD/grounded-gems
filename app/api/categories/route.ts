@@ -6,6 +6,8 @@ export async function GET(request: NextRequest) {
   try {
     const payload = await getPayload({ config })
     
+    console.log('🔄 Fetching categories from API...')
+    
     // Fetch categories from Payload CMS, similar to the getCategories action
     const result = await payload.find({
       collection: "categories",
@@ -16,9 +18,20 @@ export async function GET(request: NextRequest) {
         },
       },
       sort: "order",
-      limit: 100,
+      limit: 1000, // Increased limit to ensure we get all categories
       overrideAccess: true,
     })
+
+    console.log(`📊 Categories API: Found ${result.docs.length} active categories`)
+    console.log(`📋 Total in database: ${result.totalDocs}`)
+    
+    // Log category sources for debugging
+    const bySources = result.docs.reduce((acc: any, cat: any) => {
+      const source = cat.source || 'manual'
+      acc[source] = (acc[source] || 0) + 1
+      return acc
+    }, {})
+    console.log('📈 Categories by source:', bySources)
 
     return NextResponse.json({
       success: true,
@@ -30,7 +43,7 @@ export async function GET(request: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('Categories API error:', error)
+    console.error('❌ Categories API error:', error)
     
     return NextResponse.json(
       { error: 'Failed to fetch categories' },

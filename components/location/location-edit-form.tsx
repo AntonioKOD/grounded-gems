@@ -3,20 +3,9 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { 
-  MapPin, 
-  Clock, 
-  Phone, 
-  Globe, 
-  Tag, 
-  DollarSign,
-  Upload,
   X,
   Plus,
-  Trash2,
   Save,
-  Eye,
-  EyeOff,
-  Star,
   Shield,
   Users,
   Wifi,
@@ -36,17 +25,77 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
 
 interface LocationEditFormProps {
-  location: any
-  onSave: (updatedLocation: any) => Promise<void>
+  location: Location
+  onSave: (updatedLocation: LocationFormData) => Promise<void>
   onCancel: () => void
   isVisible?: boolean
+}
+
+interface Location {
+  id?: string
+  name?: string
+  description?: string
+  address?: string
+  city?: string
+  state?: string
+  zipCode?: string
+  country?: string
+  phone?: string
+  website?: string
+  priceRange?: string
+  categories?: Array<{ id: string; name: string } | string>
+  hours?: Record<string, { open: string; close: string; closed: boolean }>
+  amenities?: string[]
+  specialties?: string[]
+  socialMedia?: {
+    instagram?: string
+    facebook?: string
+    twitter?: string
+  }
+  isPublic?: boolean
+  acceptsReservations?: boolean
+  hasDelivery?: boolean
+  hasTakeout?: boolean
+  metadata?: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+  stats?: {
+    views?: number
+    photos?: number
+    reviews?: number
+    saves?: number
+  }
+}
+
+interface LocationFormData {
+  name: string
+  description: string
+  address: string
+  city: string
+  state: string
+  zipCode: string
+  country: string
+  phone: string
+  website: string
+  priceRange: string
+  categories: string[]
+  hours: Record<string, { open: string; close: string; closed: boolean }>
+  amenities: string[]
+  specialties: string[]
+  socialMedia: {
+    instagram: string
+    facebook: string
+    twitter: string
+  }
+  isPublic: boolean
+  acceptsReservations: boolean
+  hasDelivery: boolean
+  hasTakeout: boolean
+  metadata: Record<string, unknown>
 }
 
 const DAYS_OF_WEEK = [
@@ -65,7 +114,7 @@ const AMENITIES = [
   { id: 'parking', label: 'Parking Available', icon: Car },
   { id: 'cards', label: 'Credit Cards Accepted', icon: CreditCard },
   { id: 'accessible', label: 'Wheelchair Accessible', icon: Users },
-  { id: 'outdoor', label: 'Outdoor Seating', icon: Eye },
+  { id: 'outdoor', label: 'Outdoor Seating', icon: Wifi },
   { id: 'delivery', label: 'Delivery Available', icon: Car },
   { id: 'takeout', label: 'Takeout Available', icon: Users },
   { id: 'reservations', label: 'Accepts Reservations', icon: Shield },
@@ -110,7 +159,28 @@ export function LocationEditForm({
   const [activeTab, setActiveTab] = useState('basic')
   const [newSpecialty, setNewSpecialty] = useState('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [availableCategories, setAvailableCategories] = useState<any[]>([])
+  const [availableCategories, setAvailableCategories] = useState<Array<{
+    id: string
+    name: string
+    slug?: string
+    description?: string
+    source?: string
+    foursquareIcon?: {
+      prefix: string
+      suffix: string
+    }
+    subcategories?: Array<{
+      id: string
+      name: string
+      slug?: string
+      description?: string
+      source?: string
+      foursquareIcon?: {
+        prefix: string
+        suffix: string
+      }
+    }>
+  }>>([])
 
   // Initialize form data
   useEffect(() => {
@@ -126,7 +196,9 @@ export function LocationEditForm({
         phone: location.phone || '',
         website: location.website || '',
         priceRange: location.priceRange || '',
-        categories: location.categories?.map((cat: any) => cat.id || cat) || [],
+        categories: location.categories?.map((cat: { id: string; name: string } | string) => 
+          typeof cat === 'string' ? cat : cat.id
+        ) || [],
         hours: location.hours || {},
         amenities: location.amenities || [],
         specialties: location.specialties || [],
@@ -141,7 +213,9 @@ export function LocationEditForm({
         hasTakeout: location.hasTakeout || false,
         metadata: location.metadata || {},
       })
-      setSelectedCategories(location.categories?.map((cat: any) => cat.id || cat) || [])
+      setSelectedCategories(location.categories?.map((cat: { id: string; name: string } | string) => 
+        typeof cat === 'string' ? cat : cat.id
+      ) || [])
     }
   }, [location])
 
@@ -162,24 +236,24 @@ export function LocationEditForm({
     }
   }
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | boolean | string[]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
   }
 
-  const handleNestedInputChange = (parent: string, field: string, value: any) => {
+  const handleNestedInputChange = (parent: keyof LocationFormData, field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [parent]: {
-        ...prev[parent as keyof typeof prev],
+        ...(prev[parent] as Record<string, unknown>),
         [field]: value
       }
     }))
   }
 
-  const handleHoursChange = (day: string, field: 'open' | 'close' | 'closed', value: any) => {
+  const handleHoursChange = (day: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
     setFormData(prev => ({
       ...prev,
       hours: {

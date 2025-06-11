@@ -25,7 +25,8 @@ import {
   Save,
   Building,
   Clock,
-  Camera
+  Camera,
+  RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -957,22 +958,51 @@ export default function EnhancedFoursquareImport() {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-category">Category</Label>
-                      <Select 
-                        value={currentEdit.locationData.categories?.[0] || ''} 
-                        onValueChange={(value) => updateCurrentLocationData({ categories: value ? [value] : undefined })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="edit-category">Categories</Label>
+                      {categories.length > 0 ? (
+                        <HierarchicalCategorySelector
+                          categories={categories}
+                          selectedCategories={currentEdit.locationData.categories || []}
+                          onSelectionChange={(selectedIds) => updateCurrentLocationData({ categories: selectedIds })}
+                          maxSelections={3}
+                          placeholder="Select categories for this location"
+                          showSearch={true}
+                          showBadges={false}
+                          allowSubcategorySelection={true}
+                          expandedByDefault={false}
+                        />
+                      ) : (
+                        <div className="p-3 border border-gray-200 rounded-lg text-center">
+                          <div className="text-sm text-gray-500 mb-2">No categories available</div>
+                          <Button
+                            onClick={async () => {
+                              try {
+                                toast.info('Syncing categories from Foursquare...')
+                                const response = await fetch('/api/categories/sync-foursquare', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' }
+                                })
+                                const result = await response.json()
+                                
+                                if (response.ok) {
+                                  toast.success(`Categories synced! Created: ${result.created}, Updated: ${result.updated}`)
+                                  window.location.reload()
+                                } else {
+                                  toast.error(result.error || 'Failed to sync categories')
+                                }
+                              } catch (error) {
+                                console.error('Error syncing categories:', error)
+                                toast.error('Failed to sync categories')
+                              }
+                            }}
+                            variant="outline"
+                            size="sm"
+                          >
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Sync Categories
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   

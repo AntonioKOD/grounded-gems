@@ -121,6 +121,9 @@ export async function getLocations() {
 // Add the getCategories export to your actions file if it's not already there
 export async function getCategories() {
   const payload = await getPayload({ config: config })
+  
+  console.log('🔄 getCategories action: Fetching categories...')
+  
   const result = await payload.find({
     collection: "categories",
     depth: 1,
@@ -130,9 +133,12 @@ export async function getCategories() {
       },
     },
     sort: "order",
-    limit: 100,
+    limit: 1000, // Increased limit to ensure we get all categories
     overrideAccess: true,
   })
+  
+  console.log(`📊 getCategories action: Found ${result.docs.length} categories`)
+  
   return result
 }
 

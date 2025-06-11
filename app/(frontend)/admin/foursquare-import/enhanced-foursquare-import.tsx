@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
@@ -32,7 +32,8 @@ import {
   ImageIcon,
   Users,
   Tag,
-  Settings
+  Settings,
+  RefreshCw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -137,7 +138,9 @@ export default function EnhancedFoursquareImport() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
+        console.log('🔄 Fetching categories for Foursquare import...')
         const result = await getCategories()
+        console.log('📊 Categories result:', result.docs?.length || 0, 'categories found')
         
         // Transform categories to include hierarchical structure
         const transformedCategories = result.docs.map((doc: any) => ({
@@ -147,7 +150,7 @@ export default function EnhancedFoursquareImport() {
           description: doc.description,
           source: doc.source || 'manual',
           foursquareIcon: doc.foursquareIcon,
-          parent: doc.parent?.id || doc.parent,
+          parent: typeof doc.parent === 'object' && doc.parent?.id ? doc.parent.id : doc.parent,
           subcategories: []
         }))
 
@@ -161,15 +164,29 @@ export default function EnhancedFoursquareImport() {
             if (parent) {
               if (!parent.subcategories) parent.subcategories = []
               parent.subcategories.push(category)
+            } else {
+              // Add orphaned categories as root categories
+              rootCategories.push(category)
             }
           } else {
             rootCategories.push(category)
           }
         })
 
+        console.log('✅ Successfully loaded categories:', {
+          total: transformedCategories.length,
+          rootCategories: rootCategories.length,
+          withSubcategories: rootCategories.filter(cat => cat.subcategories && cat.subcategories.length > 0).length
+        })
+        
         setCategories(rootCategories)
+        
+        if (rootCategories.length === 0) {
+          console.warn('⚠️ No categories available for selection')
+          toast.warning('No categories available. Categories may need to be synced first.')
+        }
       } catch (error) {
-        console.error("Error fetching categories:", error)
+        console.error("❌ Error fetching categories:", error)
         toast.error('Failed to load categories')
       }
     }
@@ -425,6 +442,111 @@ export default function EnhancedFoursquareImport() {
     ))
   }
 
+  const generateBusinessDescription = async (fsqId: string, locationData: any) => {
+    if (!locationData.name || !locationData.contactInfo?.website) {
+      toast.error('Please provide location name and website URL first')
+      return
+    }
+
+    setIsSubmittingEdit(true)
+    try {
+      console.log('🤖 Generating business description for:', locationData.name)
+      toast.info('🔍 Analyzing website content...')
+      
+      const response = await fetch('/api/ai/insights', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationName: locationData.name,
+          locationAddress: typeof locationData.address === 'string' 
+            ? locationData.address 
+            : Object.values(locationData.address || {}).filter(Boolean).join(', '),
+          categories: locationData.categories || [],
+          website: locationData.contactInfo.website,
+          phone: locationData.contactInfo?.phone || '',
+          requestType: 'business_description'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.insights) {
+        // Update the current editing location with the generated description
+        updateCurrentLocationData({ 
+          description: data.insights 
+        })
+        
+        toast.success('✨ AI business description generated successfully!')
+        console.log('✅ Generated description:', data.insights)
+      } else {
+        toast.error(data.error || 'Failed to generate business description')
+      }
+    } catch (error) {
+      console.error('❌ Error generating business description:', error)
+      toast.error('Failed to generate business description. Please try again.')
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
+  const generateInsiderTips = async (fsqId: string, locationData: any) => {
+    if (!locationData.name || !locationData.address) {
+      toast.error('Please fill in location name and address first')
+      return
+    }
+
+    setIsSubmittingEdit(true)
+    try {
+      console.log('🤖 Generating insider tips for:', locationData.name)
+      
+      const response = await fetch('/api/ai/insights', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationName: locationData.name,
+          locationAddress: typeof locationData.address === 'string' 
+            ? locationData.address 
+            : Object.values(locationData.address || {}).filter(Boolean).join(', '),
+          categories: locationData.categories || [],
+          description: locationData.description || '',
+          website: locationData.contactInfo?.website || '',
+          requestType: 'insider_tips'
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.success && data.insights) {
+        // Update the current editing location with the generated tips
+        updateCurrentLocationData({ 
+          insiderTips: data.insights 
+        })
+        
+        toast.success('✨ AI insider tips generated successfully!')
+        console.log('✅ Generated tips:', data.insights)
+      } else {
+        toast.error(data.error || 'Failed to generate insider tips')
+      }
+    } catch (error) {
+      console.error('❌ Error generating insider tips:', error)
+      toast.error('Failed to generate insider tips. Please try again.')
+    } finally {
+      setIsSubmittingEdit(false)
+    }
+  }
+
   const PlaceCard = ({ place, onToggle, isSelected }: { 
     place: FoursquarePlace, 
     onToggle: (id: string) => void, 
@@ -502,99 +624,140 @@ export default function EnhancedFoursquareImport() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="search">Search Places</TabsTrigger>
           <TabsTrigger value="discover">Discover Nearby</TabsTrigger>
           <TabsTrigger value="edit">Edit & Import ({selectedPlaces.size})</TabsTrigger>
           <TabsTrigger value="results">Import Results</TabsTrigger>
+          <TabsTrigger value="debug">Debug</TabsTrigger>
         </TabsList>
 
         {/* Search Tab */}
         <TabsContent value="search" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Search Foursquare Places</CardTitle>
+              <CardTitle>Search Places</CardTitle>
               <CardDescription>
-                Search for places by name, location, or category
+                Search for places using various criteria
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Category sync warning if no categories */}
+              {categories.length === 0 && (
+                <Alert className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Categories Not Available</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <p className="mb-3">
+                      No categories found in the system. You may need to sync categories from Foursquare first.
+                    </p>
+                    <Button
+                      onClick={async () => {
+                        try {
+                          toast.info('Syncing categories from Foursquare...')
+                          const response = await fetch('/api/categories/sync-foursquare', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }
+                          })
+                          const result = await response.json()
+                          
+                          if (response.ok) {
+                            toast.success(`Categories synced successfully! Created: ${result.created}, Updated: ${result.updated}`)
+                            // Refresh categories
+                            window.location.reload()
+                          } else {
+                            toast.error(result.error || 'Failed to sync categories')
+                          }
+                        } catch (error) {
+                          console.error('Error syncing categories:', error)
+                          toast.error('Failed to sync categories')
+                        }
+                      }}
+                      className="bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Sync Categories from Foursquare
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="query">Search Query</Label>
+                  <Label htmlFor="search-query">Search Query</Label>
                   <Input
-                    id="query"
-                    placeholder="e.g., coffee shops, pizza"
+                    id="search-query"
+                    placeholder="e.g., coffee, restaurants, museums"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location</Label>
+                  <Label htmlFor="search-location">Location</Label>
                   <Input
-                    id="location"
-                    placeholder="e.g., Boston, MA"
+                    id="search-location"
+                    placeholder="e.g., New York, NY or latitude,longitude"
                     value={searchLocation}
                     onChange={(e) => setSearchLocation(e.target.value)}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category">Category</Label>
+                  <Label htmlFor="search-category">Category</Label>
                   <Select value={searchCategory} onValueChange={setSearchCategory}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
+                      <SelectValue placeholder="Select category..." />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">All Categories</SelectItem>
-                      <SelectItem value="RESTAURANT">Restaurants</SelectItem>
-                      <SelectItem value="CAFE">Cafes</SelectItem>
-                      <SelectItem value="BAR">Bars</SelectItem>
-                      <SelectItem value="MUSEUM">Museums</SelectItem>
-                      <SelectItem value="PARK">Parks</SelectItem>
-                      <SelectItem value="SHOPPING_MALL">Shopping</SelectItem>
-                      <SelectItem value="HOTEL">Hotels</SelectItem>
+                      {categories.length > 0 ? (
+                        categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="NONE" disabled>
+                          No categories available
+                        </SelectItem>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="radius">Radius (meters)</Label>
+                  <Label htmlFor="search-radius">Radius (meters)</Label>
                   <Input
-                    id="radius"
+                    id="search-radius"
                     type="number"
+                    placeholder="1000"
                     value={searchRadius}
                     onChange={(e) => setSearchRadius(e.target.value)}
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="limit">Limit</Label>
+                  <Label htmlFor="search-limit">Max Results</Label>
                   <Input
-                    id="limit"
+                    id="search-limit"
                     type="number"
+                    placeholder="20"
                     value={searchLimit}
                     onChange={(e) => setSearchLimit(e.target.value)}
                   />
                 </div>
               </div>
 
-              <Button 
-                onClick={handleSearch} 
-                disabled={isLoading}
-                className="w-full"
-              >
+              <Button onClick={handleSearch} disabled={isLoading} className="w-full">
                 {isLoading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Searching...
-                  </>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
-                  <>
-                    <Search className="w-4 h-4 mr-2" />
-                    Search Places
-                  </>
+                  <Search className="w-4 h-4 mr-2" />
                 )}
+                Search Places
               </Button>
             </CardContent>
           </Card>
@@ -910,222 +1073,671 @@ export default function EnhancedFoursquareImport() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Debug Tab */}
+        <TabsContent value="debug" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Debug Information</CardTitle>
+              <CardDescription>
+                Category loading and system status information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Categories Status */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-gray-700">Category System Status</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Root Categories:</span>
+                      <span className="font-medium">{categories.length}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total Subcategories:</span>
+                      <span className="font-medium">
+                        {categories.reduce((total, cat) => total + (cat.subcategories?.length || 0), 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Categories Loaded:</span>
+                      <span className={`font-medium ${categories.length > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {categories.length > 0 ? '✅ Yes' : '❌ No'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Sources */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-gray-700">Category Sources</h4>
+                  <div className="space-y-2 text-sm">
+                    {(() => {
+                      const sources = categories.reduce((acc: any, cat: any) => {
+                        const source = cat.source || 'manual'
+                        acc[source] = (acc[source] || 0) + 1
+                        return acc
+                      }, {})
+                      
+                      return Object.entries(sources).map(([source, count]) => (
+                        <div key={source} className="flex justify-between">
+                          <span className="text-gray-600 capitalize">{source}:</span>
+                          <span className="font-medium">{count}</span>
+                        </div>
+                      ))
+                    })()}
+                    {Object.keys(categories.reduce((acc: any, cat: any) => {
+                      const source = cat.source || 'manual'
+                      acc[source] = true
+                      return acc
+                    }, {})).length === 0 && (
+                      <div className="text-gray-500 italic">No categories loaded</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sample Categories */}
+              {categories.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-gray-700">Sample Categories (First 5)</h4>
+                  <div className="space-y-2">
+                    {categories.slice(0, 5).map((category) => (
+                      <div key={category.id} className="p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {category.foursquareIcon && (
+                              <img
+                                src={`${category.foursquareIcon.prefix}32${category.foursquareIcon.suffix}`}
+                                alt=""
+                                className="w-5 h-5"
+                              />
+                            )}
+                            <span className="font-medium">{category.name}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {category.source || 'manual'}
+                            </Badge>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {category.subcategories?.length || 0} subs
+                          </span>
+                        </div>
+                        {category.description && (
+                          <p className="text-xs text-gray-600 mt-1">{category.description}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Complete Category Tree */}
+              {categories.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm text-gray-700">Complete Category Tree</h4>
+                  <div className="max-h-80 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                    <div className="space-y-1 text-sm">
+                      {categories.map((category) => (
+                        <div key={category.id} className="space-y-1">
+                          <div className="flex items-center gap-2 font-medium text-gray-800">
+                            {category.foursquareIcon && (
+                              <img
+                                src={`${category.foursquareIcon.prefix}24${category.foursquareIcon.suffix}`}
+                                alt=""
+                                className="w-4 h-4"
+                              />
+                            )}
+                            <span>{category.name}</span>
+                            <Badge variant="secondary" className="text-xs px-1 py-0">
+                              {category.source}
+                            </Badge>
+                            {category.subcategories && category.subcategories.length > 0 && (
+                              <span className="text-xs text-gray-500">
+                                ({category.subcategories.length} subcategories)
+                              </span>
+                            )}
+                          </div>
+                          
+                          {/* Subcategories */}
+                          {category.subcategories && category.subcategories.length > 0 && (
+                            <div className="ml-6 space-y-1">
+                              {category.subcategories.map((sub) => (
+                                <div key={sub.id} className="flex items-center gap-2 text-gray-600">
+                                  {sub.foursquareIcon && (
+                                    <img
+                                      src={`${sub.foursquareIcon.prefix}16${sub.foursquareIcon.suffix}`}
+                                      alt=""
+                                      className="w-3 h-3"
+                                    />
+                                  )}
+                                  <span className="text-xs">↳ {sub.name}</span>
+                                  <Badge variant="outline" className="text-xs px-1 py-0">
+                                    {sub.source}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="space-y-3">
+                <h4 className="font-medium text-sm text-gray-700">Actions</h4>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => {
+                      console.log('🔄 Manual category refresh triggered')
+                      window.location.reload()
+                    }}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh Categories
+                  </Button>
+                  
+                  <Button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch('/api/categories')
+                        const data = await response.json()
+                        console.log('📊 Raw categories API response:', data)
+                        toast.info(`API Response: ${data.docs?.length || 0} categories found`)
+                      } catch (error) {
+                        console.error('❌ Error testing API:', error)
+                        toast.error('Failed to test categories API')
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Test API
+                  </Button>
+                </div>
+              </div>
+
+              {/* Warning if no categories */}
+              {categories.length === 0 && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>No Categories Found</AlertTitle>
+                  <AlertDescription>
+                    The category system appears to be empty. This could be due to:
+                    <ul className="mt-2 ml-4 list-disc text-sm">
+                      <li>Categories haven't been synced from Foursquare yet</li>
+                      <li>All categories are marked as inactive</li>
+                      <li>Database connection issues</li>
+                      <li>API endpoint problems</li>
+                    </ul>
+                    <div className="mt-3">
+                      <Button
+                        onClick={async () => {
+                          try {
+                            toast.info('Syncing categories from Foursquare...')
+                            const response = await fetch('/api/categories/sync-foursquare', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' }
+                            })
+                            const result = await response.json()
+                            
+                            if (response.ok) {
+                              toast.success(`Categories synced! Created: ${result.created}, Updated: ${result.updated}`)
+                              window.location.reload()
+                            } else {
+                              toast.error(result.error || 'Failed to sync categories')
+                            }
+                          } catch (error) {
+                            console.error('Error syncing categories:', error)
+                            toast.error('Failed to sync categories')
+                          }
+                        }}
+                        className="bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"
+                        size="sm"
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Sync Categories Now
+                      </Button>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Edit Modal */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen} modal={true}>
+        <DialogContent className="max-w-6xl h-[90vh] flex flex-col overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
           {currentEdit && (
             <>
-              <DialogHeader>
-                <DialogTitle>
-                  Edit Location ({currentEditIndex + 1}/{editingLocations.length})
-                </DialogTitle>
-                <DialogDescription>
-                  Customize the details for "{currentEdit.locationData.name}" before importing
-                </DialogDescription>
+              <DialogHeader className="flex-shrink-0 pb-4 border-b">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <DialogTitle className="text-xl font-bold">
+                      Edit Location ({currentEditIndex + 1}/{editingLocations.length})
+                    </DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Customize the details for "{currentEdit.locationData.name}" before importing
+                    </DialogDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline" className="text-xs">
+                      {editingLocations.length - currentEditIndex - 1} remaining
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditModalOpen(false)}
+                      className="h-8 w-8 p-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </DialogHeader>
               
-              <div className="space-y-6">
-                {/* Basic Info */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
-                    <Building className="w-5 h-5 mr-2" />
-                    Basic Information
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-name">Location Name</Label>
-                      <Input
-                        id="edit-name"
-                        value={currentEdit.locationData.name}
-                        onChange={(e) => updateCurrentLocationData({ name: e.target.value })}
-                      />
+              <div className="flex-1 min-h-0 flex">
+                {/* Left Column - Basic Info & Categories */}
+                <div className="w-1/2 pr-4 overflow-y-auto">
+                  <div className="space-y-6 py-4">
+                    {/* Progress Indicator */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-blue-800">Import Progress</span>
+                        <span className="text-xs text-blue-600">{Math.round((currentEditIndex / editingLocations.length) * 100)}% complete</span>
+                      </div>
+                      <div className="w-full bg-blue-100 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${(currentEditIndex / editingLocations.length) * 100}%` }}
+                        ></div>
+                      </div>
                     </div>
-                    
-                    <div className="space-y-2">
-                      <Label>Categories</Label>
-                      <HierarchicalCategorySelector
-                        categories={categories}
-                        selectedCategories={currentEdit.locationData.categories || []}
-                        onSelectionChange={(selectedIds) => 
-                          updateCurrentLocationData({ categories: selectedIds })
-                        }
-                        placeholder="Select categories for this location"
-                        maxSelections={5}
-                        showSearch={true}
-                      />
-                      {currentEdit.locationData.categories && currentEdit.locationData.categories.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {currentEdit.locationData.categories.map((categoryId) => {
-                            const category = findCategoryById(categoryId, categories)
-                            return category ? (
-                              <Badge key={categoryId} variant="secondary" className="text-xs">
-                                {category.name}
-                              </Badge>
-                            ) : null
-                          })}
+
+                    {/* Basic Info */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <Building className="w-5 h-5 mr-2" />
+                        Basic Information
+                      </h3>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-name">Location Name</Label>
+                          <Input
+                            id="edit-name"
+                            value={currentEdit.locationData.name}
+                            onChange={(e) => updateCurrentLocationData({ name: e.target.value })}
+                          />
                         </div>
-                      )}
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-description">Description</Label>
+                          <Textarea
+                            id="edit-description"
+                            value={currentEdit.locationData.description}
+                            onChange={(e) => updateCurrentLocationData({ description: e.target.value })}
+                            className="min-h-[100px]"
+                          />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-description">Description</Label>
-                    <Textarea
-                      id="edit-description"
-                      value={currentEdit.locationData.description}
-                      onChange={(e) => updateCurrentLocationData({ description: e.target.value })}
-                      className="min-h-[100px]"
-                    />
-                  </div>
-                </div>
 
-                <Separator />
-
-                {/* Address */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
-                    <MapPin className="w-5 h-5 mr-2" />
-                    Address
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-street">Street Address</Label>
-                      <Input
-                        id="edit-street"
-                        value={currentEdit.locationData.address?.street || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          address: { ...currentEdit.locationData.address, street: e.target.value }
-                        })}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-city">City</Label>
-                      <Input
-                        id="edit-city"
-                        value={currentEdit.locationData.address?.city || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          address: { ...currentEdit.locationData.address, city: e.target.value }
-                        })}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-state">State</Label>
-                      <Input
-                        id="edit-state"
-                        value={currentEdit.locationData.address?.state || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          address: { ...currentEdit.locationData.address, state: e.target.value }
-                        })}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-zip">ZIP Code</Label>
-                      <Input
-                        id="edit-zip"
-                        value={currentEdit.locationData.address?.zip || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          address: { ...currentEdit.locationData.address, zip: e.target.value }
-                        })}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Contact Info */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
-                    <Phone className="w-5 h-5 mr-2" />
-                    Contact Information
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-phone">Phone</Label>
-                      <Input
-                        id="edit-phone"
-                        value={currentEdit.locationData.contactInfo?.phone || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          contactInfo: { ...currentEdit.locationData.contactInfo, phone: e.target.value }
-                        })}
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-website">Website</Label>
-                      <Input
-                        id="edit-website"
-                        value={currentEdit.locationData.contactInfo?.website || ''}
-                        onChange={(e) => updateCurrentLocationData({ 
-                          contactInfo: { ...currentEdit.locationData.contactInfo, website: e.target.value }
-                        })}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Additional Info */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
-                    <Tag className="w-5 h-5 mr-2" />
-                    Additional Information
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-price">Price Range</Label>
-                      <Select 
-                        value={currentEdit.locationData.priceRange || 'moderate'} 
-                        onValueChange={(value) => updateCurrentLocationData({ priceRange: value as any })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="free">Free</SelectItem>
-                          <SelectItem value="budget">Budget ($)</SelectItem>
-                          <SelectItem value="moderate">Moderate ($$)</SelectItem>
-                          <SelectItem value="expensive">Expensive ($$$)</SelectItem>
-                          <SelectItem value="luxury">Luxury ($$$$)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="edit-verified"
-                          checked={currentEdit.locationData.isVerified || false}
-                          onCheckedChange={(checked) => updateCurrentLocationData({ isVerified: !!checked })}
-                        />
-                        <Label htmlFor="edit-verified">Verified Location</Label>
+                    {/* Categories Section - Enhanced */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <Tag className="w-5 h-5 mr-2" />
+                        Categories
+                      </h3>
+                      
+                      <div className="space-y-3">
+                        {/* Category Info Banner */}
+                        <div className="text-sm text-gray-600 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <div className="h-2 w-2 bg-blue-500 rounded-full"></div>
+                            <span className="font-medium">Category Selection</span>
+                          </div>
+                          {categories.length > 0 ? (
+                            <div className="space-y-1 text-xs">
+                              <div className="flex justify-between">
+                                <span>Available categories:</span>
+                                <span className="font-medium">
+                                  {categories.length} root categories with {categories.reduce((total, cat) => total + (cat.subcategories?.length || 0), 0)} subcategories
+                                </span>
+                              </div>
+                              <div className="mt-2 text-blue-700">
+                                💡 Select up to 5 categories that best describe this location
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-amber-700 flex items-center space-x-2">
+                              <span>⚠️ No categories loaded.</span>
+                              <Button
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch('/api/categories/sync-foursquare', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' }
+                                    })
+                                    const result = await response.json()
+                                    
+                                    if (response.ok) {
+                                      toast.success(`Categories synced! Created: ${result.created}, Updated: ${result.updated}`)
+                                      window.location.reload()
+                                    } else {
+                                      toast.error(result.error || 'Failed to sync categories')
+                                    }
+                                  } catch (error) {
+                                    console.error('Error syncing categories:', error)
+                                    toast.error('Failed to sync categories')
+                                  }
+                                }}
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs"
+                              >
+                                Sync Now
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Category Selector */}
+                        {categories.length > 0 ? (
+                          <HierarchicalCategorySelector
+                            categories={categories}
+                            selectedCategories={currentEdit.locationData.categories || []}
+                            onSelectionChange={(selectedIds) => {
+                              console.log('📝 Category selection changed:', selectedIds)
+                              updateCurrentLocationData({ categories: selectedIds })
+                            }}
+                            placeholder="Choose categories for this location"
+                            maxSelections={5}
+                            showSearch={true}
+                            showBadges={true}
+                            allowSubcategorySelection={true}
+                            expandedByDefault={false}
+                          />
+                        ) : (
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                            <Tag className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                              No Categories Available
+                            </h3>
+                            <p className="text-gray-600 mb-4">
+                              Categories need to be synced from Foursquare before you can select them.
+                            </p>
+                            <Button
+                              onClick={async () => {
+                                try {
+                                  toast.info('Syncing categories from Foursquare...')
+                                  const response = await fetch('/api/categories/sync-foursquare', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' }
+                                  })
+                                  const result = await response.json()
+                                  
+                                  if (response.ok) {
+                                    toast.success(`Categories synced! Created: ${result.created}, Updated: ${result.updated}`)
+                                    window.location.reload()
+                                  } else {
+                                    toast.error(result.error || 'Failed to sync categories')
+                                  }
+                                } catch (error) {
+                                  console.error('Error syncing categories:', error)
+                                  toast.error('Failed to sync categories')
+                                }
+                              }}
+                              className="bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"
+                            >
+                              <RefreshCw className="w-4 h-4 mr-2" />
+                              Sync Categories from Foursquare
+                            </Button>
+                          </div>
+                        )}
+                        
+                        {/* Selected Categories Summary */}
+                        {currentEdit.locationData.categories && currentEdit.locationData.categories.length > 0 && (
+                          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+                              <span className="text-sm font-medium text-green-800">
+                                Selected Categories ({currentEdit.locationData.categories.length}/5)
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {currentEdit.locationData.categories.map((categoryId) => {
+                                const category = findCategoryById(categoryId, categories)
+                                return category ? (
+                                  <div key={categoryId} className="flex items-center space-x-1 bg-white px-2 py-1 rounded-md border border-green-300">
+                                    {category.foursquareIcon && (
+                                      <img
+                                        src={`${category.foursquareIcon.prefix}16${category.foursquareIcon.suffix}`}
+                                        alt=""
+                                        className="w-3 h-3"
+                                      />
+                                    )}
+                                    <span className="text-xs font-medium text-green-800">{category.name}</span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className="text-xs px-1 py-0 h-4 border-green-400 text-green-700"
+                                    >
+                                      {category.source}
+                                    </Badge>
+                                  </div>
+                                ) : (
+                                  <div key={categoryId} className="flex items-center space-x-1 bg-red-50 px-2 py-1 rounded-md border border-red-300">
+                                    <span className="text-xs text-red-600">Unknown: {categoryId}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-tips">Insider Tips</Label>
-                    <Textarea
-                      id="edit-tips"
-                      value={currentEdit.locationData.insiderTips || ''}
-                      onChange={(e) => updateCurrentLocationData({ insiderTips: e.target.value })}
-                      placeholder="Share helpful tips for visitors"
-                    />
+                </div>
+
+                {/* Right Column - Address & Additional Info */}
+                <div className="w-1/2 pl-4 border-l overflow-y-auto">
+                  <div className="space-y-6 py-4">
+                    {/* Address */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <MapPin className="w-5 h-5 mr-2" />
+                        Address
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-street">Street Address</Label>
+                          <Input
+                            id="edit-street"
+                            value={currentEdit.locationData.address?.street || ''}
+                            onChange={(e) => updateCurrentLocationData({ 
+                              address: { ...currentEdit.locationData.address, street: e.target.value }
+                            })}
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-city">City</Label>
+                            <Input
+                              id="edit-city"
+                              value={currentEdit.locationData.address?.city || ''}
+                              onChange={(e) => updateCurrentLocationData({ 
+                                address: { ...currentEdit.locationData.address, city: e.target.value }
+                              })}
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="edit-state">State</Label>
+                            <Input
+                              id="edit-state"
+                              value={currentEdit.locationData.address?.state || ''}
+                              onChange={(e) => updateCurrentLocationData({ 
+                                address: { ...currentEdit.locationData.address, state: e.target.value }
+                              })}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-zip">ZIP Code</Label>
+                          <Input
+                            id="edit-zip"
+                            value={currentEdit.locationData.address?.zip || ''}
+                            onChange={(e) => updateCurrentLocationData({ 
+                              address: { ...currentEdit.locationData.address, zip: e.target.value }
+                            })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Contact Info */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <Phone className="w-5 h-5 mr-2" />
+                        Contact Information
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-phone">Phone</Label>
+                          <Input
+                            id="edit-phone"
+                            value={currentEdit.locationData.contactInfo?.phone || ''}
+                            onChange={(e) => updateCurrentLocationData({ 
+                              contactInfo: { ...currentEdit.locationData.contactInfo, phone: e.target.value }
+                            })}
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-website">Website</Label>
+                          <Input
+                            id="edit-website"
+                            value={currentEdit.locationData.contactInfo?.website || ''}
+                            onChange={(e) => updateCurrentLocationData({ 
+                              contactInfo: { ...currentEdit.locationData.contactInfo, website: e.target.value }
+                            })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Additional Info */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <Settings className="w-5 h-5 mr-2" />
+                        Additional Information
+                      </h3>
+                      
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-price">Price Range</Label>
+                          <Select 
+                            value={currentEdit.locationData.priceRange || 'moderate'} 
+                            onValueChange={(value) => updateCurrentLocationData({ priceRange: value as any })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="free">Free</SelectItem>
+                              <SelectItem value="budget">Budget ($)</SelectItem>
+                              <SelectItem value="moderate">Moderate ($$)</SelectItem>
+                              <SelectItem value="expensive">Expensive ($$$)</SelectItem>
+                              <SelectItem value="luxury">Luxury ($$$$)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="edit-verified"
+                              checked={currentEdit.locationData.isVerified || false}
+                              onCheckedChange={(checked) => updateCurrentLocationData({ isVerified: !!checked })}
+                            />
+                            <Label htmlFor="edit-verified">Verified Location</Label>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="edit-description-ai">Business Description</Label>
+                            {currentEdit.locationData.contactInfo?.website && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => generateBusinessDescription(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
+                                disabled={isSubmittingEdit}
+                                className="text-xs"
+                              >
+                                <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
+                                Generate AI Description
+                              </Button>
+                            )}
+                          </div>
+                          <Textarea
+                            id="edit-description-ai"
+                            value={currentEdit.locationData.description || ''}
+                            onChange={(e) => updateCurrentLocationData({ description: e.target.value })}
+                            placeholder="Compelling business description for visitors"
+                            className="min-h-[100px]"
+                          />
+                          {!currentEdit.locationData.contactInfo?.website && (
+                            <p className="text-xs text-gray-500">
+                              💡 Add a website URL to enable AI description generation
+                            </p>
+                          )}
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="edit-tips">Insider Tips</Label>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateInsiderTips(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
+                              disabled={isSubmittingEdit}
+                              className="text-xs"
+                            >
+                              <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
+                              Generate AI Tips
+                            </Button>
+                          </div>
+                          <Textarea
+                            id="edit-tips"
+                            value={currentEdit.locationData.insiderTips || ''}
+                            onChange={(e) => updateCurrentLocationData({ insiderTips: e.target.value })}
+                            placeholder="Share helpful tips for visitors"
+                            className="min-h-[100px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
               
-              <DialogFooter className="flex gap-2">
+              <DialogFooter className="flex-shrink-0 flex gap-2 mt-4 pt-4 border-t border-gray-200">
                 <Button variant="outline" onClick={handleSkipLocation}>
                   Skip This Location
                 </Button>

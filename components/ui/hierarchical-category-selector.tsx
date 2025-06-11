@@ -1,13 +1,13 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
-import { Check, ChevronDown, ChevronRight, Search, X } from 'lucide-react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { Check, Search, X, Tag, Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { cn } from '@/lib/utils'
 
 interface CategoryOption {
   id: string
@@ -32,6 +32,7 @@ interface HierarchicalCategorySelectorProps {
   showSearch?: boolean
   showBadges?: boolean
   allowSubcategorySelection?: boolean
+  expandedByDefault?: boolean
 }
 
 export function HierarchicalCategorySelector({
@@ -42,84 +43,56 @@ export function HierarchicalCategorySelector({
   placeholder = "Select categories...",
   showSearch = true,
   showBadges = true,
-  allowSubcategorySelection = true
+  allowSubcategorySelection = true,
+  expandedByDefault = false
 }: HierarchicalCategorySelectorProps) {
   const [searchTerm, setSearchTerm] = useState('')
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
-  const [filteredCategories, setFilteredCategories] = useState<CategoryOption[]>(categories)
+  
+  // Flatten all categories and subcategories into a single list
+  const flatCategories = useMemo(() => {
+    const flattened: CategoryOption[] = []
+    
+    const addCategories = (cats: CategoryOption[], parentName?: string) => {
+      cats.forEach(category => {
+        // Add the parent category
+        flattened.push({
+          ...category,
+          name: parentName ? `${parentName} → ${category.name}` : category.name
+        })
+        
+        // Add subcategories if they exist and subcategory selection is allowed
+        if (allowSubcategorySelection && category.subcategories && category.subcategories.length > 0) {
+          addCategories(category.subcategories, category.name)
+        }
+      })
+    }
+    
+    addCategories(categories)
+    return flattened
+  }, [categories, allowSubcategorySelection])
 
   // Filter categories based on search term
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredCategories(categories)
-      return
-    }
+  const filteredCategories = useMemo(() => {
+    if (!searchTerm) return flatCategories
+    
+    return flatCategories.filter(category =>
+      category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      category.slug.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  }, [flatCategories, searchTerm])
 
-    const filtered = categories.filter(category => {
-      const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           category.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      
-      const hasMatchingSubcategories = category.subcategories?.some(sub =>
-        sub.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sub.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-
-      return matchesSearch || hasMatchingSubcategories
-    }).map(category => ({
-      ...category,
-      subcategories: category.subcategories?.filter(sub =>
-        sub.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        sub.description?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    }))
-
-    setFilteredCategories(filtered)
-  }, [searchTerm, categories])
-
-  const toggleCategoryExpansion = (categoryId: string) => {
-    const newExpanded = new Set(expandedCategories)
-    if (newExpanded.has(categoryId)) {
-      newExpanded.delete(categoryId)
-    } else {
-      newExpanded.add(categoryId)
-    }
-    setExpandedCategories(newExpanded)
-  }
+  const isSelectionLimitReached = selectedCategories.length >= maxSelections
 
   const handleCategoryToggle = (categoryId: string) => {
-    const newSelected = [...selectedCategories]
-    const isSelected = newSelected.includes(categoryId)
-
+    const isSelected = selectedCategories.includes(categoryId)
+    
     if (isSelected) {
-      // Remove category and all its subcategories
-      const categoryToRemove = findCategoryById(categoryId, categories)
-      const idsToRemove = [categoryId]
-      if (categoryToRemove?.subcategories) {
-        idsToRemove.push(...categoryToRemove.subcategories.map(sub => sub.id))
-      }
-      onSelectionChange(newSelected.filter(id => !idsToRemove.includes(id)))
-    } else {
-      // Add category if not at max limit
-      if (newSelected.length < maxSelections) {
-        newSelected.push(categoryId)
-        onSelectionChange(newSelected)
-      }
-    }
-  }
-
-  const handleSubcategoryToggle = (subcategoryId: string, parentId: string) => {
-    if (!allowSubcategorySelection) return
-
-    const newSelected = [...selectedCategories]
-    const isSelected = newSelected.includes(subcategoryId)
-
-    if (isSelected) {
-      onSelectionChange(newSelected.filter(id => id !== subcategoryId))
-    } else {
-      if (newSelected.length < maxSelections) {
-        newSelected.push(subcategoryId)
-        onSelectionChange(newSelected)
-      }
+      // Remove category
+      onSelectionChange(selectedCategories.filter(id => id !== categoryId))
+    } else if (!isSelectionLimitReached) {
+      // Add category
+      onSelectionChange([...selectedCategories, categoryId])
     }
   }
 
@@ -127,28 +100,26 @@ export function HierarchicalCategorySelector({
     onSelectionChange(selectedCategories.filter(id => id !== categoryId))
   }
 
-  const findCategoryById = (id: string, categoriesList: CategoryOption[]): CategoryOption | null => {
-    for (const category of categoriesList) {
-      if (category.id === id) return category
-      if (category.subcategories) {
-        const found = findCategoryById(id, category.subcategories)
-        if (found) return found
-      }
+  const findCategoryById = (id: string): CategoryOption | null => {
+    return flatCategories.find(cat => cat.id === id) || null
+  }
+
+  const CategoryIcon = ({ category }: { category: CategoryOption }) => {
+    if (category.foursquareIcon) {
+      return (
+        <img
+          src={`${category.foursquareIcon.prefix}16${category.foursquareIcon.suffix}`}
+          alt=""
+          className="w-4 h-4"
+        />
+      )
     }
-    return null
+    return <Tag className="h-4 w-4 text-gray-500" />
   }
-
-  const getSelectedCategoryNames = () => {
-    return selectedCategories.map(id => {
-      const category = findCategoryById(id, categories)
-      return category ? category.name : 'Unknown'
-    })
-  }
-
-  const isSelectionLimitReached = selectedCategories.length >= maxSelections
 
   return (
     <div className="space-y-4">
+      {/* Search */}
       {showSearch && (
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -156,153 +127,176 @@ export function HierarchicalCategorySelector({
             placeholder="Search categories..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
+            className="pl-10 pr-4"
           />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1 h-8 w-8 p-0"
+              onClick={() => setSearchTerm('')}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       )}
 
+      {/* Selected Categories Badges */}
       {showBadges && selectedCategories.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {selectedCategories.map(categoryId => {
-            const category = findCategoryById(categoryId, categories)
-            return category ? (
-              <Badge key={categoryId} variant="secondary" className="flex items-center gap-2">
-                {category.foursquareIcon && (
-                  <img
-                    src={`${category.foursquareIcon.prefix}32${category.foursquareIcon.suffix}`}
-                    alt=""
-                    className="w-4 h-4"
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Selected Categories:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onSelectionChange([])}
+              className="h-6 text-xs"
+            >
+              Clear All
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {selectedCategories.map(categoryId => {
+              const category = findCategoryById(categoryId)
+              return category ? (
+                <Badge 
+                  key={categoryId} 
+                  variant="secondary" 
+                  className="flex items-center gap-2 px-2 py-1"
+                >
+                  <CategoryIcon category={category} />
+                  <span className="text-xs font-medium">{category.name}</span>
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-red-600"
+                    onClick={() => removeCategory(categoryId)}
                   />
-                )}
-                {category.name}
-                <X
-                  className="h-3 w-3 cursor-pointer"
-                  onClick={() => removeCategory(categoryId)}
-                />
-              </Badge>
-            ) : null
-          })}
+                </Badge>
+              ) : null
+            })}
+          </div>
         </div>
       )}
 
-      <Card>
+      {/* Categories List */}
+      <Card className="border-2 border-gray-200">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center justify-between">
-            {placeholder}
-            <span className="text-xs text-gray-500">
-              {selectedCategories.length}/{maxSelections} selected
-            </span>
+            <div className="flex items-center space-x-2">
+              <Folder className="h-4 w-4 text-blue-600" />
+              <span>{placeholder}</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className={cn(
+                "text-xs",
+                selectedCategories.length >= maxSelections ? "text-orange-600 font-medium" : "text-gray-500"
+              )}>
+                {selectedCategories.length}/{maxSelections} selected
+              </span>
+              {filteredCategories.length !== flatCategories.length && (
+                <Badge variant="outline" className="text-xs">
+                  {filteredCategories.length} shown
+                </Badge>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <ScrollArea className="h-64">
+        <CardContent className="pt-0">
+          <ScrollArea className="h-80 pr-4">
             <div className="space-y-2">
               {filteredCategories.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">
-                  No categories found
-                </p>
+                <div className="text-center py-8">
+                  <Folder className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">
+                    {searchTerm ? 'No categories match your search' : 'No categories available'}
+                  </p>
+                  {searchTerm && (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setSearchTerm('')}
+                      className="text-xs"
+                    >
+                      Clear search
+                    </Button>
+                  )}
+                </div>
               ) : (
-                filteredCategories.map(category => (
-                  <div key={category.id} className="space-y-1">
-                    <div className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                      {category.subcategories && category.subcategories.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                          onClick={() => toggleCategoryExpansion(category.id)}
-                        >
-                          {expandedCategories.has(category.id) ? (
-                            <ChevronDown className="h-3 w-3" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3" />
-                          )}
-                        </Button>
+                filteredCategories.map(category => {
+                  const isSelected = selectedCategories.includes(category.id)
+                  const isDisabled = !isSelected && isSelectionLimitReached
+
+                  return (
+                    <div
+                      key={category.id}
+                      className={cn(
+                        "flex items-center space-x-3 p-3 rounded-lg border border-gray-200 transition-all duration-200 cursor-pointer",
+                        isSelected 
+                          ? "bg-blue-50 border-blue-300 shadow-sm" 
+                          : "hover:bg-gray-50 hover:border-gray-300",
+                        isDisabled && "opacity-50 cursor-not-allowed"
                       )}
+                      onClick={() => !isDisabled && handleCategoryToggle(category.id)}
+                    >
+                      <CategoryIcon category={category} />
                       
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className={`flex-1 justify-start h-auto p-2 ${
-                          selectedCategories.includes(category.id) ? 'bg-blue-50 border-blue-200' : ''
-                        }`}
-                        onClick={() => handleCategoryToggle(category.id)}
-                        disabled={!selectedCategories.includes(category.id) && isSelectionLimitReached}
-                      >
-                        <div className="flex items-center space-x-2 w-full">
-                          {category.foursquareIcon && (
-                            <img
-                              src={`${category.foursquareIcon.prefix}32${category.foursquareIcon.suffix}`}
-                              alt=""
-                              className="w-5 h-5"
-                            />
-                          )}
-                          <div className="flex-1 text-left">
-                            <div className="font-medium text-sm">{category.name}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className={cn(
+                                "font-medium text-sm truncate",
+                                isSelected ? "text-blue-900" : "text-gray-900"
+                              )}>
+                                {category.name}
+                              </span>
+                              
+                              <Badge 
+                                variant={category.source === 'foursquare' ? 'default' : 'outline'}
+                                className="text-xs px-1 py-0"
+                              >
+                                {category.source}
+                              </Badge>
+                            </div>
+                            
                             {category.description && (
-                              <div className="text-xs text-gray-500">{category.description}</div>
+                              <div className="text-xs text-gray-500 truncate mt-0.5">
+                                {category.description}
+                              </div>
                             )}
                           </div>
-                          {selectedCategories.includes(category.id) && (
-                            <Check className="h-4 w-4 text-blue-600" />
+                          
+                          {isSelected && (
+                            <Check className="h-4 w-4 text-blue-600 flex-shrink-0 ml-2" />
                           )}
                         </div>
-                      </Button>
+                      </div>
                     </div>
-
-                    {/* Subcategories */}
-                    {allowSubcategorySelection && category.subcategories && expandedCategories.has(category.id) && (
-                      <Collapsible open={expandedCategories.has(category.id)}>
-                        <CollapsibleContent>
-                          <div className="ml-8 space-y-1">
-                            {category.subcategories.map(subcategory => (
-                              <Button
-                                key={subcategory.id}
-                                variant="ghost"
-                                size="sm"
-                                className={`w-full justify-start h-auto p-2 ${
-                                  selectedCategories.includes(subcategory.id) ? 'bg-blue-50 border-blue-200' : ''
-                                }`}
-                                onClick={() => handleSubcategoryToggle(subcategory.id, category.id)}
-                                disabled={!selectedCategories.includes(subcategory.id) && isSelectionLimitReached}
-                              >
-                                <div className="flex items-center space-x-2 w-full">
-                                  {subcategory.foursquareIcon && (
-                                    <img
-                                      src={`${subcategory.foursquareIcon.prefix}32${subcategory.foursquareIcon.suffix}`}
-                                      alt=""
-                                      className="w-4 h-4"
-                                    />
-                                  )}
-                                  <div className="flex-1 text-left">
-                                    <div className="font-medium text-sm">{subcategory.name}</div>
-                                    {subcategory.description && (
-                                      <div className="text-xs text-gray-500">{subcategory.description}</div>
-                                    )}
-                                  </div>
-                                  {selectedCategories.includes(subcategory.id) && (
-                                    <Check className="h-4 w-4 text-blue-600" />
-                                  )}
-                                </div>
-                              </Button>
-                            ))}
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    )}
-                  </div>
-                ))
+                  )
+                })
               )}
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
 
+      {/* Selection Limit Warning */}
       {isSelectionLimitReached && (
-        <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded-lg">
-          Maximum number of categories selected ({maxSelections}). Remove some to add others.
+        <div className="flex items-center space-x-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+          <div className="h-2 w-2 bg-amber-500 rounded-full flex-shrink-0"></div>
+          <span>
+            Maximum number of categories selected ({maxSelections}). Remove some to add others.
+          </span>
         </div>
       )}
+
+      {/* Stats */}
+      <div className="text-xs text-gray-500 pt-2 border-t border-gray-100">
+        <div className="flex justify-between">
+          <span>Available categories: {flatCategories.length}</span>
+          <span>Selected: {selectedCategories.length}</span>
+        </div>
+      </div>
     </div>
   )
 } 

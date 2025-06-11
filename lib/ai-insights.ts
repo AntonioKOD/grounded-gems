@@ -11,6 +11,12 @@ export interface InsiderTipsResult {
   error?: string
 }
 
+export interface BusinessDescriptionResult {
+  description: string
+  confidence: number
+  error?: string
+}
+
 export interface LocationInsights {
   insiderTips: string
   enhancedDescription: string
@@ -95,6 +101,95 @@ export async function generateInsiderTipsFromWebsite(
       tips: '',
       confidence: 0,
       error: `Failed to generate tips: ${error instanceof Error ? error.message : 'Unknown error'}`
+    }
+  }
+}
+
+/**
+ * Scrape and analyze website content to generate compelling business descriptions
+ */
+export async function generateBusinessDescriptionFromWebsite(
+  websiteUrl: string,
+  locationName: string,
+  locationAddress?: string,
+  categories?: string[],
+  phone?: string
+): Promise<BusinessDescriptionResult> {
+  try {
+    // Validate URL
+    if (!websiteUrl || !isValidUrl(websiteUrl)) {
+      return {
+        description: '',
+        confidence: 0,
+        error: 'Invalid website URL provided'
+      }
+    }
+
+    // Fetch website content
+    const websiteContent = await scrapeWebsiteContent(websiteUrl)
+    
+    if (!websiteContent || websiteContent.length < 50) {
+      return {
+        description: '',
+        confidence: 0,
+        error: 'Could not extract meaningful content from website'
+      }
+    }
+
+    // Generate business description using AI
+    const prompt = createBusinessDescriptionPrompt(
+      locationName,
+      websiteContent,
+      locationAddress,
+      categories,
+      phone
+    )
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert business writer and travel content creator who crafts compelling, authentic descriptions that capture the essence of businesses and locations. Write engaging descriptions that help visitors understand what makes each place special. Write in clear, conversational sentences without using markdown formatting, headers, or bullet points. Focus on what visitors will experience and why they should visit.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 400,
+      temperature: 0.7,
+    })
+
+    const generatedDescription = response.choices[0]?.message?.content?.trim()
+    
+    if (!generatedDescription) {
+      return {
+        description: '',
+        confidence: 0,
+        error: 'AI failed to generate business description'
+      }
+    }
+
+    // Clean up the generated description
+    const cleanedDescription = cleanAIResponse(generatedDescription)
+    
+    // Format the description for better readability
+    const formattedDescription = formatBusinessDescription(cleanedDescription)
+
+    // Calculate confidence based on content quality
+    const confidence = calculateDescriptionConfidence(formattedDescription, websiteContent)
+
+    return {
+      description: formattedDescription,
+      confidence,
+    }
+  } catch (error) {
+    console.error('Error generating business description:', error)
+    return {
+      description: '',
+      confidence: 0,
+      error: `Failed to generate description: ${error instanceof Error ? error.message : 'Unknown error'}`
     }
   }
 }
@@ -393,4 +488,91 @@ export function generateFallbackTips(locationName: string, category: string = ''
   ]
 
   return tips.join('. ') + '.'
+}
+
+/**
+ * Create a prompt for generating business descriptions
+ */
+function createBusinessDescriptionPrompt(
+  locationName: string,
+  websiteContent: string,
+  locationAddress?: string,
+  categories?: string[],
+  phone?: string
+): string {
+  const categoryText = categories && categories.length > 0 ? categories.join(', ') : 'business'
+  const addressText = locationAddress ? ` located at ${locationAddress}` : ''
+  const contactText = phone ? ` (Contact: ${phone})` : ''
+  
+  return `
+Based on the following website content for ${locationName}${addressText}${contactText}, a ${categoryText}, create a compelling business description:
+
+Website Content:
+${websiteContent}
+
+Generate a description that:
+- Captures what makes this business unique and special
+- Describes the atmosphere and experience visitors can expect
+- Highlights key offerings, specialties, or standout features
+- Appeals to potential visitors and makes them want to visit
+- Is 2-3 sentences that flow naturally together
+
+Write in an engaging, conversational tone without using bullet points, headers, or markdown formatting. Focus on the experience and value this business provides to customers.
+`
+}
+
+/**
+ * Format business description for better readability
+ */
+function formatBusinessDescription(text: string): string {
+  if (!text) return text
+  
+  // Split into sentences and clean each
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0)
+  
+  // Format each sentence and rejoin
+  return sentences
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length > 15) // Remove very short fragments
+    .map(sentence => {
+      // Capitalize first letter
+      return sentence.charAt(0).toUpperCase() + sentence.slice(1)
+    })
+    .join('. ') + (sentences.length > 0 ? '.' : '')
+}
+
+/**
+ * Calculate confidence score for generated business descriptions
+ */
+function calculateDescriptionConfidence(description: string, sourceContent: string): number {
+  let confidence = 0.6 // Base confidence for descriptions
+  
+  // Increase confidence based on description length and detail
+  if (description.length > 150) confidence += 0.1
+  if (description.length > 250) confidence += 0.1
+  
+  // Increase confidence if description mentions specific business aspects
+  const businessKeywords = [
+    'experience', 'atmosphere', 'specializes', 'features', 'offers', 'known for',
+    'serves', 'provides', 'creates', 'delivers', 'focuses', 'combines'
+  ]
+  const keywordMatches = businessKeywords.filter(keyword => 
+    description.toLowerCase().includes(keyword)
+  ).length
+  
+  confidence += Math.min(keywordMatches * 0.03, 0.15)
+  
+  // Increase confidence if source content is substantial and relevant
+  if (sourceContent.length > 800) confidence += 0.1
+  if (sourceContent.length > 1500) confidence += 0.05
+  
+  // Check for business-related content in source
+  const businessContentKeywords = ['menu', 'service', 'hours', 'location', 'about', 'welcome']
+  const contentMatches = businessContentKeywords.filter(keyword => 
+    sourceContent.toLowerCase().includes(keyword)
+  ).length
+  
+  confidence += Math.min(contentMatches * 0.02, 0.1)
+  
+  return Math.min(confidence, 1.0)
 } 

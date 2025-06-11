@@ -1,19 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateInsiderTipsFromWebsite, generateLocationInsights } from '@/lib/ai-insights'
+import { generateInsiderTipsFromWebsite, generateLocationInsights, generateBusinessDescriptionFromWebsite } from '@/lib/ai-insights'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { type, ...params } = body
+    const { 
+      requestType, 
+      type, 
+      locationName, 
+      locationAddress, 
+      categories, 
+      description, 
+      website, 
+      phone,
+      websiteUrl,
+      locationCategory,
+      category
+    } = body
 
-    switch (type) {
+    // Handle both old and new request formats
+    const requestTypeToUse = requestType || type
+    
+    switch (requestTypeToUse) {
+      case 'business_description':
+        return await handleBusinessDescription({
+          locationName,
+          website,
+          locationAddress,
+          categories,
+          phone
+        })
+      case 'insider_tips':
+        return await handleInsiderTips({
+          locationName,
+          website,
+          locationAddress,
+          categories,
+          description
+        })
       case 'insider-tips':
-        return await handleInsiderTips(params)
+        return await handleLegacyInsiderTips({
+          websiteUrl: websiteUrl || website,
+          locationName,
+          locationCategory: locationCategory || (categories && categories.length > 0 ? categories[0] : undefined)
+        })
       case 'location-insights':
-        return await handleLocationInsights(params)
+        return await handleLocationInsights({
+          locationName,
+          description,
+          category: category || (categories && categories.length > 0 ? categories[0] : 'general'),
+          websiteUrl: websiteUrl || website
+        })
       default:
         return NextResponse.json(
-          { success: false, error: 'Invalid request type' },
+          { success: false, error: `Invalid request type: ${requestTypeToUse}` },
           { status: 400 }
         )
     }
@@ -29,7 +69,109 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function handleBusinessDescription(params: {
+  locationName: string
+  website?: string
+  locationAddress?: string
+  categories?: string[]
+  phone?: string
+}) {
+  const { locationName, website, locationAddress, categories, phone } = params
+
+  if (!locationName) {
+    return NextResponse.json(
+      { success: false, error: 'Location name is required' },
+      { status: 400 }
+    )
+  }
+
+  if (!website) {
+    return NextResponse.json(
+      { success: false, error: 'Website URL is required for business description generation' },
+      { status: 400 }
+    )
+  }
+
+  console.log('🤖 Generating business description for:', locationName, 'from website:', website)
+
+  try {
+    const result = await generateBusinessDescriptionFromWebsite(
+      website,
+      locationName,
+      locationAddress,
+      categories,
+      phone
+    )
+
+    return NextResponse.json({
+      success: true,
+      insights: result.description,
+      confidence: result.confidence,
+      error: result.error
+    })
+  } catch (error) {
+    console.error('Error generating business description:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate business description' },
+      { status: 500 }
+    )
+  }
+}
+
 async function handleInsiderTips(params: {
+  locationName: string
+  website?: string
+  locationAddress?: string
+  categories?: string[]
+  description?: string
+}) {
+  const { locationName, website, categories, description } = params
+
+  if (!locationName) {
+    return NextResponse.json(
+      { success: false, error: 'Location name is required' },
+      { status: 400 }
+    )
+  }
+
+  console.log('🤖 Generating insider tips for:', locationName)
+
+  try {
+    let result
+    
+    if (website) {
+      // Generate tips from website content
+      result = await generateInsiderTipsFromWebsite(
+        website,
+        locationName,
+        categories && categories.length > 0 ? categories[0] : undefined
+      )
+    } else {
+      // Generate basic tips from location info only
+      const category = categories && categories.length > 0 ? categories[0] : 'general'
+      const insights = await generateLocationInsights(locationName, description || '', category)
+      result = {
+        tips: insights.insiderTips,
+        confidence: 0.8
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      insights: result.tips,
+      confidence: result.confidence,
+      error: result.error
+    })
+  } catch (error) {
+    console.error('Error generating insider tips:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to generate insider tips' },
+      { status: 500 }
+    )
+  }
+}
+
+async function handleLegacyInsiderTips(params: {
   websiteUrl: string
   locationName: string
   locationCategory?: string
