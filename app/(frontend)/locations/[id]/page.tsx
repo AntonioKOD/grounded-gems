@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { parseLocationParam } from '@/lib/slug-utils'
+import { getPrimaryImageUrl } from '@/lib/image-utils'
 import Image from 'next/image'
 import Link from 'next/link'
 import { 
@@ -127,13 +128,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     const locationName = location.name || 'Unnamed Location'
     const description = location.shortDescription || location.description || `Discover ${locationName} - a unique destination worth visiting.`
     
-    // Get image URL
-    let imageUrl = '/og-default.jpg' // fallback image
-    if (typeof location.featuredImage === 'string') {
-      imageUrl = location.featuredImage
-    } else if (location.featuredImage?.url) {
-      imageUrl = location.featuredImage.url
-    }
+    // Get image URL using the robust utility function
+    const imageUrl = getPrimaryImageUrl(location) || '/og-default.jpg'
 
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.sacavia.com'
     const canonicalUrl = `${baseUrl}/locations/${urlSlug || urlId}`
@@ -230,9 +226,7 @@ export default async function LocationPage({ params }: PageProps) {
 
     // Helper functions
     const getLocationImageUrl = (loc: LocationData): string => {
-      if (typeof loc.featuredImage === 'string') return loc.featuredImage
-      if (loc.featuredImage?.url) return loc.featuredImage.url
-      return '/images/placeholder-location.jpg'
+      return getPrimaryImageUrl(loc)
     }
 
     const formatAddress = (address: Address | string): string => {
@@ -283,28 +277,65 @@ export default async function LocationPage({ params }: PageProps) {
     const getBusinessStatus = (businessHours?: BusinessHours[]) => {
       if (!businessHours?.length) return { status: 'Hours not available', isOpen: false }
       
-      const parseTime = (timeStr: string) => {
-        if (!timeStr) return null
-        const time = timeStr.toLowerCase().replace(/\s+/g, '')
-        let [hours] = time.split(':')
-        const minutes = time.split(':')[1] || '0'
+      const parseTime = (timeStr: string): number | null => {
+        if (!timeStr || timeStr.trim() === '') return null
         
-        if (time.includes('pm') && hours !== '12') {
-          hours = String(parseInt(hours) + 12)
-        } else if (time.includes('am') && hours === '12') {
-          hours = '0'
+        // Clean up the time string
+        let cleanTime = timeStr.toLowerCase().trim().replace(/\s+/g, '')
+        
+        // Handle common variations
+        cleanTime = cleanTime.replace(/\./g, ':') // Replace dots with colons
+        
+        // Extract hours, minutes, and period
+        let hours = 0
+        let minutes = 0
+        let isPM = false
+        
+        // Check for AM/PM
+        if (cleanTime.includes('pm')) {
+          isPM = true
+          cleanTime = cleanTime.replace('pm', '')
+        } else if (cleanTime.includes('am')) {
+          isPM = false
+          cleanTime = cleanTime.replace('am', '')
         }
         
-        return parseInt(hours) * 60 + parseInt(minutes)
+        // Split by colon or just get the number
+        const timeParts = cleanTime.split(':')
+        hours = parseInt(timeParts[0]) || 0
+        minutes = parseInt(timeParts[1]) || 0
+        
+        // Validate hours and minutes
+        if (hours < 0 || hours > 24 || minutes < 0 || minutes >= 60) {
+          return null
+        }
+        
+        // Convert to 24-hour format
+        if (isPM && hours !== 12) {
+          hours += 12
+        } else if (!isPM && hours === 12) {
+          hours = 0
+        }
+        
+        // Convert to minutes since midnight
+        return hours * 60 + minutes
       }
 
       const now = new Date()
-      const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+      const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' })
       const currentTime = now.getHours() * 60 + now.getMinutes()
       
-      const todayHours = businessHours.find(h => h.day.toLowerCase() === currentDay)
+      // Find today's hours (case-insensitive matching)
+      const todayHours = businessHours.find(h => 
+        h.day.toLowerCase() === currentDay.toLowerCase()
+      )
       
-      if (!todayHours || !todayHours.open || !todayHours.close) {
+      if (!todayHours) {
+        return { status: 'Hours not available', isOpen: false }
+      }
+      
+      // Check if closed today
+      if (todayHours.isOpen === false || !todayHours.open || !todayHours.close) {
         return { status: 'Closed today', isOpen: false }
       }
       
@@ -315,8 +346,41 @@ export default async function LocationPage({ params }: PageProps) {
         return { status: 'Hours not available', isOpen: false }
       }
       
-      const isOpen = currentTime >= openTime && currentTime <= closeTime
-      const status = isOpen ? 'Open now' : 'Closed'
+      // Handle cases where closing time is after midnight (e.g., 2:00 AM)
+      let isOpen = false
+      if (closeTime < openTime) {
+        // Crosses midnight (e.g., 10 PM to 2 AM)
+        isOpen = currentTime >= openTime || currentTime <= closeTime
+      } else {
+        // Normal case (e.g., 9 AM to 5 PM)
+        isOpen = currentTime >= openTime && currentTime <= closeTime
+      }
+      
+      // Provide more detailed status messages
+      let status = 'Closed'
+      if (isOpen) {
+        status = 'Open now'
+      } else {
+        // Check if opening soon (within next 2 hours)
+        const timeUntilOpen = openTime > currentTime ? openTime - currentTime : (24 * 60) - currentTime + openTime
+        if (timeUntilOpen <= 120 && timeUntilOpen > 0) { // 2 hours = 120 minutes
+          const hoursUntil = Math.floor(timeUntilOpen / 60)
+          const minutesUntil = timeUntilOpen % 60
+          if (hoursUntil > 0) {
+            status = `Opens in ${hoursUntil}h ${minutesUntil}m`
+          } else {
+            status = `Opens in ${minutesUntil}m`
+          }
+        } else {
+          // Check if closed recently (within last 2 hours)
+          const timeSinceClosed = closeTime < currentTime ? currentTime - closeTime : currentTime + (24 * 60) - closeTime
+          if (timeSinceClosed <= 120 && timeSinceClosed > 0) {
+            status = 'Recently closed'
+          } else {
+            status = 'Closed'
+          }
+        }
+      }
       
       return { status, isOpen }
     }
@@ -326,7 +390,7 @@ export default async function LocationPage({ params }: PageProps) {
       
       // Add featured image first
       const featuredUrl = getLocationImageUrl(loc)
-      if (featuredUrl !== '/images/placeholder-location.jpg') {
+      if (featuredUrl && featuredUrl !== '/placeholder.svg' && featuredUrl !== '/images/placeholder-location.jpg') {
         images.push(featuredUrl)
       }
       
@@ -375,11 +439,12 @@ export default async function LocationPage({ params }: PageProps) {
         <div className="relative">
           <div className="h-96 lg:h-[500px] relative overflow-hidden">
             <Image
-              src={getLocationImageUrl(location)}
+              src={getLocationImageUrl(location) || '/images/placeholder-location.jpg'}
               alt={location.name}
               fill
               className="object-cover"
               priority
+              unoptimized
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
             
