@@ -16,7 +16,8 @@ import {
   Eye,
   Award,
   Clock,
-  X
+  X,
+  Plus
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +28,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
+import { PhotoSubmissionModal } from "./photo-submission-modal"
+import { useAuth } from "@/hooks/use-auth"
 
 interface UserPhoto {
   id: string
@@ -72,6 +75,7 @@ interface UserPhotosSectionProps {
 }
 
 export function UserPhotosSection({ locationId, locationName, className }: UserPhotosSectionProps) {
+  const { user } = useAuth()
   const [photos, setPhotos] = useState<UserPhoto[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -83,6 +87,7 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedPhoto, setSelectedPhoto] = useState<UserPhoto | null>(null)
+  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false)
 
   // Fetch photos
   const fetchPhotos = async (pageNum: number = 1, reset: boolean = false) => {
@@ -133,6 +138,14 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
     if (hasMore && !isLoading) {
       fetchPhotos(page + 1, false)
     }
+  }
+
+  // Handle successful photo submission
+  const handlePhotoSubmissionSuccess = () => {
+    setIsSubmissionModalOpen(false)
+    // Refresh photos to show any newly approved ones
+    fetchPhotos(1, true)
+    toast.success('Photo submitted for review! It will appear once approved.')
   }
 
   // Format date
@@ -187,10 +200,19 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
         <p className="text-gray-600 mb-6">
           Be the first to share a photo of {locationName}!
         </p>
-        <Button className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
-          <Camera className="w-4 h-4 mr-2" />
-          Add Photo
-        </Button>
+        {user ? (
+          <Button 
+            onClick={() => setIsSubmissionModalOpen(true)}
+            className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+          >
+            <Camera className="w-4 h-4 mr-2" />
+            Add Photo
+          </Button>
+        ) : (
+          <p className="text-gray-500 text-sm">
+            Please log in to add photos
+          </p>
+        )}
       </div>
     )
   }
@@ -230,22 +252,46 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
           </div>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant={viewMode === 'grid' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('grid')}
-          >
-            <Grid3X3 className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'list' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('list')}
-          >
-            <List className="w-4 h-4" />
-          </Button>
+        {/* Actions */}
+        <div className="flex items-center gap-3">
+          {/* Add Photo Button */}
+          {user ? (
+            <Button
+              onClick={() => setIsSubmissionModalOpen(true)}
+              className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+              size="sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Photo
+            </Button>
+          ) : (
+            <Button
+              onClick={() => toast.error('Please log in to add photos')}
+              variant="outline"
+              size="sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Photo
+            </Button>
+          )}
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('grid')}
+            >
+              <Grid3X3 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -471,6 +517,19 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
           categories={categories}
         />
       )}
+
+      {/* Photo Submission Modal */}
+      <PhotoSubmissionModal
+        isOpen={isSubmissionModalOpen}
+        onClose={() => setIsSubmissionModalOpen(false)}
+        location={{ id: locationId, name: locationName }}
+        user={user ? { 
+          id: user.id, 
+          name: user.name || user.email || 'User',
+          avatar: typeof user.profileImage === 'object' ? user.profileImage?.url : user.profileImage
+        } : null}
+        onSuccess={handlePhotoSubmissionSuccess}
+      />
     </div>
   )
 }
