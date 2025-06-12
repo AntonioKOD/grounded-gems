@@ -116,53 +116,76 @@ export default function ProfileContent({
     }
   }, [])
 
-  // Rate-limited API call helper
+  // Enhanced rate-limited API call helper with better coordination
   const rateLimitedApiCall = useCallback(async (
     key: string, 
     apiCall: () => Promise<any>, 
-    minInterval: number = 2000
+    minInterval: number = 2000, // Increased back to 2000ms for better rate limiting
+    priority: 'high' | 'medium' | 'low' = 'medium'
   ) => {
     const now = Date.now()
     const cached = fetchCache.current.get(key)
     
-    // Return cached data if it's fresh (less than 30 seconds old)
-    if (cached && (now - cached.timestamp) < 30000) {
-      console.log(`Using cached data for ${key}`)
+    // Return cached data if it's fresh (varied cache time based on priority)
+    const cacheTime = priority === 'high' ? 5000 : priority === 'medium' ? 15000 : 30000
+    if (cached && (now - cached.timestamp) < cacheTime) {
+      console.log(`Using cached data for ${key} (priority: ${priority})`)
       return cached.data
     }
 
-    // Rate limit: prevent calls more frequent than minInterval
-    if ((now - lastFetchTime.current) < minInterval) {
-      console.log(`Rate limiting API call for ${key}`)
-      return null
+    // Advanced rate limiting with priority queue
+    const timeSinceLastCall = now - lastFetchTime.current
+    const shouldRateLimit = timeSinceLastCall < minInterval
+    
+    if (shouldRateLimit && cached) {
+      console.log(`Rate limiting API call for ${key} (${timeSinceLastCall}ms < ${minInterval}ms), returning cached data`)
+      return cached.data
+    }
+
+    // If high priority and no cache, allow even if rate limited
+    if (priority === 'high' && !cached && shouldRateLimit) {
+      console.log(`High priority call for ${key}, bypassing rate limit`)
+    } else if (shouldRateLimit) {
+      // Wait for the remaining time before making the call
+      const waitTime = minInterval - timeSinceLastCall
+      console.log(`Waiting ${waitTime}ms before making call for ${key}`)
+      await new Promise(resolve => setTimeout(resolve, waitTime))
     }
 
     try {
-      // Abort any previous request
-      if (abortControllerRef.current) {
+      // Abort any previous request of lower priority
+      if (abortControllerRef.current && priority === 'high') {
         abortControllerRef.current.abort()
       }
       
       abortControllerRef.current = new AbortController()
-      lastFetchTime.current = now
+      lastFetchTime.current = Date.now()
       
+      console.log(`Making API call for ${key} (priority: ${priority})`)
       const result = await apiCall()
       
-      // Cache the result
-      fetchCache.current.set(key, { data: result, timestamp: now })
+      // Cache the result with timestamp
+      fetchCache.current.set(key, { data: result, timestamp: Date.now() })
       
       return result
     } catch (error: any) {
       if (error.name === 'AbortError') {
         console.log(`Request aborted for ${key}`)
-        return null
+        return cached?.data || null
       }
-      console.error(`Rate-limited API call failed for ${key}:`, error)
+      console.error(`API call failed for ${key}:`, error)
+      
+      // Return cached data if available, even if stale
+      if (cached) {
+        console.log(`Returning stale cached data for ${key} due to error`)
+        return cached.data
+      }
+      
       throw error
     }
   }, [])
 
-  // Debounced follow data fetcher
+  // Coordinated follow data fetcher with proper sequencing
   const debouncedFetchFollowData = useMemo(
     () => debounce(async (profileId: string, currentUserId?: string) => {
       if (!profileId || isProcessingFollow) return
@@ -170,38 +193,58 @@ export default function ProfileContent({
       try {
         console.log(`Fetching follow data for profile ${profileId}`)
         
+        // Fetch followers first, then following with slight delay for better coordination
         const followersData = await rateLimitedApiCall(
           `followers-${profileId}`,
           () => getFollowers(profileId),
-          3000 // 3 second minimum interval
+          2500, // Increased rate limiting for better coordination
+          'medium'
         )
-        
+
+        // Small delay before fetching following data
+        await new Promise(resolve => setTimeout(resolve, 200))
+
         const followingData = await rateLimitedApiCall(
           `following-${profileId}`,
           () => getFollowing(profileId),
-          3000
+          2500,
+          'medium'
         )
 
-        if (followersData && followingData) {
-          setFollowers(followersData || [])
-          setFollowing(followingData || [])
+        console.log('Follow data received:', { 
+          followersCount: followersData?.length || 0, 
+          followingCount: followingData?.length || 0 
+        })
 
-          if (currentUserId && followersData) {
-            const isUserFollowing = followersData.some((follower: any) => follower.id === currentUserId)
-            setIsFollowing(isUserFollowing)
-          }
+        // Update state even if only one call succeeded
+        if (followersData !== null) {
+          setFollowers(Array.isArray(followersData) ? followersData : [])
+        }
+        
+        if (followingData !== null) {
+          setFollowing(Array.isArray(followingData) ? followingData : [])
+        }
+
+        // Check following status
+        if (currentUserId && followersData && Array.isArray(followersData)) {
+          const isUserFollowing = followersData.some((follower: any) => follower.id === currentUserId)
+          setIsFollowing(isUserFollowing)
+          console.log(`User ${currentUserId} is ${isUserFollowing ? '' : 'not '}following ${profileId}`)
         }
       } catch (error) {
         console.error("Error fetching follow data:", error)
         if (error instanceof Error && error.message.includes('429')) {
           toast.error("Too many requests. Please wait a moment.")
+        } else {
+          // Don't show error toast for follow data failures - it's not critical
+          console.warn("Follow data fetch failed, continuing without it")
         }
       }
-    }, 1000), // 1 second debounce
+    }, 800), // Balanced debounce time
     [rateLimitedApiCall, isProcessingFollow]
   )
 
-  // Debounced posts fetcher
+  // Coordinated posts fetcher with priority handling
   const debouncedFetchUserPosts = useMemo(
     () => debounce(async (profileId: string) => {
       if (!profileId || hasLoadedPosts || activeTab !== "posts") return
@@ -213,10 +256,13 @@ export default function ProfileContent({
         const posts = await rateLimitedApiCall(
           `posts-${profileId}`,
           () => getFeedPostsByUser(profileId),
-          5000 // 5 second minimum interval for posts
+          3000, // Increased for better coordination with follow data
+          'high' // High priority for posts as they're user-requested
         )
 
-        if (posts) {
+        console.log('Posts data received:', { postsCount: posts?.length || 0 })
+
+        if (posts && Array.isArray(posts)) {
           const formattedPosts = posts.map((post: any) => {
             const normalizedPost = normalizePost(post)
 
@@ -229,6 +275,7 @@ export default function ProfileContent({
               },
               title: post.title || "",
               content: post.content || "",
+              caption: post.caption || post.content || "",
               createdAt: post.createdAt || new Date().toISOString(),
               updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
               image: normalizedPost.image,
@@ -249,18 +296,26 @@ export default function ProfileContent({
 
           setUserPosts(formattedPosts)
           setHasLoadedPosts(true)
+          console.log(`Successfully loaded ${formattedPosts.length} posts for profile`)
+        } else {
+          console.log('No posts found or invalid posts data')
+          setUserPosts([])
+          setHasLoadedPosts(true)
         }
       } catch (error) {
         console.error("Error fetching user posts:", error)
         if (error instanceof Error && error.message.includes('429')) {
           toast.error("Too many requests. Please wait a moment.")
         } else {
-          toast.error("Failed to load user posts")
+          console.error("Failed to load user posts:", error)
+          // Don't show error toast immediately - might be temporary
         }
+        // Still mark as loaded to prevent infinite retries
+        setHasLoadedPosts(true)
       } finally {
         setIsLoadingPosts(false)
       }
-    }, 1500), // 1.5 second debounce
+    }, 1000), // Increased debounce for better coordination
     [rateLimitedApiCall, hasLoadedPosts, activeTab, normalizePost, profile]
   )
 
@@ -334,28 +389,48 @@ export default function ProfileContent({
     fetchProfileData()
   }, [userId, initialUserData, rateLimitedApiCall])
 
-  // Fetch followers and following data - with proper dependencies
+  // Coordinated data fetching sequence
   useEffect(() => {
-    if (!profile?.id || !currentUser) return
-    
-    // Only fetch if we don't have data or data is stale
-    if (followers.length === 0 || following.length === 0 || isDataStale.current) {
-      console.log('Triggering follow data fetch')
-      debouncedFetchFollowData(profile.id, currentUser.id)
-    }
-  }, [profile?.id, currentUser?.id, debouncedFetchFollowData, followers.length, following.length])
+    if (!profile?.id) return
 
-  // Lazy load posts only when posts tab is active - with proper dependencies
+    // Sequenced data fetching for better coordination
+    const fetchProfileData = async () => {
+      console.log('Starting coordinated data fetch for profile:', profile.id)
+      
+      // Step 1: Always fetch follow data first (lower priority, cached longer)
+      if (followers.length === 0 || following.length === 0 || isDataStale.current) {
+        console.log('Triggering follow data fetch for profile:', profile.id)
+        debouncedFetchFollowData(profile.id, currentUser?.id)
+        
+        // Step 2: Wait a bit before fetching posts if needed
+        if (activeTab === "posts" && !hasLoadedPosts) {
+          setTimeout(() => {
+            console.log('Triggering delayed posts fetch for tab:', activeTab)
+            debouncedFetchUserPosts(profile.id)
+          }, 1000) // 1 second delay for coordination
+        }
+      } else if (activeTab === "posts" && !hasLoadedPosts) {
+        // If we already have follow data, fetch posts immediately
+        console.log('Triggering immediate posts fetch for tab:', activeTab)
+        debouncedFetchUserPosts(profile.id)
+      }
+    }
+
+    fetchProfileData()
+  }, [profile?.id, currentUser?.id, activeTab, hasLoadedPosts, debouncedFetchFollowData, debouncedFetchUserPosts])
+
+  // Handle tab changes for posts
   useEffect(() => {
     if (!profile?.id) return
     
-    if (activeTab === "posts" && !hasLoadedPosts) {
-      console.log('Triggering posts fetch for tab:', activeTab)
+    // Only trigger posts fetch when switching to posts tab
+    if (activeTab === "posts" && !hasLoadedPosts && followers.length > 0) {
+      console.log('Tab changed to posts, triggering fetch')
       debouncedFetchUserPosts(profile.id)
     }
-  }, [profile?.id, activeTab, hasLoadedPosts, debouncedFetchUserPosts])
+  }, [activeTab, profile?.id, hasLoadedPosts, followers.length, debouncedFetchUserPosts])
 
-  // Lazy load saved posts only when saved tab is active
+  // Coordinated saved posts fetching
   useEffect(() => {
     const fetchSavedPosts = async () => {
       if (!profile?.id || hasLoadedSavedPosts || activeTab !== "saved") return
@@ -363,28 +438,41 @@ export default function ProfileContent({
 
       setIsLoadingSavedPosts(true)
       try {
-        const response = await fetch(`/api/users/${profile.id}/saved-posts?page=1&limit=50`)
-        const data = await response.json()
+        console.log(`Fetching saved posts for user ${profile.id}`)
+        
+        const savedPostsCall = () => fetch(`/api/users/${profile.id}/saved-posts?page=1&limit=50`)
+          .then(res => res.json())
 
-        if (data.success && data.posts) {
-          setSavedPosts(data.posts)
+        const data = await rateLimitedApiCall(
+          `saved-posts-${profile.id}`,
+          savedPostsCall,
+          3500, // Higher interval to avoid conflicts with other calls
+          'low' // Lower priority since it's secondary data
+        )
+
+        if (data?.success && data.posts) {
+          setSavedPosts(Array.isArray(data.posts) ? data.posts : [])
           setHasLoadedSavedPosts(true)
+          console.log(`Successfully loaded ${data.posts.length} saved posts`)
         } else {
-          console.error("Failed to load saved posts:", data.error)
-          toast.error("Failed to load saved posts")
+          console.error("Failed to load saved posts:", data?.error)
+          setSavedPosts([])
+          setHasLoadedSavedPosts(true)
         }
       } catch (error) {
         console.error("Error fetching saved posts:", error)
-        toast.error("Failed to load saved posts")
+        setSavedPosts([])
+        setHasLoadedSavedPosts(true)
+        // Don't show error toast for saved posts - it's not critical
       } finally {
         setIsLoadingSavedPosts(false)
       }
     }
 
-    // Debounce saved posts fetch as well
-    const timeoutId = setTimeout(fetchSavedPosts, 500)
+    // Coordinated debounce with other data fetching
+    const timeoutId = setTimeout(fetchSavedPosts, 1200) // Longer delay for coordination
     return () => clearTimeout(timeoutId)
-  }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser])
+  }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser, rateLimitedApiCall])
 
   // Cleanup on unmount
   useEffect(() => {

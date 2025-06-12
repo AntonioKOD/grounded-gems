@@ -426,49 +426,212 @@ interface LocationWithImages {
 }
 
 /**
- * Get the primary/featured image URL for a location
- * Priority: featuredImage > first gallery image marked as primary > first gallery image > fallback
+ * Enhanced image utilities for handling various image sources and formats
  */
-export function getPrimaryImageUrl(location: LocationWithImages, fallbackUrl?: string): string {
-  // First, check if there's a featuredImage
+
+export interface ImageSource {
+  url?: string
+  filename?: string
+  alt?: string
+  width?: number
+  height?: number
+}
+
+export interface GalleryItem {
+  image: ImageSource | string
+  caption?: string
+  isPrimary?: boolean
+  order?: number
+  altText?: string
+}
+
+/**
+ * Get the primary image URL for a location with comprehensive fallback handling
+ */
+export function getPrimaryImageUrl(location: any): string {
+  // 1. Check featuredImage first (highest priority)
   if (location.featuredImage) {
-    const imageUrl = typeof location.featuredImage === 'string' 
-      ? location.featuredImage 
-      : location.featuredImage.url
-    if (imageUrl) return imageUrl
+    const featuredUrl = extractImageUrl(location.featuredImage)
+    if (featuredUrl) return featuredUrl
   }
 
-  // Check for primary gallery image
-  if (location.gallery && location.gallery.length > 0) {
-    // Sort gallery by order first
+  // 2. Check gallery for primary image
+  if (location.gallery && Array.isArray(location.gallery)) {
+    // Sort by order and find primary
     const sortedGallery = [...location.gallery].sort((a, b) => (a.order || 0) - (b.order || 0))
     
-    // Look for image marked as primary
+    // Look for explicitly marked primary image
     const primaryImage = sortedGallery.find(item => item.isPrimary)
     if (primaryImage) {
-      const imageUrl = typeof primaryImage.image === 'string' 
-        ? primaryImage.image 
-        : primaryImage.image.url
-      if (imageUrl) return imageUrl
+      const primaryUrl = extractImageUrl(primaryImage.image)
+      if (primaryUrl) return primaryUrl
     }
-
-    // Fall back to first image in sorted gallery
-    const firstImage = sortedGallery[0]
-    if (firstImage) {
-      const imageUrl = typeof firstImage.image === 'string' 
-        ? firstImage.image 
-        : firstImage.image.url
-      if (imageUrl) return imageUrl
+    
+    // Fallback to first gallery image
+    if (sortedGallery.length > 0) {
+      const firstUrl = extractImageUrl(sortedGallery[0].image)
+      if (firstUrl) return firstUrl
     }
   }
 
-  // Legacy support for imageUrl field
+  // 3. Check legacy imageUrl field
   if (location.imageUrl) {
     return location.imageUrl
   }
 
-  // Return fallback or default placeholder
-  return fallbackUrl || '/images/location-placeholder.jpg'
+  // 4. Check if there are any image-like fields from Foursquare imports
+  if (location.photos && Array.isArray(location.photos) && location.photos.length > 0) {
+    const firstPhoto = location.photos[0]
+    if (typeof firstPhoto === 'string') return firstPhoto
+    if (firstPhoto?.url) return firstPhoto.url
+    if (firstPhoto?.highResUrl) return firstPhoto.highResUrl
+    if (firstPhoto?.thumbnailUrl) return firstPhoto.thumbnailUrl
+  }
+
+  // 5. Final fallback to placeholder
+  return "/placeholder.svg"
+}
+
+/**
+ * Extract image URL from various image object formats
+ */
+function extractImageUrl(imageSource: any): string | null {
+  if (!imageSource) return null
+
+  // Direct string URL
+  if (typeof imageSource === 'string') {
+    return imageSource
+  }
+
+  // Standard Payload media object
+  if (imageSource.url) {
+    return imageSource.url
+  }
+
+  // Foursquare photo formats
+  if (imageSource.highResUrl) {
+    return imageSource.highResUrl
+  }
+
+  if (imageSource.thumbnailUrl) {
+    return imageSource.thumbnailUrl
+  }
+
+  // Media object with filename (construct URL)
+  if (imageSource.filename) {
+    return `/api/media/${imageSource.filename}`
+  }
+
+  // Nested media object
+  if (imageSource.media?.url) {
+    return imageSource.media.url
+  }
+
+  if (imageSource.media?.filename) {
+    return `/api/media/${imageSource.media.filename}`
+  }
+
+  return null
+}
+
+/**
+ * Get all available images for a location (for galleries, previews, etc.)
+ */
+export function getAllLocationImages(location: any): string[] {
+  const images: string[] = []
+
+  // Add featured image
+  const featuredUrl = extractImageUrl(location.featuredImage)
+  if (featuredUrl) {
+    images.push(featuredUrl)
+  }
+
+  // Add gallery images
+  if (location.gallery && Array.isArray(location.gallery)) {
+    location.gallery
+      .sort((a, b) => (a.order || 0) - (b.order || 0))
+      .forEach(item => {
+        const url = extractImageUrl(item.image)
+        if (url && !images.includes(url)) {
+          images.push(url)
+        }
+      })
+  }
+
+  // Add legacy imageUrl if not already included
+  if (location.imageUrl && !images.includes(location.imageUrl)) {
+    images.push(location.imageUrl)
+  }
+
+  // Add Foursquare photos if available
+  if (location.photos && Array.isArray(location.photos)) {
+    location.photos.forEach(photo => {
+      const url = extractImageUrl(photo)
+      if (url && !images.includes(url)) {
+        images.push(url)
+      }
+    })
+  }
+
+  return images.length > 0 ? images : ["/placeholder.svg"]
+}
+
+/**
+ * Optimize image URL with size parameters if supported
+ */
+export function optimizeImageUrl(url: string, width?: number, height?: number, quality?: number): string {
+  if (!url || url === "/placeholder.svg") return url
+
+  // If it's already a Payload media URL, add optimization parameters
+  if (url.includes('/api/media/')) {
+    const params = new URLSearchParams()
+    if (width) params.append('width', width.toString())
+    if (height) params.append('height', height.toString())
+    if (quality) params.append('quality', quality.toString())
+    
+    const separator = url.includes('?') ? '&' : '?'
+    return params.toString() ? `${url}${separator}${params.toString()}` : url
+  }
+
+  // For external URLs (like Foursquare), return as-is
+  return url
+}
+
+/**
+ * Check if an image URL is valid and accessible
+ */
+export function validateImageUrl(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!url || url === "/placeholder.svg") {
+      resolve(false)
+      return
+    }
+
+    const img = new Image()
+    img.onload = () => resolve(true)
+    img.onerror = () => resolve(false)
+    img.src = url
+  })
+}
+
+/**
+ * Generate responsive image sizes
+ */
+export function getResponsiveImageSizes(baseUrl: string) {
+  return {
+    thumbnail: optimizeImageUrl(baseUrl, 150, 150, 80),
+    small: optimizeImageUrl(baseUrl, 300, 200, 85),
+    medium: optimizeImageUrl(baseUrl, 600, 400, 90),
+    large: optimizeImageUrl(baseUrl, 1200, 800, 95),
+    original: baseUrl
+  }
+}
+
+/**
+ * Legacy function for backward compatibility
+ */
+export function getLocationImageUrl(location: any): string {
+  return getPrimaryImageUrl(location)
 }
 
 /**

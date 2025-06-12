@@ -12,7 +12,10 @@ import {
   Filter,
   Calendar,
   Heart,
-  Search
+  Search,
+  SortAsc,
+  Users,
+  AlertTriangle
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -31,14 +34,15 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import Image from "next/image"
 import type { Location } from "./map-data"
-import { getCategoryColor } from "./category-utils"
+import { getCategoryColor, getCategoryName } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { toggleSaveLocationAction, toggleSubscribeLocationAction, getSavedLocationsAction, getUserLocationDataAction } from "@/app/actions"
 import { motion } from "framer-motion"
+import { getPrimaryImageUrl, getAllLocationImages } from "@/lib/image-utils"
 
 
 interface LocationListProps {
@@ -58,19 +62,7 @@ interface SavedLocationItem {
 
 // Helper to get image URL
 const getLocationImageUrl = (location: Location): string => {
-  if (typeof location.featuredImage === "string") {
-    return location.featuredImage
-  }
-
-  if (location.featuredImage?.url) {
-    return location.featuredImage.url
-  }
-
-  if (location.imageUrl) {
-    return location.imageUrl
-  }
-
-  return "/placeholder.svg"
+  return getPrimaryImageUrl(location)
 }
 
 export default function LocationList({
@@ -390,14 +382,7 @@ export default function LocationList({
 
     // Simplified getImageUrl from context
     const getImageUrl = (loc: Location): string => {
-      if (typeof loc.featuredImage === "string") {
-        return loc.featuredImage;
-      } else if (loc.featuredImage?.url) {
-        return loc.featuredImage.url;
-      } else if (loc.imageUrl) {
-        return loc.imageUrl;
-      }
-      return "/placeholder.svg";
+      return getPrimaryImageUrl(loc)
     };
 
     const handleSaveLocation = (e: React.MouseEvent, loc: Location) => {

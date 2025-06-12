@@ -1126,6 +1126,39 @@ export default function EnhancedFoursquareImport() {
                     Photos & Media
                   </h3>
 
+                  {/* Featured Image Selection */}
+                  <div className="space-y-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                    <h4 className="text-md font-medium text-blue-900 flex items-center">
+                      <Star className="w-4 h-4 mr-2 text-blue-600" />
+                      Featured Image Selection
+                    </h4>
+                    <div className="text-sm text-blue-700 mb-3">
+                      Choose which image will be the main featured image displayed in location lists and previews
+                    </div>
+                    
+                    {currentEdit.locationData.featuredImage && (
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-blue-800">Current Featured Image:</div>
+                        <div className="relative inline-block">
+                          <img
+                            src={currentEdit.locationData.featuredImage}
+                            alt="Current featured image"
+                            className="w-32 h-24 object-cover rounded-lg border-2 border-blue-300 shadow-md"
+                          />
+                          <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-lg">
+                            <Star className="w-3 h-3 fill-current" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {!currentEdit.locationData.featuredImage && (
+                      <div className="text-sm text-gray-600 italic">
+                        No featured image selected. Choose one from the photos below.
+                      </div>
+                    )}
+                  </div>
+
                   {/* Foursquare Photos */}
                   {fetchedPhotos[currentEdit.foursquarePlace.foursquareId] && (
                     <div className="space-y-4">
@@ -1139,12 +1172,27 @@ export default function EnhancedFoursquareImport() {
                             <img
                               src={photo.thumbnailUrl}
                               alt={`Photo ${index + 1}`}
-                              className="w-full h-24 object-cover rounded-lg border"
+                              className={`w-full h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
+                                currentEdit.locationData.featuredImage === photo.highResUrl 
+                                  ? 'border-4 border-blue-500 shadow-lg' 
+                                  : 'border hover:border-blue-300 hover:shadow-md'
+                              }`}
+                              onClick={() => updateCurrentLocationData({ featuredImage: photo.highResUrl })}
                             />
+                            {currentEdit.locationData.featuredImage === photo.highResUrl && (
+                              <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-lg">
+                                <Star className="w-3 h-3 fill-current" />
+                              </div>
+                            )}
                             <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                              <span className="text-white text-xs font-medium">
-                                {photo.width} × {photo.height}
-                              </span>
+                              <div className="text-center">
+                                <span className="text-white text-xs font-medium block">
+                                  {photo.width} × {photo.height}
+                                </span>
+                                <span className="text-white text-xs block mt-1">
+                                  {currentEdit.locationData.featuredImage === photo.highResUrl ? 'Featured' : 'Set as Featured'}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -1152,6 +1200,8 @@ export default function EnhancedFoursquareImport() {
                       
                       <div className="text-sm text-gray-600">
                         ✅ These photos will be automatically added to the location's gallery when imported
+                        <br />
+                        💡 Click on any photo to set it as the featured image
                       </div>
                     </div>
                   )}
@@ -1188,16 +1238,47 @@ export default function EnhancedFoursquareImport() {
                             <img
                               src={photo.preview}
                               alt={`Manual photo ${index + 1}`}
-                              className="w-full h-24 object-cover rounded-lg border"
+                              className={`w-full h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
+                                currentEdit.locationData.featuredImage === photo.preview 
+                                  ? 'border-4 border-blue-500 shadow-lg' 
+                                  : 'border hover:border-blue-300 hover:shadow-md'
+                              }`}
+                              onClick={() => updateCurrentLocationData({ featuredImage: photo.preview })}
                             />
+                            {currentEdit.locationData.featuredImage === photo.preview && (
+                              <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-lg">
+                                <Star className="w-3 h-3 fill-current" />
+                              </div>
+                            )}
                             <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => removeManualPhoto(currentEdit.foursquarePlace.foursquareId, index)}
-                              >
-                                Remove
-                              </Button>
+                              <div className="flex flex-col gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    updateCurrentLocationData({ featuredImage: photo.preview })
+                                  }}
+                                  className="text-xs"
+                                >
+                                  {currentEdit.locationData.featuredImage === photo.preview ? 'Featured' : 'Set as Featured'}
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    removeManualPhoto(currentEdit.foursquarePlace.foursquareId, index)
+                                    // If this was the featured image, clear it
+                                    if (currentEdit.locationData.featuredImage === photo.preview) {
+                                      updateCurrentLocationData({ featuredImage: undefined })
+                                    }
+                                  }}
+                                  className="text-xs"
+                                >
+                                  Remove
+                                </Button>
+                              </div>
                             </div>
                             <div className="mt-2">
                               <Input
@@ -1214,8 +1295,24 @@ export default function EnhancedFoursquareImport() {
 
                     <div className="text-sm text-gray-600">
                       💡 Upload additional photos that aren't available from Foursquare
+                      <br />
+                      🌟 Click on any uploaded photo to set it as the featured image
                     </div>
                   </div>
+
+                  {/* Clear Featured Image Option */}
+                  {currentEdit.locationData.featuredImage && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => updateCurrentLocationData({ featuredImage: undefined })}
+                        className="text-gray-600 hover:text-red-600 hover:border-red-300"
+                      >
+                        Clear Featured Image
+                      </Button>
+                    </div>
+                  )}
 
                   {(fetchedPhotos[currentEdit.foursquarePlace.foursquareId] || manualPhotos[currentEdit.foursquarePlace.foursquareId]) && (
                     <Separator />
@@ -1460,4 +1557,4 @@ export default function EnhancedFoursquareImport() {
       )}
     </div>
   )
-} 
+}

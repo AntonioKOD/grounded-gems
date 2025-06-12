@@ -53,6 +53,7 @@ import { toast } from "sonner"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
 import { UserPhotosSection } from "@/components/location/user-photos-section"
+import StructuredInsiderTips from "@/components/location/structured-insider-tips"
 import type { 
   User, 
   ReviewItem, 
@@ -1855,49 +1856,12 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                     </TabsContent>
 
                       {location.insiderTips && (
-                        <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 rounded-2xl p-6 border border-emerald-200 shadow-lg relative overflow-hidden">
-                          {/* Enhanced decorative background pattern */}
-                          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-100/40 rounded-full -translate-y-12 translate-x-12 animate-pulse"></div>
-                          <div className="absolute bottom-0 left-0 w-20 h-20 bg-teal-100/40 rounded-full translate-y-10 -translate-x-10 animate-pulse"></div>
-                          <div className="absolute top-1/2 right-8 w-3 h-3 bg-cyan-400/60 rounded-full animate-bounce"></div>
-                          <div className="absolute top-8 left-8 w-2 h-2 bg-emerald-400/60 rounded-full animate-ping"></div>
-                          
-                          <div className="relative">
-                            <div className="flex items-start gap-4 mb-5">
-                              <div className="flex-shrink-0 w-12 h-12 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 rounded-2xl flex items-center justify-center shadow-xl transform rotate-3 hover:rotate-0 transition-transform duration-300">
-                                <span className="text-white text-2xl">💎</span>
-                              </div>
-                              <div className="flex-1 pt-1">
-                                <h3 className="text-xl font-bold text-emerald-900 mb-2">
-                                  Hidden Gem Alert
-                                </h3>
-                                <div className="flex items-center gap-2 mb-3">
-                                  <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300">
-                                    🏆 LOCAL INSIDER
-                                  </span>
-                                  <span className="text-xs font-medium text-teal-600 bg-teal-100 px-2 py-1 rounded-full">
-                                    Exclusive Tip
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div className="bg-white/80 backdrop-blur-sm rounded-xl p-5 border border-emerald-100 shadow-inner relative">
-                              <div className="absolute top-3 right-3 text-emerald-300/40 text-4xl font-serif">"</div>
-                              <div className="prose prose-sm max-w-none relative z-10">
-                                <p className="text-lg text-emerald-900 leading-relaxed font-medium">
-                                  {location.insiderTips}
-                                </p>
-                              </div>
-                            </div>
-                            
-                            {/* Call-to-action footer */}
-                            <div className="mt-4 text-center">
-                              <p className="text-xs text-emerald-700 font-medium bg-emerald-50 py-2 px-4 rounded-lg border border-emerald-200">
-                                💡 Pro tip from locals who know this place best
-                              </p>
-                            </div>
-                          </div>
+                        <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                          <StructuredInsiderTips
+                            tips={location.insiderTips}
+                            locationName={location.name}
+                            compact={true}
+                          />
                         </div>
                       )}
 

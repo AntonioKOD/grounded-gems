@@ -56,6 +56,7 @@ import { createLocationShareUrl } from "@/lib/location-sharing"
 import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
 import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
 import LocationDetailMobile from "./location-detail-mobile"
+import StructuredInsiderTips from "@/components/location/structured-insider-tips"
 import type { 
   User, 
   ReviewItem as Review, 
@@ -81,7 +82,6 @@ import {
   fetchLocationReviews,
   processGalleryImages
 } from "./location-detail-utils"
-import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
 
 // Simple responsive hook
 const useResponsive = () => {
@@ -1353,11 +1353,11 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
 
                           {location.insiderTips && (
                             <div>
-                              <h3 className="font-semibold mb-2 flex items-center gap-2">
-                                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                                Insider Tips
-                              </h3>
-                              <p className="text-gray-700 bg-amber-50 p-3 rounded-lg">{location.insiderTips}</p>
+                              <StructuredInsiderTips
+                                tips={location.insiderTips}
+                                locationName={location.name}
+                                compact={false}
+                              />
                             </div>
                           )}
 

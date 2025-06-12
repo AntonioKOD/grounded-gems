@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { motion } from "framer-motion"
 import { getCategoryInfo } from "./category-utils"
 import type { Location } from "./map-data"
+import { getPrimaryImageUrl } from "@/lib/image-utils"
 
 // Import Mapbox CSS explicitly
 import "mapbox-gl/dist/mapbox-gl.css"
@@ -83,14 +84,7 @@ const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: numbe
 
 // Get image URL from location object
 const getLocationImageUrl = (location: Location): string => {
-  if (typeof location.featuredImage === "string") {
-    return location.featuredImage
-  } else if (location.featuredImage?.url) {
-    return location.featuredImage.url
-  } else if (location.imageUrl) {
-    return location.imageUrl
-  }
-  return "/placeholder.svg"
+  return getPrimaryImageUrl(location)
 }
 
 interface MapComponentProps {

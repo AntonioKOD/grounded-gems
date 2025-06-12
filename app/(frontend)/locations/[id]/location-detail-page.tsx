@@ -31,7 +31,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { toast } from "sonner"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
-import { getImageUrl } from "@/lib/image-utils"
+import { getImageUrl, getPrimaryImageUrl, getLocationImageUrl } from "@/lib/image-utils"
+import StructuredInsiderTips, { type StructuredTip } from "@/components/location/structured-insider-tips"
 
 interface Location {
   id: string
@@ -73,7 +74,7 @@ interface Location {
   createdAt?: string
   status: string
   bestTimeToVisit?: Array<{ season: string }>
-  insiderTips?: string
+  insiderTips?: StructuredTip[] | string
   accessibility?: {
     wheelchairAccess?: boolean
     parking?: boolean
@@ -138,12 +139,7 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
 
   // Helper functions
   const getLocationImageUrl = useCallback((loc: Location): string => {
-    if (typeof loc.featuredImage === "string") {
-      return loc.featuredImage
-    } else if (loc.featuredImage?.url) {
-      return loc.featuredImage.url
-    }
-    return "/placeholder.svg"
+    return getPrimaryImageUrl(loc)
   }, [])
 
   const formatAddress = useCallback((address?: string | Record<string, string>): string => {
@@ -431,17 +427,11 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
 
             {/* Insider Tips */}
             {location.insiderTips && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-[#FF6B6B]" />
-                    Insider Tips
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700">{location.insiderTips}</p>
-                </CardContent>
-              </Card>
+              <StructuredInsiderTips
+                tips={location.insiderTips}
+                locationName={location.name}
+                compact={false}
+              />
             )}
 
             {/* Best Time to Visit */}
