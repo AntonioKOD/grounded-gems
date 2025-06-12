@@ -443,47 +443,52 @@ export default function EnhancedFoursquareImport() {
   }
 
   const generateBusinessDescription = async (fsqId: string, locationData: any) => {
-    if (!locationData.name || !locationData.contactInfo?.website) {
-      toast.error('Please provide location name and website URL first')
+    if (!locationData.name) {
+      toast.error('Please provide location name first')
       return
     }
 
     setIsSubmittingEdit(true)
     try {
       console.log('🤖 Generating business description for:', locationData.name)
-      toast.info('🔍 Analyzing website content...')
+      toast.info('🔍 Generating compelling description with AI...')
       
-      const response = await fetch('/api/ai/insights', {
+      const requestBody = {
+        locationName: locationData.name,
+        website: locationData.contactInfo?.website || '',
+        categories: locationData.categories || [],
+        description: locationData.description || ''
+      }
+      
+      console.log('🔍 Description request body:', JSON.stringify(requestBody, null, 2))
+      
+      const response = await fetch('/api/foursquare/generate-description', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          locationName: locationData.name,
-          locationAddress: typeof locationData.address === 'string' 
-            ? locationData.address 
-            : Object.values(locationData.address || {}).filter(Boolean).join(', '),
-          categories: locationData.categories || [],
-          website: locationData.contactInfo.website,
-          phone: locationData.contactInfo?.phone || '',
-          requestType: 'business_description'
-        }),
+        body: JSON.stringify(requestBody),
       })
 
+      console.log('🔍 Description response status:', response.status)
+      
       if (!response.ok) {
+        const errorText = await response.text()
+        console.log('❌ Description error response body:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('✅ Description response data:', data)
       
-      if (data.success && data.insights) {
+      if (data.success && data.description) {
         // Update the current editing location with the generated description
         updateCurrentLocationData({ 
-          description: data.insights 
+          description: data.description 
         })
         
         toast.success('✨ AI business description generated successfully!')
-        console.log('✅ Generated description:', data.insights)
+        console.log('✅ Generated description:', data.description)
       } else {
         toast.error(data.error || 'Failed to generate business description')
       }
@@ -495,54 +500,139 @@ export default function EnhancedFoursquareImport() {
     }
   }
 
+  // Helper function to convert structured tips to display string
+  const structuredTipsToString = (tips: any): string => {
+    if (!tips) return ''
+    if (typeof tips === 'string') return tips
+    if (Array.isArray(tips)) {
+      return tips.map((tip, index) => {
+        if (typeof tip === 'object' && tip.tip) {
+          const categoryLabel = {
+            timing: 'Best Times',
+            food: 'Food & Drinks',
+            secrets: 'Local Secrets',
+            protips: 'Pro Tips',
+            access: 'Getting There',
+            savings: 'Money Saving',
+            recommendations: 'What to Order/Try',
+            hidden: 'Hidden Features'
+          }[tip.category] || 'Pro Tips'
+          
+          const priorityIndicator = tip.priority === 'high' ? '[ESSENTIAL] ' : tip.priority === 'medium' ? '[HELPFUL] ' : '[NICE TO KNOW] '
+          return `${priorityIndicator}${categoryLabel}: ${tip.tip}`
+        }
+        return typeof tip === 'string' ? tip : ''
+      }).filter(Boolean).join('\n\n')
+    }
+    return String(tips)
+  }
+
+  // Helper function to convert display string back to structured tips (basic conversion)
+  const stringToStructuredTips = (text: string): any => {
+    if (!text || text.trim() === '') return []
+    
+    // If it looks like structured tips (contains priority indicators), try to parse
+    if (text.includes('[ESSENTIAL]') || text.includes('[HELPFUL]') || text.includes('[NICE TO KNOW]')) {
+      const lines = text.split('\n\n').filter(line => line.trim())
+      return lines.map(line => {
+        // Extract priority
+        let priority = 'medium'
+        let cleanLine = line
+        if (line.includes('[ESSENTIAL]')) {
+          priority = 'high'
+          cleanLine = line.replace('[ESSENTIAL]', '').trim()
+        } else if (line.includes('[HELPFUL]')) {
+          priority = 'medium'
+          cleanLine = line.replace('[HELPFUL]', '').trim()
+        } else if (line.includes('[NICE TO KNOW]')) {
+          priority = 'low'
+          cleanLine = line.replace('[NICE TO KNOW]', '').trim()
+        }
+        
+        // Extract category and tip
+        let category = 'protips'
+        let tipText = cleanLine
+        
+        const categoryMatches = {
+          'Best Times': 'timing',
+          'Food & Drinks': 'food',
+          'Local Secrets': 'secrets',
+          'Pro Tips': 'protips',
+          'Getting There': 'access',
+          'Money Saving': 'savings',
+          'What to Order/Try': 'recommendations',
+          'Hidden Features': 'hidden'
+        }
+        
+        for (const [label, cat] of Object.entries(categoryMatches)) {
+          if (cleanLine.includes(`${label}:`)) {
+            category = cat
+            tipText = cleanLine.split(`${label}:`)[1]?.trim() || cleanLine
+            break
+          }
+        }
+        
+        return {
+          category,
+          tip: tipText,
+          priority,
+          isVerified: false,
+          source: 'ai_generated'
+        }
+      })
+    }
+    
+    // Otherwise, treat as plain text and return as-is for backward compatibility
+    return text
+  }
+
   const generateInsiderTips = async (fsqId: string, locationData: any) => {
-    if (!locationData.name || !locationData.address) {
-      toast.error('Please fill in location name and address first')
+    if (!locationData.name) {
+      toast.error('Please fill in location name first')
       return
     }
 
     setIsSubmittingEdit(true)
     try {
       console.log('🤖 Generating insider tips for:', locationData.name)
+      toast.info('🔍 Generating insider tips with AI...')
       
-      const response = await fetch('/api/ai/insights', {
+      const requestBody = {
+        locationName: locationData.name,
+        website: locationData.contactInfo?.website || '',
+        categories: locationData.categories || [],
+        description: locationData.description || ''
+      }
+      
+      console.log('🔍 Request body being sent:', JSON.stringify(requestBody, null, 2))
+      
+      const response = await fetch('/api/foursquare/generate-tips', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          locationName: locationData.name,
-          locationAddress: typeof locationData.address === 'string' 
-            ? locationData.address 
-            : Object.values(locationData.address || {}).filter(Boolean).join(', '),
-          categories: locationData.categories || [],
-          description: locationData.description || '',
-          website: locationData.contactInfo?.website || '',
-          requestType: 'insider_tips'
-        }),
+        body: JSON.stringify(requestBody),
       })
 
+      console.log('🔍 Tips response status:', response.status)
+      
       if (!response.ok) {
+        const errorText = await response.text()
+        console.log('❌ Tips error response body:', errorText)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
+      console.log('✅ Tips response data:', data)
       
-      if (data.success && data.insights) {
-        // Update the current editing location with the generated tips
-        // Handle both structured and legacy format
-        if (data.structuredTips && Array.isArray(data.structuredTips)) {
-          updateCurrentLocationData({ 
-            insiderTips: data.structuredTips 
-          })
-        } else {
-          updateCurrentLocationData({ 
-            insiderTips: data.insights 
-          })
-        }
+      if (data.success && data.tips && Array.isArray(data.tips)) {
+        // Update the current editing location with the structured tips
+        updateCurrentLocationData({ 
+          insiderTips: data.tips 
+        })
         
-        toast.success('✨ AI insider tips generated successfully!')
-        console.log('✅ Generated tips:', data.insights)
+        toast.success(`✨ AI generated ${data.tips.length} insider tips successfully!`)
+        console.log('✅ Generated tips:', data.tips)
       } else {
         toast.error(data.error || 'Failed to generate insider tips')
       }
@@ -1153,7 +1243,7 @@ export default function EnhancedFoursquareImport() {
                       <div key={category.id} className="p-3 bg-gray-50 rounded-lg">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            {category.foursquareIcon && (
+                            {category.foursquareIcon && category.foursquareIcon.prefix && category.foursquareIcon.suffix && (
                               <img
                                 src={`${category.foursquareIcon.prefix}32${category.foursquareIcon.suffix}`}
                                 alt=""
@@ -1187,7 +1277,7 @@ export default function EnhancedFoursquareImport() {
                       {categories.map((category) => (
                         <div key={category.id} className="space-y-1">
                           <div className="flex items-center gap-2 font-medium text-gray-800">
-                            {category.foursquareIcon && (
+                            {category.foursquareIcon && category.foursquareIcon.prefix && category.foursquareIcon.suffix && (
                               <img
                                 src={`${category.foursquareIcon.prefix}24${category.foursquareIcon.suffix}`}
                                 alt=""
@@ -1210,7 +1300,7 @@ export default function EnhancedFoursquareImport() {
                             <div className="ml-6 space-y-1">
                               {category.subcategories.map((sub) => (
                                 <div key={sub.id} className="flex items-center gap-2 text-gray-600">
-                                  {sub.foursquareIcon && (
+                                  {sub.foursquareIcon && sub.foursquareIcon.prefix && sub.foursquareIcon.suffix && (
                                     <img
                                       src={`${sub.foursquareIcon.prefix}16${sub.foursquareIcon.suffix}`}
                                       alt=""
@@ -1524,7 +1614,7 @@ export default function EnhancedFoursquareImport() {
                                 const category = findCategoryById(categoryId, categories)
                                 return category ? (
                                   <div key={categoryId} className="flex items-center space-x-1 bg-white px-2 py-1 rounded-md border border-green-300">
-                                    {category.foursquareIcon && (
+                                    {category.foursquareIcon && category.foursquareIcon.prefix && category.foursquareIcon.suffix && (
                                       <img
                                         src={`${category.foursquareIcon.prefix}16${category.foursquareIcon.suffix}`}
                                         alt=""
@@ -1689,18 +1779,16 @@ export default function EnhancedFoursquareImport() {
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <Label htmlFor="edit-description-ai">Business Description</Label>
-                            {currentEdit.locationData.contactInfo?.website && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => generateBusinessDescription(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
-                                disabled={isSubmittingEdit}
-                                className="text-xs"
-                              >
-                                <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
-                                Generate AI Description
-                              </Button>
-                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => generateBusinessDescription(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
+                              disabled={isSubmittingEdit}
+                              className="text-xs"
+                            >
+                              <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
+                              Generate AI Description
+                            </Button>
                           </div>
                           <Textarea
                             id="edit-description-ai"
@@ -1709,11 +1797,9 @@ export default function EnhancedFoursquareImport() {
                             placeholder="Compelling business description for visitors"
                             className="min-h-[100px]"
                           />
-                          {!currentEdit.locationData.contactInfo?.website && (
-                            <p className="text-xs text-gray-500">
-                              💡 Add a website URL to enable AI description generation
-                            </p>
-                          )}
+                          <p className="text-xs text-gray-500">
+                            💡 AI will generate a compelling description based on the location name, categories, and website (if provided)
+                          </p>
                         </div>
                         
                         <div className="space-y-2">
@@ -1732,11 +1818,14 @@ export default function EnhancedFoursquareImport() {
                           </div>
                           <Textarea
                             id="edit-tips"
-                            value={currentEdit.locationData.insiderTips || ''}
-                            onChange={(e) => updateCurrentLocationData({ insiderTips: e.target.value })}
+                            value={structuredTipsToString(currentEdit.locationData.insiderTips)}
+                            onChange={(e) => updateCurrentLocationData({ insiderTips: stringToStructuredTips(e.target.value) })}
                             placeholder="Share helpful tips for visitors"
                             className="min-h-[100px]"
                           />
+                          <p className="text-xs text-gray-500">
+                            💡 AI will generate structured insider tips with categories and priorities. You can also edit them manually.
+                          </p>
                         </div>
                       </div>
                     </div>

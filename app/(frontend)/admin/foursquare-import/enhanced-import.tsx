@@ -446,16 +446,16 @@ export default function EnhancedFoursquareImport() {
     setIsGeneratingInsights(true)
     
     try {
-      const response = await fetch('/api/ai/insights', {
+      const response = await fetch('/api/foursquare/generate-tips', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          type: 'insider-tips',
-          websiteUrl: locationData.contactInfo.website,
           locationName: locationData.name,
-          locationCategory: locationData.categories?.[0] || ''
+          website: locationData.contactInfo.website,
+          categories: locationData.categories || [],
+          description: locationData.description || ''
         })
       })
 
@@ -465,10 +465,10 @@ export default function EnhancedFoursquareImport() {
 
       const result = await response.json()
       
-      if (result.success && result.data.tips) {
+      if (result.success && result.tips && Array.isArray(result.tips)) {
         setGeneratedInsights(prev => ({
           ...prev,
-          [fsqId]: result.data
+          [fsqId]: result
         }))
         
         // Update the current editing location's insider tips
@@ -478,13 +478,13 @@ export default function EnhancedFoursquareImport() {
                 ...loc, 
                 locationData: { 
                   ...loc.locationData, 
-                  insiderTips: result.data.tips 
+                  insiderTips: result.tips 
                 } 
               }
             : loc
         ))
         
-        toast.success('AI-generated insider tips added!')
+        toast.success(`AI-generated ${result.tips.length} insider tips added! (Confidence: ${Math.round(result.confidence * 100)}%)`)
       } else {
         throw new Error(result.error || 'Failed to generate insights')
       }
@@ -623,6 +623,92 @@ export default function EnhancedFoursquareImport() {
         ? { ...edit, locationData: { ...edit.locationData, ...updates } }
         : edit
     ))
+  }
+
+  // Helper function to convert structured tips to display string
+  const structuredTipsToString = (tips: any): string => {
+    if (!tips) return ''
+    if (typeof tips === 'string') return tips
+    if (Array.isArray(tips)) {
+      return tips.map((tip, index) => {
+        if (typeof tip === 'object' && tip.tip) {
+          const categoryLabel = {
+            timing: 'Best Times',
+            food: 'Food & Drinks',
+            secrets: 'Local Secrets',
+            protips: 'Pro Tips',
+            access: 'Getting There',
+            savings: 'Money Saving',
+            recommendations: 'What to Order/Try',
+            hidden: 'Hidden Features'
+          }[tip.category] || 'Pro Tips'
+          
+          const priorityIndicator = tip.priority === 'high' ? '[ESSENTIAL] ' : tip.priority === 'medium' ? '[HELPFUL] ' : '[NICE TO KNOW] '
+          return `${priorityIndicator}${categoryLabel}: ${tip.tip}`
+        }
+        return typeof tip === 'string' ? tip : ''
+      }).filter(Boolean).join('\n\n')
+    }
+    return String(tips)
+  }
+
+  // Helper function to convert display string back to structured tips (basic conversion)
+  const stringToStructuredTips = (text: string): any => {
+    if (!text || text.trim() === '') return []
+    
+    // If it looks like structured tips (contains priority indicators), try to parse
+    if (text.includes('[ESSENTIAL]') || text.includes('[HELPFUL]') || text.includes('[NICE TO KNOW]')) {
+      const lines = text.split('\n\n').filter(line => line.trim())
+      return lines.map(line => {
+        // Extract priority
+        let priority = 'medium'
+        let cleanLine = line
+        if (line.includes('[ESSENTIAL]')) {
+          priority = 'high'
+          cleanLine = line.replace('[ESSENTIAL]', '').trim()
+        } else if (line.includes('[HELPFUL]')) {
+          priority = 'medium'
+          cleanLine = line.replace('[HELPFUL]', '').trim()
+        } else if (line.includes('[NICE TO KNOW]')) {
+          priority = 'low'
+          cleanLine = line.replace('[NICE TO KNOW]', '').trim()
+        }
+        
+        // Extract category and tip
+        let category = 'protips'
+        let tipText = cleanLine
+        
+        const categoryMatches = {
+          'Best Times': 'timing',
+          'Food & Drinks': 'food',
+          'Local Secrets': 'secrets',
+          'Pro Tips': 'protips',
+          'Getting There': 'access',
+          'Money Saving': 'savings',
+          'What to Order/Try': 'recommendations',
+          'Hidden Features': 'hidden'
+        }
+        
+        for (const [label, cat] of Object.entries(categoryMatches)) {
+          if (cleanLine.includes(`${label}:`)) {
+            category = cat
+            tipText = cleanLine.split(`${label}:`)[1]?.trim() || cleanLine
+            break
+          }
+        }
+        
+        return {
+          category,
+          tip: tipText,
+          priority,
+          isVerified: false,
+          source: 'ai_generated'
+        }
+      })
+    }
+    
+    // Otherwise, treat as plain text and return as-is for backward compatibility
+    return text
   }
 
   const PlaceCard = ({ place, onToggle, isSelected }: { 
@@ -1392,50 +1478,27 @@ export default function EnhancedFoursquareImport() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="edit-tips">Insider Tips</Label>
-                      {currentEdit.locationData.contactInfo?.website && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateInsiderTips(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
-                          disabled={isGeneratingInsights}
-                        >
-                          {isGeneratingInsights ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Generating...
-                            </>
-                          ) : (
-                            <>
-                              <Star className="w-4 h-4 mr-2" />
-                              Generate with AI
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => generateInsiderTips(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
+                        disabled={isSubmittingEdit}
+                        className="text-xs"
+                      >
+                        <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
+                        Generate AI Tips
+                      </Button>
                     </div>
                     <Textarea
                       id="edit-tips"
-                      value={currentEdit.locationData.insiderTips || ''}
-                      onChange={(e) => updateCurrentLocationData({ insiderTips: e.target.value })}
+                      value={structuredTipsToString(currentEdit.locationData.insiderTips)}
+                      onChange={(e) => updateCurrentLocationData({ insiderTips: stringToStructuredTips(e.target.value) })}
                       placeholder="Share helpful tips for visitors"
-                      className="min-h-[120px] leading-relaxed"
+                      className="min-h-[100px]"
                     />
-                    {!currentEdit.locationData.contactInfo?.website && (
-                      <div className="text-sm text-gray-500">
-                        💡 Add a website URL to enable AI-generated insider tips
-                      </div>
-                    )}
-                    {generatedInsights[currentEdit.foursquarePlace.foursquareId] && (
-                      <div className="text-sm text-green-700 bg-green-50 border border-green-200 p-3 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="font-medium">AI-Generated Content</span>
-                        </div>
-                        <p className="text-green-600">
-                          Generated with {Math.round(generatedInsights[currentEdit.foursquarePlace.foursquareId].confidence * 100)}% confidence
-                        </p>
-                      </div>
-                    )}
+                    <p className="text-xs text-gray-500">
+                      💡 AI will generate structured insider tips with categories and priorities. You can also edit them manually.
+                    </p>
                   </div>
                 </div>
 

@@ -259,7 +259,7 @@ function validatePriority(priority: any): StructuredTip['priority'] {
 /**
  * Calculate confidence score for structured tips
  */
-function calculateStructuredTipsConfidence(tips: StructuredTip[], sourceContent: string): number {
+export function calculateStructuredTipsConfidence(tips: StructuredTip[], sourceContent: string): number {
   let confidence = 0.5 // Base confidence
   
   // Increase confidence based on number of tips
@@ -323,19 +323,26 @@ Respond with a JSON array of objects with category, tip, and priority fields onl
 /**
  * Generate fallback structured tips when AI fails
  */
-function generateFallbackStructuredTips(locationName: string, category: string = ''): StructuredTip[] {
+export function generateFallbackStructuredTips(locationName: string, category: string = ''): StructuredTip[] {
   const categoryTips: Record<string, StructuredTip[]> = {
     restaurant: [
       {
         category: 'timing',
-        tip: 'Visit during off-peak hours (2-5pm) for better service and atmosphere',
+        tip: 'Visit between 2-4pm on weekdays for the best service and atmosphere',
         priority: 'high',
         isVerified: false,
         source: 'ai_generated'
       },
       {
         category: 'food',
-        tip: 'Ask your server for daily specials or chef recommendations',
+        tip: 'Ask your server for daily specials or chef\'s recommendations',
+        priority: 'high',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'savings',
+        tip: 'Check if they have a happy hour or special lunch menu',
         priority: 'medium',
         isVerified: false,
         source: 'ai_generated'
@@ -343,8 +350,8 @@ function generateFallbackStructuredTips(locationName: string, category: string =
     ],
     bar: [
       {
-        category: 'recommendations',
-        tip: 'Ask the bartender for their signature cocktail or seasonal special',
+        category: 'food',
+        tip: 'Ask the bartender for their signature cocktail',
         priority: 'high',
         isVerified: false,
         source: 'ai_generated'
@@ -352,6 +359,13 @@ function generateFallbackStructuredTips(locationName: string, category: string =
       {
         category: 'timing',
         tip: 'Visit on weeknights for a more intimate experience',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'secrets',
+        tip: 'Check if they have a hidden menu or seasonal specials',
         priority: 'medium',
         isVerified: false,
         source: 'ai_generated'
@@ -371,29 +385,87 @@ function generateFallbackStructuredTips(locationName: string, category: string =
         priority: 'medium',
         isVerified: false,
         source: 'ai_generated'
+      },
+      {
+        category: 'protips',
+        tip: 'Ask about their brewing methods or coffee sourcing',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
+      }
+    ],
+    park: [
+      {
+        category: 'timing',
+        tip: 'Visit early morning or late afternoon for the best lighting',
+        priority: 'high',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'secrets',
+        tip: 'Look for hidden trails or less crowded areas',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'protips',
+        tip: 'Check for seasonal events or guided tours',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
+      }
+    ],
+    shop: [
+      {
+        category: 'protips',
+        tip: 'Ask staff about their best-selling or unique items',
+        priority: 'high',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'savings',
+        tip: 'Check for seasonal sales or loyalty programs',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
+      },
+      {
+        category: 'recommendations',
+        tip: 'Look for locally-made or exclusive products',
+        priority: 'medium',
+        isVerified: false,
+        source: 'ai_generated'
       }
     ]
   }
 
   const lowerCategory = category.toLowerCase()
-  const tips = categoryTips[lowerCategory] || [
+  return categoryTips[lowerCategory] || [
     {
-      category: 'timing' as const,
+      category: 'timing',
       tip: 'Visit during off-peak times for a better experience',
-      priority: 'medium' as const,
+      priority: 'high',
       isVerified: false,
-      source: 'ai_generated' as const
+      source: 'ai_generated'
     },
     {
-      category: 'protips' as const,
+      category: 'protips',
       tip: 'Ask locals or staff for their personal recommendations',
-      priority: 'medium' as const,
+      priority: 'medium',
       isVerified: false,
-      source: 'ai_generated' as const
+      source: 'ai_generated'
+    },
+    {
+      category: 'secrets',
+      tip: 'Check for special events or seasonal offerings',
+      priority: 'medium',
+      isVerified: false,
+      source: 'ai_generated'
     }
   ]
-
-  return tips
 }
 
 /**

@@ -105,7 +105,7 @@ export function HierarchicalCategorySelector({
   }
 
   const CategoryIcon = ({ category }: { category: CategoryOption }) => {
-    if (category.foursquareIcon) {
+    if (category.foursquareIcon && category.foursquareIcon.prefix && category.foursquareIcon.suffix) {
       return (
         <img
           src={`${category.foursquareIcon.prefix}16${category.foursquareIcon.suffix}`}
