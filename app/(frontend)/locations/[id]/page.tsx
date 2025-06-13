@@ -31,6 +31,7 @@ import {
 } from './location-interactions'
 import { ContactActions } from './contact-actions'
 import { UserPhotosSection } from '@/components/location/user-photos-section'
+import StructuredInsiderTips from '@/components/location/structured-insider-tips'
 
 export const dynamic = 'force-dynamic'
 
@@ -612,6 +613,21 @@ export default async function LocationPage({ params }: PageProps) {
                         View All Photos ({galleryImages.length})
                       </Button>
                     )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Insider Tips Section */}
+              {location.insiderTips && (
+                <Card>
+                  <CardContent className="p-8">
+                    <StructuredInsiderTips
+                      tips={location.insiderTips}
+                      locationName={location.name}
+                      locationId={location.id}
+                      showAddTip={true}
+                      compact={false}
+                    />
                   </CardContent>
                 </Card>
               )}

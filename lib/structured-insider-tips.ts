@@ -60,7 +60,7 @@ export async function generateStructuredInsiderTips(
 
 CRITICAL: Respond ONLY with a valid JSON array of objects. Each object must have these exact fields:
 - category: one of ["timing", "food", "secrets", "protips", "access", "savings", "recommendations", "hidden"]
-- tip: a concise, actionable tip (under 150 characters)
+- tip: a concise, actionable tip (under 150 characters) - NO priority labels like [HELPFUL] in the text
 - priority: one of ["high", "medium", "low"]
 
 Example response format:
@@ -77,7 +77,7 @@ Example response format:
   }
 ]
 
-Do not include any other text, explanations, or markdown formatting. Only return the JSON array.`
+IMPORTANT: The tip text should be clean and natural without any brackets, labels, or indicators. Do not include any other text, explanations, or markdown formatting. Only return the JSON array.`
         },
         {
           role: 'user',
@@ -228,6 +228,21 @@ function validateTipText(tip: any): string {
   
   // Clean the tip text
   let cleanTip = tip.trim()
+  
+  // Remove priority indicators that might be in the text
+  cleanTip = cleanTip.replace(/^\[ESSENTIAL\]\s*/i, '')
+  cleanTip = cleanTip.replace(/^\[HELPFUL\]\s*/i, '')
+  cleanTip = cleanTip.replace(/^\[NICE TO KNOW\]\s*/i, '')
+  
+  // Remove category labels if they're at the start
+  const categoryLabels = [
+    'Best Times:', 'Food & Drinks:', 'Local Secrets:', 'Pro Tips:',
+    'Getting There:', 'Money Saving:', 'What to Order/Try:', 'Hidden Features:'
+  ]
+  for (const label of categoryLabels) {
+    const regex = new RegExp(`^${label}\\s*`, 'i')
+    cleanTip = cleanTip.replace(regex, '')
+  }
   
   // Remove quotes if they wrap the entire tip
   cleanTip = cleanTip.replace(/^["']|["']$/g, '')
@@ -490,7 +505,40 @@ export function structuredTipsToLegacyFormat(tips: StructuredTip[]): string {
 export function legacyTipsToStructuredFormat(legacyTips: string): StructuredTip[] {
   if (!legacyTips || legacyTips.trim().length === 0) return []
   
-  // Split by periods or pipe characters
+  // Handle tips with priority indicators (from Foursquare import editing)
+  if (legacyTips.includes('[ESSENTIAL]') || legacyTips.includes('[HELPFUL]') || legacyTips.includes('[NICE TO KNOW]')) {
+    const lines = legacyTips.split('\n\n').filter(line => line.trim())
+    return lines.map((line, index) => {
+      // Extract priority
+      let priority: StructuredTip['priority'] = 'medium'
+      let cleanLine = line.trim()
+      
+      if (cleanLine.includes('[ESSENTIAL]')) {
+        priority = 'high'
+        cleanLine = cleanLine.replace(/\[ESSENTIAL\]\s*/gi, '').trim()
+      } else if (cleanLine.includes('[HELPFUL]')) {
+        priority = 'medium'
+        cleanLine = cleanLine.replace(/\[HELPFUL\]\s*/gi, '').trim()
+      } else if (cleanLine.includes('[NICE TO KNOW]')) {
+        priority = 'low'
+        cleanLine = cleanLine.replace(/\[NICE TO KNOW\]\s*/gi, '').trim()
+      }
+      
+      // Extract category and clean tip text
+      const category = inferTipCategory(cleanLine)
+      const cleanTip = validateTipText(cleanLine)
+      
+      return {
+        category,
+        tip: cleanTip,
+        priority,
+        isVerified: false,
+        source: 'ai_generated' as const
+      }
+    }).filter(tip => tip.tip && tip.tip.trim().length > 5)
+  }
+  
+  // Split by periods or pipe characters for regular legacy tips
   const tipTexts = legacyTips.split(/[.|]+/)
     .map(tip => tip.trim())
     .filter(tip => tip.length > 10)
@@ -544,4 +592,52 @@ function extractTextFromHTML(html: string): string {
   text = text.replace(/<[^>]*>/g, ' ')
   text = text.replace(/\s+/g, ' ').trim()
   return text
+}
+
+/**
+ * Clean tip text by removing priority indicators and category labels
+ * Useful for cleaning up existing tips that may have these artifacts
+ */
+export function cleanTipText(tipText: string): string {
+  if (!tipText || typeof tipText !== 'string') return ''
+  
+  let cleaned = tipText.trim()
+  
+  // Remove priority indicators
+  cleaned = cleaned.replace(/^\[ESSENTIAL\]\s*/gi, '')
+  cleaned = cleaned.replace(/^\[HELPFUL\]\s*/gi, '')
+  cleaned = cleaned.replace(/^\[NICE TO KNOW\]\s*/gi, '')
+  
+  // Remove category labels
+  const categoryLabels = [
+    'Best Times:', 'Food & Drinks:', 'Local Secrets:', 'Pro Tips:',
+    'Getting There:', 'Money Saving:', 'What to Order/Try:', 'Hidden Features:'
+  ]
+  for (const label of categoryLabels) {
+    const regex = new RegExp(`^${label}\\s*`, 'i')
+    cleaned = cleaned.replace(regex, '')
+  }
+  
+  // Remove extra whitespace and ensure proper capitalization
+  cleaned = cleaned.trim()
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+  }
+  
+  return cleaned
+}
+
+/**
+ * Batch clean multiple tips from text input
+ * Useful for cleaning pasted text with multiple tips
+ */
+export function cleanMultipleTips(text: string): string[] {
+  if (!text || typeof text !== 'string') return []
+  
+  // Split by double newlines or lines that start with priority indicators
+  const lines = text.split(/\n\n|\n(?=\[(?:ESSENTIAL|HELPFUL|NICE TO KNOW)\])/)
+    .map(line => cleanTipText(line))
+    .filter(line => line.length > 10)
+  
+  return lines
 } 

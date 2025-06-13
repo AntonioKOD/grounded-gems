@@ -57,6 +57,7 @@ import { EnhancedShareButton } from "@/components/ui/enhanced-share-button"
 import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
 import LocationDetailMobile from "./location-detail-mobile"
 import StructuredInsiderTips from "@/components/location/structured-insider-tips"
+import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
 import type { 
   User, 
   ReviewItem as Review, 
@@ -785,6 +786,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
   const [isBucketModalOpen, setIsBucketModalOpen] = useState(false)
   const [isLoadingBucketLists, setIsLoadingBucketLists] = useState(false)
   const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
+  const [isSubmitTipModalOpen, setIsSubmitTipModalOpen] = useState(false)
 
   console.log('🔴 DESKTOP: LocationDetailDesktop rendered:', {
     locationName: location?.name,
@@ -1079,6 +1081,20 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }
 
+  const handleAddTip = () => {
+    if (!currentUser) {
+      toast.error('Please log in to share insider tips')
+      return
+    }
+    
+    setIsSubmitTipModalOpen(true)
+  }
+
+  const handleTipSubmissionSuccess = () => {
+    toast.success("Your tip has been submitted and will appear after review!")
+    // Could trigger a refresh of tips here if needed
+  }
+
   if (!location) return null
 
   const categoryInfo = {
@@ -1356,6 +1372,10 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
                               <StructuredInsiderTips
                                 tips={location.insiderTips}
                                 locationName={location.name}
+                                locationId={location.id}
+                                showAddTip={true}
+                                onAddTip={handleAddTip}
+                                currentUser={currentUser}
                                 compact={false}
                               />
                             </div>
@@ -1618,6 +1638,15 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
               setIsPhotoSubmissionModalOpen(false)
               toast.success('Photo submitted for review!')
             }}
+          />
+
+          {/* Submit Insider Tip Modal */}
+          <SubmitInsiderTipModal
+            isOpen={isSubmitTipModalOpen}
+            onClose={() => setIsSubmitTipModalOpen(false)}
+            locationId={location.id}
+            locationName={location.name}
+            onSuccess={handleTipSubmissionSuccess}
           />
         </>
       )}

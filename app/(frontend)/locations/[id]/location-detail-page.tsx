@@ -33,6 +33,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 import { getImageUrl, getPrimaryImageUrl, getLocationImageUrl } from "@/lib/image-utils"
 import StructuredInsiderTips, { type StructuredTip } from "@/components/location/structured-insider-tips"
+import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
 
 interface Location {
   id: string
@@ -95,6 +96,8 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [isLiked, setIsLiked] = useState(false)
   const [isSaved, setIsSaved] = useState(false)
+  const [isSubmitTipModalOpen, setIsSubmitTipModalOpen] = useState(false)
+  const [refreshTips, setRefreshTips] = useState(0)
 
   // Fetch location data
   useEffect(() => {
@@ -240,6 +243,12 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
       toast.error("Action failed. Please try again.")
     }
   }, [user, locationId, isLiked, isSaved])
+
+  const handleTipSubmissionSuccess = useCallback(() => {
+    // Refresh the tips by triggering a re-fetch
+    setRefreshTips(prev => prev + 1)
+    toast.success("Your tip has been submitted and will appear after review!")
+  }, [])
 
   // Gallery images
   const galleryImages = location?.gallery?.map(item => item.image) || []
@@ -430,6 +439,10 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
               <StructuredInsiderTips
                 tips={location.insiderTips}
                 locationName={location.name}
+                locationId={location.id}
+                showAddTip={true}
+                onAddTip={() => setIsSubmitTipModalOpen(true)}
+                currentUser={user}
                 compact={false}
               />
             )}
@@ -627,6 +640,15 @@ export default function LocationDetailPage({ locationId }: LocationDetailPagePro
           </div>
         </div>
       </div>
+
+      {/* Submit Insider Tip Modal */}
+      <SubmitInsiderTipModal
+        isOpen={isSubmitTipModalOpen}
+        onClose={() => setIsSubmitTipModalOpen(false)}
+        locationId={location.id}
+        locationName={location.name}
+        onSuccess={handleTipSubmissionSuccess}
+      />
     </div>
   )
 } 

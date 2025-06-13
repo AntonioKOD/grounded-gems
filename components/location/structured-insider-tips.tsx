@@ -30,9 +30,11 @@ export interface StructuredTip {
 interface StructuredInsiderTipsProps {
   tips: StructuredTip[] | string // Support both new structured and legacy format
   locationName?: string
+  locationId?: string
   showAddTip?: boolean
   onAddTip?: () => void
   compact?: boolean
+  currentUser?: { id: string; name?: string } | null
 }
 
 const categoryConfig = {
@@ -150,9 +152,11 @@ function legacyToStructured(legacyTips: string): StructuredTip[] {
 export default function StructuredInsiderTips({
   tips,
   locationName,
+  locationId,
   showAddTip = false,
   onAddTip,
-  compact = false
+  compact = false,
+  currentUser
 }: StructuredInsiderTipsProps) {
   // Handle both legacy string format and new structured format
   const structuredTips: StructuredTip[] = typeof tips === 'string' 
@@ -176,10 +180,13 @@ export default function StructuredInsiderTips({
             <Eye className="h-12 w-12 mx-auto mb-3 text-gray-300" />
             <p className="text-gray-600 mb-2">No insider tips yet</p>
             <p className="text-sm text-gray-500">Be the first to share what makes this place special!</p>
-            {showAddTip && onAddTip && (
+            {showAddTip && onAddTip && currentUser && (
               <Button onClick={onAddTip} className="mt-4" variant="outline">
                 Share a Tip
               </Button>
+            )}
+            {showAddTip && !currentUser && (
+              <p className="text-sm text-gray-400 mt-4">Log in to share your insider tips</p>
             )}
           </div>
         </CardContent>
@@ -289,13 +296,20 @@ export default function StructuredInsiderTips({
             )
           })}
           
-          {showAddTip && onAddTip && (
+          {showAddTip && onAddTip && currentUser && (
             <div className="border border-dashed border-gray-300 rounded-lg p-4 text-center">
               <p className="text-gray-600 mb-3">Know a secret about this place?</p>
               <Button onClick={onAddTip} variant="outline" size="sm">
                 <Target className="h-4 w-4 mr-2" />
                 Share Your Insider Tip
               </Button>
+            </div>
+          )}
+          
+          {showAddTip && !currentUser && (
+            <div className="border border-dashed border-gray-200 rounded-lg p-4 text-center bg-gray-50">
+              <p className="text-gray-500 mb-3">Want to share an insider tip?</p>
+              <p className="text-sm text-gray-400">Please log in to contribute your local knowledge</p>
             </div>
           )}
         </div>

@@ -54,6 +54,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { PhotoSubmissionModal } from "@/components/location/photo-submission-modal"
 import { UserPhotosSection } from "@/components/location/user-photos-section"
 import StructuredInsiderTips from "@/components/location/structured-insider-tips"
+import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
 import type { 
   User, 
   ReviewItem, 
@@ -1445,6 +1446,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
   const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
+  const [isSubmitTipModalOpen, setIsSubmitTipModalOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isIOS, setIsIOS] = useState(false)
@@ -1507,6 +1509,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
       setError(null)
       setIsBucketModalOpen(false)
       setIsWriteReviewModalOpen(false)
+      setIsSubmitTipModalOpen(false)
     }
   }, [isOpen, isIOS, location?.id])
 
@@ -1586,6 +1589,20 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
     
     setIsPhotoSubmissionModalOpen(true)
+  }
+
+  const handleAddTip = () => {
+    if (!user) {
+      toast.error('Please log in to share insider tips')
+      return
+    }
+    
+    setIsSubmitTipModalOpen(true)
+  }
+
+  const handleTipSubmissionSuccess = () => {
+    toast.success("Your tip has been submitted and will appear after review!")
+    // Could trigger a refresh of tips here if needed
   }
 
   const handleInteraction = async (interactionType: string) => {
@@ -1860,6 +1877,10 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                           <StructuredInsiderTips
                             tips={location.insiderTips}
                             locationName={location.name}
+                            locationId={location.id}
+                            showAddTip={true}
+                            onAddTip={handleAddTip}
+                            currentUser={user}
                             compact={true}
                           />
                         </div>
@@ -2106,6 +2127,15 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
               setIsPhotoSubmissionModalOpen(false)
               toast.success('Photo submitted for review!')
             }}
+          />
+
+          {/* Submit Insider Tip Modal */}
+          <SubmitInsiderTipModal
+            isOpen={isSubmitTipModalOpen}
+            onClose={() => setIsSubmitTipModalOpen(false)}
+            locationId={location.id}
+            locationName={location.name}
+            onSuccess={handleTipSubmissionSuccess}
           />
         </div>
       )}

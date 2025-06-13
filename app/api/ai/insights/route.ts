@@ -260,7 +260,9 @@ Guidelines:
 - Each tip should be under 150 characters
 - Include a mix of categories
 - Focus on unique insights that aren't obvious
-- Prioritize tips that would be most valuable to visitors`
+- Prioritize tips that would be most valuable to visitors
+- DO NOT include priority labels like [HELPFUL] or [ESSENTIAL] in the tip text itself
+- The tip text should be clean and natural without any brackets or indicators`
 }
 
 function createLocationInsightsPrompt(
@@ -286,7 +288,9 @@ Guidelines:
 - Each tip should be under 150 characters
 - Include a mix of categories
 - Focus on unique insights that aren't obvious
-- Prioritize tips that would be most valuable to visitors`
+- Prioritize tips that would be most valuable to visitors
+- DO NOT include priority labels like [HELPFUL] or [ESSENTIAL] in the tip text itself
+- The tip text should be clean and natural without any brackets or indicators`
 }
 
 function parseStructuredTipsResponse(response: string): StructuredTip[] {
