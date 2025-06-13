@@ -209,12 +209,19 @@ export async function getPublicLocations(
 
     console.log(`Fetched ${result.docs?.length || 0} locations from Payload CMS for home page`)
     
-    // Debug: log all locations with their status and coordinates
-    result.docs.forEach((location: any, index: number) => {
-      const lat = location.coordinates?.latitude || location.latitude
-      const lng = location.coordinates?.longitude || location.longitude
-      console.log(`Location ${index + 1}: "${location.name}" - Status: ${location.status} - Coords: [${lat}, ${lng}]`)
-    })
+            // Debug: log all locations with their status, coordinates, and images
+        result.docs.forEach((location: any, index: number) => {
+          const lat = location.coordinates?.latitude || location.latitude
+          const lng = location.coordinates?.longitude || location.longitude
+          console.log(`Location ${index + 1}: "${location.name}" - Status: ${location.status} - Coords: [${lat}, ${lng}] - Featured: ${location.featuredImage ? 'YES' : 'NO'} - Gallery: ${location.gallery?.length || 0}`)
+          
+          if (location.featuredImage) {
+            console.log(`  Featured image:`, location.featuredImage)
+          }
+          if (location.gallery?.length > 0) {
+            console.log(`  Gallery (${location.gallery.length} items):`, location.gallery.map((g: any) => g.image))
+          }
+        })
 
     // Process locations similar to map-explorer's addedLocations function
     const processedLocations = result.docs
@@ -259,13 +266,32 @@ export async function getPublicLocations(
           }
         }
 
-        // Extract image URL like in actions.ts
+        // Extract image URL using the proper image utility
         let imageUrl = null
         if (location.featuredImage) {
           if (typeof location.featuredImage === "string") {
             imageUrl = location.featuredImage
           } else if (location.featuredImage.url) {
             imageUrl = location.featuredImage.url
+          }
+        }
+        
+        // Also check gallery for primary image if no featured image
+        if (!imageUrl && location.gallery && Array.isArray(location.gallery) && location.gallery.length > 0) {
+          const primaryGalleryImage = location.gallery.find((item: any) => item.isPrimary)
+          if (primaryGalleryImage) {
+            if (typeof primaryGalleryImage.image === "string") {
+              imageUrl = primaryGalleryImage.image
+            } else if (primaryGalleryImage.image?.url) {
+              imageUrl = primaryGalleryImage.image.url
+            }
+          } else if (location.gallery[0]) {
+            // Use first gallery image if no primary is set
+            if (typeof location.gallery[0].image === "string") {
+              imageUrl = location.gallery[0].image
+            } else if (location.gallery[0].image?.url) {
+              imageUrl = location.gallery[0].image.url
+            }
           }
         }
 
@@ -279,7 +305,7 @@ export async function getPublicLocations(
           
           // Media
           featuredImage: location.featuredImage,
-          imageUrl: imageUrl || "/abstract-location.png",
+          imageUrl: imageUrl, // Don't set fallback here, let the component handle it
           gallery: location.gallery,
           
           // Categories and tags - ensure arrays
@@ -317,6 +343,11 @@ export async function getPublicLocations(
         }
 
         console.log(`Processed location "${location.name}" with coordinates:`, [latitude, longitude])
+        console.log(`  Final image data:`, {
+          featuredImage: locationData.featuredImage,
+          imageUrl: locationData.imageUrl,
+          galleryCount: locationData.gallery?.length || 0
+        })
         
         return locationData
       })

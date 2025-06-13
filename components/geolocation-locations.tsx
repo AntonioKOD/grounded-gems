@@ -7,28 +7,12 @@ import { MapPin, Star } from "lucide-react";
 import FallbackImage from "@/components/fallback-image";
 import type { Location } from "@/app/(frontend)/map/map-data";
 import { getCategoryColor, getCategoryName, getPrimaryCategory } from "@/app/(frontend)/map/category-utils";
+import { getPrimaryImageUrl } from "@/lib/image-utils";
 
 
 interface GeolocationLocationsProps {
   initialLocations: Location[];
 }
-
-// Helper to get image URL from Location
-const getLocationImageUrl = (location: Location): string => {
-  if (typeof location.featuredImage === "string") {
-    return location.featuredImage;
-  }
-
-  if (location.featuredImage?.url) {
-    return location.featuredImage.url;
-  }
-
-  if (location.imageUrl) {
-    return location.imageUrl;
-  }
-
-  return "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=200&q=80";
-};
 
 export default function GeolocationLocations({ initialLocations }: GeolocationLocationsProps) {
   const [locations, setLocations] = useState<Location[]>(initialLocations);
@@ -166,13 +150,24 @@ export default function GeolocationLocations({ initialLocations }: GeolocationLo
           const primaryCategory = getPrimaryCategory(location);
           const primaryColor = getCategoryColor(primaryCategory);
           const categoryName = getCategoryName(primaryCategory);
+          
+          // Debug image URL
+          const imageUrl = getPrimaryImageUrl(location);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`🏠 Home page location "${location.name}" image:`, {
+              imageUrl,
+              featuredImage: location.featuredImage,
+              imageUrlField: location.imageUrl,
+              gallery: location.gallery?.length || 0
+            });
+          }
 
           return (
             <Link key={location.id} href={`/locations/${location.id}`}>
               <div className="group bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
                 <div className="relative h-48 overflow-hidden">
                   <FallbackImage
-                    src={getLocationImageUrl(location)}
+                    src={imageUrl}
                     alt={location.name}
                     width={400}
                     height={200}
