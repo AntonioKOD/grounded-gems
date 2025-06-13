@@ -26,7 +26,10 @@ import {
   Building,
   Clock,
   Camera,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  Trash2,
+  MessageSquare
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -101,6 +104,10 @@ export default function EnhancedFoursquareImport() {
   // AI insights state
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
   const [generatedInsights, setGeneratedInsights] = useState<Record<string, any>>({})
+
+  // State for tips editing mode
+  const [tipsEditMode, setTipsEditMode] = useState<'simple' | 'structured'>('simple')
+  const [simpleTipsText, setSimpleTipsText] = useState('')
 
   // Load categories on mount
   useEffect(() => {
@@ -652,26 +659,26 @@ export default function EnhancedFoursquareImport() {
     return String(tips)
   }
 
-  // Helper function to convert display string back to structured tips (basic conversion)
+  // Improved helper function to convert display string back to structured tips
   const stringToStructuredTips = (text: string): any => {
     if (!text || text.trim() === '') return []
     
     // If it looks like structured tips (contains priority indicators), try to parse
     if (text.includes('[ESSENTIAL]') || text.includes('[HELPFUL]') || text.includes('[NICE TO KNOW]')) {
       const lines = text.split('\n\n').filter(line => line.trim())
-      return lines.map(line => {
+      return lines.map((line, index) => {
         // Extract priority
         let priority = 'medium'
-        let cleanLine = line
-        if (line.includes('[ESSENTIAL]')) {
+        let cleanLine = line.trim()
+        if (cleanLine.includes('[ESSENTIAL]')) {
           priority = 'high'
-          cleanLine = line.replace('[ESSENTIAL]', '').trim()
-        } else if (line.includes('[HELPFUL]')) {
+          cleanLine = cleanLine.replace(/\[ESSENTIAL\]\s*/g, '').trim()
+        } else if (cleanLine.includes('[HELPFUL]')) {
           priority = 'medium'
-          cleanLine = line.replace('[HELPFUL]', '').trim()
-        } else if (line.includes('[NICE TO KNOW]')) {
+          cleanLine = cleanLine.replace(/\[HELPFUL\]\s*/g, '').trim()
+        } else if (cleanLine.includes('[NICE TO KNOW]')) {
           priority = 'low'
-          cleanLine = line.replace('[NICE TO KNOW]', '').trim()
+          cleanLine = cleanLine.replace(/\[NICE TO KNOW\]\s*/g, '').trim()
         }
         
         // Extract category and tip
@@ -690,25 +697,44 @@ export default function EnhancedFoursquareImport() {
         }
         
         for (const [label, cat] of Object.entries(categoryMatches)) {
-          if (cleanLine.includes(`${label}:`)) {
+          const pattern = new RegExp(`${label}\\s*:\\s*`, 'i')
+          if (pattern.test(cleanLine)) {
             category = cat
-            tipText = cleanLine.split(`${label}:`)[1]?.trim() || cleanLine
+            tipText = cleanLine.replace(pattern, '').trim()
             break
           }
         }
         
         return {
           category,
-          tip: tipText,
+          tip: tipText || `Tip ${index + 1}`,
           priority,
           isVerified: false,
           source: 'ai_generated'
         }
-      })
+      }).filter(tip => tip.tip && tip.tip.trim())
     }
     
-    // Otherwise, treat as plain text and return as-is for backward compatibility
-    return text
+    // For simple text, split by double newlines and create basic structured tips
+    const lines = text.split('\n\n').filter(line => line.trim())
+    if (lines.length > 0) {
+      return lines.map((line, index) => ({
+        category: 'protips',
+        tip: line.trim(),
+        priority: 'medium',
+        isVerified: false,
+        source: 'user_edited'
+      })).filter(tip => tip.tip && tip.tip.trim())
+    }
+    
+    // Fallback: treat as single tip
+    return [{
+      category: 'protips',
+      tip: text.trim(),
+      priority: 'medium',
+      isVerified: false,
+      source: 'user_edited'
+    }]
   }
 
   const PlaceCard = ({ place, onToggle, isSelected }: { 
@@ -1475,30 +1501,186 @@ export default function EnhancedFoursquareImport() {
                     </div>
                   </div>
                   
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <Label htmlFor="edit-tips">Insider Tips</Label>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => generateInsiderTips(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
-                        disabled={isSubmittingEdit}
-                        className="text-xs"
-                      >
-                        <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
-                        Generate AI Tips
-                      </Button>
+                      <Label>Insider Tips</Label>
+                      <div className="flex gap-2">
+                        <Select 
+                          value={tipsEditMode} 
+                          onValueChange={(value: 'simple' | 'structured') => {
+                            setTipsEditMode(value)
+                            if (value === 'simple') {
+                              // Convert current tips to simple text for editing
+                              setSimpleTipsText(structuredTipsToString(currentEdit.locationData.insiderTips))
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-[120px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="simple">Simple Edit</SelectItem>
+                            <SelectItem value="structured">Structured</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => generateInsiderTips(currentEdit.foursquarePlace.foursquareId, currentEdit.locationData)}
+                          disabled={isSubmittingEdit}
+                          className="text-xs h-8"
+                        >
+                          <Loader2 className={`w-3 h-3 mr-1 ${isSubmittingEdit ? 'animate-spin' : ''}`} />
+                          Generate AI Tips
+                        </Button>
+                      </div>
                     </div>
-                    <Textarea
-                      id="edit-tips"
-                      value={structuredTipsToString(currentEdit.locationData.insiderTips)}
-                      onChange={(e) => updateCurrentLocationData({ insiderTips: stringToStructuredTips(e.target.value) })}
-                      placeholder="Share helpful tips for visitors"
-                      className="min-h-[100px]"
-                    />
-                    <p className="text-xs text-gray-500">
-                      💡 AI will generate structured insider tips with categories and priorities. You can also edit them manually.
-                    </p>
+
+                    {tipsEditMode === 'simple' ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={simpleTipsText}
+                          onChange={(e) => setSimpleTipsText(e.target.value)}
+                          placeholder="Enter tips here, separate different tips with double line breaks (Enter twice)..."
+                          className="min-h-[120px]"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              updateCurrentLocationData({ insiderTips: stringToStructuredTips(simpleTipsText) })
+                              toast.success('Tips updated!')
+                            }}
+                            disabled={!simpleTipsText.trim()}
+                            className="text-xs"
+                          >
+                            <Save className="w-3 h-3 mr-1" />
+                            Apply Changes
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSimpleTipsText('')
+                              updateCurrentLocationData({ insiderTips: [] })
+                              toast.success('Tips cleared!')
+                            }}
+                            className="text-xs"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            Clear All
+                          </Button>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          💡 Write tips in plain text. Each paragraph (separated by double line breaks) will become a separate tip.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {Array.isArray(currentEdit.locationData.insiderTips) && currentEdit.locationData.insiderTips.length > 0 ? (
+                          currentEdit.locationData.insiderTips.map((tip: any, index: number) => (
+                            <Card key={index} className="p-3">
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex gap-2">
+                                    <Select 
+                                      value={tip.category || 'protips'} 
+                                      onValueChange={(value) => {
+                                        const newTips = [...currentEdit.locationData.insiderTips]
+                                        newTips[index] = { ...tip, category: value }
+                                        updateCurrentLocationData({ insiderTips: newTips })
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-[140px] h-7">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="timing">⏰ Best Times</SelectItem>
+                                        <SelectItem value="food">🍽️ Food & Drinks</SelectItem>
+                                        <SelectItem value="secrets">💡 Local Secrets</SelectItem>
+                                        <SelectItem value="protips">🎯 Pro Tips</SelectItem>
+                                        <SelectItem value="access">🚗 Getting There</SelectItem>
+                                        <SelectItem value="savings">💰 Money Saving</SelectItem>
+                                        <SelectItem value="recommendations">📱 What to Order/Try</SelectItem>
+                                        <SelectItem value="hidden">🎪 Hidden Features</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Select 
+                                      value={tip.priority || 'medium'} 
+                                      onValueChange={(value) => {
+                                        const newTips = [...currentEdit.locationData.insiderTips]
+                                        newTips[index] = { ...tip, priority: value }
+                                        updateCurrentLocationData({ insiderTips: newTips })
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-[100px] h-7">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="high">🔥 Essential</SelectItem>
+                                        <SelectItem value="medium">⭐ Helpful</SelectItem>
+                                        <SelectItem value="low">💡 Nice to Know</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                      const newTips = currentEdit.locationData.insiderTips.filter((_: any, i: number) => i !== index)
+                                      updateCurrentLocationData({ insiderTips: newTips })
+                                    }}
+                                    className="h-7 w-7 p-0 hover:bg-red-100"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-500" />
+                                  </Button>
+                                </div>
+                                <Textarea
+                                  value={tip.tip || ''}
+                                  onChange={(e) => {
+                                    const newTips = [...currentEdit.locationData.insiderTips]
+                                    newTips[index] = { ...tip, tip: e.target.value }
+                                    updateCurrentLocationData({ insiderTips: newTips })
+                                  }}
+                                  placeholder="Enter tip here..."
+                                  className="min-h-[60px] resize-none"
+                                />
+                              </div>
+                            </Card>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-gray-500">
+                            <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No tips yet. Generate AI tips or add manually.</p>
+                          </div>
+                        )}
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const currentTips = Array.isArray(currentEdit.locationData.insiderTips) ? currentEdit.locationData.insiderTips : []
+                            const newTip = {
+                              category: 'protips',
+                              tip: '',
+                              priority: 'medium',
+                              isVerified: false,
+                              source: 'user_edited'
+                            }
+                            updateCurrentLocationData({ insiderTips: [...currentTips, newTip] })
+                          }}
+                          className="w-full text-xs"
+                        >
+                          <Plus className="w-3 h-3 mr-1" />
+                          Add New Tip
+                        </Button>
+                        
+                        <p className="text-xs text-gray-500">
+                          💡 Use structured mode to organize tips by category and priority for better user experience.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
