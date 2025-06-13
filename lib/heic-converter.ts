@@ -1,6 +1,13 @@
 'use client'
 
-import heic2any from 'heic2any'
+// Dynamic import to prevent SSR issues
+const loadHeic2any = async () => {
+  if (typeof window === 'undefined') {
+    throw new Error('HEIC conversion is only available in the browser')
+  }
+  const heic2any = await import('heic2any')
+  return heic2any.default
+}
 
 export interface ConversionOptions {
   quality?: number
@@ -50,6 +57,9 @@ export async function convertHEICFile(
 
   try {
     console.log(`🔄 Converting HEIC file: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    
+    // Dynamically load heic2any to prevent SSR issues
+    const heic2any = await loadHeic2any()
     
     // Convert HEIC to target format
     const convertedBlob = await heic2any({
