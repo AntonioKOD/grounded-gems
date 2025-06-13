@@ -97,6 +97,7 @@
     "framer-motion": "^12.15.0",
     "graphql": "^16.10.0",
     "haversine-distance": "^1.2.3",
+    "heic2any": "^0.0.4",
     "is-url": "^1.2.4",
     "isomorphic-unfetch": "^4.0.2",
     "jsonwebtoken": "^9.0.2",

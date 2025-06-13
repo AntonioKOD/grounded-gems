@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
+// Helper function to check if file is HEIC
+function isHEICFile(file: File): boolean {
+  // Check by MIME type
+  if (file.type === 'image/heic' || file.type === 'image/heif') {
+    return true
+  }
+  
+  // Check by file extension as fallback (since some browsers don't set MIME type correctly)
+  const filename = file.name.toLowerCase()
+  return filename.endsWith('.heic') || filename.endsWith('.heif')
+}
+
 // POST /api/media - Upload a new media file
 export async function POST(req: NextRequest) {
   try {
@@ -28,10 +40,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
+    // Enhanced file type validation to include HEIC
+    const isValidImageFile = file.type.startsWith('image/') || isHEICFile(file)
+    
+    if (!isValidImageFile) {
       return NextResponse.json(
-        { error: 'Only image files are allowed' },
+        { error: 'Only image files are allowed (including HEIC/HEIF)' },
         { status: 400 }
       )
     }
@@ -44,6 +58,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // Log file info for debugging
+    console.log(`📁 Uploading file: ${file.name}`)
+    console.log(`📊 File type: ${file.type || 'unknown'}`)
+    console.log(`📏 File size: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+    
+    if (isHEICFile(file)) {
+      console.log(`📱 HEIC file detected - will be processed by client before upload`)
+    }
+
     // Create media document in PayloadCMS
     const doc = await payload.create({
       collection: 'media',
@@ -52,12 +75,14 @@ export async function POST(req: NextRequest) {
       },
       file: {
         data: Buffer.from(await file.arrayBuffer()),
-        mimetype: file.type,
+        mimetype: file.type || (isHEICFile(file) ? 'image/heic' : 'application/octet-stream'),
         name: file.name,
         size: file.size,
       },
       user,
     })
+
+    console.log(`✅ File uploaded successfully: ${doc.id}`)
 
     return NextResponse.json({
       success: true,
@@ -66,7 +91,7 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Error uploading media:', error)
+    console.error('❌ Error uploading media:', error)
     return NextResponse.json(
       { error: 'Failed to upload file' },
       { status: 500 }

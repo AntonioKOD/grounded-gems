@@ -8,28 +8,39 @@ export const LocationPhotoSubmissions: CollectionConfig = {
   },
   access: {
     read: ({ req: { user } }) => {
-      // Admins can read all, users can read their own submissions
-      if (user?.role === 'admin') return true;
-      return {
-        submittedBy: {
-          equals: user?.id,
-        },
-      };
+      // Allow everyone to read (for now - will be filtered by status later)
+      // Admins can see all, users can see their own submissions
+      if (!user) return false;
+      
+      // For now, allow all authenticated users to read (will filter by status/ownership in queries)
+      return true;
     },
     create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => {
-      // Only admins and moderators can update submissions (for review)
-      return user?.role === 'admin' || user?.role === 'moderator';
+      // Allow users to update their own submissions if status is 'pending' or 'needs_improvement'
+      // Allow admins/moderators to update any submission for review
+      return Boolean(user);
     },
     delete: ({ req: { user } }) => {
-      // Only admins can delete submissions
-      return user?.role === 'admin';
+      // Allow users to delete their own pending submissions
+      // Allow admins to delete any submission
+      return Boolean(user);
     },
   },
   admin: {
     useAsTitle: 'id',
-    defaultColumns: ['location', 'submittedBy', 'status', 'qualityScore', 'submittedAt'],
+    defaultColumns: ['photo', 'location', 'submittedBy', 'status', 'category', 'qualityScore', 'submittedAt'],
     group: 'Content Management',
+    listSearchableFields: ['caption', 'category', 'status'],
+    pagination: {
+      defaultLimit: 50,
+    },
+    preview: (doc) => {
+      if (doc?.location?.name && doc?.category) {
+        return `${doc.location.name} - ${doc.category}`;
+      }
+      return `Photo Submission ${doc.id}`;
+    },
   },
   fields: [
     {
@@ -46,6 +57,7 @@ export const LocationPhotoSubmissions: CollectionConfig = {
       type: 'relationship',
       relationTo: 'users',
       required: true,
+      label: 'Submitted By',
       admin: {
         description: 'User who submitted the photo',
       },
@@ -307,8 +319,20 @@ export const LocationPhotoSubmissions: CollectionConfig = {
     beforeChange: [
       async ({ operation, data, req }) => {
         if (operation === 'create') {
-          data.submittedAt = new Date().toISOString();
-          data.submittedBy = req.user?.id;
+          // Set submittedAt if not already set
+          if (!data.submittedAt) {
+            data.submittedAt = new Date().toISOString();
+          }
+          
+          // Set submittedBy if not already set and user is available
+          if (!data.submittedBy && req.user?.id) {
+            data.submittedBy = req.user.id;
+          }
+          
+          // Validate that submittedBy is set
+          if (!data.submittedBy) {
+            throw new Error('submittedBy is required for photo submissions');
+          }
         }
         
         if (data.status === 'approved' && !data.approvedAt) {

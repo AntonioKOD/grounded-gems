@@ -134,7 +134,13 @@ export async function POST(
     // Get user from session
     const { user } = await payload.auth({ headers: req.headers });
     
+    console.log('🔐 Photo submission auth check:');
+    console.log('   - User found:', !!user);
+    console.log('   - User ID:', user?.id);
+    console.log('   - User name:', user?.name);
+    
     if (!user) {
+      console.log('❌ No authenticated user for photo submission');
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -206,21 +212,33 @@ export async function POST(
       initialStatus = 'needs_improvement'; // Very low quality photos need improvement
     }
 
-    // Create the submission
+    // Create the submission with explicit user context
+    console.log('📝 Creating photo submission with data:');
+    console.log('   - locationId:', locationId);
+    console.log('   - photoId:', photoId);
+    console.log('   - category:', category);
+    console.log('   - submittedBy (user.id):', user.id);
+    console.log('   - status:', initialStatus);
+    
+    const submissionData = {
+      location: locationId,
+      photo: photoId,
+      caption: caption || '',
+      category,
+      status: initialStatus,
+      qualityScore: qualityAssessment.overallScore,
+      autoQualityChecks: qualityAssessment,
+      tags: tags ? tags.map((tag: string) => ({ tag })) : [],
+      submittedBy: user.id, // Explicitly set the user ID
+      submittedAt: new Date().toISOString(),
+    };
+    
+    console.log('📝 Full submission data:', JSON.stringify(submissionData, null, 2));
+    
     const submission = await payload.create({
       collection: 'locationPhotoSubmissions',
-      data: {
-        location: locationId,
-        submittedBy: user.id,
-        photo: photoId,
-        caption: caption || '',
-        category,
-        status: initialStatus,
-        qualityScore: qualityAssessment.overallScore,
-        autoQualityChecks: qualityAssessment,
-        tags: tags ? tags.map((tag: string) => ({ tag })) : [],
-        submittedAt: new Date().toISOString(),
-      },
+      data: submissionData,
+      user, // Pass user context to the hook
     });
 
     // If auto-approved (very high quality from trusted users), update status

@@ -492,31 +492,64 @@ export default function AddLocationForm() {
       return
     }
 
-    // 1. Size guard
-    if (file.size > MAX_IMAGE_SIZE) {
-      toast({
-        title: "File too large",
-        description: "Image must be less than 5 MB.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // 2. Instant preview
-    const reader = new FileReader()
-    reader.onload = () => {
-      console.log("File reader loaded")
-      setLocationImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
-
     try {
+      // Import HEIC utilities
+      const { isValidImageFile, processImageFile, isHEICFile } = await import('@/lib/heic-converter')
+
+      // Enhanced file validation including HEIC
+      if (!isValidImageFile(file)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select a valid image file (including HEIC).",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // 1. Size guard
+      if (file.size > MAX_IMAGE_SIZE) {
+        toast({
+          title: "File too large",
+          description: "Image must be less than 5 MB.",
+          variant: "destructive",
+        })
+        return
+      }
+
       setIsUploading(true)
       setUploadError(null)
 
+      // Show processing message for HEIC files
+      if (isHEICFile(file)) {
+        toast({
+          title: "Processing HEIC file",
+          description: "Converting HEIC to JPEG...",
+        })
+      }
+
+      // Process file (convert HEIC if needed)
+      const result = await processImageFile(file, { quality: 0.9, format: 'JPEG' })
+      
+      if (result.wasConverted) {
+        toast({
+          title: "HEIC converted successfully",
+          description: `File size reduced by ${result.conversionInfo?.compressionRatio.toFixed(1)}%`,
+        })
+      }
+
+      const processedFile = result.file
+
+      // 2. Instant preview
+      const reader = new FileReader()
+      reader.onload = () => {
+        console.log("File reader loaded")
+        setLocationImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(processedFile)
+
       // 3. Build FormData for Payload's /api/media
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", processedFile)
       // Optional: set alt text or other metadata fields
       formData.append("alt", locationName || "Location image")
 
@@ -565,28 +598,61 @@ export default function AddLocationForm() {
       return
     }
 
-    // Client-side size check (max 5 MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Image must be less than 5MB",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Add a temporary placeholder to the gallery with a local object URL
-    const tempId = Date.now().toString()
-    const localPreviewUrl = URL.createObjectURL(file)
-    setGallery([...gallery, { image: localPreviewUrl, caption: "", tempId }])
-
     try {
+      // Import HEIC utilities
+      const { isValidImageFile, processImageFile, isHEICFile } = await import('@/lib/heic-converter')
+
+      // Enhanced file validation including HEIC
+      if (!isValidImageFile(file)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please select a valid image file (including HEIC).",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Client-side size check (max 5 MB)
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: "Image must be less than 5MB",
+          variant: "destructive",
+        })
+        return
+      }
+
       setIsUploading(true)
       setUploadError(null)
 
+      // Show processing message for HEIC files
+      if (isHEICFile(file)) {
+        toast({
+          title: "Processing HEIC file",
+          description: "Converting HEIC to JPEG...",
+        })
+      }
+
+      // Process file (convert HEIC if needed)
+      const result = await processImageFile(file, { quality: 0.9, format: 'JPEG' })
+      
+      if (result.wasConverted) {
+        toast({
+          title: "HEIC converted successfully",
+          description: `File size reduced by ${result.conversionInfo?.compressionRatio.toFixed(1)}%`,
+        })
+      }
+
+      const processedFile = result.file
+
+      // Add a temporary placeholder to the gallery with a local object URL
+      const tempId = Date.now().toString()
+      const localPreviewUrl = URL.createObjectURL(processedFile)
+      setGallery([...gallery, { image: localPreviewUrl, caption: "", tempId }])
+
       // Create FormData for Payload CMS upload
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", processedFile)
       formData.append("alt", `Gallery image for ${locationName || "location"}`)
 
       console.log("Uploading gallery image to /api/media")
@@ -627,8 +693,8 @@ export default function AddLocationForm() {
       console.error("Gallery upload failed:", error)
       setUploadError((error as Error).message || "Failed to upload gallery image")
 
-      // Remove the temporary image from gallery
-      setGallery((prev) => prev.filter((item) => item.tempId !== tempId))
+      // Remove the temporary image from gallery if it was added
+      setGallery((prev) => prev.filter((item) => !item.tempId))
 
       toast({
         title: "Upload Failed",
@@ -1140,11 +1206,11 @@ export default function AddLocationForm() {
                           Drag and drop an image, or click to browse
                         </p>
                         <p className="text-sm text-muted-foreground text-center mb-4">
-                          Recommended size: 1200 x 800 pixels (Max: 5MB)
+                          Recommended size: 1200 x 800 pixels (Max: 5MB) • Supports HEIC
                         </p>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,.heic,.heif"
                           className="hidden"
                           id="location-image-upload"
                           ref={fileInputRef}
@@ -1220,7 +1286,7 @@ export default function AddLocationForm() {
                             </Button>
                             <input
                               type="file"
-                              accept="image/*"
+                              accept="image/*,.heic,.heif"
                               className="hidden"
                               id="location-image-upload"
                               ref={fileInputRef}
@@ -1306,7 +1372,7 @@ export default function AddLocationForm() {
                         <p className="text-sm text-muted-foreground text-center mb-4">Max file size: 5MB</p>
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/*,.heic,.heif"
                           className="hidden"
                           id="gallery-image-upload"
                           ref={galleryFileInputRef}

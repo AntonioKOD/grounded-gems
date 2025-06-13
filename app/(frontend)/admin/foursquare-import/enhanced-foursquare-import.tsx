@@ -257,8 +257,7 @@ export default function EnhancedFoursquareImport() {
       ],
       
       priceRange: preview.priceRange as "free" | "budget" | "moderate" | "expensive" | "luxury" || 'moderate',
-      bestTimeToVisit: preview.bestTimeToVisit || [],
-      insiderTips: preview.insiderTips || '',
+      bestTimeToVisit: preview.bestTimeToVisit || [{ season: 'Year-round' }],
       
       accessibility: {
         wheelchairAccess: false,

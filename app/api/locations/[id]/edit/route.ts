@@ -9,7 +9,32 @@ export async function PUT(
 ) {
   try {
     const { id: locationId } = await params;
-    const body = await req.json();
+    
+    let body;
+    const contentType = req.headers.get('content-type') || '';
+    
+    try {
+      if (contentType.includes('multipart/form-data')) {
+        // Handle multipart form data (from Payload CMS admin)
+        const formData = await req.formData();
+        const payloadData = formData.get('_payload');
+        
+        if (payloadData && typeof payloadData === 'string') {
+          body = JSON.parse(payloadData);
+        } else {
+          body = {};
+        }
+      } else {
+        // Handle regular JSON
+        body = await req.json();
+      }
+    } catch (error) {
+      console.error('❌ Error parsing request body in edit endpoint:', error);
+      return NextResponse.json(
+        { error: 'Invalid request body format' },
+        { status: 400 }
+      );
+    }
 
     const payload = await getPayload({ config });
 

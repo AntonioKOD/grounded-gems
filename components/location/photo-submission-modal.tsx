@@ -87,14 +87,17 @@ export function PhotoSubmissionModal({
     }
   }
 
-  // Handle file selection
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file selection with HEIC support
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file')
+    // Import HEIC utilities
+    const { isValidImageFile, processImageFile, isHEICFile } = await import('@/lib/heic-converter')
+
+    // Validate file type (including HEIC)
+    if (!isValidImageFile(file)) {
+      toast.error('Please select a valid image file (including HEIC)')
       return
     }
 
@@ -104,22 +107,40 @@ export function PhotoSubmissionModal({
       return
     }
 
-    setSelectedFile(file)
-    
-    // Create preview
-    const reader = new FileReader()
-    reader.onload = () => {
-      setPreviewUrl(reader.result as string)
-    }
-    reader.readAsDataURL(file)
+    try {
+      // Show processing message for HEIC files
+      if (isHEICFile(file)) {
+        toast.info('Converting HEIC file...')
+      }
 
-    // Quick quality assessment for immediate feedback
-    const img = new Image()
-    img.onload = () => {
-      const score = assessImageQuality(img.width, img.height, file.size, file.type)
-      setQualityScore(score)
+      // Process file (convert HEIC if needed)
+      const result = await processImageFile(file, { quality: 0.9, format: 'JPEG' })
+      
+      if (result.wasConverted) {
+        toast.success(`HEIC file converted successfully! Size reduced by ${result.conversionInfo?.compressionRatio.toFixed(1)}%`)
+      }
+
+      setSelectedFile(result.file)
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = () => {
+        setPreviewUrl(reader.result as string)
+      }
+      reader.readAsDataURL(result.file)
+
+      // Quick quality assessment for immediate feedback
+      const img = new Image()
+      img.onload = () => {
+        const score = assessImageQuality(img.width, img.height, result.file.size, result.file.type)
+        setQualityScore(score)
+      }
+      img.src = URL.createObjectURL(result.file)
+
+    } catch (error) {
+      console.error('Error processing image:', error)
+      toast.error('Failed to process image file')
     }
-    img.src = URL.createObjectURL(file)
   }
 
   // Simple quality assessment for immediate feedback
@@ -317,13 +338,13 @@ export function PhotoSubmissionModal({
                     Drag and drop or click to select
                   </p>
                   <p className="text-xs text-gray-400">
-                    Max 10MB • JPG, PNG, WebP
+                    Max 10MB • JPG, PNG, WebP, HEIC
                   </p>
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileSelect}
-                    accept="image/*"
+                    accept="image/*,.heic,.heif"
                     className="hidden"
                   />
                 </div>

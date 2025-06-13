@@ -394,7 +394,6 @@ export const Locations: CollectionConfig = {
         {
           name: 'category',
           type: 'select',
-          required: true,
           options: [
             { label: '⏰ Best Times to Visit', value: 'timing' },
             { label: '🍽️ Food & Drinks', value: 'food' },
@@ -409,7 +408,6 @@ export const Locations: CollectionConfig = {
         {
           name: 'tip',
           type: 'text',
-          required: true,
           admin: {
             description: 'The actual tip (keep it concise and actionable)'
           }

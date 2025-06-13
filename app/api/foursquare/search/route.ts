@@ -423,6 +423,26 @@ function cleanDataForPayload(data: any): any {
     }
   }
   
+  // Handle insiderTips - should be omitted or empty array, never a string
+  if (cleaned.insiderTips !== undefined) {
+    if (typeof cleaned.insiderTips === 'string') {
+      // If it's a string, remove it - insiderTips should be added by locals as structured data
+      delete cleaned.insiderTips
+    } else if (!Array.isArray(cleaned.insiderTips)) {
+      // If it's not an array, remove it
+      delete cleaned.insiderTips
+    } else {
+      // If it's an array, clean each tip object
+      cleaned.insiderTips = cleaned.insiderTips.map((tip: any) => ({
+        category: String(tip.category || ''),
+        tip: String(tip.tip || ''),
+        priority: String(tip.priority || 'medium'),
+        isVerified: Boolean(tip.isVerified),
+        source: String(tip.source || 'ai_generated')
+      }))
+    }
+  }
+  
   // Clean partnership details
   if (cleaned.partnershipDetails) {
     cleaned.partnershipDetails = {

@@ -334,11 +334,8 @@ class FoursquareAPI {
       }))
     }
 
-    // Extract insider tips (safely handle missing tips)
-    const extractInsiderTips = (tips?: FoursquarePlace['tips']): string => {
-      if (!tips || tips.length === 0) return ''
-      return tips.slice(0, 3).map(tip => tip.text).join(' | ')
-    }
+    // Note: extractInsiderTips function removed - insider tips should be added by locals
+    // as structured data, not imported as simple strings from Foursquare
 
     // Extract best time to visit based on category
     const getBestTimeToVisit = (categories?: FoursquarePlace['categories']) => {
@@ -418,7 +415,6 @@ class FoursquareAPI {
       
       // Visitor Information
       bestTimeToVisit: getBestTimeToVisit(place.categories),
-      insiderTips: extractInsiderTips(place.tips),
       
       // Accessibility (default values that can be edited)
       accessibility: {

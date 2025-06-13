@@ -2,62 +2,161 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-// GET /api/admin/photo-reviews - Get photos pending review
+// GET /api/admin/photo-reviews - Fetch all photo submissions for admin review
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
-    const status = searchParams.get('status') || 'pending'
-    const limit = parseInt(searchParams.get('limit') || '20')
-    const page = parseInt(searchParams.get('page') || '1')
-    const locationId = searchParams.get('locationId')
-
     const payload = await getPayload({ config })
+    
+    // Get user from session/auth
+    const { user } = await payload.auth({ headers: req.headers })
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
 
-    // Check admin permissions (you may need to adjust this based on your auth setup)
-    // This is a basic check - implement proper admin authentication
-    // const currentUser = await payload.auth({ req })
-    // if (!currentUser || currentUser.collection !== 'users' || !currentUser.role?.includes('admin')) {
-    //   return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    // For now, allow any authenticated user to review (you can add role check later)
+    // if (user.role !== 'admin' && user.role !== 'moderator') {
+    //   return NextResponse.json(
+    //     { error: 'Admin or moderator access required' },
+    //     { status: 403 }
+    //   )
     // }
 
-    // Build query
-    const where: any = {
-      status: {
-        equals: status
-      }
+    const url = new URL(req.url)
+    const status = url.searchParams.get('status')
+    const page = parseInt(url.searchParams.get('page') || '1')
+    const limit = parseInt(url.searchParams.get('limit') || '50')
+
+    // Build query conditions
+    const where: any = {}
+    if (status && status !== 'all') {
+      where.status = { equals: status }
     }
 
-    if (locationId) {
-      where.location = {
-        equals: locationId
-      }
-    }
-
-    const photoSubmissions = await payload.find({
+    // Fetch photo submissions with populated relationships
+    const submissions = await payload.find({
       collection: 'locationPhotoSubmissions',
       where,
       limit,
       page,
-      sort: '-submittedAt',
-      depth: 2
-    })
-
-    return NextResponse.json({
-      success: true,
-      submissions: photoSubmissions.docs,
-      pagination: {
-        page: photoSubmissions.page,
-        totalPages: photoSubmissions.totalPages,
-        totalDocs: photoSubmissions.totalDocs,
-        hasNextPage: photoSubmissions.hasNextPage,
-        hasPrevPage: photoSubmissions.hasPrevPage
+      sort: '-submittedAt', // Most recent first
+      populate: {
+        location: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          }
+        },
+        submittedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            username: true,
+          }
+        },
+        photo: {
+          select: {
+            id: true,
+            url: true,
+            alt: true,
+            filename: true,
+            width: true,
+            height: true,
+          }
+        },
+        reviewedBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
       }
     })
 
+    // Transform the data for the frontend
+    const transformedSubmissions = submissions.docs.map(submission => ({
+      id: submission.id,
+      location: {
+        id: submission.location.id,
+        name: submission.location.name,
+        slug: submission.location.slug,
+      },
+      submittedBy: {
+        id: submission.submittedBy.id,
+        name: submission.submittedBy.name,
+        email: submission.submittedBy.email,
+        username: submission.submittedBy.username,
+      },
+      photo: {
+        id: submission.photo.id,
+        url: submission.photo.url,
+        alt: submission.photo.alt,
+        filename: submission.photo.filename,
+        width: submission.photo.width,
+        height: submission.photo.height,
+      },
+      caption: submission.caption,
+      category: submission.category,
+      status: submission.status,
+      qualityScore: submission.qualityScore,
+      autoQualityChecks: submission.autoQualityChecks,
+      submittedAt: submission.submittedAt,
+      reviewedBy: submission.reviewedBy ? {
+        id: submission.reviewedBy.id,
+        name: submission.reviewedBy.name,
+        email: submission.reviewedBy.email,
+      } : null,
+      reviewedAt: submission.reviewedAt,
+      reviewNotes: submission.reviewNotes,
+      rejectionReason: submission.rejectionReason,
+      rejectionFeedback: submission.rejectionFeedback,
+      featured: submission.featured,
+      tags: submission.tags,
+      visibility: submission.visibility,
+    }))
+
+    // Get summary statistics
+    const statusCounts = await Promise.all([
+      payload.count({ collection: 'locationPhotoSubmissions', where: { status: { equals: 'pending' } } }),
+      payload.count({ collection: 'locationPhotoSubmissions', where: { status: { equals: 'reviewing' } } }),
+      payload.count({ collection: 'locationPhotoSubmissions', where: { status: { equals: 'approved' } } }),
+      payload.count({ collection: 'locationPhotoSubmissions', where: { status: { equals: 'rejected' } } }),
+      payload.count({ collection: 'locationPhotoSubmissions', where: { status: { equals: 'needs_improvement' } } }),
+    ])
+
+    const summary = {
+      total: submissions.totalDocs,
+      pending: statusCounts[0].totalDocs,
+      reviewing: statusCounts[1].totalDocs,
+      approved: statusCounts[2].totalDocs,
+      rejected: statusCounts[3].totalDocs,
+      needs_improvement: statusCounts[4].totalDocs,
+    }
+
+    return NextResponse.json({
+      success: true,
+      submissions: transformedSubmissions,
+      pagination: {
+        totalDocs: submissions.totalDocs,
+        totalPages: submissions.totalPages,
+        page: submissions.page,
+        limit: submissions.limit,
+        hasNextPage: submissions.hasNextPage,
+        hasPrevPage: submissions.hasPrevPage,
+      },
+      summary,
+    })
+
   } catch (error) {
-    console.error('Error fetching photo reviews:', error)
+    console.error('Error fetching photo submissions for review:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch photo reviews' },
+      { error: 'Failed to fetch photo submissions' },
       { status: 500 }
     )
   }

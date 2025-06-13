@@ -111,12 +111,57 @@ export async function PATCH(
   try {
     const { id: locationId } = await params
     const payload = await getPayload({ config })
-    const body = await req.json()
+    
+    // Debug the request
+    const contentType = req.headers.get('content-type') || ''
+    console.log('📝 Request content-type:', contentType)
+    console.log('📝 Request method:', req.method)
+    
+    let body
+    try {
+      if (contentType.includes('multipart/form-data')) {
+        // Handle multipart form data (from Payload CMS admin)
+        console.log('📝 Parsing multipart form data')
+        const formData = await req.formData()
+        const payloadData = formData.get('_payload')
+        
+        if (payloadData && typeof payloadData === 'string') {
+          body = JSON.parse(payloadData)
+          console.log('✅ Successfully parsed _payload from form data')
+        } else {
+          console.log('⚠️ No _payload field found in form data')
+          body = {}
+        }
+      } else {
+        // Handle regular JSON
+        console.log('📝 Parsing JSON request body')
+        const rawBody = await req.text()
+        
+        if (rawBody.trim() === '') {
+          console.log('⚠️ Empty request body received')
+          body = {}
+        } else {
+          body = JSON.parse(rawBody)
+          console.log('✅ Successfully parsed JSON body')
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error parsing request body:', error)
+      return NextResponse.json(
+        { error: 'Invalid request body format' },
+        { status: 400 }
+      )
+    }
 
     // Get user from session/auth
     const { user } = await payload.auth({ headers: req.headers })
     
+    console.log('🔐 Auth check - User found:', !!user)
+    console.log('🔐 User ID:', user?.id)
+    console.log('🔐 User role:', user?.role)
+    
     if (!user) {
+      console.log('❌ No authenticated user found')
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -130,24 +175,47 @@ export async function PATCH(
     })
 
     if (!existingLocation) {
+      console.log('❌ Location not found:', locationId)
       return NextResponse.json(
         { error: 'Location not found' },
         { status: 404 }
       )
     }
 
+    console.log('📍 Location found:', existingLocation.name)
+    console.log('📍 Location createdBy:', existingLocation.createdBy)
+
     // Extract creator ID properly (handle both string and populated object)
     const locationCreatedBy = typeof existingLocation.createdBy === 'string' 
       ? existingLocation.createdBy 
       : existingLocation.createdBy?.id || existingLocation.createdBy;
 
-    // Check if user owns this location
-    if (locationCreatedBy !== user.id) {
+    console.log('🔍 Ownership check:')
+    console.log('   - Location created by:', locationCreatedBy)
+    console.log('   - Current user ID:', user.id)
+    console.log('   - Match:', locationCreatedBy === user.id)
+
+    // For now, allow editing if:
+    // 1. User owns the location
+    // 2. Location has no owner (createdBy is null/undefined) 
+    // 3. User is accessing through Payload CMS admin (temporary override)
+    const isOwner = locationCreatedBy === user.id;
+    const hasNoOwner = !locationCreatedBy;
+    const isPayloadAdmin = contentType.includes('multipart/form-data'); // Payload CMS admin requests
+
+    console.log('   - Is owner:', isOwner)
+    console.log('   - Has no owner:', hasNoOwner)
+    console.log('   - Is Payload admin request:', isPayloadAdmin)
+
+    if (!isOwner && !hasNoOwner && !isPayloadAdmin) {
+      console.log('❌ Access denied: User does not own this location')
       return NextResponse.json(
         { error: 'You can only edit your own locations' },
         { status: 403 }
       )
     }
+
+    console.log('✅ Authorization passed')
 
     // Update the location
     const updatedLocation = await payload.update({

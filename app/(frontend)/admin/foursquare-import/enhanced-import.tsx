@@ -244,7 +244,6 @@ export default function EnhancedFoursquareImport() {
       
       priceRange: preview.priceRange as "free" | "budget" | "moderate" | "expensive" | "luxury" || 'moderate',
       bestTimeToVisit: preview.bestTimeToVisit || [{ season: 'Year-round' }],
-      insiderTips: preview.insiderTips || '',
       
       accessibility: {
         wheelchairAccess: false,
@@ -1791,9 +1790,6 @@ export default function EnhancedFoursquareImport() {
                 )}
                 {previewPlace.preview.contactInfo?.website && (
                   <p><strong>Website:</strong> {previewPlace.preview.contactInfo.website}</p>
-                )}
-                {previewPlace.preview.insiderTips && (
-                  <p><strong>Tips:</strong> {previewPlace.preview.insiderTips}</p>
                 )}
               </div>
             </div>
