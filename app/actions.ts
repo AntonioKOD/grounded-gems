@@ -256,17 +256,75 @@ export async function createLocation(data: LocationFormData) {
   const [longitude = 0, latitude = 0] =
     geoJson.features?.[0]?.geometry?.coordinates || [];
 
-  // 3. Create the document in Payload
-  const payload = await getPayload({config: config});
-  const created = await payload.create({
-    collection: 'locations',
-    data: {
-      ...data,
-      coordinates: { latitude, longitude },
-    },
-  });
+  // 3. Clean and validate data before creating
+  const cleanData: any = {
+    ...data,
+    coordinates: { latitude, longitude },
+  };
 
-  return created;
+  // Remove or clean relationship fields that might have invalid ObjectIds
+  if (cleanData.featuredImage === '' || cleanData.featuredImage === null || cleanData.featuredImage === undefined) {
+    delete cleanData.featuredImage;
+  }
+
+  if (cleanData.categories) {
+    // Filter out invalid category IDs
+    cleanData.categories = cleanData.categories.filter((id: string) => 
+      id && typeof id === 'string' && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)
+    );
+    if (cleanData.categories.length === 0) {
+      delete cleanData.categories;
+    }
+  }
+
+  if (cleanData.createdBy === '' || cleanData.createdBy === null || cleanData.createdBy === undefined) {
+    delete cleanData.createdBy;
+  }
+
+  // Validate createdBy ObjectId if present
+  if (cleanData.createdBy && (typeof cleanData.createdBy !== 'string' || cleanData.createdBy.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(cleanData.createdBy))) {
+    delete cleanData.createdBy;
+  }
+
+  // Clean gallery data if present
+  if (cleanData.gallery && Array.isArray(cleanData.gallery)) {
+    cleanData.gallery = cleanData.gallery.filter((item: any) => {
+      // Keep only items with valid image ObjectIds
+      return item.image && 
+             typeof item.image === 'string' && 
+             item.image.length === 24 && 
+             /^[0-9a-fA-F]{24}$/.test(item.image);
+    });
+    if (cleanData.gallery.length === 0) {
+      delete cleanData.gallery;
+    }
+  }
+
+  // 4. Create the document in Payload
+  const payload = await getPayload({config: config});
+  
+  try {
+    console.log('Creating location with cleaned data:', {
+      name: cleanData.name,
+      hasCoordinates: !!cleanData.coordinates,
+      hasFeaturedImage: !!cleanData.featuredImage,
+      categoriesCount: cleanData.categories?.length || 0,
+      hasCreatedBy: !!cleanData.createdBy,
+      galleryCount: cleanData.gallery?.length || 0
+    });
+
+    const created = await payload.create({
+      collection: 'locations',
+      data: cleanData,
+    });
+
+    console.log('Location created successfully:', created.id);
+    return created;
+  } catch (error) {
+    console.error('Failed to create location:', error);
+    console.error('Data that failed:', JSON.stringify(cleanData, null, 2));
+    throw error;
+  }
 }
 
 export async function updateLocation(locationId: string, data: Partial<LocationFormData>) {
