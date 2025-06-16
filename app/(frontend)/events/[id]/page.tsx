@@ -36,10 +36,10 @@ export async function generateMetadata({
     ? event.location 
     : event.location?.name || 'Event Location'
 
-  const seoTitle = `${event.name} - ${eventDate} | Sacavia Events`
+  const seoTitle = `${event.name} - ${eventDate} | Sacavia`
   const description = event.description.length > 160 
     ? event.description.substring(0, 157) + '...'
-    : event.description || `Join ${event.name} on ${eventDate}. Discover authentic community events and experiences on Sacavia.`
+    : event.description || `Join ${event.name} on ${eventDate}. Find local events, meetups, and activities happening near you.`
 
   const getEventImageUrl = (image: any): string => {
     if (typeof image === "string") {
@@ -57,12 +57,12 @@ export async function generateMetadata({
     description,
     keywords: [
       event.name,
-      'events',
-      'community',
+      'events near me',
+      'meetups',
       'local events',
       locationName,
-      event.category || 'community event',
-      'authentic experiences',
+      event.category || 'local event',
+      'activities',
       'join event',
       eventDate
     ].filter(Boolean).join(', '),

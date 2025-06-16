@@ -127,7 +127,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
 
     const locationName = location.name || 'Unnamed Location'
-    const description = location.shortDescription || location.description || `Discover ${locationName} - a unique destination worth visiting.`
+    const description = location.shortDescription || location.description || `Visit ${locationName} - find reviews, photos, hours, and contact info for this local business and attraction.`
     
     // Get image URL using the robust utility function
     const imageUrl = getPrimaryImageUrl(location) || '/og-default.jpg'
@@ -140,12 +140,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description,
       keywords: [
         locationName,
-        'travel',
-        'destinations',
-        'places to visit',
-        'local guide',
+        'restaurant',
+        'business hours',
         'reviews',
-        'recommendations'
+        'phone number',
+        'address',
+        'local business',
+        'places near me'
       ],
       authors: [{ name: 'Sacavia' }],
       creator: 'Sacavia',
@@ -191,8 +192,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   } catch (error) {
     console.error('Error generating metadata:', error)
     return {
-      title: 'Location | Sacavia',
-      description: 'Discover amazing places and hidden gems on Sacavia.'
+      title: 'Business | Sacavia',
+      description: 'Find local businesses, restaurants, and places to visit with reviews and contact information.'
     }
   }
 }

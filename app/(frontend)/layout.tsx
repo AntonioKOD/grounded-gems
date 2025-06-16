@@ -15,9 +15,9 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Sacavia - Guided Discovery & Authentic Journeys",
-  description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
-  keywords: "local discovery, authentic experiences, community events, guided exploration, travel, places, native wisdom",
+  title: "Sacavia - Find Amazing Places to Visit Near You",
+  description: "Discover the best local places, restaurants, events and hidden gems near you. Join our community of explorers sharing their favorite spots.",
+  keywords: "places to visit, local restaurants, things to do, events near me, travel guide, local attractions, hidden gems, places to eat",
   authors: [{ name: "Sacavia Team" }],
   creator: "Sacavia",
   publisher: "Sacavia",
@@ -26,8 +26,8 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   openGraph: {
-    title: "Sacavia - Guided Discovery & Authentic Journeys",
-    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    title: "Sacavia - Find Amazing Places to Visit Near You",
+    description: "Discover the best local places, restaurants, events and hidden gems near you. Join our community of explorers sharing their favorite spots.",
     url: 'https://sacavia.com',
     siteName: 'Sacavia',
     images: [
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Sacavia - Your Guide to Authentic Discovery',
+        alt: 'Sacavia - Find Places to Visit Near You',
       },
     ],
     locale: 'en_US',
@@ -43,8 +43,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: "Sacavia - Guided Discovery & Authentic Journeys",
-    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    title: "Sacavia - Find Amazing Places to Visit Near You",
+    description: "Discover the best local places, restaurants, events and hidden gems near you. Join our community of explorers sharing their favorite spots.",
     images: ['/og-image.png'],
     creator: '@sacaviaapp',
   },

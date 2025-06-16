@@ -29,12 +29,12 @@ export async function generateMetadata({ params }: PostPageProps) {
     const authorName = post.author?.name || 'Sacavia Community Member'
     const postTitle = post.title || `Post by ${authorName}`
     const seoTitle = post.title 
-      ? `${post.title} | Sacavia Community`
-      : `${authorName}'s Post | Sacavia Community`
+      ? `${post.title} | Sacavia`
+      : `${authorName}'s Review | Sacavia`
 
     const description = post.content && post.content.length > 0
       ? (post.content.length > 160 ? post.content.substring(0, 157) + '...' : post.content)
-      : `Discover ${authorName}'s latest post on Sacavia. Join our community for authentic local experiences and meaningful connections.`
+      : `Check out ${authorName}'s review and photos on Sacavia. See what locals are saying about the best places to visit.`
 
     // Handle post images for social media cards
     const getPostImageUrl = (post: any): string => {
@@ -67,13 +67,13 @@ export async function generateMetadata({ params }: PostPageProps) {
     const keywords = [
       postTitle,
       authorName,
-      'community',
-      'social',
-      'authentic experiences',
-      'local discovery',
+      'review',
+      'photos',
+      'local recommendations',
+      'places to visit',
       locationName,
-      'travel stories',
-      'community posts'
+      'travel tips',
+      'user reviews'
     ].filter(Boolean).join(', ')
 
     return {
@@ -136,8 +136,8 @@ export async function generateMetadata({ params }: PostPageProps) {
   } catch (error) {
     console.error("Error generating metadata:", error)
     return {
-      title: "Post | Sacavia - Guided Discovery & Authentic Journeys",
-      description: "Discover authentic stories and experiences shared by the Sacavia community.",
+      title: "Post | Sacavia - Find Places to Visit",
+      description: "Read reviews and see photos of amazing places shared by our community.",
       robots: 'noindex'
     }
   }

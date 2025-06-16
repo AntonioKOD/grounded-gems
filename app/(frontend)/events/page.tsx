@@ -8,8 +8,8 @@ import { getSavedGemJourneys } from '@/app/(frontend)/events/actions'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Community Gatherings | Sacavia",
-  description: "Discover and join authentic community gatherings and events. Connect with fellow explorers and create meaningful memories together.",
+  title: "Local Events Near You | Sacavia",
+  description: "Find fun events, meetups, and activities happening near you. Join local gatherings, workshops, and social events in your area.",
 }
 
 export default async function EventsPage({ 

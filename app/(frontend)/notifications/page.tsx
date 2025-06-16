@@ -6,8 +6,8 @@ import { Metadata } from "next"
 export const dynamic = 'force-dynamic' 
 
 export const metadata: Metadata = {
-  title: "Journey Updates | Sacavia",
-  description: "Stay connected with your community and never miss important updates on your exploration journey.",
+  title: "Notifications | Sacavia",
+  description: "Stay up to date with new events, messages, and activity from your friends and local community.",
 }
 
 export default function NotificationsRoute() {

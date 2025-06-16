@@ -14,6 +14,16 @@ const nextConfig: NextConfig = {
   // Enable output standalone for better performance
   output: 'standalone',
   
+  // Server external packages (moved from experimental)
+  serverExternalPackages: ['payload'],
+  
+  // Turbopack configuration (moved from experimental)
+  turbopack: {
+    rules: {
+      '*.svg': ['@svgr/webpack'],
+    },
+  },
+  
   images: {
     // Use custom loader for better mobile and Payload CMS compatibility
     loader: 'custom',
@@ -86,14 +96,8 @@ const nextConfig: NextConfig = {
       'react-redux',
       'date-fns',
     ],
-    // Enable turbo for faster development
-    turbo: {
-      rules: {
-        '*.svg': ['@svgr/webpack'],
-      },
-    },
     // Enable server-side rendering improvements
-    serverComponentsExternalPackages: ['payload'],
+    // moved serverComponentsExternalPackages to top level
   },
   
   // Disable static generation to fix build issues
@@ -256,7 +260,6 @@ const nextConfig: NextConfig = {
     return config;
   },
   
-  serverExternalPackages: ['payload'],
   env: {
     // Ensure NEXTAUTH_URL is available in production
     NEXT_PUBLIC_SERVER_URL:

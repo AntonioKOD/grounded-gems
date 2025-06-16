@@ -17,11 +17,11 @@ export const dynamic = "force-dynamic"
 export const revalidate = 60 // Revalidate at most once per minute
 
 export const metadata: Metadata = {
-  title: "Sacavia | Guided Discovery & Authentic Journeys",
-  description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories. Your journey begins here.",
+  title: "Sacavia | Find the Best Places to Visit and Things to Do",
+  description: "Discover amazing restaurants, attractions, events and hidden gems near you. See what locals recommend and find your next favorite spot.",
   openGraph: {
-    title: "Sacavia | Guided Discovery & Authentic Journeys",
-    description: "Discover authentic experiences and meaningful places with your community. Guided by wisdom, connected by stories.",
+    title: "Sacavia | Find the Best Places to Visit and Things to Do",
+    description: "Discover amazing restaurants, attractions, events and hidden gems near you. See what locals recommend and find your next favorite spot.",
     images: ['/og-image.png'],
   },
 }

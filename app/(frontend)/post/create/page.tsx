@@ -7,8 +7,8 @@ import { Loader2 } from "lucide-react"
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Share Your Story | Sacavia",
-  description: "Share your discoveries and experiences with the community. Help others find their path to authentic places.",
+  title: "Share a Post | Sacavia",
+  description: "Share photos and reviews of places you've visited. Help others discover great restaurants, attractions, and hidden gems.",
 }
 
 export default function CreatePostPage() {

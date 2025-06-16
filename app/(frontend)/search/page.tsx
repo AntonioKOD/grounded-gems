@@ -7,9 +7,9 @@ import { Loader2 } from "lucide-react"
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: "Search | Sacavia",
-  description: "Search for people, locations, and discover amazing places near you",
-  keywords: ["search", "locations", "users", "places", "discover", "find people"],
+  title: "Search Places and People | Sacavia",
+  description: "Find restaurants, attractions, events and people near you. Search by location, category, or name to discover your next favorite spot.",
+  keywords: ["search restaurants", "find places", "local attractions", "search events", "find people", "places near me"],
 }
 
 interface SearchPageProps {
