@@ -32,6 +32,7 @@ import {
 import { ContactActions } from './contact-actions'
 import { UserPhotosSection } from '@/components/location/user-photos-section'
 import StructuredInsiderTips from '@/components/location/structured-insider-tips'
+import { LocationStructuredData, BreadcrumbStructuredData } from '@/components/seo/enhanced-structured-data'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,14 +141,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description,
       keywords: [
         locationName,
+        ...(location.categories?.map(cat => cat.name) || []),
+        location.address?.city || '',
+        location.address?.state || '',
         'restaurant',
         'business hours',
         'reviews',
         'phone number',
         'address',
         'local business',
-        'places near me'
-      ],
+        'places near me',
+        'local recommendations',
+        'best places to visit',
+        'things to do'
+      ].filter(Boolean).join(', '),
       authors: [{ name: 'Sacavia' }],
       creator: 'Sacavia',
       publisher: 'Sacavia',
@@ -418,8 +425,36 @@ export default async function LocationPage({ params }: PageProps) {
 
     const locationUrl = `https://sacavia.com/locations/${location.slug || location.id}`
 
+    // Prepare breadcrumb data for structured data
+    const breadcrumbItems = [
+      { name: 'Home', url: 'https://www.sacavia.com' },
+      { name: 'Locations', url: 'https://www.sacavia.com/locations' },
+      { name: location.name, url: `https://www.sacavia.com/locations/${location.slug || location.id}` }
+    ]
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        {/* Add structured data for SEO */}
+        <LocationStructuredData location={{
+          id: location.id,
+          name: location.name,
+          description: location.description,
+          address: location.address,
+          categories: categories,
+          featuredImage: location.featuredImage,
+          gallery: location.gallery,
+          latitude: location.coordinates?.latitude,
+          longitude: location.coordinates?.longitude,
+          rating: location.averageRating,
+          reviewCount: location.reviewCount,
+          priceRange: location.priceRange,
+          businessHours: location.businessHours,
+          contactInfo: location.contactInfo,
+          amenities: location.amenities,
+          slug: location.slug
+        }} />
+        <BreadcrumbStructuredData items={breadcrumbItems} />
+        
         {/* Website Navigation Breadcrumbs */}
         <div className="bg-white border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">

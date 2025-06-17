@@ -7,6 +7,7 @@ import PostDetail from "@/components/post/post-detail"
 import CommentSection from "@/components/post/comment-section"
 import PostDetailSkeleton from "@/components/post/post-detail-skeleton"
 import { getPostById } from "@/app/actions"
+import { PostStructuredData } from "@/components/seo/enhanced-structured-data"
 
 interface PostPageProps {
   params: Promise<{ id: string }>
@@ -73,7 +74,13 @@ export async function generateMetadata({ params }: PostPageProps) {
       'places to visit',
       locationName,
       'travel tips',
-      'user reviews'
+      'user reviews',
+      'community content',
+      'authentic experiences',
+      'local insights',
+      'travel guide',
+      'food reviews',
+      'restaurant recommendations'
     ].filter(Boolean).join(', ')
 
     return {
@@ -161,6 +168,19 @@ export default async function PostPage({ params }: PostPageProps) {
 
     return (
       <div className="container mx-auto px-4 py-6 max-w-4xl">
+        {/* Add structured data for SEO */}
+        <PostStructuredData post={{
+          id: post.id,
+          title: post.title,
+          content: post.content,
+          author: post.author,
+          createdAt: post.createdAt,
+          updatedAt: post.updatedAt,
+          media: post.media,
+          location: post.location,
+          slug: post.slug
+        }} />
+        
         {/* Back button */}
         <div className="mb-6">
           <Button variant="ghost" size="sm" asChild>

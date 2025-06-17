@@ -15,16 +15,20 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Sacavia - Find Amazing Places to Visit Near You",
+  title: {
+    default: "Sacavia - Find Amazing Places to Visit Near You",
+    template: "%s | Sacavia"
+  },
   description: "Discover the best local places, restaurants, events and hidden gems near you. Join our community of explorers sharing their favorite spots.",
-  keywords: "places to visit, local restaurants, things to do, events near me, travel guide, local attractions, hidden gems, places to eat",
+  keywords: "places to visit, local restaurants, things to do, events near me, travel guide, local attractions, hidden gems, places to eat, local business directory, community recommendations, authentic experiences",
   authors: [{ name: "Sacavia Team" }],
   creator: "Sacavia",
   publisher: "Sacavia",
-  metadataBase: new URL('https://sacavia.com'),
+  metadataBase: new URL('https://www.sacavia.com'),
   alternates: {
     canonical: '/',
   },
+  category: 'travel',
   openGraph: {
     title: "Sacavia - Find Amazing Places to Visit Near You",
     description: "Discover the best local places, restaurants, events and hidden gems near you. Join our community of explorers sharing their favorite spots.",

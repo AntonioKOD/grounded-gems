@@ -2,6 +2,7 @@ import { Suspense } from "react"
 import type { Metadata } from "next"
 import EventDetailContainer from "@/components/event/event-detail-container"
 import { getEventById } from "@/app/(frontend)/events/actions"
+import { EventStructuredData } from "@/components/seo/enhanced-structured-data"
 
 export const dynamic = 'force-dynamic'
 // Params now comes in as a Promise<{ id: string }>
@@ -172,6 +173,22 @@ export default async function EventDetailPage({
 
   return (
     <div className="container mx-auto px-4 py-6 max-w-7xl">
+      {/* Add structured data for SEO */}
+      {event && (
+        <EventStructuredData event={{
+          id: event.id,
+          name: event.name,
+          description: event.description,
+          startDate: event.startDate,
+          endDate: event.endDate,
+          location: event.location,
+          image: event.image,
+          organizer: event.organizer,
+          eventType: event.eventType,
+          slug: event.slug
+        }} />
+      )}
+      
       <Suspense fallback={<EventDetailSkeleton />}>
         <EventDetailContainer eventId={id} initialEvent={event} />
       </Suspense>
