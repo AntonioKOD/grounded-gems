@@ -43,9 +43,10 @@ export default function VerifyEmailComponent() {
           setMessage('Your email has been verified successfully!')
           setEmail(data.user?.email || '')
           
-          // Redirect to login after 3 seconds
+          // Use a more controlled redirect to prevent loops
           setTimeout(() => {
-            router.push('/login?verified=true')
+            // Use replace instead of push to prevent back button issues
+            window.location.replace('/login?verified=true')
           }, 3000)
         } else {
           if (data.error?.includes('already verified')) {

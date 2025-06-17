@@ -33,7 +33,7 @@ export default function VerifyContent() {
           setStatus("success")
           // let them see the success message before redirecting
           setTimeout(() => {
-            router.push("/login")
+            window.location.replace("/login?verified=true")
           }, 3000)
         } else {
           const data = await res.json().catch(() => ({}))
@@ -81,7 +81,7 @@ export default function VerifyContent() {
               <p className="text-center font-medium">Redirecting you to login...</p>
             </CardContent>
             <CardFooter className="flex justify-center pb-6">
-              <Button onClick={() => router.push("/login")} className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white">
+              <Button onClick={() => window.location.replace("/login?verified=true")} className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 text-white">
                 Go to Login <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </CardFooter>
@@ -113,7 +113,7 @@ export default function VerifyContent() {
               >
                 <RefreshCw className="mr-2 h-4 w-4" /> Request New Link
               </Button>
-              <Button variant="outline" onClick={() => router.push("/login")} className="w-full sm:w-auto">
+              <Button variant="outline" onClick={() => window.location.replace("/login")} className="w-full sm:w-auto">
                 Return to Login
               </Button>
             </CardFooter>

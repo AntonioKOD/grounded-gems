@@ -5,7 +5,7 @@
 import { useState, useEffect, memo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Eye, EyeOff, Loader2, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +36,7 @@ const LoginForm = memo(function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/feed"
+  const isVerified = searchParams.get("verified") === "true"
   const { isAuthenticated, isLoading } = useAuth()
   const { preloadUser } = useAuth()
 
@@ -48,6 +49,18 @@ const LoginForm = memo(function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [hasRedirected, setHasRedirected] = useState(false)
+  const [verificationShown, setVerificationShown] = useState(false)
+
+  // Show verification success message
+  useEffect(() => {
+    if (isVerified && !verificationShown) {
+      setVerificationShown(true)
+      // Clear the verified parameter from URL to prevent refresh issues
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('verified')
+      window.history.replaceState({}, '', newUrl.toString())
+    }
+  }, [isVerified, verificationShown])
 
   // Immediate redirect for authenticated users (no delay)
   useEffect(() => {
@@ -186,6 +199,15 @@ const LoginForm = memo(function LoginForm() {
           <CardDescription>Log in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent>
+          {isVerified && verificationShown && (
+            <Alert className="mb-6 border-green-200 bg-green-50">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-800">Email Verified!</AlertTitle>
+              <AlertDescription className="text-green-700">
+                Your email has been successfully verified. You can now log in to your account.
+              </AlertDescription>
+            </Alert>
+          )}
           {error && (
             <Alert variant="destructive" className="mb-6">
               <AlertCircle className="h-4 w-4" />

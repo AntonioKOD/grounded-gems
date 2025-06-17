@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { UsernameInput } from "@/components/ui/username-input"
 import { cn } from "@/lib/utils"
 
 type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
@@ -24,6 +25,7 @@ interface UserData {
   password: string
   name: string
   username: string
+  usernameValid?: boolean
   location?: {
     city?: string
     coordinates?: {
@@ -166,12 +168,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     return username
   }
 
-  const cleanUsername = (username: string) => {
-    return username
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, '') // Only allow lowercase letters, numbers, hyphens, underscores
-      .substring(0, 30) // Limit length
-  }
+  // Username cleaning is now handled by the UsernameInput component
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
@@ -202,7 +199,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username
+      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username && userData.usernameValid
       case 2: return userData.interests.length > 0
       case 3: return userData.primaryUseCase && userData.travelRadius && userData.budgetPreference
       default: return false
@@ -442,9 +439,12 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                     placeholder="What should we call you?"
                     value={userData.name}
                     onChange={(e) => {
-                      updateUserData("name", e.target.value)
-                      if (!userData.username || userData.username.startsWith('user')) {
-                        updateUserData("username", generateUsername(e.target.value))
+                      const newName = e.target.value
+                      updateUserData("name", newName)
+                      // Auto-generate username suggestion if username is empty
+                      if (!userData.username && newName.length > 2) {
+                        const suggestion = generateUsername(newName)
+                        updateUserData("username", suggestion)
                       }
                     }}
                     disabled={status === "loading"}
@@ -455,20 +455,21 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm">@</span>
-                  <Input
-                    id="username"
-                    placeholder="your_username"
-                    value={userData.username}
-                    onChange={(e) => updateUserData("username", cleanUsername(e.target.value))}
-                    disabled={status === "loading"}
-                    required
-                    className="pl-8"
-                  />
-                </div>
-                <p className="text-xs text-gray-500">Letters, numbers, dashes and underscores only</p>
+                <UsernameInput
+                  value={userData.username}
+                  onChange={(value) => updateUserData("username", value)}
+                  onValidationChange={(isValid) => {
+                    // Store validation state for form submission
+                    setUserData(prev => ({ ...prev, usernameValid: isValid }))
+                  }}
+                  label="Username"
+                  placeholder="your_username"
+                  required
+                  disabled={status === "loading"}
+                  autoGenerate={false} // Let user choose their own
+                  userFullName={userData.name}
+                  showSuggestions={true}
+                />
               </div>
 
               <div className="space-y-2">
