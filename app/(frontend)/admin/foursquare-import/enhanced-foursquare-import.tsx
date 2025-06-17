@@ -599,7 +599,7 @@ export default function EnhancedFoursquareImport() {
         tip: line.trim(),
         priority: 'medium',
         isVerified: false,
-        source: 'user_edited'
+        source: 'user_submitted'
       })).filter(tip => tip.tip && tip.tip.trim())
     }
     
@@ -609,7 +609,7 @@ export default function EnhancedFoursquareImport() {
       tip: text.trim(),
       priority: 'medium',
       isVerified: false,
-      source: 'user_edited'
+      source: 'user_submitted'
     }]
   }
 
@@ -1989,7 +1989,7 @@ export default function EnhancedFoursquareImport() {
                                     tip: '',
                                     priority: 'medium',
                                     isVerified: false,
-                                    source: 'user_edited'
+                                    source: 'user_submitted'
                                   }
                                   updateCurrentLocationData({ insiderTips: [...currentTips, newTip] })
                                 }}
