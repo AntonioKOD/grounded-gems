@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPayload } from "payload"
 import config from "@/payload.config"
+import { getFoursquareAPI } from "@/lib/foursquare"
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const query = searchParams.get("q")
-    const type = searchParams.get("type") // 'users', 'locations', 'categories', or 'all'
+    const type = searchParams.get("type") // 'users', 'locations', 'categories', 'places', or 'all'
     const limit = parseInt(searchParams.get("limit") || "20")
     const sortBy = searchParams.get("sortBy") || "relevance" // 'relevance', 'name', 'recent'
+    const includeDiscovery = searchParams.get("discovery") === "true" || type === "places" || type === "all"
+    const latitude = searchParams.get("lat")
+    const longitude = searchParams.get("lng")
+    const location = searchParams.get("location") // For text-based location search
 
     if (!query || query.trim().length < 1) {
       return NextResponse.json({ 
         users: [],
         locations: [],
+        categories: [],
+        places: [],
         total: 0,
         message: "Enter at least 1 character to search"
       })
@@ -26,6 +33,7 @@ export async function GET(request: NextRequest) {
       users: [],
       locations: [],
       categories: [],
+      places: [], // New: Foursquare place discoveries
       total: 0
     }
 
@@ -80,7 +88,7 @@ export async function GET(request: NextRequest) {
               },
             ],
           },
-          limit: type === "users" ? limit : Math.ceil(limit / 2),
+          limit: type === "users" ? limit : Math.ceil(limit / 3),
           select: {
             id: true,
             name: true,
@@ -201,7 +209,7 @@ export async function GET(request: NextRequest) {
               },
             ],
           },
-          limit: type === "locations" ? limit : Math.ceil(limit / 2),
+          limit: type === "locations" ? limit : Math.ceil(limit / 3),
           depth: 2,
           sort: sortBy === "name" ? "name" : sortBy === "recent" ? "-createdAt" : "-averageRating",
           overrideAccess: true,
@@ -296,7 +304,7 @@ export async function GET(request: NextRequest) {
               },
             ],
           },
-          limit: type === "categories" ? limit : Math.ceil(limit / 3),
+          limit: type === "categories" ? limit : Math.ceil(limit / 4),
           depth: 1,
           sort: sortBy === "name" ? "name" : sortBy === "recent" ? "-createdAt" : "order",
           overrideAccess: true,
@@ -338,16 +346,89 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    results.total = results.users.length + results.locations.length + results.categories.length
+    // Search Foursquare places if requested and API is available
+    if (includeDiscovery && (type === "places" || type === "all" || !type)) {
+      try {
+        const foursquareAPI = getFoursquareAPI()
+        
+        if (process.env.FOURSQUARE_API_KEY && foursquareAPI) {
+          const searchParams: any = {
+            query: trimmedQuery,
+            limit: type === "places" ? limit : Math.min(10, Math.ceil(limit / 4)),
+            sort: 'RELEVANCE'
+          }
+
+          // Add location parameters if provided
+          if (latitude && longitude) {
+            searchParams.ll = `${latitude},${longitude}`
+            searchParams.radius = 10000 // 10km radius
+          } else if (location) {
+            searchParams.near = location
+          } else {
+            // Default to general search without specific location
+            searchParams.near = "United States"
+          }
+
+          const foursquareResult = await foursquareAPI.searchPlaces(searchParams)
+          
+          // Map Foursquare results to our format
+          const mappedPlaces = foursquareResult.results.map((place: any) => ({
+            id: place.fsq_id,
+            foursquareId: place.fsq_id,
+            name: place.name,
+            description: place.description || `${place.categories?.[0]?.name || 'Place'} in ${place.location?.locality || 'Unknown location'}`,
+            address: {
+              street: place.location?.address,
+              city: place.location?.locality,
+              state: place.location?.region,
+              country: place.location?.country,
+              postalCode: place.location?.postcode,
+              formattedAddress: place.location?.formatted_address
+            },
+            coordinates: place.geocodes?.main ? {
+              latitude: place.geocodes.main.latitude,
+              longitude: place.geocodes.main.longitude
+            } : null,
+            categories: place.categories?.map((cat: any) => ({
+              name: cat.name,
+              id: cat.id,
+              color: '#4ECDC4' // Default color for Foursquare categories
+            })) || [],
+            averageRating: place.rating || null,
+            reviewCount: place.stats?.total_ratings || 0,
+            isVerified: place.verified || false,
+            photos: place.photos?.length || 0,
+            website: place.website,
+            phone: place.tel,
+            source: 'foursquare',
+            distance: place.distance || null,
+            relevanceScore: calculateFoursquareRelevance(place, trimmedQuery)
+          }))
+
+          // Sort by relevance if requested
+          if (sortBy === "relevance") {
+            mappedPlaces.sort((a, b) => b.relevanceScore - a.relevanceScore)
+          }
+
+          results.places = mappedPlaces
+        }
+      } catch (error) {
+        console.error("Error searching Foursquare places:", error)
+        // Don't fail the entire search if Foursquare is unavailable
+      }
+    }
+
+    results.total = results.users.length + results.locations.length + results.categories.length + results.places.length
 
     // Log search analytics
-    console.log(`Search: "${trimmedQuery}" (${type || 'all'}) -> ${results.total} results (${results.users.length} users, ${results.locations.length} locations, ${results.categories.length} categories)`)
+    console.log(`Search: "${trimmedQuery}" (${type || 'all'}) -> ${results.total} results (${results.users.length} users, ${results.locations.length} locations, ${results.categories.length} categories, ${results.places.length} places)`)
 
     return NextResponse.json({
       ...results,
       query: trimmedQuery,
       searchType: type || 'all',
-      hasResults: results.total > 0
+      hasResults: results.total > 0,
+      hasPlaceDiscovery: results.places.length > 0
     })
   } catch (error) {
     console.error("Search API error:", error)
@@ -357,9 +438,47 @@ export async function GET(request: NextRequest) {
         users: [],
         locations: [],
         categories: [],
+        places: [],
         total: 0
       },
       { status: 500 }
     )
   }
+}
+
+// Helper function to calculate relevance score for Foursquare places
+function calculateFoursquareRelevance(place: any, query: string): number {
+  let score = 0
+  const lowerQuery = query.toLowerCase()
+  const placeName = place.name?.toLowerCase() || ''
+  const placeDesc = place.description?.toLowerCase() || ''
+  const categoryNames = place.categories?.map((cat: any) => cat.name.toLowerCase()).join(' ') || ''
+
+  // Exact name match gets highest score
+  if (placeName === lowerQuery) score += 100
+  
+  // Name starts with query
+  if (placeName.startsWith(lowerQuery)) score += 80
+  
+  // Name contains query
+  if (placeName.includes(lowerQuery)) score += 60
+  
+  // Category matches
+  if (categoryNames.includes(lowerQuery)) score += 50
+  
+  // Description contains query
+  if (placeDesc.includes(lowerQuery)) score += 30
+  
+  // Boost for highly rated places
+  if (place.rating >= 4.5) score += 15
+  else if (place.rating >= 4.0) score += 10
+  else if (place.rating >= 3.5) score += 5
+  
+  // Boost for verified places
+  if (place.verified) score += 10
+  
+  // Boost for places with photos
+  if (place.photos && place.photos.length > 0) score += 5
+
+  return score
 } 

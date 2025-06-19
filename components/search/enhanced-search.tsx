@@ -66,14 +66,49 @@ interface SearchCategory {
   relevanceScore?: number
 }
 
+interface SearchPlace {
+  id: string
+  foursquareId: string
+  name: string
+  description: string
+  address?: {
+    street?: string
+    city?: string
+    state?: string
+    country?: string
+    postalCode?: string
+    formattedAddress?: string
+  }
+  coordinates?: {
+    latitude: number
+    longitude: number
+  }
+  categories?: Array<{
+    name: string
+    id?: string
+    color?: string
+  }>
+  averageRating?: number
+  reviewCount?: number
+  isVerified?: boolean
+  photos?: number
+  website?: string
+  phone?: string
+  source: 'foursquare'
+  distance?: number
+  relevanceScore?: number
+}
+
 interface SearchResults {
   users: SearchUser[]
   locations: SearchLocation[]
   categories: SearchCategory[]
+  places: SearchPlace[]
   total: number
   query?: string
   searchType?: string
   hasResults?: boolean
+  hasPlaceDiscovery?: boolean
 }
 
 interface EnhancedSearchProps {
@@ -117,10 +152,17 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   const [query, setQuery] = useState(initialQuery)
   const [activeTab, setActiveTab] = useState(initialType)
   const [sortBy, setSortBy] = useState("relevance")
-  const [results, setResults] = useState<SearchResults>({ users: [], locations: [], categories: [], total: 0 })
+  const [results, setResults] = useState<SearchResults>({ 
+    users: [], 
+    locations: [], 
+    categories: [], 
+    places: [], 
+    total: 0 
+  })
   const [loading, setLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(!!initialQuery)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -155,17 +197,47 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
     })
   }, [])
 
+  // Get user location for better place discovery
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          })
+        },
+        (error) => {
+          console.log('Location access denied or unavailable:', error)
+        }
+      )
+    }
+  }, [])
+
   // Search function
   const performSearch = useCallback(async (searchQuery: string, searchType: string = "all", sort: string = "relevance") => {
     if (!searchQuery.trim()) {
-      setResults({ users: [], locations: [], categories: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
       setHasSearched(false)
       return
     }
 
     setLoading(true)
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&type=${searchType}&sortBy=${sort}&limit=20`)
+      const params = new URLSearchParams({
+        q: searchQuery,
+        type: searchType,
+        sortBy: sort,
+        limit: '20'
+      })
+
+      // Add location parameters for better place discovery
+      if (userLocation && (searchType === 'places' || searchType === 'all')) {
+        params.append('lat', userLocation.lat.toString())
+        params.append('lng', userLocation.lng.toString())
+      }
+
+      const response = await fetch(`/api/search?${params}`)
       
       if (response.ok) {
         const data = await response.json()
@@ -174,22 +246,22 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
         saveRecentSearch(searchQuery)
       } else {
         console.error("Search failed:", response.statusText)
-        setResults({ users: [], locations: [], categories: [], total: 0 })
+        setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
       }
     } catch (error) {
       console.error("Search error:", error)
-      setResults({ users: [], locations: [], categories: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
     } finally {
       setLoading(false)
     }
-  }, [saveRecentSearch])
+  }, [saveRecentSearch, userLocation])
 
   // Real-time search effect
   useEffect(() => {
     if (debouncedQuery.trim() && debouncedQuery.length >= 1) {
       performSearch(debouncedQuery, activeTab, sortBy)
     } else {
-      setResults({ users: [], locations: [], categories: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
       setHasSearched(false)
     }
   }, [debouncedQuery, activeTab, sortBy, performSearch])
@@ -212,7 +284,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   // Clear search
   const clearSearch = () => {
     setQuery("")
-    setResults({ users: [], locations: [], categories: [], total: 0 })
+    setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
     setHasSearched(false)
     router.push('/search')
   }
@@ -223,17 +295,34 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
     router.push(`/map?category=${encodeURIComponent(category.slug || category.name)}`)
   }
 
-  // Filter results for current tab
-  const filteredResults = useMemo(() => {
-    if (activeTab === "users") {
-      return { ...results, locations: [], categories: [], total: results.users.length }
-    } else if (activeTab === "locations") {
-      return { ...results, users: [], categories: [], total: results.locations.length }
-    } else if (activeTab === "categories") {
-      return { ...results, users: [], locations: [], total: results.categories.length }
+  const handlePlaceImport = async (place: SearchPlace) => {
+    try {
+      const response = await fetch('/api/foursquare/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'import',
+          data: {
+            foursquareIds: [place.foursquareId],
+            createdBy: 'search-import' // You might want to get the current user ID here
+          }
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(`Successfully imported ${place.name}!`)
+        // Optionally refresh the search results or navigate to the new location
+      } else {
+        toast.error(`Failed to import ${place.name}`)
+      }
+    } catch (error) {
+      console.error('Import error:', error)
+      toast.error('Failed to import place')
     }
-    return results
-  }, [results, activeTab])
+  }
 
   // Initial search if query provided
   useEffect(() => {
@@ -317,7 +406,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <p className="text-sm text-gray-600">
-              {loading ? "Searching..." : `${filteredResults.total} result${filteredResults.total === 1 ? '' : 's'} found`}
+              {loading ? "Searching..." : `${results.total} result${results.total === 1 ? '' : 's'} found`}
               {query && <span className="font-medium"> for "{query}"</span>}
             </p>
           </div>
@@ -341,47 +430,52 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
       {/* Results */}
       {hasSearched && (
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="all" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-xl">
+            <TabsTrigger value="all" className="flex items-center gap-2 data-[state=active]:bg-white">
               <Search className="h-4 w-4" />
               All ({results.total})
             </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2">
+            <TabsTrigger value="users" className="flex items-center gap-2 data-[state=active]:bg-white">
               <Users className="h-4 w-4" />
               People ({results.users.length})
             </TabsTrigger>
-            <TabsTrigger value="locations" className="flex items-center gap-2">
+            <TabsTrigger value="locations" className="flex items-center gap-2 data-[state=active]:bg-white">
               <MapPin className="h-4 w-4" />
               Places ({results.locations.length})
             </TabsTrigger>
-            <TabsTrigger value="categories" className="flex items-center gap-2">
+            <TabsTrigger value="places" className="flex items-center gap-2 data-[state=active]:bg-white">
+              <Search className="h-4 w-4" />
+              Discover ({results.places.length})
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="flex items-center gap-2 data-[state=active]:bg-white">
               <Filter className="h-4 w-4" />
               Categories ({results.categories.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6">
-            {filteredResults.total === 0 ? (
+            {results.total === 0 ? (
               <NoResults query={query} />
             ) : (
               <div className="space-y-8">
-                {/* Categories section */}
-                {results.categories.length > 0 && (
-                  <div>
+                {/* Places Discovery */}
+                {results.places.length > 0 && (
+                  <div className="space-y-4">
                     <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Filter className="h-5 w-5 text-[#FFD93D]" />
-                      Categories ({results.categories.length})
+                      <Search className="h-5 w-5 text-[#4ECDC4]" />
+                      Discover New Places ({results.places.length})
                     </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                      {results.categories.slice(0, 8).map(category => (
-                        <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {results.places.slice(0, 6).map(place => (
+                        <PlaceCard key={place.id} place={place} onImport={handlePlaceImport} />
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Users column */}
+                {/* Existing Database Results */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Users */}
                   <div className="space-y-4">
                     {results.users.length > 0 && (
                       <>
@@ -389,14 +483,14 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
                           <Users className="h-5 w-5 text-[#4ECDC4]" />
                           People ({results.users.length})
                         </h2>
-                        {results.users.slice(0, 5).map(user => (
+                        {results.users.slice(0, 3).map(user => (
                           <UserCard key={user.id} user={user} />
                         ))}
                       </>
                     )}
                   </div>
-                  
-                  {/* Locations column */}
+
+                  {/* Locations */}
                   <div className="space-y-4">
                     {results.locations.length > 0 && (
                       <>
@@ -404,13 +498,28 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
                           <MapPin className="h-5 w-5 text-[#FF6B6B]" />
                           Places ({results.locations.length})
                         </h2>
-                        {results.locations.slice(0, 5).map(location => (
+                        {results.locations.slice(0, 3).map(location => (
                           <LocationCard key={location.id} location={location} />
                         ))}
                       </>
                     )}
                   </div>
                 </div>
+
+                {/* Categories */}
+                {results.categories.length > 0 && (
+                  <div className="space-y-4">
+                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Filter className="h-5 w-5 text-[#FFE66D]" />
+                      Categories ({results.categories.length})
+                    </h2>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {results.categories.slice(0, 10).map(category => (
+                        <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
@@ -439,6 +548,18 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
             )}
           </TabsContent>
 
+          <TabsContent value="places" className="mt-6">
+            {results.places.length === 0 ? (
+              <NoResults query={query} type="places" />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {results.places.map(place => (
+                  <PlaceCard key={place.id} place={place} onImport={handlePlaceImport} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
           <TabsContent value="categories" className="mt-6">
             {results.categories.length === 0 ? (
               <NoResults query={query} type="categories" />
@@ -458,7 +579,7 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
           <Search className="h-16 w-16 text-gray-300 mx-auto mb-6" />
           <h3 className="text-xl font-semibold text-gray-900 mb-3">Discover amazing places and people</h3>
           <p className="text-gray-500 mb-8 max-w-md mx-auto">
-            Search for locations by name, usernames, categories, or anything that interests you
+            Search for locations by name, usernames, categories, or discover new places from around the world
           </p>
           <div className="flex justify-center gap-4">
             <Link href="/map">
@@ -649,9 +770,127 @@ function CategoryCard({ category, onClick }: { category: SearchCategory; onClick
   )
 }
 
+// New PlaceCard component for discovered places
+function PlaceCard({ place, onImport }: { place: SearchPlace; onImport: (place: SearchPlace) => void }) {
+  const primaryCategory = place.categories?.[0]
+  const [importing, setImporting] = useState(false)
+
+  const handleImport = async () => {
+    setImporting(true)
+    try {
+      await onImport(place)
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <Card className="hover:shadow-lg transition-all duration-300 overflow-hidden group relative">
+      <div className="absolute top-3 left-3 z-10">
+        <Badge className="text-xs font-medium bg-[#4ECDC4]/90 text-white border-0">
+          🌟 New Discovery
+        </Badge>
+      </div>
+      
+      <div className="relative h-40 bg-gradient-to-br from-[#4ECDC4]/20 to-[#FF6B6B]/20 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-[#4ECDC4] to-[#FF6B6B] rounded-full flex items-center justify-center text-white font-bold text-2xl mb-2">
+            {place.name.charAt(0).toUpperCase()}
+          </div>
+          {place.distance && (
+            <Badge variant="secondary" className="text-xs">
+              {place.distance < 1 
+                ? `${Math.round(place.distance * 1000)}m away`
+                : `${Math.round(place.distance * 10) / 10}km away`
+              }
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <h4 className="font-semibold text-gray-900 group-hover:text-[#4ECDC4] transition-colors line-clamp-1">
+            {place.name}
+          </h4>
+          {place.isVerified && (
+            <Badge className="text-xs font-medium bg-green-100 text-green-800 border-0 ml-2">
+              ✓
+            </Badge>
+          )}
+        </div>
+
+        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{place.description}</p>
+        
+        {place.address && (
+          <p className="text-xs text-gray-500 mb-2 flex items-center gap-1 line-clamp-1">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            {place.address.formattedAddress || 
+             `${place.address.city ? place.address.city + ', ' : ''}${place.address.state || ''}`
+            }
+          </p>
+        )}
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {place.averageRating && (
+              <div className="flex items-center gap-1">
+                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                <span className="text-xs font-medium">{place.averageRating.toFixed(1)}</span>
+              </div>
+            )}
+            
+            {primaryCategory && (
+              <Badge 
+                variant="secondary"
+                className="text-xs"
+                style={{
+                  backgroundColor: `${primaryCategory.color || '#4ECDC4'}20`,
+                  color: primaryCategory.color || '#4ECDC4',
+                }}
+              >
+                {primaryCategory.name}
+              </Badge>
+            )}
+          </div>
+
+          <Button
+            size="sm"
+            onClick={handleImport}
+            disabled={importing}
+            className="bg-[#4ECDC4] hover:bg-[#26C6DA] text-white"
+          >
+            {importing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              'Add to Sacavia'
+            )}
+          </Button>
+        </div>
+
+        <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+          {place.photos > 0 && (
+            <span className="flex items-center gap-1">
+              📸 {place.photos} photos
+            </span>
+          )}
+          {place.reviewCount > 0 && (
+            <span>{place.reviewCount} reviews</span>
+          )}
+          {place.website && (
+            <a href={place.website} target="_blank" rel="noopener noreferrer" className="text-[#4ECDC4] hover:underline">
+              Website
+            </a>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // Enhanced No Results Component
 function NoResults({ query, type }: { query: string; type?: string }) {
-  const typeText = type === "locations" ? "places" : type === "users" ? "people" : type === "categories" ? "categories" : "results"
+  const typeText = type === "locations" ? "places" : type === "users" ? "people" : type === "categories" ? "categories" : type === "places" ? "new places" : "results"
   
   return (
     <div className="text-center py-16">
