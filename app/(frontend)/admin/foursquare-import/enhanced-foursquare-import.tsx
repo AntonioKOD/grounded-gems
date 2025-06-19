@@ -279,6 +279,9 @@ export default function EnhancedFoursquareImport() {
       gallery: preview.gallery || [],
       featuredImage: undefined,
       
+      // Initialize insiderTips as empty array (never a string)
+      insiderTips: [],
+      
       foursquareId: place.foursquareId
     }
   }
@@ -407,7 +410,16 @@ export default function EnhancedFoursquareImport() {
     setIsSubmittingEdit(true)
     try {
       const currentEdit = editingLocations[currentEditIndex]
-      const result = await createLocation(currentEdit.locationData)
+      
+      // Ensure insiderTips is always an array (never string or undefined)
+      const locationData = {
+        ...currentEdit.locationData,
+        insiderTips: Array.isArray(currentEdit.locationData.insiderTips) 
+          ? currentEdit.locationData.insiderTips 
+          : []
+      }
+      
+      const result = await createLocation(locationData)
       
       toast.success(`Successfully imported ${currentEdit.locationData.name}`)
       
@@ -653,13 +665,16 @@ export default function EnhancedFoursquareImport() {
       console.log('✅ Tips response data:', data)
       
       if (data.success && data.tips && Array.isArray(data.tips)) {
+        // Ensure tips array is valid and not empty
+        const validTips = data.tips.filter(tip => tip && typeof tip === 'object' && tip.tip)
+        
         // Update the current editing location with the structured tips
         updateCurrentLocationData({ 
-          insiderTips: data.tips 
+          insiderTips: validTips.length > 0 ? validTips : []
         })
         
-        toast.success(`✨ AI generated ${data.tips.length} insider tips successfully!`)
-        console.log('✅ Generated tips:', data.tips)
+        toast.success(`✨ AI generated ${validTips.length} insider tips successfully!`)
+        console.log('✅ Generated tips:', validTips)
       } else {
         toast.error(data.error || 'Failed to generate insider tips')
       }
@@ -1872,7 +1887,8 @@ export default function EnhancedFoursquareImport() {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => {
-                                    updateCurrentLocationData({ insiderTips: stringToStructuredTips(simpleTipsText) })
+                                    const tips = stringToStructuredTips(simpleTipsText)
+                                    updateCurrentLocationData({ insiderTips: tips.length > 0 ? tips : [] })
                                     toast.success('Tips updated!')
                                   }}
                                   disabled={!simpleTipsText.trim()}

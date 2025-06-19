@@ -300,6 +300,19 @@ export async function createLocation(data: LocationFormData) {
     }
   }
 
+  // Ensure insiderTips is always an array (never string or undefined)
+  if (cleanData.insiderTips !== undefined) {
+    if (!Array.isArray(cleanData.insiderTips)) {
+      // If it's not an array, remove it entirely
+      delete cleanData.insiderTips;
+    } else {
+      // If it's an empty array, remove it (optional)
+      if (cleanData.insiderTips.length === 0) {
+        delete cleanData.insiderTips;
+      }
+    }
+  }
+
   // 4. Create the document in Payload
   const payload = await getPayload({config: config});
   
