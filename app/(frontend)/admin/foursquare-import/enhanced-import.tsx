@@ -1038,38 +1038,63 @@ export default function EnhancedFoursquareImport() {
 
       {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-7xl h-[95vh] max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0">
           {currentEdit && (
             <>
-              <DialogHeader>
-                <DialogTitle>
-                  Edit Location ({currentEditIndex + 1}/{editingLocations.length})
-                </DialogTitle>
-                <DialogDescription>
-                  Customize the details for "{currentEdit.locationData.name}" before importing
-                </DialogDescription>
+              <DialogHeader className="flex-shrink-0 px-6 py-4 border-b">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <DialogTitle className="text-xl sm:text-2xl font-bold">
+                      Edit Location ({currentEditIndex + 1}/{editingLocations.length})
+                    </DialogTitle>
+                    <DialogDescription className="text-sm sm:text-base mt-1">
+                      Customize the details for "{currentEdit.locationData.name}" before importing
+                    </DialogDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline" className="text-xs">
+                      {editingLocations.length - currentEditIndex - 1} remaining
+                    </Badge>
+                  </div>
+                </div>
               </DialogHeader>
               
-              <div className="space-y-6">
-                {/* Basic Info */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
-                    <Building className="w-5 h-5 mr-2" />
-                    Basic Information
-                  </h3>
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                <div className="space-y-6 pb-4">
+                  {/* Progress Indicator */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-blue-800">Import Progress</span>
+                      <span className="text-xs text-blue-600">{Math.round((currentEditIndex / editingLocations.length) * 100)}% complete</span>
+                    </div>
+                    <div className="w-full bg-blue-100 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${(currentEditIndex / editingLocations.length) * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Basic Info */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg sm:text-xl font-medium flex items-center">
+                      <Building className="w-5 h-5 mr-2" />
+                      Basic Information
+                    </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-name">Location Name</Label>
+                      <Label htmlFor="edit-name" className="text-sm font-medium">Location Name</Label>
                       <Input
                         id="edit-name"
                         value={currentEdit.locationData.name}
                         onChange={(e) => updateCurrentLocationData({ name: e.target.value })}
+                        className="text-sm"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-category">Categories</Label>
+                      <Label htmlFor="edit-category" className="text-sm font-medium">Categories</Label>
                       {categories.length > 0 ? (
                         <HierarchicalCategorySelector
                           categories={categories}
@@ -1117,13 +1142,14 @@ export default function EnhancedFoursquareImport() {
                     </div>
                   </div>
                   
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-description">Description</Label>
+                  <div className="space-y-2 lg:col-span-2">
+                    <Label htmlFor="edit-description" className="text-sm font-medium">Description</Label>
                     <Textarea
                       id="edit-description"
                       value={currentEdit.locationData.description}
                       onChange={(e) => updateCurrentLocationData({ description: e.target.value })}
-                      className="min-h-[100px]"
+                      className="min-h-[100px] text-sm"
+                      placeholder="Enter a compelling description for this location..."
                     />
                   </div>
                 </div>
@@ -1132,53 +1158,61 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Address */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
+                  <h3 className="text-lg sm:text-xl font-medium flex items-center">
                     <MapPin className="w-5 h-5 mr-2" />
                     Address
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-street">Street Address</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="edit-street" className="text-sm font-medium">Street Address</Label>
                       <Input
                         id="edit-street"
                         value={currentEdit.locationData.address?.street || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           address: { ...currentEdit.locationData.address, street: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="123 Main Street"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-city">City</Label>
+                      <Label htmlFor="edit-city" className="text-sm font-medium">City</Label>
                       <Input
                         id="edit-city"
                         value={currentEdit.locationData.address?.city || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           address: { ...currentEdit.locationData.address, city: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="City"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-state">State</Label>
+                      <Label htmlFor="edit-state" className="text-sm font-medium">State</Label>
                       <Input
                         id="edit-state"
                         value={currentEdit.locationData.address?.state || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           address: { ...currentEdit.locationData.address, state: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="State"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-zip">ZIP Code</Label>
+                      <Label htmlFor="edit-zip" className="text-sm font-medium">ZIP Code</Label>
                       <Input
                         id="edit-zip"
                         value={currentEdit.locationData.address?.zip || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           address: { ...currentEdit.locationData.address, zip: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="12345"
                       />
                     </div>
                   </div>
@@ -1188,14 +1222,14 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Coordinates */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
+                  <h3 className="text-lg sm:text-xl font-medium flex items-center">
                     <MapPin className="w-5 h-5 mr-2" />
                     Coordinates
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-latitude">Latitude</Label>
+                      <Label htmlFor="edit-latitude" className="text-sm font-medium">Latitude</Label>
                       <Input
                         id="edit-latitude"
                         type="number"
@@ -1207,11 +1241,13 @@ export default function EnhancedFoursquareImport() {
                             latitude: parseFloat(e.target.value) || 0 
                           }
                         })}
+                        className="text-sm"
+                        placeholder="42.3601"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-longitude">Longitude</Label>
+                      <Label htmlFor="edit-longitude" className="text-sm font-medium">Longitude</Label>
                       <Input
                         id="edit-longitude"
                         type="number"
@@ -1223,6 +1259,8 @@ export default function EnhancedFoursquareImport() {
                             longitude: parseFloat(e.target.value) || 0 
                           }
                         })}
+                        className="text-sm"
+                        placeholder="-71.0589"
                       />
                     </div>
                   </div>
@@ -1232,18 +1270,18 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Photos */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
+                  <h3 className="text-lg sm:text-xl font-medium flex items-center">
                     <Camera className="w-5 h-5 mr-2" />
                     Photos & Media
                   </h3>
 
                   {/* Featured Image Selection */}
                   <div className="space-y-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                    <h4 className="text-md font-medium text-blue-900 flex items-center">
+                    <h4 className="text-sm sm:text-md font-medium text-blue-900 flex items-center">
                       <Star className="w-4 h-4 mr-2 text-blue-600" />
                       Featured Image Selection
                     </h4>
-                    <div className="text-sm text-blue-700 mb-3">
+                    <div className="text-xs sm:text-sm text-blue-700 mb-3">
                       Choose which image will be the main featured image displayed in location lists and previews
                     </div>
                     
@@ -1277,13 +1315,13 @@ export default function EnhancedFoursquareImport() {
                         Photos from Foursquare ({fetchedPhotos[currentEdit.foursquarePlace.foursquareId].length})
                       </h4>
                       
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-h-60 overflow-y-auto">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 max-h-80 overflow-y-auto">
                         {fetchedPhotos[currentEdit.foursquarePlace.foursquareId].map((photo, index) => (
                           <div key={photo.id} className="relative group">
                             <img
                               src={photo.thumbnailUrl}
                               alt={`Photo ${index + 1}`}
-                              className={`w-full h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
+                              className={`w-full h-20 sm:h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
                                 currentEdit.locationData.featuredImage === photo.highResUrl 
                                   ? 'border-4 border-blue-500 shadow-lg' 
                                   : 'border hover:border-blue-300 hover:shadow-md'
@@ -1291,12 +1329,12 @@ export default function EnhancedFoursquareImport() {
                               onClick={() => updateCurrentLocationData({ featuredImage: photo.highResUrl })}
                             />
                             {currentEdit.locationData.featuredImage === photo.highResUrl && (
-                              <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-lg">
-                                <Star className="w-3 h-3 fill-current" />
+                              <div className="absolute -top-1 -right-1 bg-blue-600 text-white rounded-full p-1 shadow-lg">
+                                <Star className="w-2 h-2 sm:w-3 sm:h-3 fill-current" />
                               </div>
                             )}
                             <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                              <div className="text-center">
+                              <div className="text-center p-1">
                                 <span className="text-white text-xs font-medium block">
                                   {photo.width} × {photo.height}
                                 </span>
@@ -1343,64 +1381,72 @@ export default function EnhancedFoursquareImport() {
                     </div>
 
                     {manualPhotos[currentEdit.foursquarePlace.foursquareId] && manualPhotos[currentEdit.foursquarePlace.foursquareId].length > 0 && (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        {manualPhotos[currentEdit.foursquarePlace.foursquareId].map((photo, index) => (
-                          <div key={index} className="relative group">
-                            <img
-                              src={photo.preview}
-                              alt={`Manual photo ${index + 1}`}
-                              className={`w-full h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
-                                currentEdit.locationData.featuredImage === photo.preview 
-                                  ? 'border-4 border-blue-500 shadow-lg' 
-                                  : 'border hover:border-blue-300 hover:shadow-md'
-                              }`}
-                              onClick={() => updateCurrentLocationData({ featuredImage: photo.preview })}
-                            />
-                            {currentEdit.locationData.featuredImage === photo.preview && (
-                              <div className="absolute -top-2 -right-2 bg-blue-600 text-white rounded-full p-1 shadow-lg">
-                                <Star className="w-3 h-3 fill-current" />
-                              </div>
-                            )}
-                            <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
-                              <div className="flex flex-col gap-2">
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    updateCurrentLocationData({ featuredImage: photo.preview })
-                                  }}
-                                  className="text-xs"
-                                >
-                                  {currentEdit.locationData.featuredImage === photo.preview ? 'Featured' : 'Set as Featured'}
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    removeManualPhoto(currentEdit.foursquarePlace.foursquareId, index)
-                                    // If this was the featured image, clear it
-                                    if (currentEdit.locationData.featuredImage === photo.preview) {
-                                      updateCurrentLocationData({ featuredImage: undefined })
-                                    }
-                                  }}
-                                  className="text-xs"
-                                >
-                                  Remove
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <Input
-                                placeholder="Photo caption"
-                                value={photo.caption}
-                                onChange={(e) => updateManualPhotoCaption(currentEdit.foursquarePlace.foursquareId, index, e.target.value)}
-                                className="text-xs"
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                          {manualPhotos[currentEdit.foursquarePlace.foursquareId].map((photo, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={photo.preview}
+                                alt={`Manual photo ${index + 1}`}
+                                className={`w-full h-20 sm:h-24 object-cover rounded-lg border cursor-pointer transition-all duration-200 ${
+                                  currentEdit.locationData.featuredImage === photo.preview 
+                                    ? 'border-4 border-blue-500 shadow-lg' 
+                                    : 'border hover:border-blue-300 hover:shadow-md'
+                                }`}
+                                onClick={() => updateCurrentLocationData({ featuredImage: photo.preview })}
                               />
+                              {currentEdit.locationData.featuredImage === photo.preview && (
+                                <div className="absolute -top-1 -right-1 bg-blue-600 text-white rounded-full p-1 shadow-lg">
+                                  <Star className="w-2 h-2 sm:w-3 sm:h-3 fill-current" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black bg-opacity-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                <div className="flex flex-col gap-1 p-2">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      updateCurrentLocationData({ featuredImage: photo.preview })
+                                    }}
+                                    className="text-xs py-1 h-auto"
+                                  >
+                                    {currentEdit.locationData.featuredImage === photo.preview ? 'Featured' : 'Set Featured'}
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      removeManualPhoto(currentEdit.foursquarePlace.foursquareId, index)
+                                      // If this was the featured image, clear it
+                                      if (currentEdit.locationData.featuredImage === photo.preview) {
+                                        updateCurrentLocationData({ featuredImage: undefined })
+                                      }
+                                    }}
+                                    className="text-xs py-1 h-auto"
+                                  >
+                                    Remove
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                        
+                        {/* Photo captions below the grid */}
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">Photo Captions</Label>
+                          {manualPhotos[currentEdit.foursquarePlace.foursquareId].map((photo, index) => (
+                            <Input
+                              key={index}
+                              placeholder={`Caption for photo ${index + 1}`}
+                              value={photo.caption}
+                              onChange={(e) => updateManualPhotoCaption(currentEdit.foursquarePlace.foursquareId, index, e.target.value)}
+                              className="text-sm"
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
 
@@ -1432,31 +1478,35 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Contact Info */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
+                  <h3 className="text-lg sm:text-xl font-medium flex items-center">
                     <Phone className="w-5 h-5 mr-2" />
                     Contact Information
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-phone">Phone</Label>
+                      <Label htmlFor="edit-phone" className="text-sm font-medium">Phone</Label>
                       <Input
                         id="edit-phone"
                         value={currentEdit.locationData.contactInfo?.phone || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           contactInfo: { ...currentEdit.locationData.contactInfo, phone: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="(555) 123-4567"
                       />
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="edit-website">Website</Label>
+                      <Label htmlFor="edit-website" className="text-sm font-medium">Website</Label>
                       <Input
                         id="edit-website"
                         value={currentEdit.locationData.contactInfo?.website || ''}
                         onChange={(e) => updateCurrentLocationData({ 
                           contactInfo: { ...currentEdit.locationData.contactInfo, website: e.target.value }
                         })}
+                        className="text-sm"
+                        placeholder="https://example.com"
                       />
                     </div>
                   </div>
@@ -1466,16 +1516,16 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Additional Info */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Additional Information</h3>
+                  <h3 className="text-lg sm:text-xl font-medium">Additional Information</h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-price">Price Range</Label>
+                      <Label htmlFor="edit-price" className="text-sm font-medium">Price Range</Label>
                       <Select 
                         value={currentEdit.locationData.priceRange || 'moderate'} 
                         onValueChange={(value) => updateCurrentLocationData({ priceRange: value as any })}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1489,13 +1539,14 @@ export default function EnhancedFoursquareImport() {
                     </div>
                     
                     <div className="space-y-2">
+                      <Label className="text-sm font-medium">Options</Label>
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="edit-verified"
                           checked={currentEdit.locationData.isVerified || false}
                           onCheckedChange={(checked) => updateCurrentLocationData({ isVerified: !!checked })}
                         />
-                        <Label htmlFor="edit-verified">Verified Location</Label>
+                        <Label htmlFor="edit-verified" className="text-sm">Verified Location</Label>
                       </div>
                     </div>
                   </div>
@@ -1687,15 +1738,15 @@ export default function EnhancedFoursquareImport() {
 
                 {/* Business Hours */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium flex items-center">
+                  <h3 className="text-lg sm:text-xl font-medium flex items-center">
                     <Clock className="w-5 h-5 mr-2" />
                     Business Hours
                   </h3>
                   
                   <div className="space-y-3">
                     {currentEdit.locationData.businessHours?.map((hours, index) => (
-                      <div key={hours.day} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center p-3 bg-gray-50 rounded-lg">
-                        <div className="font-medium capitalize">{hours.day}</div>
+                      <div key={hours.day} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center p-3 bg-gray-50 rounded-lg">
+                        <div className="font-medium capitalize text-sm sm:text-base">{hours.day}</div>
                         
                         <div className="flex items-center space-x-2">
                           <Checkbox
@@ -1720,6 +1771,7 @@ export default function EnhancedFoursquareImport() {
                                 updateCurrentLocationData({ businessHours: newHours })
                               }}
                               placeholder="Opening time"
+                              className="text-sm"
                             />
                             <Input
                               type="time"
@@ -1730,27 +1782,33 @@ export default function EnhancedFoursquareImport() {
                                 updateCurrentLocationData({ businessHours: newHours })
                               }}
                               placeholder="Closing time"
+                              className="text-sm"
                             />
                           </>
                         )}
                         
                         {hours.closed && (
-                          <div className="md:col-span-2 text-gray-500 text-sm italic">Closed</div>
+                          <div className="sm:col-span-1 lg:col-span-2 text-gray-500 text-sm italic">Closed</div>
                         )}
                       </div>
                     ))}
                   </div>
                 </div>
+                </div>
               </div>
               
-              <DialogFooter className="flex gap-2">
-                <Button variant="outline" onClick={handleSkipLocation}>
+              <DialogFooter className="flex-shrink-0 flex flex-col sm:flex-row gap-2 p-6 border-t bg-gray-50">
+                <Button 
+                  variant="outline" 
+                  onClick={handleSkipLocation}
+                  className="w-full sm:w-auto"
+                >
                   Skip This Location
                 </Button>
                 <Button 
                   onClick={handleSaveCurrentEdit}
                   disabled={isSubmittingEdit}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 w-full sm:w-auto"
                 >
                   {isSubmittingEdit ? (
                     <>
