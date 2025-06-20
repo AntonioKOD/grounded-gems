@@ -1107,8 +1107,8 @@ export async function createLocation(data: LocationFormData) {
     // 3. Create the location in Payload CMS
     const payload = await getPayload({ config })
 
-    // Prepare the location data
-    const locationData = {
+    // Clean and validate data before creating
+    const cleanData: any = {
       name: data.name,
       description: data.description || "",
       address: data.address,
@@ -1119,6 +1119,41 @@ export async function createLocation(data: LocationFormData) {
       accessibility: data.accessibility || {},
       status: 'review', // Set as review by default for new locations
     }
+
+    // Remove featuredImage if it's a blob URL or invalid ObjectId
+    if (data.featuredImage && (
+      typeof data.featuredImage !== 'string' || 
+      data.featuredImage.startsWith('blob:') ||
+      data.featuredImage.length !== 24 || 
+      !/^[0-9a-fA-F]{24}$/.test(data.featuredImage)
+    )) {
+      // Don't include featuredImage
+    } else if (data.featuredImage) {
+      cleanData.featuredImage = data.featuredImage;
+    }
+
+    // Validate category IDs
+    if (cleanData.categories && Array.isArray(cleanData.categories)) {
+      cleanData.categories = cleanData.categories.filter((id: string) => 
+        id && typeof id === 'string' && id.length === 24 && /^[0-9a-fA-F]{24}$/.test(id)
+      );
+      if (cleanData.categories.length === 0) {
+        delete cleanData.categories;
+      }
+    }
+
+    // Validate createdBy if present
+    if (data.createdBy && (
+      typeof data.createdBy !== 'string' || 
+      data.createdBy.length !== 24 || 
+      !/^[0-9a-fA-F]{24}$/.test(data.createdBy)
+    )) {
+      // Don't include createdBy
+    } else if (data.createdBy) {
+      cleanData.createdBy = data.createdBy;
+    }
+
+    const locationData = cleanData
 
     console.log("Creating location in Payload CMS")
 

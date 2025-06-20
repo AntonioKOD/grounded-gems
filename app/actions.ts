@@ -267,6 +267,16 @@ export async function createLocation(data: LocationFormData) {
     delete cleanData.featuredImage;
   }
 
+  // Also remove featuredImage if it's a blob URL or invalid ObjectId
+  if (cleanData.featuredImage && (
+    typeof cleanData.featuredImage !== 'string' || 
+    cleanData.featuredImage.startsWith('blob:') ||
+    cleanData.featuredImage.length !== 24 || 
+    !/^[0-9a-fA-F]{24}$/.test(cleanData.featuredImage)
+  )) {
+    delete cleanData.featuredImage;
+  }
+
   if (cleanData.categories) {
     // Filter out invalid category IDs
     cleanData.categories = cleanData.categories.filter((id: string) => 
@@ -321,8 +331,11 @@ export async function createLocation(data: LocationFormData) {
       name: cleanData.name,
       hasCoordinates: !!cleanData.coordinates,
       hasFeaturedImage: !!cleanData.featuredImage,
+      featuredImageValue: cleanData.featuredImage,
       categoriesCount: cleanData.categories?.length || 0,
+      categories: cleanData.categories,
       hasCreatedBy: !!cleanData.createdBy,
+      createdByValue: cleanData.createdBy,
       galleryCount: cleanData.gallery?.length || 0
     });
 
@@ -336,6 +349,17 @@ export async function createLocation(data: LocationFormData) {
   } catch (error) {
     console.error('Failed to create location:', error);
     console.error('Data that failed:', JSON.stringify(cleanData, null, 2));
+    // Additional debugging for ObjectId validation
+    if (error instanceof Error && error.message.includes('BSON')) {
+      console.error('BSON Error - checking field types:', {
+        featuredImageType: typeof cleanData.featuredImage,
+        featuredImageValid: cleanData.featuredImage ? /^[0-9a-fA-F]{24}$/.test(cleanData.featuredImage) : 'not present',
+        categoriesType: typeof cleanData.categories,
+        categoriesValid: cleanData.categories ? cleanData.categories.every((id: string) => /^[0-9a-fA-F]{24}$/.test(id)) : 'not present',
+        createdByType: typeof cleanData.createdBy,
+        createdByValid: cleanData.createdBy ? /^[0-9a-fA-F]{24}$/.test(cleanData.createdBy) : 'not present'
+      });
+    }
     throw error;
   }
 }

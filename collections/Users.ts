@@ -266,6 +266,125 @@ export const Users: CollectionConfig = {
     delete: () => true,
   },
   hooks: {
+    beforeChange: [
+      async ({ data, req, operation }) => {
+        // Initialize creatorProfile for creators if it doesn't exist
+        if ((data.role === 'creator' || data.isCreator) && !data.creatorProfile) {
+          data.creatorProfile = {
+            creatorLevel: 'explorer',
+            specialty: [],
+            experienceAreas: [],
+            verification: {
+              isVerified: false,
+              verifiedAt: null,
+              verificationMethod: null
+            },
+            stats: {
+              totalGuides: 0,
+              publishedGuides: 0,
+              totalViews: 0,
+              totalSales: 0,
+              totalEarnings: 0,
+              averageRating: null,
+              followerCount: 0
+            },
+            earnings: {
+              totalEarnings: 0,
+              withdrawalSettings: {
+                payoutMethod: null,
+                payoutEmail: null,
+                stripeAccountId: null
+              }
+            },
+            joinedCreatorProgram: new Date(),
+            creatorBio: '',
+            website: ''
+          }
+        }
+        
+        // Ensure verification object exists within creatorProfile for ALL users (even existing ones)
+        if (data.creatorProfile && !data.creatorProfile.verification) {
+          data.creatorProfile.verification = {
+            isVerified: false,
+            verifiedAt: null,
+            verificationMethod: null
+          }
+        }
+        
+        return data
+      }
+    ],
+    afterRead: [
+      async ({ doc, req }) => {
+        // Fix existing users that don't have the new verification structure
+        if (doc && typeof doc === 'object') {
+          let needsUpdate = false
+          
+          // If user has creatorProfile but missing verification
+          if (doc.creatorProfile && !doc.creatorProfile.verification) {
+            doc.creatorProfile.verification = {
+              isVerified: false,
+              verifiedAt: null,
+              verificationMethod: null
+            }
+            needsUpdate = true
+          }
+          
+          // If user is a creator but has no creatorProfile at all
+          if ((doc.role === 'creator' || doc.isCreator) && !doc.creatorProfile) {
+            doc.creatorProfile = {
+              creatorLevel: 'explorer',
+              specialty: [],
+              experienceAreas: [],
+              verification: {
+                isVerified: false,
+                verifiedAt: null,
+                verificationMethod: null
+              },
+              stats: {
+                totalGuides: 0,
+                publishedGuides: 0,
+                totalViews: 0,
+                totalSales: 0,
+                totalEarnings: 0,
+                averageRating: null,
+                followerCount: 0
+              },
+              earnings: {
+                totalEarnings: 0,
+                withdrawalSettings: {
+                  payoutMethod: null,
+                  payoutEmail: null,
+                  stripeAccountId: null
+                }
+              },
+              joinedCreatorProgram: new Date(),
+              creatorBio: '',
+              website: ''
+            }
+            needsUpdate = true
+          }
+          
+          // Update the user in the database if needed (but only for significant operations)
+          if (needsUpdate && req?.payload && doc.id) {
+            try {
+              await req.payload.update({
+                collection: 'users',
+                id: doc.id,
+                data: {
+                  creatorProfile: doc.creatorProfile
+                }
+              })
+            } catch (error) {
+              // Silently fail to avoid infinite loops, but log the error
+              req?.payload?.logger?.warn('Failed to auto-update user verification structure:', error)
+            }
+          }
+        }
+        
+        return doc
+      }
+    ],
     afterChange: [
       async ({ req, doc, previousDoc, operation }) => {
         if (operation !== 'update' || !req.payload || !previousDoc) return doc;
@@ -381,17 +500,260 @@ export const Users: CollectionConfig = {
         return true
       }
     },
+    { 
+      name: 'role',
+      type: 'select',
+      required: true,
+      defaultValue: 'user',
+      options: [
+        { label: 'User', value: 'user' },
+        { label: 'Creator', value: 'creator' },
+        { label: 'Admin', value: 'admin' },
+      ],
+      admin: {
+        description: 'User role - determines permissions and features'
+      }
+    },
     { name: 'isCreator', type: 'checkbox', defaultValue: false },
     {
-      name: 'creatorLevel',
-      type: 'select',
-      options: [
-        { label: 'Local Explorer', value: 'explorer' },
-        { label: 'Hidden Gem Hunter', value: 'hunter' },
-        { label: 'Local Authority', value: 'authority' },
-        { label: 'Destination Expert', value: 'expert' },
-      ],
-      admin: { condition: data => data.isCreator },
+      name: 'creatorProfile',
+      type: 'group',
+      admin: {
+        condition: data => Boolean(data?.isCreator) || data?.role === 'creator',
+        description: 'Creator-specific profile information'
+      },
+      defaultValue: {
+        creatorLevel: 'explorer',
+        specialty: [],
+        experienceAreas: [],
+        verification: {
+          isVerified: false,
+          verifiedAt: null,
+          verificationMethod: null
+        },
+        stats: {
+          totalGuides: 0,
+          publishedGuides: 0,
+          totalViews: 0,
+          totalSales: 0,
+          totalEarnings: 0,
+          averageRating: null,
+          followerCount: 0
+        },
+        earnings: {
+          totalEarnings: 0,
+          withdrawalSettings: {
+            payoutMethod: null,
+            payoutEmail: null,
+            stripeAccountId: null
+          }
+        },
+        joinedCreatorProgram: null,
+        creatorBio: '',
+        website: ''
+      },
+      fields: [
+        {
+          name: 'creatorLevel',
+          type: 'select',
+          options: [
+            { label: 'Local Explorer', value: 'explorer' },
+            { label: 'Hidden Gem Hunter', value: 'hunter' },
+            { label: 'Local Authority', value: 'authority' },
+            { label: 'Destination Expert', value: 'expert' },
+          ],
+          defaultValue: 'explorer',
+        },
+        {
+          name: 'specialty',
+          type: 'select',
+          hasMany: true,
+          options: [
+            { label: 'Food & Dining', value: 'food' },
+            { label: 'Nightlife & Entertainment', value: 'nightlife' },
+            { label: 'Culture & Arts', value: 'culture' },
+            { label: 'Outdoor & Adventure', value: 'outdoor' },
+            { label: 'Shopping', value: 'shopping' },
+            { label: 'Historical', value: 'historical' },
+            { label: 'Family-Friendly', value: 'family' },
+            { label: 'Hidden Gems', value: 'hidden' },
+            { label: 'Photography', value: 'photography' },
+            { label: 'Local Lifestyle', value: 'lifestyle' },
+          ],
+          admin: {
+            description: 'Areas of expertise for creating guides'
+          }
+        },
+        {
+          name: 'experienceAreas',
+          type: 'relationship',
+          relationTo: 'locations',
+          hasMany: true,
+          admin: {
+            description: 'Locations this creator has expertise in'
+          }
+        },
+        {
+          name: 'verification',
+          type: 'group',
+          admin: {
+            description: 'Creator verification status and details'
+          },
+          defaultValue: {
+            isVerified: false,
+            verifiedAt: null,
+            verificationMethod: null
+          },
+          fields: [
+            {
+              name: 'isVerified',
+              type: 'checkbox',
+              defaultValue: false,
+              admin: {
+                description: 'Whether this creator is verified'
+              }
+            },
+            {
+              name: 'verifiedAt',
+              type: 'date',
+              admin: {
+                readOnly: true,
+              }
+            },
+            {
+              name: 'verificationMethod',
+              type: 'select',
+              options: [
+                { label: 'Local Knowledge Test', value: 'knowledge_test' },
+                { label: 'Community Vouching', value: 'community' },
+                { label: 'Content Quality Review', value: 'content_review' },
+                { label: 'Manual Verification', value: 'manual' },
+              ],
+              admin: {
+                description: 'Method used for verification (only shown for verified creators)'
+              }
+            },
+          ]
+        },
+        {
+          name: 'stats',
+          type: 'group',
+          admin: {
+            readOnly: true,
+            description: 'Creator statistics (automatically calculated)'
+          },
+          fields: [
+            {
+              name: 'totalGuides',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+            {
+              name: 'publishedGuides',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+            {
+              name: 'totalViews',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+            {
+              name: 'totalSales',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+            {
+              name: 'totalEarnings',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+            {
+              name: 'averageRating',
+              type: 'number',
+              admin: { readOnly: true }
+            },
+            {
+              name: 'followerCount',
+              type: 'number',
+              defaultValue: 0,
+              admin: { readOnly: true }
+            },
+          ]
+        },
+        {
+          name: 'earnings',
+          type: 'group',
+          fields: [
+            {
+              name: 'totalEarnings',
+              type: 'number',
+              defaultValue: 0,
+              admin: {
+                readOnly: true,
+                description: 'Total earnings from guide sales'
+              }
+            },
+            {
+              name: 'withdrawalSettings',
+              type: 'group',
+              fields: [
+                {
+                  name: 'payoutMethod',
+                  type: 'select',
+                  options: [
+                    { label: 'PayPal', value: 'paypal' },
+                    { label: 'Stripe', value: 'stripe' },
+                    { label: 'Bank Transfer', value: 'bank' },
+                  ]
+                },
+                {
+                  name: 'payoutEmail',
+                  type: 'email',
+                  admin: {
+                    description: 'PayPal email for payouts'
+                  }
+                },
+                {
+                  name: 'stripeAccountId',
+                  type: 'text',
+                  admin: {
+                    description: 'Stripe account ID for payouts'
+                  }
+                },
+              ]
+            }
+          ]
+        },
+        {
+          name: 'joinedCreatorProgram',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When the user became a creator'
+          }
+        },
+        {
+          name: 'creatorBio',
+          type: 'textarea',
+          maxLength: 500,
+          admin: {
+            description: 'Extended bio for creator profile (different from regular bio)'
+          }
+        },
+        {
+          name: 'website',
+          type: 'text',
+          admin: {
+            description: 'Creator website or portfolio'
+          }
+        },
+      ]
     },
     {
       name: 'socialLinks',

@@ -26,6 +26,9 @@ import { DeviceTokens } from './collections/DeviceTokens'
 import { LocationPhotoSubmissions } from './collections/LocationPhotoSubmissions'
 import { BusinessClaims } from './collections/BusinessClaims'
 import { UserSubscriptions } from './collections/UserSubscriptions'
+import Guides from './collections/Guides'
+import GuidePurchases from './collections/GuidePurchases'
+import GuideReviews from './collections/GuideReviews'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -42,7 +45,7 @@ export default buildConfig({
       ogImage: '/logo.png',
     },
   },
-  collections: [Users, Media, Posts, Locations, Categories, Events, Reviews, LocationInteractions, Journeys, Notifications, BucketLists],
+  collections: [Users, Media, Posts, Locations, Categories, Events, Reviews, LocationInteractions, Journeys, Notifications, BucketLists, Guides, GuidePurchases, GuideReviews],
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(__dirname, 'payload-types.ts'),
@@ -125,5 +128,8 @@ export default buildConfig({
     LocationPhotoSubmissions,
     BusinessClaims,
     UserSubscriptions,
+    Guides,
+    GuidePurchases,
+    GuideReviews,
   ],
 })
