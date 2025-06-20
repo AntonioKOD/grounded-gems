@@ -263,22 +263,13 @@ export default function EnhancedFoursquareImport() {
       
       tags: preview.tags || preview.categories?.map((cat: string) => ({ tag: cat })) || [],
       gallery: [
-        // Fetched photos from Foursquare
+        // Only include Foursquare photos here, manual photos will be handled during upload
         ...(fetchedPhotos[place.foursquareId] || []).map((photo, index) => ({
           image: photo.highResUrl,
           caption: photo.caption || `${preview.name} - Photo ${index + 1} (via Foursquare)`
-        })),
-        // Manual photos (will be uploaded during location creation)
-        ...(manualPhotos[place.foursquareId] || []).map((photo, index) => ({
-          image: photo.preview, // Will be replaced with actual URL after upload
-          caption: photo.caption || `${preview.name} - Manual Photo ${index + 1}`,
-          isManual: true,
-          file: photo.file
         }))
       ],
-      featuredImage: fetchedPhotos[place.foursquareId]?.[0]?.highResUrl || 
-                    manualPhotos[place.foursquareId]?.[0]?.preview || 
-                    undefined,
+      featuredImage: fetchedPhotos[place.foursquareId]?.[0]?.highResUrl || undefined,
       
       foursquareId: place.foursquareId
     }
@@ -535,6 +526,7 @@ export default function EnhancedFoursquareImport() {
       const manualPhotosForLocation = manualPhotos[currentEdit.foursquarePlace.foursquareId]
       if (manualPhotosForLocation && manualPhotosForLocation.length > 0) {
         const uploadedPhotos = []
+        const failedUploads = []
         
         for (const photo of manualPhotosForLocation) {
           try {
@@ -559,21 +551,46 @@ export default function EnhancedFoursquareImport() {
             })
           } catch (error) {
             console.error('Failed to upload manual photo:', error)
-            toast.error('Some photos failed to upload')
+            failedUploads.push(photo)
           }
         }
 
-        // Update gallery with uploaded photos (replace manual ones with uploaded IDs)
+        // Show appropriate success/error messages
+        if (uploadedPhotos.length > 0) {
+          toast.success(`Successfully uploaded ${uploadedPhotos.length} photos`)
+        }
+        if (failedUploads.length > 0) {
+          toast.error(`Failed to upload ${failedUploads.length} photos`)
+        }
+
+        // Add uploaded photos to gallery
         if (uploadedPhotos.length > 0) {
           const existingGallery = locationData.gallery || []
-          // Remove manual photos and add uploaded ones
-          const nonManualPhotos = existingGallery.filter(item => !item.isManual)
-          locationData.gallery = [...nonManualPhotos, ...uploadedPhotos]
-          
-          // Update featured image if it was a manual photo
-          if (locationData.featuredImage?.startsWith('blob:') && uploadedPhotos.length > 0) {
-            locationData.featuredImage = uploadedPhotos[0].image
+          locationData.gallery = [...existingGallery, ...uploadedPhotos]
+        }
+      }
+
+      // Handle featured image selection (check if it's a blob URL and needs to be updated)
+      if (locationData.featuredImage?.startsWith('blob:')) {
+        // If featured image is a blob URL, try to find the corresponding uploaded photo
+        const manualPhotosForLocation = manualPhotos[currentEdit.foursquarePlace.foursquareId]
+        if (manualPhotosForLocation) {
+          const photoIndex = manualPhotosForLocation.findIndex(p => p.preview === locationData.featuredImage)
+          if (photoIndex >= 0 && locationData.gallery && locationData.gallery.length > 0) {
+            // Use the first uploaded photo as featured image
+            const uploadedPhotoFromGallery = locationData.gallery.find(item => 
+              typeof item.image === 'string' && item.image.length === 24
+            )
+            if (uploadedPhotoFromGallery) {
+              locationData.featuredImage = uploadedPhotoFromGallery.image
+            } else {
+              // Clear invalid featured image
+              delete locationData.featuredImage
+            }
           }
+        } else {
+          // Clear invalid blob URL
+          delete locationData.featuredImage
         }
       }
       
