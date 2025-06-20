@@ -202,6 +202,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
       const res = await fetch("/api/media", {
         method: "POST",
         body: formData,
+        credentials: 'include', // Required for authentication
       })
 
       if (!res.ok) {

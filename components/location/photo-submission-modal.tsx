@@ -204,6 +204,7 @@ export function PhotoSubmissionModal({
       const uploadResponse = await fetch('/api/media', {
         method: 'POST',
         body: formData,
+        credentials: 'include', // Required for authentication
       })
 
       if (!uploadResponse.ok) {

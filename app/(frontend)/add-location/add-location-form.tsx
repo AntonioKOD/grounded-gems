@@ -558,6 +558,7 @@ export default function AddLocationForm() {
       const res = await fetch("/api/media", {
         method: "POST",
         body: formData,
+        credentials: 'include', // Required for authentication
       })
 
       if (!res.ok) {
@@ -660,6 +661,7 @@ export default function AddLocationForm() {
       const response = await fetch("/api/media", {
         method: "POST",
         body: formData,
+        credentials: 'include', // Required for authentication
       })
 
       if (!response.ok) {
