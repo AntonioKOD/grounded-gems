@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       console.log(`   - Has verification: ${!!user.creatorProfile?.verification}`)
       
       // Check if user needs creatorProfile initialization or verification fix
-      if (!user.creatorProfile || !user.creatorProfile.verification)
+      if (!user.creatorProfile || !user.creatorProfile.verification) {
         updateData.creatorProfile = {
           creatorLevel: 'explorer',
           specialty: [],
