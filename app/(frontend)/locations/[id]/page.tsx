@@ -57,6 +57,15 @@ interface ContactInfo {
   email?: string
 }
 
+interface InsiderTip {
+  category: 'timing' | 'food' | 'secrets' | 'protips' | 'access' | 'savings' | 'recommendations' | 'hidden'
+  tip: string
+  priority: 'high' | 'medium' | 'low'
+  isVerified: boolean
+  source: 'ai_generated' | 'user_submitted' | 'business_provided' | 'staff_verified'
+  id: string
+}
+
 interface LocationData {
   id: string
   slug?: string
@@ -75,7 +84,7 @@ interface LocationData {
   amenities?: string[]
   isVerified?: boolean
   isFeatured?: boolean
-  insiderTips?: string
+  insiderTips?: InsiderTip[]
 }
 
 interface PageProps {
@@ -600,13 +609,13 @@ export default async function LocationPage({ params }: PageProps) {
                     </div>
                   )}
                   
-                  {location.insiderTips && (
+                  {location.insiderTips && location.insiderTips.length > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-6">
                       <div className="flex items-start gap-3">
                         <Lightbulb className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                         <div>
                           <h4 className="font-semibold text-amber-800 mb-1">Insider Tip</h4>
-                          <p className="text-amber-700 text-sm">{location.insiderTips}</p>
+                          <p className="text-amber-700 text-sm">{location.insiderTips[0]?.tip}</p>
                         </div>
                       </div>
                     </div>

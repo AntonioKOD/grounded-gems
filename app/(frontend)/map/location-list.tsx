@@ -59,20 +59,7 @@ export default function LocationList({
   const [showSavedLocations, setShowSavedLocations] = useState(false)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [sortBy, setSortBy] = useState<"relevance" | "distance" | "rating">("relevance")
-  const [userLocationData, setUserLocationData] = useState<{ isLiked: boolean; isSaved: boolean }>({
-    isLiked: false,
-    isSaved: false,
-  })
-  const [interactionCounts, setInteractionCounts] = useState<{
-    likes: number
-    saves: number
-    views: number
-  }>({
-    likes: 0,
-    saves: 0,
-    views: 0,
-  })
-  const [isLiking, setIsLiking] = useState(false)
+
   const [isSaving, setIsSaving] = useState(false)
 
   // Load user location data on mount
@@ -128,20 +115,7 @@ export default function LocationList({
     }
   }, [])
 
-  // Extract all unique categories from locations
-  const allCategories = useMemo(() => {
-    return locations.reduce((acc, location) => {
-      if (location.categories && Array.isArray(location.categories)) {
-        location.categories.forEach((category) => {
-          const categoryName = typeof category === "string" ? category : category.name
-          if (categoryName && !acc.includes(categoryName)) {
-            acc.push(categoryName)
-          }
-        })
-      }
-      return acc
-    }, [] as string[])
-  }, [locations])
+
 
   // Filter locations based on selected categories
   const filteredLocations = useMemo(() => {
@@ -178,10 +152,7 @@ export default function LocationList({
     setSelectedCategories((prev) => (checked ? [...prev, category] : prev.filter((c) => c !== category)))
   }, [])
 
-  // Handle sort selection
-  const handleSortChange = useCallback((value: string) => {
-    setSortBy(value as "relevance" | "distance" | "rating")
-  }, [])
+
 
   // Clear all filters
   const clearFilters = useCallback(() => {
@@ -191,14 +162,7 @@ export default function LocationList({
 
   // This function is no longer needed as we use onViewDetail directly
 
-  // Using a function to check if location is saved/subscribed to avoid re-renders
-  const isLocationSaved = useCallback((locationId: string) => {
-    return savedLocations.has(locationId)
-  }, [savedLocations])
-  
-  const isLocationSubscribed = useCallback((locationId: string) => {
-    return subscribedLocations.has(locationId)
-  }, [subscribedLocations])
+
   
   // Handle saving/liking locations
   const handleSaveLocation = useCallback(async (e: React.MouseEvent, location: Location) => {

@@ -35,7 +35,12 @@ export async function POST(req: Request) {
       collection: 'locations',
       where: {
         and: [
-          { status: { equals: 'published' } },
+          { 
+            or: [
+              { status: { equals: 'published' } },
+              { status: { equals: 'review' } }
+            ]
+          },
           { 'coordinates.latitude': { exists: true } },
           { 'coordinates.longitude': { exists: true } }
         ]
@@ -80,6 +85,7 @@ export async function POST(req: Request) {
       return {
         id: loc.id,
         name: loc.name,
+        slug: loc.slug || null,
         description: loc.description || '',
         address: formattedAddress,
         coordinates: { latitude: locLat, longitude: locLng },

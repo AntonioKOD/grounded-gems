@@ -21,8 +21,8 @@ function SearchLoading() {
   return (
     <div className="flex items-center justify-center py-8">
       <div className="flex items-center gap-3 text-[#4ECDC4]">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-base font-medium">Loading search...</span>
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span className="text-sm font-medium">Loading search...</span>
       </div>
     </div>
   )
@@ -35,25 +35,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      {/* Background decorations - smaller on mobile */}
-      <div className="absolute inset-0 opacity-20 overflow-hidden">
-        <div className="absolute top-5 left-5 w-32 h-32 sm:w-48 sm:h-48 md:w-72 md:h-72 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-full blur-2xl md:blur-3xl"></div>
-        <div className="absolute bottom-10 right-5 w-40 h-40 sm:w-60 sm:h-60 md:w-96 md:h-96 bg-gradient-to-br from-[#FFD93D]/20 to-[#FF6B6B]/20 rounded-full blur-2xl md:blur-3xl"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 sm:w-64 sm:h-64 md:w-80 md:h-80 bg-gradient-to-br from-[#4ECDC4]/10 to-[#FFD93D]/10 rounded-full blur-2xl md:blur-3xl"></div>
+      {/* Background decorations - more subtle and mobile-friendly */}
+      <div className="absolute inset-0 opacity-10 overflow-hidden">
+        <div className="absolute top-10 left-5 w-24 h-24 sm:w-32 sm:h-32 md:w-48 md:h-48 bg-gradient-to-br from-[#FF6B6B]/30 to-[#4ECDC4]/30 rounded-full blur-xl"></div>
+        <div className="absolute bottom-20 right-5 w-32 h-32 sm:w-40 sm:h-40 md:w-60 md:h-60 bg-gradient-to-br from-[#FFD93D]/30 to-[#FF6B6B]/30 rounded-full blur-xl"></div>
       </div>
 
-      <div className="relative z-10 container mx-auto px-4 py-4 sm:py-6 md:py-8 max-w-6xl">
-        {/* Header - more compact on mobile */}
-        <div className="text-center mb-4 sm:mb-6 md:mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-2 sm:mb-3 bg-gradient-to-r from-[#FF6B6B] via-[#4ECDC4] to-[#FFD93D] bg-clip-text text-transparent">
-            Discover & Connect
-          </h1>
-          <p className="text-sm sm:text-base md:text-lg text-gray-600 max-w-2xl mx-auto px-2">
-            Find amazing places, connect with like-minded people, and explore your world
-          </p>
-        </div>
-
-        {/* Enhanced Search Component */}
+      <div className="relative z-10 container mx-auto px-3 sm:px-4 py-3 sm:py-4 md:py-6 max-w-5xl">
+        {/* Enhanced Search Component - more space on mobile */}
         <Suspense fallback={<SearchLoading />}>
           <EnhancedSearch initialQuery={query} initialType={type} />
         </Suspense>
