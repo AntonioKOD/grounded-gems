@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Search, Users, MapPin, Star, User, Mail, ExternalLink, Filter, SortAsc, X, Loader2 } from "lucide-react"
+import { Search, Users, MapPin, Star, User, Mail, ExternalLink, Filter, SortAsc, X, Loader2, Navigation, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -53,6 +53,7 @@ interface SearchLocation {
   isVerified?: boolean
   isFeatured?: boolean
   relevanceScore?: number
+  distance?: number
 }
 
 interface SearchCategory {
@@ -99,11 +100,29 @@ interface SearchPlace {
   relevanceScore?: number
 }
 
+interface NearbyLocation {
+  id: string
+  name: string
+  description?: string
+  address?: string
+  coordinates?: {
+    latitude: number
+    longitude: number
+  }
+  distance?: number
+  averageRating?: number
+  reviewCount?: number
+  category?: string
+  imageUrl?: string
+  isVerified?: boolean
+}
+
 interface SearchResults {
   users: SearchUser[]
   locations: SearchLocation[]
   categories: SearchCategory[]
   places: SearchPlace[]
+  nearbyLocations: NearbyLocation[]
   total: number
   query?: string
   searchType?: string
@@ -157,12 +176,15 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
     locations: [], 
     categories: [], 
     places: [], 
+    nearbyLocations: [],
     total: 0 
   })
   const [loading, setLoading] = useState(false)
   const [hasSearched, setHasSearched] = useState(!!initialQuery)
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null)
+  const [locationPermission, setLocationPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt')
+  const [nearbyLoading, setNearbyLoading] = useState(false)
   
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -198,202 +220,264 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
   }, [])
 
   // Get user location for better place discovery
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          })
-        },
-        (error) => {
-          console.log('Location access denied or unavailable:', error)
-        }
-      )
+  const getUserLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported')
+      return
     }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        })
+        setLocationPermission('granted')
+        console.log('Location obtained:', position.coords.latitude, position.coords.longitude)
+      },
+      (error) => {
+        console.error('Error getting location:', error)
+        setLocationPermission('denied')
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      }
+    )
   }, [])
 
-  // Search function
-  const performSearch = useCallback(async (searchQuery: string, searchType: string = "all", sort: string = "relevance") => {
+  // Get nearby locations from database
+  const getNearbyLocations = useCallback(async () => {
+    if (!userLocation) {
+      getUserLocation()
+      return
+    }
+
+    setNearbyLoading(true)
+    try {
+      const response = await fetch('/api/locations/nearby', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          latitude: userLocation.lat,
+          longitude: userLocation.lng,
+          radius: 25,
+          limit: 20
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setResults(prev => ({
+          ...prev,
+          nearbyLocations: data.locations || [],
+          total: (prev.total - prev.nearbyLocations.length) + (data.locations?.length || 0)
+        }))
+        setHasSearched(true)
+        setActiveTab('nearby')
+      } else {
+        throw new Error(data.error || 'Failed to get nearby locations')
+      }
+    } catch (error) {
+      console.error('Error fetching nearby locations:', error)
+      toast.error('Failed to find nearby locations')
+    } finally {
+      setNearbyLoading(false)
+    }
+  }, [userLocation, getUserLocation])
+
+  // Request location permission on mount
+  useEffect(() => {
+    getUserLocation()
+  }, [getUserLocation])
+
+  // Perform search when debounced query changes
+  const performSearch = useCallback(async (searchQuery: string, searchType: string = activeTab) => {
     if (!searchQuery.trim()) {
-      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
+      setResults({ users: [], locations: [], categories: [], places: [], nearbyLocations: [], total: 0 })
       setHasSearched(false)
       return
     }
 
     setLoading(true)
+    saveRecentSearch(searchQuery)
+
     try {
       const params = new URLSearchParams({
         q: searchQuery,
         type: searchType,
-        sortBy: sort,
+        sortBy,
         limit: '20'
       })
 
-      // Add location parameters for better place discovery
-      if (userLocation && (searchType === 'places' || searchType === 'all')) {
+      if (userLocation && (searchType === 'locations' || searchType === 'all')) {
         params.append('lat', userLocation.lat.toString())
         params.append('lng', userLocation.lng.toString())
       }
 
       const response = await fetch(`/api/search?${params}`)
-      
+      const data = await response.json()
+
       if (response.ok) {
-        const data = await response.json()
-        setResults(data)
+        setResults({
+          users: data.users || [],
+          locations: data.locations || [],
+          categories: data.categories || [],
+          places: data.places || [],
+          nearbyLocations: results.nearbyLocations, // Preserve nearby locations
+          total: data.total || 0
+        })
         setHasSearched(true)
-        saveRecentSearch(searchQuery)
       } else {
-        console.error("Search failed:", response.statusText)
-        setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
+        throw new Error(data.message || 'Search failed')
       }
     } catch (error) {
-      console.error("Search error:", error)
-      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
+      console.error('Search error:', error)
+      toast.error('Search failed. Please try again.')
     } finally {
       setLoading(false)
     }
-  }, [saveRecentSearch, userLocation])
+  }, [activeTab, sortBy, userLocation, saveRecentSearch, results.nearbyLocations])
 
-  // Real-time search effect
+  // Effect for real-time search
   useEffect(() => {
-    if (debouncedQuery.trim() && debouncedQuery.length >= 1) {
-      performSearch(debouncedQuery, activeTab, sortBy)
-    } else {
-      setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
+    if (debouncedQuery.trim().length >= 1) {
+      performSearch(debouncedQuery)
+    } else if (debouncedQuery.trim().length === 0) {
+      setResults({ users: [], locations: [], categories: [], places: [], nearbyLocations: results.nearbyLocations, total: 0 })
       setHasSearched(false)
     }
-  }, [debouncedQuery, activeTab, sortBy, performSearch])
+  }, [debouncedQuery, performSearch, results.nearbyLocations])
 
   // Handle tab change
   const handleTabChange = (value: string) => {
     setActiveTab(value)
+    
+    if (value === 'nearby') {
+      if (!userLocation) {
+        getUserLocation()
+      } else if (results.nearbyLocations.length === 0) {
+        getNearbyLocations()
+      }
+    }
+    
     if (query.trim()) {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('type', value)
-      router.push(`/search?${params.toString()}`)
+      performSearch(query, value)
     }
   }
 
   // Handle sort change
   const handleSortChange = (value: string) => {
     setSortBy(value)
+    if (query.trim()) {
+      performSearch(query, activeTab)
+    }
   }
 
   // Clear search
   const clearSearch = () => {
     setQuery("")
-    setResults({ users: [], locations: [], categories: [], places: [], total: 0 })
+    setResults({ users: [], locations: [], categories: [], places: [], nearbyLocations: [], total: 0 })
     setHasSearched(false)
-    router.push('/search')
   }
 
-  // Handle category click to show nearby locations
+  // Handle category click
   const handleCategoryClick = (category: SearchCategory) => {
-    // Navigate to map with category filter
-    router.push(`/map?category=${encodeURIComponent(category.slug || category.name)}`)
+    router.push(`/search?q=${encodeURIComponent(category.name)}&type=locations`)
   }
 
+  // Handle place import
   const handlePlaceImport = async (place: SearchPlace) => {
     try {
-      const response = await fetch('/api/foursquare/search', {
+      const response = await fetch('/api/locations', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          action: 'import',
-          data: {
-            foursquareIds: [place.foursquareId],
-            createdBy: 'search-import' // You might want to get the current user ID here
-          }
-        })
+          name: place.name,
+          description: place.description,
+          foursquareId: place.foursquareId,
+          address: place.address,
+          coordinates: place.coordinates,
+          categories: place.categories,
+          website: place.website,
+          phone: place.phone,
+        }),
       })
 
       if (response.ok) {
-        const result = await response.json()
-        toast.success(`Successfully imported ${place.name}!`)
-        // Optionally refresh the search results or navigate to the new location
+        toast.success('Location imported successfully!')
+        performSearch(query) // Refresh search results
       } else {
-        toast.error(`Failed to import ${place.name}`)
+        throw new Error('Failed to import location')
       }
     } catch (error) {
       console.error('Import error:', error)
-      toast.error('Failed to import place')
+      toast.error('Failed to import location')
     }
   }
 
-  // Initial search if query provided
-  useEffect(() => {
-    if (initialQuery && initialQuery !== query) {
-      setQuery(initialQuery)
+  // Calculate total results for current tab
+  const currentTabResults = useMemo(() => {
+    switch (activeTab) {
+      case 'users':
+        return results.users.length
+      case 'locations':
+        return results.locations.length
+      case 'categories':
+        return results.categories.length
+      case 'places':
+        return results.places.length
+      case 'nearby':
+        return results.nearbyLocations.length
+      default:
+        return results.total
     }
-  }, [initialQuery, query])
+  }, [activeTab, results])
 
   return (
-    <div className="space-y-6">
-      {/* Enhanced Search Form */}
-      <div className="relative">
-        <div className="relative group">
-          {/* Main search container */}
-          <div className="relative flex h-14 overflow-hidden rounded-2xl bg-gradient-to-r from-gray-50 to-white border-2 border-gray-100 shadow-lg transition-all duration-300 group-hover:shadow-xl group-focus-within:border-[#4ECDC4] group-focus-within:shadow-xl group-focus-within:from-[#4ECDC4]/5 group-focus-within:to-white">
-            
-            {/* Search icon */}
-            <div className="absolute left-5 top-0 bottom-0 flex items-center pointer-events-none z-10">
-              <Search className={cn(
-                "h-5 w-5 transition-colors duration-200",
-                loading ? "text-[#4ECDC4] animate-pulse" : "text-gray-400 group-focus-within:text-[#4ECDC4]"
-              )} />
-            </div>
-
-            {/* Input field */}
-            <Input
-              id="search-input"
-              name="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search people, places, categories..."
-              className="flex-1 pl-14 pr-20 h-full border-0 bg-transparent text-gray-900 placeholder-gray-400 focus-visible:ring-0 focus-visible:ring-offset-0 text-base font-medium"
-            />
-
-            {/* Clear button */}
-            {query && (
-              <button
-                onClick={clearSearch}
-                className="absolute right-16 top-0 bottom-0 flex items-center px-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
-
-            {/* Loading indicator */}
-            {loading && (
-              <div className="absolute right-2 top-2 bottom-2 flex items-center">
-                <div className="h-10 px-4 rounded-xl bg-[#4ECDC4]/10 flex items-center">
-                  <Loader2 className="h-4 w-4 text-[#4ECDC4] animate-spin" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Decorative elements */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#4ECDC4]/20 via-transparent to-[#FF6B6B]/20 rounded-2xl opacity-0 group-focus-within:opacity-100 transition-opacity duration-300 blur-sm -z-10" />
+    <div className="w-full max-w-4xl mx-auto">
+      {/* Search Input */}
+      <div className="relative mb-4 sm:mb-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 sm:h-5 sm:w-5" />
+          <Input
+            type="text"
+            placeholder="Search places, people, or categories..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="pl-10 pr-10 h-11 sm:h-12 text-sm sm:text-base bg-white/90 backdrop-blur-sm border-gray-200 focus:border-[#4ECDC4] focus:ring-[#4ECDC4] rounded-xl shadow-sm"
+          />
+          {query && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 sm:h-7 sm:w-7 p-0 hover:bg-gray-100 rounded-full"
+            >
+              <X className="h-3 w-3 sm:h-4 sm:w-4" />
+            </Button>
+          )}
         </div>
-
+        
         {/* Recent searches */}
-        {!query && recentSearches.length > 0 && (
-          <div className="mt-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Recent Searches</h3>
+        {!hasSearched && recentSearches.length > 0 && (
+          <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 p-3 z-50">
+            <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Recent searches</p>
             <div className="flex flex-wrap gap-2">
-              {recentSearches.map((recent, index) => (
+              {recentSearches.map((search, index) => (
                 <button
                   key={index}
-                  onClick={() => setQuery(recent)}
-                  className="text-sm px-3 py-1.5 bg-gray-50 hover:bg-[#4ECDC4]/10 text-gray-700 rounded-lg transition-colors duration-200 flex items-center gap-2"
+                  onClick={() => setQuery(search)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs sm:text-sm text-gray-600 hover:text-[#4ECDC4] hover:bg-gray-50 rounded-md transition-colors"
                 >
-                  <Search className="h-3 w-3" />
-                  {recent}
+                  <Clock className="h-3 w-3" />
+                  {search}
                 </button>
               ))}
             </div>
@@ -401,203 +485,317 @@ export default function EnhancedSearch({ initialQuery = "", initialType = "all" 
         )}
       </div>
 
-      {/* Search controls */}
-      {hasSearched && (
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <p className="text-sm text-gray-600">
-              {loading ? "Searching..." : `${results.total} result${results.total === 1 ? '' : 's'} found`}
-              {query && <span className="font-medium"> for "{query}"</span>}
-            </p>
-          </div>
+      {/* Tabs and Controls */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-9 sm:h-10 bg-white/80 backdrop-blur-sm">
+            <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-3">All</TabsTrigger>
+            <TabsTrigger value="locations" className="text-xs sm:text-sm px-2 sm:px-3">Places</TabsTrigger>
+            <TabsTrigger value="nearby" className="text-xs sm:text-sm px-2 sm:px-3 relative">
+              Nearby
+              {nearbyLoading && (
+                <Loader2 className="h-3 w-3 animate-spin ml-1" />
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="users" className="text-xs sm:text-sm px-2 sm:px-3">People</TabsTrigger>
+            <TabsTrigger value="categories" className="text-xs sm:text-sm px-2 sm:px-3">Categories</TabsTrigger>
+            <TabsTrigger value="places" className="text-xs sm:text-sm px-2 sm:px-3">Discover</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        
+        {/* Controls */}
+        <div className="flex gap-2">
+          {/* Nearby Button */}
+          {activeTab !== 'nearby' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={getNearbyLocations}
+              disabled={nearbyLoading}
+              className="bg-white/80 backdrop-blur-sm border-gray-200 hover:border-[#4ECDC4] h-9 sm:h-10 px-3 sm:px-4 text-xs sm:text-sm"
+            >
+              {nearbyLoading ? (
+                <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin mr-1" />
+              ) : (
+                <Navigation className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+              )}
+              Near Me
+            </Button>
+          )}
           
-          <div className="flex items-center gap-3">
-            <Select value={sortBy} onValueChange={handleSortChange}>
-              <SelectTrigger className="w-[140px] h-9">
-                <SortAsc className="h-4 w-4 mr-2" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="relevance">Relevance</SelectItem>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="recent">Recent</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Sort Select */}
+          <Select value={sortBy} onValueChange={handleSortChange}>
+            <SelectTrigger className="w-24 sm:w-32 bg-white/80 backdrop-blur-sm border-gray-200 h-9 sm:h-10 text-xs sm:text-sm">
+              <SortAsc className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="relevance">Relevance</SelectItem>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="recent">Recent</SelectItem>
+              <SelectItem value="rating">Rating</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Location Permission Banner */}
+      {locationPermission === 'denied' && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-800">
+            Enable location access to find places near you.{' '}
+            <button
+              onClick={getUserLocation}
+              className="font-medium text-amber-900 hover:underline"
+            >
+              Try again
+            </button>
+          </p>
         </div>
       )}
 
       {/* Results */}
-      {hasSearched && (
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 bg-gray-100 p-1 rounded-xl">
-            <TabsTrigger value="all" className="flex items-center gap-2 data-[state=active]:bg-white">
-              <Search className="h-4 w-4" />
-              All ({results.total})
-            </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2 data-[state=active]:bg-white">
-              <Users className="h-4 w-4" />
-              People ({results.users.length})
-            </TabsTrigger>
-            <TabsTrigger value="locations" className="flex items-center gap-2 data-[state=active]:bg-white">
-              <MapPin className="h-4 w-4" />
-              Places ({results.locations.length})
-            </TabsTrigger>
-            <TabsTrigger value="places" className="flex items-center gap-2 data-[state=active]:bg-white">
-              <Search className="h-4 w-4" />
-              Discover ({results.places.length})
-            </TabsTrigger>
-            <TabsTrigger value="categories" className="flex items-center gap-2 data-[state=active]:bg-white">
-              <Filter className="h-4 w-4" />
-              Categories ({results.categories.length})
-            </TabsTrigger>
-          </TabsList>
+      <div className="space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-8 sm:py-12">
+            <div className="flex items-center gap-3 text-[#4ECDC4]">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm sm:text-base font-medium">Searching...</span>
+            </div>
+          </div>
+        ) : hasSearched || results.nearbyLocations.length > 0 ? (
+          <>
+            {/* Results Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-gray-200">
+              <p className="text-sm sm:text-base text-gray-600">
+                {currentTabResults > 0 ? (
+                  <>
+                    Found <span className="font-semibold text-gray-900">{currentTabResults}</span>{' '}
+                    {activeTab === 'all' ? 'results' : 
+                     activeTab === 'nearby' ? 'nearby places' :
+                     activeTab === 'users' ? 'people' : activeTab}
+                    {query && ` for "${query}"`}
+                  </>
+                ) : (
+                  <>No {activeTab === 'all' ? 'results' : activeTab} found{query && ` for "${query}"`}</>
+                )}
+              </p>
+              
+              {userLocation && activeTab === 'nearby' && (
+                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                  <Navigation className="h-3 w-3 mr-1" />
+                  Location enabled
+                </Badge>
+              )}
+            </div>
 
-          <TabsContent value="all" className="mt-6">
-            {results.total === 0 ? (
-              <NoResults query={query} />
-            ) : (
-              <div className="space-y-8">
-                {/* Places Discovery */}
-                {results.places.length > 0 && (
-                  <div className="space-y-4">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Search className="h-5 w-5 text-[#4ECDC4]" />
-                      Discover New Places ({results.places.length})
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {results.places.slice(0, 6).map(place => (
-                        <PlaceCard key={place.id} place={place} onImport={handlePlaceImport} />
+            {/* Tab Content */}
+            <Tabs value={activeTab} className="w-full">
+              <TabsContent value="all" className="space-y-4 mt-0">
+                {results.locations.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Places</h3>
+                    <div className="grid gap-3 sm:gap-4">
+                      {results.locations.slice(0, 3).map((location) => (
+                        <LocationCard key={location.id} location={location} />
                       ))}
                     </div>
                   </div>
                 )}
-
-                {/* Existing Database Results */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Users */}
-                  <div className="space-y-4">
-                    {results.users.length > 0 && (
-                      <>
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                          <Users className="h-5 w-5 text-[#4ECDC4]" />
-                          People ({results.users.length})
-                        </h2>
-                        {results.users.slice(0, 3).map(user => (
-                          <UserCard key={user.id} user={user} />
-                        ))}
-                      </>
-                    )}
+                
+                {results.users.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">People</h3>
+                    <div className="grid gap-3 sm:gap-4">
+                      {results.users.slice(0, 3).map((user) => (
+                        <UserCard key={user.id} user={user} />
+                      ))}
+                    </div>
                   </div>
-
-                  {/* Locations */}
-                  <div className="space-y-4">
-                    {results.locations.length > 0 && (
-                      <>
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                          <MapPin className="h-5 w-5 text-[#FF6B6B]" />
-                          Places ({results.locations.length})
-                        </h2>
-                        {results.locations.slice(0, 3).map(location => (
-                          <LocationCard key={location.id} location={location} />
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Categories */}
+                )}
+                
                 {results.categories.length > 0 && (
-                  <div className="space-y-4">
-                    <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Filter className="h-5 w-5 text-[#FFE66D]" />
-                      Categories ({results.categories.length})
-                    </h2>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                      {results.categories.slice(0, 10).map(category => (
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-3 text-sm sm:text-base">Categories</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                      {results.categories.slice(0, 4).map((category) => (
                         <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
                       ))}
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-          </TabsContent>
+              </TabsContent>
 
-          <TabsContent value="users" className="mt-6">
-            {results.users.length === 0 ? (
-              <NoResults query={query} type="users" />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {results.users.map(user => (
-                  <UserCard key={user.id} user={user} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="locations" className="mt-6">
-            {results.locations.length === 0 ? (
-              <NoResults query={query} type="locations" />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {results.locations.map(location => (
+              <TabsContent value="locations" className="space-y-3 sm:space-y-4 mt-0">
+                {results.locations.map((location) => (
                   <LocationCard key={location.id} location={location} />
                 ))}
-              </div>
-            )}
-          </TabsContent>
+                {results.locations.length === 0 && (
+                  <NoResults query={query} type="locations" />
+                )}
+              </TabsContent>
 
-          <TabsContent value="places" className="mt-6">
-            {results.places.length === 0 ? (
-              <NoResults query={query} type="places" />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {results.places.map(place => (
+              <TabsContent value="nearby" className="space-y-3 sm:space-y-4 mt-0">
+                {results.nearbyLocations.map((location) => (
+                  <NearbyLocationCard key={location.id} location={location} />
+                ))}
+                {results.nearbyLocations.length === 0 && !nearbyLoading && (
+                  <div className="text-center py-8 sm:py-12">
+                    <Navigation className="h-8 w-8 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No nearby places found</h3>
+                    <p className="text-sm sm:text-base text-gray-500 mb-4">
+                      We couldn't find any places within 25 miles of your location.
+                    </p>
+                    <Button
+                      onClick={getNearbyLocations}
+                      variant="outline"
+                      className="bg-white border-[#4ECDC4] text-[#4ECDC4] hover:bg-[#4ECDC4] hover:text-white"
+                    >
+                      <Navigation className="h-4 w-4 mr-2" />
+                      Try Again
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="users" className="space-y-3 sm:space-y-4 mt-0">
+                {results.users.map((user) => (
+                  <UserCard key={user.id} user={user} />
+                ))}
+                {results.users.length === 0 && (
+                  <NoResults query={query} type="users" />
+                )}
+              </TabsContent>
+
+              <TabsContent value="categories" className="mt-0">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {results.categories.map((category) => (
+                    <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
+                  ))}
+                </div>
+                {results.categories.length === 0 && (
+                  <NoResults query={query} type="categories" />
+                )}
+              </TabsContent>
+
+              <TabsContent value="places" className="space-y-3 sm:space-y-4 mt-0">
+                {results.places.map((place) => (
                   <PlaceCard key={place.id} place={place} onImport={handlePlaceImport} />
                 ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="categories" className="mt-6">
-            {results.categories.length === 0 ? (
-              <NoResults query={query} type="categories" />
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {results.categories.map(category => (
-                  <CategoryCard key={category.id} category={category} onClick={() => handleCategoryClick(category)} />
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      )}
-
-      {!hasSearched && !loading && (
-        <div className="text-center py-16">
-          <Search className="h-16 w-16 text-gray-300 mx-auto mb-6" />
-          <h3 className="text-xl font-semibold text-gray-900 mb-3">Discover amazing places and people</h3>
-          <p className="text-gray-500 mb-8 max-w-md mx-auto">
-            Search for locations by name, usernames, categories, or discover new places from around the world
-          </p>
-          <div className="flex justify-center gap-4">
-            <Link href="/map">
-              <Button variant="outline" className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Explore Map
+                {results.places.length === 0 && (
+                  <NoResults query={query} type="places" />
+                )}
+              </TabsContent>
+            </Tabs>
+          </>
+        ) : (
+          <div className="text-center py-8 sm:py-16">
+            <Search className="h-12 w-12 sm:h-16 sm:w-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg sm:text-xl font-medium text-gray-900 mb-2">Start exploring</h3>
+            <p className="text-sm sm:text-base text-gray-500 mb-6">
+              Search for places, people, or categories to discover amazing content
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center">
+              <Button
+                onClick={getNearbyLocations}
+                className="bg-[#4ECDC4] hover:bg-[#4ECDC4]/90 text-white px-4 sm:px-6"
+                disabled={nearbyLoading}
+              >
+                {nearbyLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Navigation className="h-4 w-4 mr-2" />
+                )}
+                Find Places Near Me
               </Button>
-            </Link>
-            <Link href="/add-location">
-              <Button variant="outline" className="flex items-center gap-2">
-                <Search className="h-4 w-4" />
-                Add Location
-              </Button>
-            </Link>
+              <p className="text-xs sm:text-sm text-gray-400">
+                or start typing to search
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
+  )
+}
+
+// NearbyLocationCard component for displaying nearby locations
+function NearbyLocationCard({ location }: { location: NearbyLocation }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="group"
+    >
+      <Card className="hover:shadow-lg transition-all duration-200 bg-white/80 backdrop-blur-sm border-gray-200 hover:border-[#4ECDC4]/30">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex gap-3 sm:gap-4">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+              <Image
+                src={location.imageUrl || "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&h=200&q=80"}
+                alt={location.name}
+                width={80}
+                height={80}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+              />
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <h3 className="font-semibold text-gray-900 text-sm sm:text-base line-clamp-1 group-hover:text-[#4ECDC4] transition-colors">
+                  {location.name}
+                </h3>
+                {location.distance && (
+                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-600 flex-shrink-0">
+                    {location.distance} mi
+                  </Badge>
+                )}
+              </div>
+              
+              {location.category && (
+                <p className="text-xs sm:text-sm text-[#4ECDC4] font-medium mb-1">
+                  {location.category}
+                </p>
+              )}
+              
+              {location.address && (
+                <div className="flex items-center gap-1 mb-2">
+                  <MapPin className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                  <p className="text-xs sm:text-sm text-gray-500 line-clamp-1">
+                    {location.address}
+                  </p>
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between">
+                {location.averageRating && (
+                  <div className="flex items-center gap-1">
+                    <Star className="h-3 w-3 text-yellow-400 fill-current" />
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">
+                      {location.averageRating.toFixed(1)}
+                    </span>
+                    {location.reviewCount && (
+                      <span className="text-xs text-gray-500">
+                        ({location.reviewCount})
+                      </span>
+                    )}
+                  </div>
+                )}
+                
+                <Link
+                  href={`/locations/${location.id}`}
+                  className="text-xs sm:text-sm text-[#4ECDC4] hover:text-[#4ECDC4]/80 font-medium flex items-center gap-1 group-hover:gap-2 transition-all"
+                >
+                  View Details
+                  <ExternalLink className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 

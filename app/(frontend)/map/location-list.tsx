@@ -8,41 +8,21 @@ import {
   MapPin, 
   Bookmark, 
   Bell, 
-  X,
-  Filter,
-  Calendar,
-  Heart,
-  Search,
-  SortAsc,
-  Users,
-  AlertTriangle
+  X
 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetFooter,
-  SheetClose,
-} from "@/components/ui/sheet"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Image from "next/image"
 import type { Location } from "./map-data"
-import { getCategoryColor, getCategoryName } from "./category-utils"
+import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { toggleSaveLocationAction, toggleSubscribeLocationAction, getSavedLocationsAction, getUserLocationDataAction } from "@/app/actions"
-import { motion } from "framer-motion"
-import { getPrimaryImageUrl, getAllLocationImages } from "@/lib/image-utils"
+import { getPrimaryImageUrl } from "@/lib/image-utils"
 
 
 interface LocationListProps {
@@ -388,7 +368,7 @@ export default function LocationList({
     const handleSaveLocation = (e: React.MouseEvent, loc: Location) => {
       e.stopPropagation();
       // Simplified: directly call action, actual implementation might be more complex
-      toggleSaveLocationAction(loc.id, currentUser?.id || '').then(() => {
+      toggleSaveLocationAction(loc.id).then(() => {
         setSavedLocations(prev => {
           const newSet = new Set(prev);
           if (newSet.has(loc.id)) newSet.delete(loc.id);
@@ -401,7 +381,7 @@ export default function LocationList({
     const handleSubscribeLocation = (e: React.MouseEvent, loc: Location) => {
         e.stopPropagation();
         // Simplified: directly call action
-        toggleSubscribeLocationAction(loc.id, currentUser?.id || '').then(() => {
+        toggleSubscribeLocationAction(loc.id, 'all').then(() => {
             setSubscribedLocations(prev => {
                 const newSet = new Set(prev);
                 if (newSet.has(loc.id)) newSet.delete(loc.id);
