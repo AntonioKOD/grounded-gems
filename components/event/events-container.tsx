@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Calendar, Filter, Plus, Loader2, UserCircle, MapPin, Clock, ChevronDown, Search, SlidersHorizontal, X, Bookmark, Sparkles } from 'lucide-react'
 import { EventCard } from "@/components/event/event-card"
 import EventsFilter from "@/components/event/events-filter"
-import { getNearbyEventsAction, getUserEventsByCategory, getNotifications, getSavedGemJourneys } from "@/app/(frontend)/events/actions"
+import { getNearbyEventsAction, getUserEventsByCategory, getNotifications, getSavedGemJourneys, unsaveGemJourney } from "@/app/(frontend)/events/actions"
 import type { Event } from "@/types/event"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -373,6 +373,23 @@ export default function EventsContainer({
         (event.description || "").toLowerCase().includes(searchQuery.toLowerCase()),
     )
   }, [events, searchQuery])
+
+  // Add handleUnsave function
+  const handleUnsave = async (journeyId: string) => {
+    try {
+      const result = await unsaveGemJourney(journeyId)
+      if (result.success) {
+        // Remove the journey from attendingJourneys state
+        setAttendingJourneys(prev => prev.filter(journey => journey.id !== journeyId))
+        toast.success('Journey removed successfully')
+      } else {
+        toast.error(result.error || 'Failed to remove journey')
+      }
+    } catch (error) {
+      console.error('Error removing journey:', error)
+      toast.error('Failed to remove journey')
+    }
+  }
 
   // Render My Events tab content
   const renderMyEventsContent = () => {

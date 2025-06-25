@@ -773,6 +773,14 @@ export const Users: CollectionConfig = {
     { name: 'following', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'likedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
     { name: 'savedPosts', type: 'relationship', relationTo: 'posts', hasMany: true },
+    { 
+      name: 'joinedChallenges', 
+      type: 'text', 
+      hasMany: true,
+      admin: { 
+        description: 'Challenges the user has joined (stored as weeklyFeatureId-challengeTitle)'
+      }
+    },
     // Add persistent savedGemJourneys field
     {
       name: 'savedGemJourneys',

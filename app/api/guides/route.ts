@@ -12,7 +12,9 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '12')
     const category = searchParams.get('category')
-    const location = searchParams.get('location')
+    const location = searchParams.get('location') // specific location ID
+    const locationSearch = searchParams.get('locationSearch') // location name/city/state search
+    const userState = searchParams.get('userState') // user's state for nearby filtering
     const priceType = searchParams.get('priceType') // free, paid, pwyw
     const search = searchParams.get('search')
     const difficulty = searchParams.get('difficulty')
@@ -25,14 +27,41 @@ export async function GET(request: NextRequest) {
       status: { equals: 'published' }
     }
     
-    // Filter by category
-    if (category && category !== 'all') {
-      where.category = { equals: category }
+    console.log('🔍 Guide filtering params:', {
+      location,
+      locationSearch,
+      userState,
+      search,
+      showingNearby: !!userState
+    })
+    
+    // Note: Category filtering removed - guides are no longer categorized
+    
+    // Filter by specific location ID
+    if (location) {
+      where.primaryLocation = { equals: location }
     }
     
-    // Filter by location
-    if (location) {
-      where.location = { equals: location }
+    // Filter by location search (city, state, location name)
+    if (locationSearch) {
+      where.or = [
+        // Search in primary location
+        { 'primaryLocation.name': { contains: locationSearch } },
+        { 'primaryLocation.address.city': { contains: locationSearch } },
+        { 'primaryLocation.address.state': { contains: locationSearch } },
+        // Search in guide locations
+        { 'locations.location.name': { contains: locationSearch } },
+        { 'locations.location.address.city': { contains: locationSearch } },
+        { 'locations.location.address.state': { contains: locationSearch } }
+      ]
+    }
+    
+    // Filter by user's state for nearby guides
+    if (userState && !location && !locationSearch) {
+      where.or = [
+        { 'primaryLocation.address.state': { equals: userState } },
+        { 'locations.location.address.state': { equals: userState } }
+      ]
     }
     
     // Filter by price type
@@ -50,20 +79,27 @@ export async function GET(request: NextRequest) {
       where.creator = { equals: creator }
     }
     
-    // Search functionality
-    if (search) {
+    // Search functionality (general search)
+    if (search && !locationSearch) {
       where.or = [
         { title: { contains: search } },
         { description: { contains: search } },
-        { 'tags.tag': { contains: search } }
+        { 'tags.tag': { contains: search } },
+        // Also search in location names when doing general search
+        { 'primaryLocation.name': { contains: search } },
+        { 'primaryLocation.address.city': { contains: search } },
+        { 'primaryLocation.address.state': { contains: search } }
       ]
     }
     
-    // Featured guides
+    // Filter by featured guides
     if (featured) {
       where['stats.rating'] = { greater_than: 4 }
       where['stats.reviewCount'] = { greater_than: 2 }
     }
+    
+    // Log final where clause for debugging
+    console.log('📋 Final where clause:', JSON.stringify(where, null, 2))
     
     // Execute query
     const result = await payload.find({
@@ -74,10 +110,14 @@ export async function GET(request: NextRequest) {
       sort,
       populate: [
         'creator',
-        'location',
+        'creator.profileImage',
+        'primaryLocation',
+        'locations.location',
         'featuredImage'
       ]
     })
+    
+    console.log(`✅ Found ${result.docs.length} guides`)
     
     return NextResponse.json({
       success: true,
@@ -105,16 +145,111 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = await getPayload({ config })
-    const data = await request.json()
     
-    // Create the guide
+    // Parse request body
+    let data
+    try {
+      const contentType = request.headers.get('content-type')
+      if (contentType?.includes('application/json')) {
+        data = await request.json()
+      } else {
+        // Fallback to form data if not JSON
+        const formData = await request.formData()
+        const formDataObj: any = {}
+        for (const [key, value] of formData.entries()) {
+          formDataObj[key] = value
+        }
+        data = formDataObj
+      }
+    } catch (parseError) {
+      console.error('❌ Error parsing request body:', parseError)
+      return NextResponse.json(
+        { success: false, error: 'Invalid request format' },
+        { status: 400 }
+      )
+    }
+    
+    console.log('🔍 Creating guide with status:', data.status)
+    
+    // Create a proper request object with headers for authentication
+    const req = {
+      headers: Object.fromEntries(request.headers.entries()),
+      user: null
+    }
+    
+    // Try to authenticate the user
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      req.user = authResult.user
+      console.log('Authenticated user:', authResult.user?.id)
+    } catch (authError) {
+      console.log('No authenticated user found')
+    }
+    
+    // Transform the data to match the collection schema
+    const guideData = {
+      title: data.title,
+      description: data.description,
+      primaryLocation: data.primaryLocation,
+      locations: data.locations || [],
+      difficulty: data.difficulty,
+      duration: data.duration,
+      pricing: data.pricing,
+      // Convert plain text content to Lexical rich text format
+      content: data.content ? {
+        root: {
+          type: 'root',
+          format: '',
+          indent: 0,
+          version: 1,
+          children: data.content.split('\n\n').map(paragraph => ({
+            type: 'paragraph',
+            format: '',
+            indent: 0,
+            version: 1,
+            children: [
+              {
+                type: 'text',
+                format: 0,
+                style: '',
+                mode: 'normal',
+                text: paragraph.trim(),
+                version: 1
+              }
+            ]
+          })).filter(p => p.children[0].text.length > 0)
+        }
+      } : {
+        root: {
+          type: 'root',
+          format: '',
+          indent: 0,
+          version: 1,
+          children: []
+        }
+      },
+      highlights: data.highlights || [],
+      insiderTips: data.insiderTips || [],
+      tags: data.tags || [],
+      language: data.language || 'en',
+      featuredImage: data.featuredImage || undefined,
+      itinerary: data.itinerary || [],
+      meta: data.meta || {
+        title: '',
+        description: '',
+        keywords: ''
+      },
+      status: data.status || 'draft'
+    }
+    
+    // Create the guide with proper request context
     const guide = await payload.create({
       collection: 'guides',
-      data: {
-        ...data,
-        status: 'draft' // All new guides start as drafts
-      }
+      data: guideData,
+      req
     })
+    
+    console.log('✅ Created guide:', guide.id, 'Status:', guide.status)
     
     return NextResponse.json({
       success: true,
@@ -124,7 +259,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating guide:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to create guide' },
+      { success: false, error: 'Failed to create guide', details: error.message },
       { status: 500 }
     )
   }

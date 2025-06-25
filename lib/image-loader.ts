@@ -44,6 +44,11 @@ export default function sacaviaImageLoader({ src, width, quality }: ImageLoaderP
       }
     }
     
+    // For Imgur images, return as-is (they don't support query params for optimization)
+    if (src.includes('imgur.com')) {
+      return src;
+    }
+    
     return src;
   }
 

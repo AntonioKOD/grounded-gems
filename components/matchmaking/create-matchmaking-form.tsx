@@ -416,7 +416,7 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                                 variant="outline"
                                 className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
                               >
-                                {field.value ? format(field.value, "PPP HH:mm") : <span>Pick a date</span>}
+                                {field.value ? format(field.value, "PPP h:mm a") : <span>Pick a date</span>}
                                 <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
                             </FormControl>
@@ -427,7 +427,7 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                               <div className="flex items-center justify-center space-x-2">
                                 <Input
                                   type="time"
-                                  value={format(field.value || new Date(), "HH:mm")}
+                                  value={field.value ? format(field.value, "HH:mm") : ""}
                                   onChange={(e) => {
                                     const [hours, minutes] = e.target.value.split(":")
                                     const newDate = new Date(field.value || new Date())
@@ -460,7 +460,7 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                                 variant="outline"
                                 className={`w-full pl-3 text-left font-normal ${!field.value && "text-muted-foreground"}`}
                               >
-                                {field.value ? format(field.value, "PPP HH:mm") : <span>Pick a date</span>}
+                                {field.value ? format(field.value, "PPP h:mm a") : <span>Pick a date</span>}
                                 <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                               </Button>
                             </FormControl>
@@ -471,7 +471,7 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                               <div className="flex items-center justify-center space-x-2">
                                 <Input
                                   type="time"
-                                  value={format(field.value || new Date(), "HH:mm")}
+                                  value={field.value ? format(field.value, "HH:mm") : ""}
                                   onChange={(e) => {
                                     const [hours, minutes] = e.target.value.split(":")
                                     const newDate = new Date(field.value || new Date())

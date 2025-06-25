@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@payload-config'
-import { likePost } from '@/app/actions'
+import config from '@/payload.config'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,30 +18,133 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { postId, shouldLike } = await request.json()
+    const body = await request.json()
+    const { postId, shouldLike } = body
 
     if (!postId || typeof shouldLike !== 'boolean') {
       return NextResponse.json(
-        { success: false, error: 'Missing required fields' },
+        { success: false, error: 'Missing required fields: postId and shouldLike' },
         { status: 400 }
       )
     }
 
-    // Use the authenticated user's ID
-    const result = await likePost(postId, shouldLike, user.id)
-    
-    return NextResponse.json({
+    console.log(`👤 User ${user.id} ${shouldLike ? 'liking' : 'unliking'} post ${postId}`)
+
+    // Get the current post and user
+    const [post, currentUser] = await Promise.all([
+      payload.findByID({
+        collection: 'posts',
+        id: postId,
+        depth: 0,
+      }),
+      payload.findByID({
+        collection: 'users',
+        id: user.id,
+        depth: 0,
+      })
+    ])
+
+    if (!post) {
+      return NextResponse.json(
+        { success: false, error: 'Post not found' },
+        { status: 404 }
+      )
+    }
+
+    // Get current likes arrays
+    const currentPostLikes = Array.isArray(post.likes) ? post.likes : []
+    const currentUserLikedPosts = Array.isArray(currentUser.likedPosts) ? currentUser.likedPosts : []
+
+    // Check current like status
+    const isCurrentlyLiked = currentPostLikes.includes(user.id)
+    const userHasLikedPost = currentUserLikedPosts.includes(postId)
+
+    // Validate operation
+    if (shouldLike && isCurrentlyLiked) {
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: 'Post already liked',
+          data: { 
+            isLiked: true, 
+            likeCount: currentPostLikes.length,
+            postId 
+          } 
+        }
+      )
+    }
+
+    if (!shouldLike && !isCurrentlyLiked) {
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: 'Post already not liked',
+          data: { 
+            isLiked: false, 
+            likeCount: currentPostLikes.length,
+            postId 
+          } 
+        }
+      )
+    }
+
+    let updatedPostLikes: string[]
+    let updatedUserLikedPosts: string[]
+
+    if (shouldLike) {
+      // Add like
+      updatedPostLikes = Array.from(new Set([...currentPostLikes, user.id]))
+      updatedUserLikedPosts = Array.from(new Set([...currentUserLikedPosts, postId]))
+      console.log(`➕ Adding like: Post ${postId} now has ${updatedPostLikes.length} likes`)
+    } else {
+      // Remove like
+      updatedPostLikes = currentPostLikes.filter((id: string) => id !== user.id)
+      updatedUserLikedPosts = currentUserLikedPosts.filter((id: string) => id !== postId)
+      console.log(`➖ Removing like: Post ${postId} now has ${updatedPostLikes.length} likes`)
+    }
+
+    // Update both post and user in parallel
+    await Promise.all([
+      payload.update({
+        collection: 'posts',
+        id: postId,
+        data: {
+          likes: updatedPostLikes,
+          likeCount: updatedPostLikes.length,
+        },
+      }),
+      payload.update({
+        collection: 'users',
+        id: user.id,
+        data: {
+          likedPosts: updatedUserLikedPosts,
+        },
+      })
+    ])
+
+    const response = {
       success: true,
-      data: result
-    })
+      message: shouldLike ? 'Post liked successfully' : 'Post unliked successfully',
+      data: { 
+        isLiked: shouldLike,
+        likeCount: updatedPostLikes.length,
+        postId,
+        userId: user.id
+      }
+    }
+
+    console.log(`✅ Like operation completed:`, response.data)
+
+    return NextResponse.json(response)
   } catch (error) {
-    console.error('Error liking post:', error)
+    console.error('❌ Error in like API:', error)
     return NextResponse.json(
       { 
         success: false, 
-        error: 'Failed to like post'
+        error: 'Failed to like post',
+        message: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )
   }
-} 
+}

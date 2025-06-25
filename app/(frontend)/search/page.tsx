@@ -42,6 +42,34 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       </div>
 
       <div className="relative z-10 container mx-auto px-3 sm:px-4 py-3 sm:py-4 md:py-6 max-w-5xl">
+        {/* Create Guide CTA Banner */}
+        <div className="mb-6 p-4 sm:p-6 bg-gradient-to-r from-[#FF6B6B]/10 via-[#4ECDC4]/10 to-[#FFD93D]/10 rounded-2xl border border-white/20 backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">
+                Share Your Local Expertise 🌟
+              </h2>
+              <p className="text-sm sm:text-base text-gray-600">
+                Create and sell travel guides for your favorite places. Turn your local knowledge into income!
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <a 
+                href="/guides" 
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white/80 hover:bg-white border border-gray-200 rounded-xl transition-all duration-200 text-center"
+              >
+                Browse Guides
+              </a>
+              <a 
+                href="/guides/create" 
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-center"
+              >
+                Create Guide & Earn
+              </a>
+            </div>
+          </div>
+        </div>
+
         {/* Enhanced Search Component - more space on mobile */}
         <Suspense fallback={<SearchLoading />}>
           <EnhancedSearch initialQuery={query} initialType={type} />

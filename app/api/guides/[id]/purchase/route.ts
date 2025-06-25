@@ -1,20 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import Stripe from 'stripe'
 
-// POST /api/guides/[id]/purchase - Purchase a guide
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2024-06-20',
+}) : null
+
+// Platform commission rates
+const PLATFORM_COMMISSION_RATE = 0.15 // 15% platform fee
+const STRIPE_FEE_RATE = 0.029 // 2.9% + $0.30
+const STRIPE_FIXED_FEE = 0.30
+
+// POST /api/guides/[id]/purchase - Purchase a guide with Stripe payment
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Check if Stripe is available for paid guides
+    if (!stripe) {
+      return NextResponse.json(
+        { success: false, error: 'Payment processing is temporarily unavailable' },
+        { status: 503 }
+      )
+    }
+
     const payload = await getPayload({ config })
-    const { id: guideId } = params
-    const { amount, paymentMethod = 'free', transactionId } = await request.json()
-    
-    // TODO: Add authentication to get current user
-    // For now, we'll assume user ID is passed in the request
-    const { userId } = await request.json()
+    const { id: guideId } = await params
+    const { 
+      amount, 
+      paymentMethodId, 
+      userId,
+      paymentType = 'stripe' // 'stripe', 'free', or 'pwyw'
+    } = await request.json()
     
     if (!userId) {
       return NextResponse.json(
@@ -23,10 +42,11 @@ export async function POST(
       )
     }
     
-    // Get the guide to check pricing
+    // Get the guide and creator information
     const guide = await payload.findByID({
       collection: 'guides',
-      id: guideId
+      id: guideId,
+      depth: 2
     })
     
     if (!guide || guide.status !== 'published') {
@@ -56,10 +76,45 @@ export async function POST(
       )
     }
     
-    // Validate payment amount
-    const expectedAmount = guide.pricing?.type === 'free' ? 0 : 
-                          guide.pricing?.type === 'paid' ? guide.pricing.price : 
-                          amount // For pay-what-you-want
+    // Get the user information
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId
+    })
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, error: 'User not found' },
+        { status: 404 }
+      )
+    }
+    
+    // Handle free guides
+    if (guide.pricing?.type === 'free') {
+      const purchase = await payload.create({
+        collection: 'guide-purchases',
+        data: {
+          user: userId,
+          guide: guideId,
+          amount: 0,
+          currency: 'USD',
+          paymentMethod: 'free',
+          status: 'completed',
+          platformFee: 0,
+          creatorEarnings: 0,
+          stripeFee: 0
+        }
+      })
+      
+      return NextResponse.json({
+        success: true,
+        purchase,
+        message: 'Free guide added to your library!'
+      })
+    }
+    
+    // Validate payment amount for paid guides
+    const expectedAmount = guide.pricing?.type === 'paid' ? guide.pricing.price : amount
     
     if (guide.pricing?.type === 'paid' && amount !== expectedAmount) {
       return NextResponse.json(
@@ -68,23 +123,170 @@ export async function POST(
       )
     }
     
+    if (!expectedAmount || expectedAmount <= 0) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid payment amount' },
+        { status: 400 }
+      )
+    }
+    
+    // Calculate fees and earnings
+    const totalAmount = expectedAmount * 100 // Convert to cents
+    const stripeFee = Math.round(totalAmount * STRIPE_FEE_RATE + STRIPE_FIXED_FEE * 100)
+    const platformFee = Math.round(totalAmount * PLATFORM_COMMISSION_RATE)
+    const creatorEarnings = totalAmount - stripeFee - platformFee
+    
+    let paymentIntent
+    let transactionId
+    
+    // Process Stripe payment for paid guides
+    if (paymentType === 'stripe' && paymentMethodId) {
+      try {
+        // Create payment intent with application fee for platform commission
+        paymentIntent = await stripe.paymentIntents.create({
+          amount: totalAmount,
+          currency: 'usd',
+          payment_method: paymentMethodId,
+          confirm: true,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: 'never'
+          },
+          metadata: {
+            guideId,
+            userId,
+            creatorId: typeof guide.author === 'object' ? guide.author.id : guide.author,
+            platformFee: platformFee.toString(),
+            creatorEarnings: creatorEarnings.toString()
+          },
+          description: `Purchase of guide: ${guide.title}`,
+          receipt_email: user.email
+        })
+        
+        transactionId = paymentIntent.id
+        
+        if (paymentIntent.status !== 'succeeded') {
+          return NextResponse.json(
+            { success: false, error: 'Payment failed' },
+            { status: 400 }
+          )
+        }
+      } catch (stripeError: any) {
+        console.error('Stripe payment error:', stripeError)
+        return NextResponse.json(
+          { success: false, error: stripeError.message || 'Payment processing failed' },
+          { status: 400 }
+        )
+      }
+    }
+    
     // Create the purchase record
     const purchase = await payload.create({
       collection: 'guide-purchases',
       data: {
         user: userId,
         guide: guideId,
-        amount: amount || 0,
+        amount: expectedAmount,
         currency: 'USD',
-        paymentMethod,
+        paymentMethod: paymentType,
         transactionId,
-        status: 'completed' // For free guides or after payment verification
+        status: 'completed',
+        platformFee: platformFee / 100, // Convert back to dollars
+        creatorEarnings: creatorEarnings / 100,
+        stripeFee: stripeFee / 100,
+        paymentIntentId: paymentIntent?.id
       }
     })
+    
+    // Update creator earnings
+    const creatorId = typeof guide.author === 'object' ? guide.author.id : guide.author
+    if (creatorId && creatorEarnings > 0) {
+      try {
+        const creator = await payload.findByID({
+          collection: 'users',
+          id: creatorId
+        })
+        
+        if (creator?.creatorProfile) {
+          const newTotalEarnings = (creator.creatorProfile.earnings?.totalEarnings || 0) + (creatorEarnings / 100)
+          const newTotalSales = (creator.creatorProfile.stats?.totalSales || 0) + 1
+          
+          await payload.update({
+            collection: 'users',
+            id: creatorId,
+            data: {
+              'creatorProfile.earnings.totalEarnings': newTotalEarnings,
+              'creatorProfile.stats.totalSales': newTotalSales,
+              'creatorProfile.stats.totalEarnings': newTotalEarnings
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Error updating creator earnings:', error)
+        // Don't fail the purchase if this update fails
+      }
+    }
+    
+    // Update guide stats
+    try {
+      const currentGuide = await payload.findByID({
+        collection: 'guides',
+        id: guideId
+      })
+      
+      if (currentGuide) {
+        const currentStats = currentGuide.stats || {}
+        await payload.update({
+          collection: 'guides',
+          id: guideId,
+          data: {
+            stats: {
+              ...currentStats,
+              purchases: (currentStats.purchases || 0) + 1,
+              revenue: (currentStats.revenue || 0) + expectedAmount
+            }
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error updating guide stats:', error)
+    }
+    
+    // Create notification for creator
+    if (creatorId && creatorId !== userId) {
+      try {
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: creatorId,
+            type: 'guide_purchased',
+            title: 'Guide Purchased! 🎉',
+            message: `Someone just purchased your guide "${guide.title}" for $${expectedAmount}. You earned $${(creatorEarnings / 100).toFixed(2)}!`,
+            priority: 'high',
+            relatedTo: {
+              relationTo: 'guides',
+              value: guideId
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Error creating notification:', error)
+      }
+    }
     
     return NextResponse.json({
       success: true,
       purchase,
+      paymentIntent: paymentIntent ? {
+        id: paymentIntent.id,
+        status: paymentIntent.status
+      } : null,
+      breakdown: {
+        totalAmount: expectedAmount,
+        platformFee: platformFee / 100,
+        stripeFee: stripeFee / 100,
+        creatorEarnings: creatorEarnings / 100
+      },
       message: 'Guide purchased successfully!'
     })
     
@@ -100,11 +302,11 @@ export async function POST(
 // GET /api/guides/[id]/purchase - Check if user has purchased this guide
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const payload = await getPayload({ config })
-    const { id: guideId } = params
+    const { id: guideId } = await params
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
     

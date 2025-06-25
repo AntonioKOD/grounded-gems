@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, CalendarDays, Search, Bell, PlusSquare, Crown } from "lucide-react";
+import { Plus, X, CalendarDays, Search, Bell, PlusSquare, Crown, BookOpen, LibraryBig } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ActionButton {
@@ -21,6 +21,9 @@ const FloatingActionButtonMenu: React.FC = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
 
   const buttons: ActionButton[] = [
+    { id: "my-library", label: "My Library", icon: LibraryBig, href: "/library", bgColor: "bg-[#6366F1]", textColor: "text-white" },
+    { id: "browse-guides", label: "Browse Guides", icon: BookOpen, href: "/guides", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
+    { id: "create-guide", label: "Create Guide & Earn", icon: BookOpen, href: "/guides/create", bgColor: "bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4]", textColor: "text-white" },
     { id: "bucket-list", label: "My Local Legends", icon: Crown, href: "/bucket-list", bgColor: "bg-[#FFD93D]", textColor: "text-gray-800" },
     { id: "add-location", label: "Add Location", icon: PlusSquare, href: "/add-location", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
     { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications", bgColor: "bg-[#FFE66D]", textColor: "text-gray-800" },

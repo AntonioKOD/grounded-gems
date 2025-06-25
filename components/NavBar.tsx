@@ -4,7 +4,7 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { Bell, Heart, Plus, Search, User, LogOut, Menu, X } from "lucide-react"
+import { Bell, Heart, Plus, Search, User, LogOut, Menu, X, BookOpen } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -109,7 +109,8 @@ export default function NavBar({ initialUser }: NavBarProps) {
   const navLinks = [
     { href: "/feed", label: "Feed", priority: 1 },
     { href: "/events", label: "Events", priority: 2 },
-    { href: "/map", label: "Explore", priority: 3 },
+    { href: "/guides", label: "Guides", priority: 3 },
+    { href: "/map", label: "Explore", priority: 4 },
   ];
 
   // Show loading state during authentication check
@@ -180,6 +181,14 @@ export default function NavBar({ initialUser }: NavBarProps) {
               {!isAuthenticated ? (
                 // Not authenticated: show login/signup buttons
                 <div className="flex items-center space-x-2 lg:space-x-3">
+                  <Link href="/guides">
+                    <Button 
+                      variant="ghost" 
+                      className="text-gray-700 hover:text-[#4ECDC4] hover:bg-[#4ECDC4]/10 transition-all duration-300 font-medium rounded-full px-4 lg:px-6"
+                    >
+                      Browse Guides
+                    </Button>
+                  </Link>
                   <Link href="/login">
                     <Button 
                       variant="ghost" 
@@ -198,6 +207,39 @@ export default function NavBar({ initialUser }: NavBarProps) {
               ) : (
                 // Authenticated: render authenticated user UI
                 <>
+                  {/* Guides Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="hidden lg:flex items-center space-x-2 text-white bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 transition-all duration-300 font-medium px-4 rounded-full shadow-lg hover:shadow-xl"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Guides</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent 
+                      align="end" 
+                      className="w-60 mt-2 shadow-2xl border-0 bg-white/95 backdrop-blur-xl rounded-2xl overflow-hidden"
+                    >
+                      <div className="p-2 space-y-1">
+                        <Link href="/guides">
+                          <div className="flex items-center w-full p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl font-medium cursor-pointer">
+                            <Search className="w-4 h-4 mr-3" />
+                            Browse Guide Marketplace
+                          </div>
+                        </Link>
+                        <Link href="/guides/create">
+                          <div className="flex items-center w-full p-3 text-white bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 transition-all duration-300 rounded-xl font-medium shadow-lg cursor-pointer">
+                            <Plus className="w-4 h-4 mr-3" />
+                            Create Guide & Earn
+                          </div>
+                        </Link>
+                      </div>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
                   {/* Add Location Button */}
                   <Link href="/add-location">
                     <Button
@@ -267,6 +309,12 @@ export default function NavBar({ initialUser }: NavBarProps) {
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+                          <Link href="/library" className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl">
+                            <BookOpen className="mr-3 h-4 w-4" />
+                            <span className="font-medium">My Library</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
                           <Link href="/saved" className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl">
                             <Heart className="mr-3 h-4 w-4" />
                             <span className="font-medium">Saved</span>
@@ -326,9 +374,38 @@ export default function NavBar({ initialUser }: NavBarProps) {
               </Link>
             ))}
             
+            {/* Always show guides for everyone */}
+            {!isAuthenticated && (
+              <div className="border-t border-gray-200 pt-4">
+                <Link 
+                  href="/guides"
+                  className="block w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#4ECDC4] hover:to-[#FF6B6B] transition-all duration-300 rounded-xl font-medium"
+                  onClick={toggleMobileMenu}
+                >
+                  Browse Guide Marketplace
+                </Link>
+              </div>
+            )}
+            
             {isAuthenticated && (
               <>
-                <div className="border-t border-gray-200 pt-4">
+                <div className="border-t border-gray-200 pt-4 space-y-2">
+                  <Link 
+                    href="/guides"
+                    className="flex items-center w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#4ECDC4] hover:to-[#FF6B6B] transition-all duration-300 rounded-xl font-medium"
+                    onClick={toggleMobileMenu}
+                  >
+                    <Search className="w-4 h-4 mr-3" />
+                    Browse Guide Marketplace
+                  </Link>
+                  <Link 
+                    href="/guides/create"
+                    className="flex items-center w-full p-3 text-white bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 transition-all duration-300 rounded-xl font-medium shadow-lg"
+                    onClick={toggleMobileMenu}
+                  >
+                    <Plus className="w-4 h-4 mr-3" />
+                    Create Guide & Earn
+                  </Link>
                   <Link 
                     href="/add-location"
                     className="flex items-center w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#4ECDC4] hover:to-[#4ECDC4]/80 transition-all duration-300 rounded-xl font-medium"

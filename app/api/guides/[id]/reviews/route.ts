@@ -5,11 +5,11 @@ import config from '@/payload.config'
 // GET /api/guides/[id]/reviews - Get reviews for a guide
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const payload = await getPayload({ config })
-    const { id: guideId } = params
+    const { id: guideId } = await params
     const { searchParams } = new URL(request.url)
     
     const page = parseInt(searchParams.get('page') || '1')
@@ -56,11 +56,11 @@ export async function GET(
 // POST /api/guides/[id]/reviews - Create a review for a guide
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const payload = await getPayload({ config })
-    const { id: guideId } = params
+    const { id: guideId } = await params
     const data = await request.json()
     
     // TODO: Add authentication to get current user

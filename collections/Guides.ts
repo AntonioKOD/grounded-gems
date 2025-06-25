@@ -1,23 +1,31 @@
-import { CollectionConfig } from 'payload/types'
+import { CollectionConfig } from 'payload'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
-import { isAdminOrCreatedBy } from '../access/isAdminOrCreatedBy'
 
-const Guides: CollectionConfig = {
+export const Guides: CollectionConfig = {
   slug: 'guides',
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'creator', 'location', 'price', 'status', 'createdAt'],
+    defaultColumns: ['title', 'creator', 'status', 'createdAt'],
+    description: 'Manage travel guides created by users',
+    group: 'Content Management',
+    pagination: {
+      defaultLimit: 25,
+      limits: [10, 25, 50, 100],
+    },
+    enableRichTextRelationship: true,
+    enableRichTextLink: true,
   },
   access: {
     read: ({ req: { user } }) => {
+      // Admin can read all guides
+      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') return true
+      
       // Public can read published guides, creators can read their own guides
       if (!user) {
         return {
           status: { equals: 'published' }
         }
       }
-      
-      if (user.role === 'admin') return true
       
       return {
         or: [
@@ -27,10 +35,33 @@ const Guides: CollectionConfig = {
       }
     },
     create: ({ req: { user } }) => {
-      return user?.role === 'admin' || user?.role === 'creator' || user?.role === 'user'
+      return user?.role === 'admin' || user?.role === 'creator' || user?.role === 'user' || user?.email === 'antonio_kodheli@icloud.com'
     },
-    update: isAdminOrCreatedBy,
-    delete: isAdminOrCreatedBy,
+    update: ({ req: { user }, data }) => {
+      console.log(`🔒 Access control - Update check for user: ${user?.email}`)
+      console.log(`🔒 User role: ${user?.role}`)
+      console.log(`🔒 Data being updated:`, data ? Object.keys(data) : 'No data')
+      
+      // Admin can update any guide and any field
+      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') {
+        console.log(`✅ Admin access granted for update`)
+        return true
+      }
+      
+      // Users can update their own guides
+      console.log(`🔍 Checking creator access for user: ${user?.id}`)
+      return {
+        creator: { equals: user?.id }
+      }
+    },
+    delete: ({ req: { user } }) => {
+      // Admin can delete any guide
+      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') return true
+      // Users can delete their own guides
+      return {
+        creator: { equals: user?.id }
+      }
+    },
   },
   fields: [
     {
@@ -46,21 +77,7 @@ const Guides: CollectionConfig = {
       unique: true,
       admin: {
         position: 'sidebar',
-      },
-      hooks: {
-        beforeValidate: [
-          ({ value, data }) => {
-            if (!value && data?.title) {
-              return data.title
-                .toLowerCase()
-                .replace(/[^a-z0-9\s-]/g, '')
-                .replace(/\s+/g, '-')
-                .replace(/-+/g, '-')
-                .trim()
-            }
-            return value
-          },
-        ],
+        description: 'URL-friendly version of the title (auto-generated)',
       },
     },
     {
@@ -76,46 +93,85 @@ const Guides: CollectionConfig = {
       name: 'creator',
       type: 'relationship',
       relationTo: 'users',
-      required: true,
+      required: false, // Temporarily optional for testing
       admin: {
         position: 'sidebar',
-      },
-      hooks: {
-        beforeChange: [
-          ({ req, data }) => {
-            if (!data.creator && req.user) {
-              return req.user.id
-            }
-            return data.creator
-          },
-        ],
+        description: 'The user who created this guide',
       },
     },
     {
-      name: 'location',
+      name: 'primaryLocation',
       type: 'relationship',
       relationTo: 'locations',
       required: true,
       admin: {
-        description: 'The location this guide is for',
+        description: 'The main location this guide covers (used for categorization and discovery)',
       },
     },
     {
-      name: 'category',
-      type: 'select',
+      name: 'locations',
+      type: 'array',
       required: true,
-      options: [
-        { label: 'Food & Dining', value: 'food' },
-        { label: 'Nightlife & Entertainment', value: 'nightlife' },
-        { label: 'Culture & Arts', value: 'culture' },
-        { label: 'Outdoor & Adventure', value: 'outdoor' },
-        { label: 'Shopping', value: 'shopping' },
-        { label: 'Historical', value: 'historical' },
-        { label: 'Family-Friendly', value: 'family' },
-        { label: 'Hidden Gems', value: 'hidden' },
-        { label: 'Photography Spots', value: 'photography' },
-        { label: 'Local Lifestyle', value: 'lifestyle' },
+      minRows: 1,
+      fields: [
+        {
+          name: 'location',
+          type: 'relationship',
+          relationTo: 'locations',
+          required: true,
+        },
+        {
+          name: 'order',
+          type: 'number',
+          required: true,
+          min: 1,
+        },
+        {
+          name: 'description',
+          type: 'textarea',
+          maxLength: 500,
+          admin: {
+            description: 'What should travelers know about this location?',
+          },
+        },
+        {
+          name: 'estimatedTime',
+          type: 'number',
+          required: true,
+          defaultValue: 60,
+          min: 15,
+          max: 480,
+          admin: {
+            description: 'Estimated time to spend here (in minutes)',
+          },
+        },
+        {
+          name: 'tips',
+          type: 'array',
+          fields: [
+            {
+              name: 'tip',
+              type: 'text',
+              required: true,
+              maxLength: 200,
+            },
+          ],
+          admin: {
+            description: 'Location-specific tips',
+          },
+        },
+        {
+          name: 'isRequired',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: {
+            description: 'Is this location essential to the guide?',
+          },
+        },
       ],
+      admin: {
+        description: 'All locations included in this guide',
+      },
     },
     {
       name: 'difficulty',
@@ -169,20 +225,13 @@ const Guides: CollectionConfig = {
           name: 'price',
           type: 'number',
           admin: {
-            condition: (data) => data.pricing?.type === 'paid',
-          },
-          validate: (value, { data }) => {
-            if (data.pricing?.type === 'paid' && (!value || value <= 0)) {
-              return 'Price is required for paid guides'
-            }
-            return true
+            description: 'Price for paid guides (leave empty for free guides)',
           },
         },
         {
           name: 'suggestedPrice',
           type: 'number',
           admin: {
-            condition: (data) => data.pricing?.type === 'pwyw',
             description: 'Suggested minimum price for pay-what-you-want guides',
           },
         },
@@ -192,7 +241,11 @@ const Guides: CollectionConfig = {
       name: 'content',
       type: 'richText',
       required: true,
-      editor: lexicalEditor({}),
+      editor: lexicalEditor({
+        features: ({ defaultFeatures }) => [
+          ...defaultFeatures,
+        ],
+      }),
       admin: {
         description: 'The main content of your guide - include detailed recommendations, tips, and insights',
       },
@@ -201,7 +254,7 @@ const Guides: CollectionConfig = {
       name: 'highlights',
       type: 'array',
       required: true,
-      minRows: 3,
+      minRows: 1,
       maxRows: 10,
       fields: [
         {
@@ -212,7 +265,7 @@ const Guides: CollectionConfig = {
         },
       ],
       admin: {
-        description: 'Key highlights that make your guide special (3-10 bullet points)',
+        description: 'Key highlights that make your guide special (1-10 bullet points)',
       },
     },
     {
@@ -398,29 +451,9 @@ const Guides: CollectionConfig = {
       name: 'featuredImage',
       type: 'upload',
       relationTo: 'media',
-      required: true,
+      required: false,
       admin: {
         description: 'Main image for your guide (will be used in listings)',
-      },
-    },
-    {
-      name: 'gallery',
-      type: 'array',
-      fields: [
-        {
-          name: 'image',
-          type: 'upload',
-          relationTo: 'media',
-          required: true,
-        },
-        {
-          name: 'caption',
-          type: 'text',
-          maxLength: 100,
-        },
-      ],
-      admin: {
-        description: 'Additional images to showcase your guide',
       },
     },
     {
@@ -428,15 +461,60 @@ const Guides: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'draft',
+      validate: (value) => {
+        if (!value) {
+          return 'Status is required'
+        }
+        
+        const validStatuses = ['draft', 'review', 'published', 'archived']
+        if (!validStatuses.includes(value)) {
+          return `Status must be one of: ${validStatuses.join(', ')}`
+        }
+        
+        return true
+      },
       options: [
-        { label: 'Draft', value: 'draft' },
-        { label: 'Under Review', value: 'review' },
-        { label: 'Published', value: 'published' },
-        { label: 'Archived', value: 'archived' },
+        { 
+          label: '📝 Draft - Work in progress, not visible to public', 
+          value: 'draft' 
+        },
+        { 
+          label: '⏳ Under Review - Submitted for approval', 
+          value: 'review' 
+        },
+        { 
+          label: '✅ Published - Live on marketplace', 
+          value: 'published' 
+        },
+        { 
+          label: '📦 Archived - Hidden from marketplace', 
+          value: 'archived' 
+        },
       ],
       admin: {
         position: 'sidebar',
+        description: 'Control guide visibility and publication status. Set to Published to make guides visible in marketplace.',
       },
+      hooks: {
+        beforeValidate: [
+          ({ value, req }) => {
+            console.log(`🔧 Status field validation - Value: ${value}, User: ${req?.user?.email}`)
+            return value
+          }
+        ],
+        beforeChange: [
+          ({ value, req }) => {
+            console.log(`🔧 Status field change - Value: ${value}, User: ${req?.user?.email}`)
+            return value
+          }
+        ],
+        afterRead: [
+          ({ value, req }) => {
+            console.log(`🔧 Status field read - Value: ${value}, User: ${req?.user?.email}`)
+            return value
+          }
+        ]
+      }
     },
     {
       name: 'tags',
@@ -478,7 +556,7 @@ const Guides: CollectionConfig = {
       type: 'group',
       admin: {
         position: 'sidebar',
-        readOnly: true,
+        readOnly: false, // Allow editing for admins
       },
       fields: [
         {
@@ -486,7 +564,8 @@ const Guides: CollectionConfig = {
           type: 'number',
           defaultValue: 0,
           admin: {
-            readOnly: true,
+            readOnly: false, // Allow editing for admins
+            description: 'Number of views this guide has received',
           },
         },
         {
@@ -494,14 +573,15 @@ const Guides: CollectionConfig = {
           type: 'number',
           defaultValue: 0,
           admin: {
-            readOnly: true,
+            readOnly: false, // Allow editing for admins
+            description: 'Number of times this guide has been purchased',
           },
         },
         {
           name: 'rating',
           type: 'number',
           admin: {
-            readOnly: true,
+            readOnly: false, // Allow editing for admins
             description: 'Average rating (calculated from reviews)',
           },
         },
@@ -510,7 +590,8 @@ const Guides: CollectionConfig = {
           type: 'number',
           defaultValue: 0,
           admin: {
-            readOnly: true,
+            readOnly: false, // Allow editing for admins
+            description: 'Number of reviews this guide has received',
           },
         },
       ],
@@ -544,41 +625,147 @@ const Guides: CollectionConfig = {
         },
       ],
     },
+    {
+      name: 'adminNotes',
+      type: 'group',
+      admin: {
+        position: 'sidebar',
+        description: 'Internal notes for admin use only',
+      },
+      fields: [
+        {
+          name: 'moderationNotes',
+          type: 'textarea',
+          admin: {
+            description: 'Internal notes for moderation purposes',
+          },
+        },
+        {
+          name: 'featured',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Mark this guide as featured (admin only)',
+          },
+        },
+        {
+          name: 'priority',
+          type: 'select',
+          options: [
+            { label: 'Low', value: 'low' },
+            { label: 'Normal', value: 'normal' },
+            { label: 'High', value: 'high' },
+            { label: 'Urgent', value: 'urgent' },
+          ],
+          defaultValue: 'normal',
+          admin: {
+            description: 'Admin priority level for this guide',
+          },
+        },
+        {
+          name: 'lastReviewed',
+          type: 'date',
+          admin: {
+            description: 'When this guide was last reviewed by admin',
+          },
+        },
+        {
+          name: 'reviewedBy',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            description: 'Admin who last reviewed this guide',
+          },
+        },
+      ],
+    },
   ],
   timestamps: true,
   hooks: {
-    beforeChange: [
-      ({ data, req }) => {
-        // Auto-generate slug if not provided
-        if (!data.slug && data.title) {
-          data.slug = data.title
-            .toLowerCase()
-            .replace(/[^a-z0-9\s-]/g, '')
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .trim()
-        }
+    beforeValidate: [
+      ({ data, operation, req }) => {
+        console.log(`🔧 Guide beforeValidate hook - Operation: ${operation}`)
+        console.log(`🔧 User context:`, req?.user ? `${req.user.role} (${req.user.email})` : 'No user context')
         
-        // Set creator if not provided
-        if (!data.creator && req.user) {
-          data.creator = req.user.id
-        }
-        
-        // Auto-generate SEO fields if not provided
-        if (!data.meta?.title && data.title) {
-          if (!data.meta) data.meta = {}
-          data.meta.title = data.title
-        }
-        
-        if (!data.meta?.description && data.description) {
-          if (!data.meta) data.meta = {}
-          data.meta.description = data.description
+        // Only set default status on creation, not on updates
+        if (operation === 'create' && data && (data.status === undefined || data.status === null)) {
+          data.status = 'draft'
         }
         
         return data
       },
     ],
+    beforeChange: [
+      ({ data, req, operation }) => {
+        try {
+          if (!data) return data
+          
+          console.log(`🔧 Guide beforeChange hook - Operation: ${operation}`)
+          console.log(`🔧 Status being set to: ${data.status}`)
+          console.log(`🔧 User context:`, req?.user ? `${req.user.role} (${req.user.email})` : 'No user context')
+          
+          // Auto-generate slug if not provided
+          if (!data.slug && data.title) {
+            data.slug = data.title
+              .toLowerCase()
+              .replace(/[^a-z0-9\s-]/g, '')
+              .replace(/\s+/g, '-')
+              .replace(/-+/g, '-')
+              .trim()
+          }
+          
+          // Set creator if not provided (only on creation)
+          if (operation === 'create' && !data.creator && req?.user) {
+            data.creator = req.user.id
+          }
+          
+          // Auto-generate SEO fields if not provided
+          if (!data.meta?.title && data.title) {
+            if (!data.meta) data.meta = {}
+            data.meta.title = data.title
+          }
+          
+          if (!data.meta?.description && data.description) {
+            if (!data.meta) data.meta = {}
+            data.meta.description = data.description
+          }
+          
+          // Update admin review information - check for admin email directly
+          const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+          if (isAdmin && data.status) {
+            if (!data.adminNotes) data.adminNotes = {}
+            data.adminNotes.lastReviewed = new Date().toISOString()
+            data.adminNotes.reviewedBy = req.user?.id || 'admin'
+            console.log(`🔧 Admin review info updated for: ${req.user?.email || 'admin'}`)
+          }
+          
+          console.log(`✅ Guide beforeChange completed - Final Status: ${data.status}`)
+          return data
+        } catch (error) {
+          console.error('❌ Error in beforeChange hook:', error)
+          return data
+        }
+      },
+    ],
+    afterRead: [
+      ({ doc, req }) => {
+        // Log when guides are read
+        const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+        if (isAdmin) {
+          console.log(`📖 Guide read - ID: ${doc.id}, Status: ${doc.status}`)
+        }
+        return doc
+      }
+    ],
+    afterChange: [
+      ({ doc, operation, req }) => {
+        // Log successful changes
+        const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+        if (isAdmin) {
+          console.log(`✅ Guide ${operation} - ID: ${doc.id}, Status: ${doc.status}`)
+        }
+        return doc
+      }
+    ],
   },
-}
-
-export default Guides 
+} 

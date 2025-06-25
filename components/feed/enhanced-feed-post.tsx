@@ -58,6 +58,12 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   onPostUpdated,
   priority = 0
 }: EnhancedFeedPostProps) {
+  // Early return if post is invalid
+  if (!post || !post.id || !post.author) {
+    console.warn('Invalid post data:', post)
+    return null
+  }
+
   const dispatch = useAppDispatch()
   const { likedPosts, savedPosts, loadingLikes, loadingSaves, loadingShares } = useAppSelector((state) => state.posts)
   
@@ -353,9 +359,10 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
 
   // Get author profile image URL using proper image utility
   const getAuthorProfileImageUrl = useCallback(() => {
+    if (!post.author) return "/placeholder.svg"
     const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
     return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
-  }, [post.author.profileImage?.url, post.author.avatar])
+  }, [post.author?.profileImage?.url, post.author?.avatar])
 
   return (
     <>
@@ -459,10 +466,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                     placeholder="blur"
                     blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8A0XGARt12BhtuKCo2ARCh1w7Lg1iCgQIU/9k="
                     onLoad={() => {
-                      setImageLoadStates(prev => ({
-                        ...prev,
-                        [currentImageIndex]: true
-                      }))
+                      setIsLoadingImage(false)
                     }}
                     onError={() => {
                       console.error(`Failed to load image: ${currentMedia.url}`)
@@ -689,9 +693,11 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         <div className="absolute bottom-0 left-0 right-0 bg-black z-10" style={{ height: '120px' }}>
           <div className="h-full p-4 flex flex-col justify-center">
             {/* Post Content */}
-            <p className="text-white text-sm leading-relaxed font-light mb-2 line-clamp-2">
-              {post.content}
-            </p>
+            {post.content && (
+              <p className="text-white text-sm leading-relaxed font-light mb-2 line-clamp-2">
+                {post.content}
+              </p>
+            )}
 
             {/* Location and Time */}
             <div className="flex items-center justify-between text-white/60 text-xs">

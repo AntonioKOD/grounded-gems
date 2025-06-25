@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import config from '@/payload.config'
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -96,7 +96,12 @@ export async function POST(request: Request) {
 
     console.log('📁 UploadMedia: Upload successful:', mediaDoc.id)
     
-    return NextResponse.json(mediaDoc)
+    return NextResponse.json({
+      success: true,
+      url: mediaDoc.url,
+      alt: mediaDoc.alt,
+      id: mediaDoc.id
+    })
   } catch (error) {
     console.error("📁 UploadMedia: Upload error:", error)
     return NextResponse.json(

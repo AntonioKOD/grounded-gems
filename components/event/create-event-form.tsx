@@ -182,7 +182,7 @@ export default function CreateEventForm() {
     category: "social",
     eventType: "meetup",
     startDate: new Date(),
-    startTime: format(new Date().setMinutes(Math.ceil(new Date().getMinutes() / 15) * 15), "HH:mm"),
+    startTime: format(new Date().setMinutes(Math.ceil(new Date().getMinutes() / 15) * 15), "h:mm a"),
     location: "",
     capacity: 10,
     status: "draft",
@@ -472,9 +472,10 @@ export default function CreateEventForm() {
     const options = []
     for (let hour = 0; hour < 24; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
-        const h = hour.toString().padStart(2, "0")
-        const m = minute.toString().padStart(2, "0")
-        options.push(`${h}:${m}`)
+        const date = new Date()
+        date.setHours(hour, minute, 0, 0)
+        const timeString = format(date, "h:mm a")
+        options.push(timeString)
       }
     }
     return options

@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Loader2,
   Mail,
+  UserPlus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -45,6 +46,7 @@ import {
   isAttending,
 } from "@/app/(frontend)/events/actions"
 import type { Event } from "@/types/event"
+import InviteUsersForm from "./invite-users-form"
 
 interface EventDetailContainerProps {
   eventId: string
@@ -61,6 +63,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
   const [userParticipationStatus, setUserParticipationStatus] = useState<string | null>(null)
   const [showJoinDialog, setShowJoinDialog] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [hasFetchedUser, setHasFetchedUser] = useState(false)
   const [attendees, setAttendees] = useState<any[]>([])
   const [isLoadingAttendees, setIsLoadingAttendees] = useState(false)
@@ -757,6 +760,19 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
                   Share Event
                 </Button>
 
+                {/* Invite people button (for creator) */}
+                {isCreator && isEventFuture && event.status !== "cancelled" && (
+                  <Button
+                    variant="outline"
+                    className="w-full border-[#4ECDC4] text-[#4ECDC4] hover:bg-[#4ECDC4]/10"
+                    onClick={() => setShowInviteDialog(true)}
+                    disabled={isLoading}
+                  >
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Invite People
+                  </Button>
+                )}
+
                 {/* Cancel event button (for creator) */}
                 {isCreator && isEventFuture && event.status !== "cancelled" && (
                   <Button
@@ -865,6 +881,36 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
               ) : (
                 "Cancel Event"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite users dialog */}
+      <Dialog open={showInviteDialog} onOpenChange={setShowInviteDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Invite People to {event?.name}</DialogTitle>
+            <DialogDescription>
+              Search for users and invite them to your event. They will receive a notification and email invitation.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <InviteUsersForm
+              eventId={eventId}
+              eventName={event?.name || "Event"}
+              currentUserId={currentUser?.id}
+              onInvited={() => {
+                // Refresh attendees list after inviting
+                fetchAttendees()
+              }}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowInviteDialog(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

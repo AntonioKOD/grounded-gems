@@ -8,14 +8,49 @@ export const Reviews: CollectionConfig = {
     plural: 'Reviews',
   },
   access: {
-    read: () => true,
-    create: () => true,
-    update: ({ req: { user } }) => !!user,
-    delete: ({ req: { user } }) => !!user,
+    read: ({ req: { user } }) => {
+      // Admin can read all reviews
+      if (user?.role === 'admin') return true
+      
+      // Public can read published reviews
+      return {
+        status: { equals: 'published' }
+      }
+    },
+    create: ({ req: { user } }) => !!user, // Authenticated users can create reviews
+    update: ({ req: { user } }) => {
+      // Admin can update any review
+      if (user?.role === 'admin') return true
+      
+      // Users can update their own reviews
+      return {
+        author: { equals: user?.id }
+      }
+    },
+    delete: ({ req: { user } }) => {
+      // Admin can delete any review
+      if (user?.role === 'admin') return true
+      
+      // Users can delete their own reviews
+      return {
+        author: { equals: user?.id }
+      }
+    },
+    // Ensure admin can access the collection in admin UI
+    admin: ({ req: { user } }) => {
+      return user?.role === 'admin'
+    },
   },
   admin: {
     useAsTitle: 'title',
-    defaultColumns: ['title', 'rating', 'reviewType', 'status'],
+    defaultColumns: ['title', 'rating', 'reviewType', 'status', 'author', 'createdAt'],
+    description: 'Manage location, event, and special reviews',
+    group: 'Content Management',
+    pagination: {
+      defaultLimit: 25,
+    },
+    listSearchableFields: ['title', 'content'],
+    defaultSort: '-createdAt',
   },
   fields: [
     // Basic Information
@@ -91,4 +126,16 @@ export const Reviews: CollectionConfig = {
     { name: 'usersWhoMarkedUnhelpful', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'usersWhoReported',         type: 'relationship', relationTo: 'users', hasMany: true },
   ],
-};
+  hooks: {
+    beforeChange: [
+      ({ data, req }) => {
+        // Auto-set author if not provided and user is authenticated
+        if (!data.author && req.user) {
+          data.author = req.user.id
+        }
+        return data
+      },
+    ],
+  },
+  timestamps: true,
+}

@@ -65,6 +65,7 @@ export const Notifications: CollectionConfig = {
         { label: "Mention", value: "mention" },
         { label: "Reminder", value: "reminder" },
         { label: "Event Update", value: "event_update" },
+        { label: "Event Invitation", value: "event_invitation" },
         // Journey invite notifications
         { label: "Journey Invite", value: "journey_invite" },
         { label: "Journey Invite Accepted", value: "journey_invite_accepted" },

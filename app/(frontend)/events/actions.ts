@@ -1386,3 +1386,136 @@ export async function searchEventsAction(query: string, limit = 10) {
     return []
   }
 }
+
+export async function inviteUserToEvent(eventId: string, inviteeId: string) {
+  try {
+    const payload = await getPayload({ config })
+    const user = await getServerSideUser()
+    
+    if (!user) {
+      return { success: false, error: 'Unauthorized' }
+    }
+
+    // Get the event
+    const event = await payload.findByID({
+      collection: 'events',
+      id: eventId,
+    })
+
+    if (!event) {
+      return { success: false, error: 'Event not found' }
+    }
+
+    // Check if user is the event organizer
+    const organizerId = typeof event.organizer === 'string' ? event.organizer : event.organizer?.id
+    if (user.id !== organizerId) {
+      return { success: false, error: 'Only event organizers can invite users' }
+    }
+
+    // Check if user is already invited or attending
+    const existingRSVPs = await payload.find({
+      collection: 'eventRSVPs',
+      where: {
+        and: [
+          { event: { equals: eventId } },
+          { user: { equals: inviteeId } }
+        ]
+      }
+    })
+
+    console.log('Existing RSVPs for user:', existingRSVPs.docs.length, existingRSVPs.docs)
+
+    let rsvp;
+    if (existingRSVPs.docs.length > 0) {
+      const existing = existingRSVPs.docs[0];
+      console.log('Existing RSVP status:', existing.status)
+      
+      // If user is already going or interested, they can't be invited again
+      if (existing.status === "going") {
+        return { success: false, error: 'User is already attending this event' }
+      } else if (existing.status === "interested") {
+        return { success: false, error: 'User is already interested in this event' }
+      } else if (existing.status === "invited") {
+        return { success: false, error: 'User has already been invited to this event' }
+      } else if (existing.status === "not_going") {
+        // Update RSVP to invited
+        console.log('Updating existing RSVP from not_going to invited')
+        rsvp = await payload.update({
+          collection: 'eventRSVPs',
+          id: existing.id,
+          data: {
+            status: 'invited',
+            invitedBy: user.id,
+            invitedAt: new Date().toISOString(),
+          }
+        })
+      } else {
+        // For any other status, update to invited
+        console.log('Updating existing RSVP to invited')
+        rsvp = await payload.update({
+          collection: 'eventRSVPs',
+          id: existing.id,
+          data: {
+            status: 'invited',
+            invitedBy: user.id,
+            invitedAt: new Date().toISOString(),
+          }
+        })
+      }
+    } else {
+      // Create RSVP with 'invited' status
+      console.log('Creating new RSVP with invited status')
+      rsvp = await payload.create({
+        collection: 'eventRSVPs',
+        data: {
+          event: eventId,
+          user: inviteeId,
+          status: 'invited',
+          invitedBy: user.id,
+          invitedAt: new Date().toISOString(),
+        }
+      })
+    }
+
+    // Get invitee details for notification
+    const invitee = await payload.findByID({
+      collection: 'users',
+      id: inviteeId,
+    })
+
+    // Create notification for the invitee
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: inviteeId,
+        type: 'event_invitation',
+        title: `You're invited to ${event.name}`,
+        message: `${user.name} has invited you to attend "${event.name}" on ${new Date(event.startDate).toLocaleDateString()}.`,
+        relatedTo: {
+          relationTo: 'events',
+          value: eventId,
+        },
+        actionBy: user.id,
+        metadata: {
+          eventName: event.name,
+          eventDate: event.startDate,
+          organizerName: user.name,
+        },
+        priority: 'normal',
+        read: false,
+      },
+    })
+
+    return {
+      success: true,
+      message: `Successfully invited ${invitee?.name || 'user'} to the event`,
+      rsvp: rsvp,
+    }
+  } catch (error) {
+    console.error('Error inviting user to event:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to invite user',
+    }
+  }
+}

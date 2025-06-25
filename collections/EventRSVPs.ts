@@ -32,7 +32,8 @@ export const EventRSVPs: CollectionConfig = {
   hooks: {
     beforeValidate: [
       async ({ operation, req, data }) => {
-        if (operation === 'create' && req.user && data) {
+        // Only set user from session if not already provided (for invitations)
+        if (operation === 'create' && req.user && data && !data.user) {
           data.user = req.user.id;
         }
         return data;
@@ -59,13 +60,22 @@ export const EventRSVPs: CollectionConfig = {
         }
 
         // Count interested and going
-        const [{ totalDocs: interestedCount }, { totalDocs: goingCount }] = await Promise.all([
+        const [{ totalDocs: interestedCount }, { totalDocs: goingCount }, { totalDocs: invitedCount }] = await Promise.all([
           req.payload.find({ collection: 'eventRSVPs', where: { event: { equals: eventId }, status: { equals: 'interested' } } }),
           req.payload.find({ collection: 'eventRSVPs', where: { event: { equals: eventId }, status: { equals: 'going' } } }),
+          req.payload.find({ collection: 'eventRSVPs', where: { event: { equals: eventId }, status: { equals: 'invited' } } }),
         ]);
 
-        // Update parent event counts
-        await req.payload.update({ collection: 'events', id: eventId, data: { interestedCount, goingCount } });
+        // Update parent event counts using direct database update to avoid triggering beforeChange hook
+        await req.payload.db.updateOne({
+          collection: 'events',
+          where: { id: { equals: eventId } },
+          data: { 
+            interestedCount, 
+            goingCount,
+            invitedCount: invitedCount || 0
+          }
+        });
 
         return doc;
       },
@@ -79,7 +89,25 @@ export const EventRSVPs: CollectionConfig = {
         { label: 'Interested', value: 'interested' },
         { label: 'Going',      value: 'going'      },
         { label: 'Not Going',  value: 'not_going'  },
+        { label: 'Invited',    value: 'invited'    },
       ], defaultValue: 'interested', required: true,
+    },
+    { 
+      name: 'invitedBy', 
+      type: 'relationship', 
+      relationTo: 'users', 
+      admin: { 
+        description: 'User who sent the invitation (only for invited status)',
+        condition: (data) => data.status === 'invited'
+      } 
+    },
+    { 
+      name: 'invitedAt', 
+      type: 'date', 
+      admin: { 
+        description: 'When the invitation was sent (only for invited status)',
+        condition: (data) => data.status === 'invited'
+      } 
     },
   ],
 };

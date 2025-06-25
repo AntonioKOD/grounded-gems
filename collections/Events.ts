@@ -19,6 +19,48 @@ export const Events: CollectionConfig = {
   hooks: {
     beforeChange: [
       async ({ req, data, operation }) => {
+        // Debug logging
+        console.log('Events beforeChange hook triggered:', {
+          operation,
+          dataKeys: Object.keys(data || {}),
+          dataValues: data,
+          headers: req.headers,
+          body: req.body
+        })
+
+        // Skip conflict check if this is triggered by an RSVP update
+        // Check multiple indicators that this is an RSVP operation
+        const isFromRSVP = (
+          // Check if the request has specific headers or body indicating RSVP operation
+          req.headers?.['x-operation-source'] === 'rsvp-update' ||
+          req.body?.['__rsvpOperation'] === true ||
+          // Check if this is an update operation that only modifies count fields
+          (operation === 'update' && 
+           data && 
+           Object.keys(data).length <= 3 && 
+           (data.interestedCount !== undefined || 
+            data.goingCount !== undefined || 
+            data.invitedCount !== undefined) &&
+           // Ensure we're not updating critical event fields
+           !data.name && 
+           !data.startDate && 
+           !data.endDate && 
+           !data.location &&
+           !data.organizer &&
+           !data.description &&
+           !data.slug &&
+           !data.category &&
+           !data.eventType &&
+           !data.capacity &&
+           !data.status &&
+           !data.image)
+        )
+        
+        if (isFromRSVP) {
+          console.log('Skipping event conflict check - RSVP operation detected')
+          return data
+        }
+
         // Check for date/time conflicts when creating or updating events
         if ((operation === 'create' || operation === 'update') && data.location && data.startDate) {
           try {
@@ -420,6 +462,32 @@ export const Events: CollectionConfig = {
       admin: {
         readOnly: true,
         description: 'Current number of confirmed attendees',
+      },
+    },
+
+    // RSVP status counts (calculated)
+    {
+      name: 'interestedCount',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description: 'Number of users interested in this event',
+      },
+    },
+    {
+      name: 'goingCount',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description: 'Number of users confirmed going to this event',
+      },
+    },
+    {
+      name: 'invitedCount',
+      type: 'number',
+      admin: {
+        readOnly: true,
+        description: 'Number of users invited to this event',
       },
     },
 

@@ -69,7 +69,7 @@ export default function FloatingSearchButton({ className }: FloatingSearchButton
   
   const dynamicPosition = getDynamicPosition()
 
-  // Primary actions - only 3 buttons as requested
+  // Primary actions - updated to include guides
   const quickActions = [
     {
       icon: Sparkles,
@@ -81,8 +81,8 @@ export default function FloatingSearchButton({ className }: FloatingSearchButton
     },
     {
       icon: Search,
-      label: 'Search',
-      href: '/search',
+      label: 'Browse Guides',
+      href: '/guides',
       color: 'bg-[#4ECDC4]',
       hoverColor: 'hover:bg-[#26C6DA]'
     },

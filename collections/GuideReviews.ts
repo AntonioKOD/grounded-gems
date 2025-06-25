@@ -1,6 +1,6 @@
 import { CollectionConfig } from 'payload/types'
 
-const GuideReviews: CollectionConfig = {
+export const GuideReviews: CollectionConfig = {
   slug: 'guide-reviews',
   admin: {
     useAsTitle: 'title',
@@ -273,4 +273,4 @@ const GuideReviews: CollectionConfig = {
   },
 }
 
-export default GuideReviews 
+ 

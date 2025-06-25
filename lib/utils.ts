@@ -1,8 +1,36 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { format } from "date-fns"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
+}
+
+/**
+ * Format time in 12-hour format with AM/PM
+ * Ensures consistent time display across the app
+ */
+export function formatTime(date: Date | string | number): string {
+  const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  return format(dateObj, "h:mm a")
+}
+
+/**
+ * Format date and time in 12-hour format
+ * Ensures consistent date-time display across the app
+ */
+export function formatDateTime(date: Date | string | number): string {
+  const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  return format(dateObj, "PPP h:mm a") // e.g., "January 1, 2024 2:30 PM"
+}
+
+/**
+ * Format date with short time in 12-hour format
+ * Useful for compact displays
+ */
+export function formatDateTimeShort(date: Date | string | number): string {
+  const dateObj = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date
+  return format(dateObj, "MMM d, h:mm a") // e.g., "Jan 1, 2:30 PM"
 }
 
 /**

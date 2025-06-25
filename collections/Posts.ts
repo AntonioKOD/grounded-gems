@@ -23,6 +23,29 @@ export const Posts: CollectionConfig = {
     defaultColumns: ['title', 'author', 'createdAt'],
   },
   hooks: {
+    beforeChange: [
+      async ({ data, req, operation, originalDoc }) => {
+        // Auto-update engagement counts when arrays change
+        if (operation === 'create' || operation === 'update') {
+          // Update like count based on likes array
+          if (Array.isArray(data.likes)) {
+            data.likeCount = data.likes.length
+          }
+          
+          // Update comment count based on comments array
+          if (Array.isArray(data.comments)) {
+            data.commentCount = data.comments.length
+          }
+          
+          // Update save count based on savedBy array
+          if (Array.isArray(data.savedBy)) {
+            data.saveCount = data.savedBy.length
+          }
+        }
+        
+        return data
+      }
+    ],
     afterChange: [
       async ({ req, doc, previousDoc, operation }) => {
         if (!req.payload) return doc;
@@ -176,6 +199,9 @@ export const Posts: CollectionConfig = {
     { name: 'isPinned', type: 'checkbox', defaultValue: false },
     { name: 'isSponsored', type: 'checkbox', defaultValue: false },
     { name: 'likes', type: 'relationship', relationTo: 'users', hasMany: true },
+    { name: 'likeCount', type: 'number', defaultValue: 0 },
+    { name: 'commentCount', type: 'number', defaultValue: 0 },
+    { name: 'shareCount', type: 'number', defaultValue: 0 },
     { name: 'savedBy', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'saveCount', type: 'number', defaultValue: 0 },
   ],

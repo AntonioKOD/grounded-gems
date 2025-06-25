@@ -94,7 +94,7 @@ export default function NotificationCenter({ userId }: NotificationCenterProps) 
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-80 p-0 bg-white" align="end">
         <div className="p-4 flex items-center justify-between">
           <h3 className="font-medium text-lg">Notifications</h3>
           <div className="flex gap-1">

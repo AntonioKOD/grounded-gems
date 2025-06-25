@@ -74,53 +74,104 @@ export async function PUT(
     }
 
     // Validate required fields
-    if (!body.name?.trim() || !body.address?.trim()) {
+    const hasValidAddress = body.address && (
+      (typeof body.address === 'string' && body.address.trim()) ||
+      (typeof body.address === 'object' && body.address.street?.trim())
+    );
+
+    if (!body.name?.trim() || !hasValidAddress) {
       return NextResponse.json(
-        { error: 'Name and address are required' },
+        { error: 'Name and street address are required' },
         { status: 400 }
       );
     }
 
     // Prepare update data
-    const updateData = {
+    const updateData: any = {
       name: body.name.trim(),
       description: body.description?.trim() || '',
-      address: body.address.trim(),
-      city: body.city?.trim() || '',
-      state: body.state?.trim() || '',
-      zipCode: body.zipCode?.trim() || '',
-      country: body.country || 'US',
-      phone: body.phone?.trim() || '',
-      website: body.website?.trim() || '',
-      priceRange: body.priceRange || '',
-      categories: body.categories || [],
-      hours: body.hours || {},
-      amenities: body.amenities || [],
-      specialties: body.specialties || [],
-      socialMedia: {
-        instagram: body.socialMedia?.instagram?.trim() || '',
-        facebook: body.socialMedia?.facebook?.trim() || '',
-        twitter: body.socialMedia?.twitter?.trim() || '',
-      },
-      isPublic: body.isPublic !== false,
-      acceptsReservations: body.acceptsReservations || false,
-      hasDelivery: body.hasDelivery || false,
-      hasTakeout: body.hasTakeout || false,
-      metadata: {
-        ...existingLocation.metadata,
-        ...body.metadata,
-        lastEditedBy: user.id,
-        lastEditedAt: new Date().toISOString(),
-      },
     };
 
-    // If categories changed, geocode the address if needed
-    if (body.address !== existingLocation.address) {
+    // Handle address - support both string and object formats
+    if (body.address) {
+      if (typeof body.address === 'string') {
+        updateData.address = body.address.trim();
+      } else if (typeof body.address === 'object') {
+        updateData.address = {
+          street: body.address.street?.trim() || '',
+          city: body.address.city?.trim() || '',
+          state: body.address.state?.trim() || '',
+          zip: body.address.zip?.trim() || '',
+          country: body.address.country?.trim() || 'US',
+        };
+      }
+    }
+
+    // Handle other fields
+    if (body.neighborhood) updateData.neighborhood = body.neighborhood.trim();
+    if (body.categories) updateData.categories = body.categories;
+    if (body.tags) updateData.tags = body.tags;
+    if (body.priceRange) updateData.priceRange = body.priceRange;
+    
+    // Handle contact info
+    if (body.contactInfo) {
+      updateData.contactInfo = {
+        phone: body.contactInfo.phone?.trim() || '',
+        email: body.contactInfo.email?.trim() || '',
+        website: body.contactInfo.website?.trim() || '',
+        socialMedia: {
+          facebook: body.contactInfo.socialMedia?.facebook?.trim() || '',
+          twitter: body.contactInfo.socialMedia?.twitter?.trim() || '',
+          instagram: body.contactInfo.socialMedia?.instagram?.trim() || '',
+          linkedin: body.contactInfo.socialMedia?.linkedin?.trim() || '',
+        },
+      };
+    }
+
+    // Handle business hours
+    if (body.businessHours) updateData.businessHours = body.businessHours;
+
+    // Handle accessibility
+    if (body.accessibility) updateData.accessibility = body.accessibility;
+
+    // Handle other optional fields
+    if (body.bestTimeToVisit) updateData.bestTimeToVisit = body.bestTimeToVisit;
+    if (body.insiderTips) updateData.insiderTips = body.insiderTips;
+    if (body.hasBusinessPartnership !== undefined) updateData.hasBusinessPartnership = body.hasBusinessPartnership;
+    if (body.partnershipDetails) updateData.partnershipDetails = body.partnershipDetails;
+    if (body.meta) updateData.meta = body.meta;
+    if (body.status) updateData.status = body.status;
+    if (body.isFeatured !== undefined) updateData.isFeatured = body.isFeatured;
+    if (body.isVerified !== undefined) updateData.isVerified = body.isVerified;
+
+    // Check if address changed for potential geocoding
+    const addressChanged = () => {
+      if (!body.address) return false;
+      
+      if (typeof body.address === 'string') {
+        return body.address !== (typeof existingLocation.address === 'string' 
+          ? existingLocation.address 
+          : `${existingLocation.address?.street || ''}, ${existingLocation.address?.city || ''}, ${existingLocation.address?.state || ''}`);
+      } else if (typeof body.address === 'object') {
+        const existing = existingLocation.address;
+        if (typeof existing === 'string') return true; // Different formats
+        return (
+          body.address.street !== existing?.street ||
+          body.address.city !== existing?.city ||
+          body.address.state !== existing?.state ||
+          body.address.zip !== existing?.zip
+        );
+      }
+      return false;
+    };
+
+    if (addressChanged()) {
       try {
+        // Keep existing coordinates for now
         // You can add geocoding logic here if needed
-        // For now, we'll keep the existing coordinates
-        updateData.latitude = existingLocation.latitude;
-        updateData.longitude = existingLocation.longitude;
+        if (existingLocation.coordinates) {
+          updateData.coordinates = existingLocation.coordinates;
+        }
       } catch (error) {
         console.error('Geocoding error:', error);
         // Continue without geocoding

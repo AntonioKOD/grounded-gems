@@ -735,6 +735,14 @@ export default function ProfileContent({
                         <span>My Locations</span>
                       </Link>
                     </DropdownMenuItem>
+                    {profile.isCreator && (
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href={`/profile/${profile.id}/creator-dashboard`} className="flex items-center">
+                          <TrendingUp className="h-4 w-4 mr-3" />
+                          <span>Creator Dashboard</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem className="cursor-pointer">
                       <Settings className="h-4 w-4 mr-3" />
                       <span>Settings</span>
@@ -876,28 +884,44 @@ export default function ProfileContent({
                         )}
                       </div>
 
-                      {/* Action Button */}
-                      {!isCurrentUser && currentUser && (
-                        <Button
-                          onClick={handleFollowToggle}
-                          disabled={isProcessingFollow}
-                          size="sm"
-                          className={
-                            isFollowing
-                              ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
-                              : "bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] hover:from-[#FF5252] hover:to-[#FF7043] text-white border-0"
-                          }
-                        >
-                          {isProcessingFollow ? (
-                            <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
-                          ) : isFollowing ? (
-                            <UserCheck className="h-4 w-4 mr-2" />
-                          ) : (
-                            <UserPlus className="h-4 w-4 mr-2" />
-                          )}
-                          {isFollowing ? "Following" : "Follow"}
-                        </Button>
-                      )}
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        {/* Creator Dashboard Button for current user */}
+                        {isCurrentUser && profile.isCreator && (
+                          <Link href={`/profile/${profile.id}/creator-dashboard`}>
+                            <Button
+                              size="sm"
+                              className="bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFD93D]/90 hover:to-[#FF8E53]/90 text-white border-0"
+                            >
+                              <TrendingUp className="h-4 w-4 mr-2" />
+                              Creator Dashboard
+                            </Button>
+                          </Link>
+                        )}
+                        
+                        {/* Follow Button for other users */}
+                        {!isCurrentUser && currentUser && (
+                          <Button
+                            onClick={handleFollowToggle}
+                            disabled={isProcessingFollow}
+                            size="sm"
+                            className={
+                              isFollowing
+                                ? "bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                                : "bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] hover:from-[#FF5252] hover:to-[#FF7043] text-white border-0"
+                            }
+                          >
+                            {isProcessingFollow ? (
+                              <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2"></div>
+                            ) : isFollowing ? (
+                              <UserCheck className="h-4 w-4 mr-2" />
+                            ) : (
+                              <UserPlus className="h-4 w-4 mr-2" />
+                            )}
+                            {isFollowing ? "Following" : "Follow"}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

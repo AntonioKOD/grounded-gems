@@ -58,7 +58,6 @@ export const likePostAsync = createAsyncThunk(
     { rejectWithValue, dispatch }
   ) => {
     try {
-      // Don't do optimistic update - let server response handle the state
       const response = await fetch('/api/posts/like', {
         method: 'POST',
         headers: {
@@ -77,11 +76,18 @@ export const likePostAsync = createAsyncThunk(
 
       const result = await response.json()
       
+      console.log('🎯 Like API response:', result)
+      
       if (!result.success) {
         throw new Error(result.error || 'Failed to like post')
       }
       
-      return { ...params, likeCount: result.data?.likeCount }
+      // Return both the params and the updated like count from the API
+      return { 
+        ...params, 
+        likeCount: result.data?.likeCount || 0,
+        newLikeCount: result.data?.likeCount || 0
+      }
     } catch (error) {
       console.error('Error liking post:', error)
       return rejectWithValue(error instanceof Error ? error.message : 'Failed to like post')

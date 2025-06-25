@@ -74,6 +74,12 @@ export const FeedPost = memo(function FeedPost({
   showInteractions = true,
   onPostUpdated 
 }: FeedPostProps) {
+  // Early return if post or author is invalid
+  if (!post || !post.id || !post.author || !post.author.name) {
+    console.warn('Invalid post data:', post)
+    return null
+  }
+
   const dispatch = useAppDispatch()
   const { likedPosts, savedPosts, loadingLikes, loadingSaves, loadingShares } = useAppSelector((state) => state.posts)
   
@@ -103,8 +109,8 @@ export const FeedPost = memo(function FeedPost({
   }, [post.likeCount, post.saveCount, post.shareCount])
 
   // Determine if content should be truncated
-  const isLongContent = post.content.length > 280
-  const displayContent = isLongContent && !expanded ? `${post.content.substring(0, 280)}...` : post.content
+  const isLongContent = post.content && post.content.length > 280
+  const displayContent = isLongContent && !expanded ? `${post.content.substring(0, 280)}...` : (post.content || '')
 
   // Video player state
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
@@ -273,9 +279,10 @@ export const FeedPost = memo(function FeedPost({
 
   // Get author profile image URL using proper image utility
   const getAuthorProfileImageUrl = useCallback(() => {
+    if (!post.author) return "/placeholder.svg"
     const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
     return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
-  }, [post.author.profileImage?.url, post.author.avatar])
+  }, [post.author?.profileImage?.url, post.author?.avatar])
 
   // Video player controls
   const handleVideoPlay = useCallback(() => {
@@ -334,13 +341,14 @@ export const FeedPost = memo(function FeedPost({
       <Card className={`overflow-hidden bg-white hover:shadow-xl transition-all duration-300 border-0 shadow-lg ${className}`}>
         {/* Post Header */}
         <CardHeader className="p-6 pb-4 flex flex-row items-center justify-between space-y-0">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-0">
             <Link 
               href={`/profile/${post.author.id}`}
-              className="group flex items-center gap-4 hover:opacity-90 transition-opacity"
+              className="group flex items-center gap-4 hover:opacity-90 transition-opacity flex-shrink-0"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="relative">
+              {/* Avatar container with proper sizing constraints */}
+              <div className="relative w-14 h-14 flex-shrink-0">
                 {/* Instagram-style gradient ring */}
                 <div className="absolute inset-0 w-14 h-14 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[2px] shadow-lg">
                   <div className="w-full h-full rounded-full bg-white p-[2px] group-hover:bg-gray-50 transition-colors">
@@ -357,21 +365,23 @@ export const FeedPost = memo(function FeedPost({
                   </div>
                 </div>
                 
-                {/* Online indicator with subtle animation */}
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-white shadow-lg">
+                {/* Online indicator with proper positioning */}
+                <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full border-2 border-white shadow-lg z-10">
                   <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
                 </div>
                 
                 {/* Subtle hover glow effect */}
-                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/10 via-red-500/10 to-purple-600/10 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-yellow-400/10 via-red-500/10 to-purple-600/10 blur-lg scale-125 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors text-lg">
+              
+              {/* User info with proper spacing */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors text-lg truncate">
                     {post.author.name}
                   </span>
                   {post.type !== "post" && (
-                    <Badge variant="outline" className="text-xs px-2 py-1 text-[#FF6B6B] border-[#FF6B6B]/30 bg-[#FF6B6B]/5">
+                    <Badge variant="outline" className="text-xs px-2 py-1 text-[#FF6B6B] border-[#FF6B6B]/30 bg-[#FF6B6B]/5 flex-shrink-0">
                       {post.type === "review" ? "Review" : "Tip"}
                     </Badge>
                   )}
@@ -382,23 +392,27 @@ export const FeedPost = memo(function FeedPost({
               </div>
             </Link>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-10 w-10 hover:bg-gray-50 rounded-full">
-                <MoreHorizontal className="h-5 w-5 text-gray-500" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 shadow-lg border-0">
-              <DropdownMenuItem onClick={handleShare} className="hover:bg-gray-50">
-                <Share2 className="mr-3 h-4 w-4" />
-                Share
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleReport} className="hover:bg-gray-50">
-                <Flag className="mr-3 h-4 w-4" />
-                Report
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          
+          {/* More options button */}
+          <div className="flex-shrink-0 ml-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10 hover:bg-gray-50 rounded-full">
+                  <MoreHorizontal className="h-5 w-5 text-gray-500" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 shadow-lg border-0">
+                <DropdownMenuItem onClick={handleShare} className="hover:bg-gray-50">
+                  <Share2 className="mr-3 h-4 w-4" />
+                  Share
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleReport} className="hover:bg-gray-50">
+                  <Flag className="mr-3 h-4 w-4" />
+                  Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardHeader>
 
         {/* Post Content */}
@@ -416,10 +430,11 @@ export const FeedPost = memo(function FeedPost({
           )}
 
           {/* Post Text */}
-          <div className="mb-6">
-            <p className="text-gray-900 whitespace-pre-wrap leading-relaxed text-base">
-              {displayContent}
-            </p>
+          {displayContent && (
+            <div className="mb-6">
+              <p className="text-gray-900 whitespace-pre-wrap leading-relaxed text-base">
+                {displayContent}
+              </p>
             {isLongContent && (
               <Button
                 variant="ghost"
@@ -443,7 +458,8 @@ export const FeedPost = memo(function FeedPost({
                 )}
               </Button>
             )}
-          </div>
+            </div>
+          )}
 
           {/* Media Display with Video Support */}
           {hasMedia && (
