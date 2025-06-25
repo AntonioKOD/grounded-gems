@@ -111,7 +111,7 @@ export function useAuth() {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('logout-success'))
       }
-      // Redirect to login page
+      // Redirect to login page using push instead of replace to prevent loops
       router.push('/login')
     } catch (error) {
       console.error('Logout failed:', error)

@@ -422,7 +422,8 @@ export class FeedAlgorithm {
           quickTip: this.generateQuickTip(location, timeOfDay, weather),
           theme,
           isSaved: false, // Will be updated by the API
-          isSubscribed: false // Will be updated by the API
+          isSubscribed: false, // Will be updated by the API
+          slug: location.slug
         }
       }))
     } catch (error) {
@@ -592,7 +593,8 @@ export class FeedAlgorithm {
             image: location.featuredImage?.url,
             rating: location.averageRating,
             reviewCount: location.reviewCount,
-            categories: location.categories?.map((cat: any) => cat.name || cat) || []
+            categories: location.categories?.map((cat: any) => cat.name || cat) || [],
+            slug: location.slug
           })) || [],
           featuredPosts: feature.featuredPosts?.map((post: any) => ({
             id: post.id,
@@ -654,36 +656,10 @@ export class FeedAlgorithm {
     limit: number = 1,
     interests: string[] = []
   ): Promise<ChallengeCardItem[]> {
-    // Mock challenge for now - will implement with challenges collection
-    const challenge = {
-      id: `challenge_${Date.now()}`,
-      title: 'Weekend Explorer Challenge',
-      description: 'Visit 3 new places this weekend and share your discoveries!',
-      type: 'exploration' as const,
-      difficulty: 'medium' as const,
-      duration: '3 days',
-      reward: {
-        type: 'badge' as const,
-        value: 'Weekend Warrior Badge'
-      },
-      progress: userId ? {
-        current: Math.floor(Math.random() * 3),
-        total: 3,
-        percentage: Math.floor(Math.random() * 100)
-      } : undefined,
-      participants: Math.floor(Math.random() * 500) + 100,
-      isParticipating: false,
-      expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-    }
-
-    return [{
-      id: `challenge_card_${challenge.id}`,
-      type: 'challenge_card',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      priority: 60,
-      challenge
-    }]
+    // TODO: Implement with challenges collection when available
+    // For now, return empty array to avoid showing placeholder data
+    console.log('Challenges feature coming soon - returning empty array')
+    return []
   }
 
   /**

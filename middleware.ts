@@ -5,6 +5,11 @@ import type { NextRequest } from 'next/server'
 // Rate limiting store (simple in-memory for basic protection)
 const rateLimitStore = new Map<string, { count: number; timestamp: number }>()
 
+// Redirect loop detection
+const redirectHistory = new Map<string, { count: number; lastRedirect: number }>()
+const MAX_REDIRECTS_PER_IP = 5
+const REDIRECT_WINDOW_MS = 30000 // 30 seconds
+
 // Check rate limiting
 function checkRateLimit(ip: string, maxRequests: number = 100, windowMs: number = 15 * 60 * 1000): boolean {
   const now = Date.now()
@@ -21,6 +26,27 @@ function checkRateLimit(ip: string, maxRequests: number = 100, windowMs: number 
   
   record.count++
   return true
+}
+
+// Check for redirect loops
+function checkRedirectLoop(ip: string, pathname: string): boolean {
+  const now = Date.now()
+  const key = `${ip}:${pathname}`
+  const record = redirectHistory.get(key)
+  
+  if (!record || (now - record.lastRedirect) > REDIRECT_WINDOW_MS) {
+    redirectHistory.set(key, { count: 1, lastRedirect: now })
+    return false
+  }
+  
+  if (record.count >= MAX_REDIRECTS_PER_IP) {
+    console.log(`🚫 [Middleware] Redirect loop detected for IP: ${ip}, path: ${pathname}`)
+    return true
+  }
+  
+  record.count++
+  record.lastRedirect = now
+  return false
 }
 
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
@@ -61,6 +87,12 @@ export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone()
   
   console.log(`🔍 [Middleware] Processing: ${pathname}`)
+  
+  // Check for redirect loops first
+  if (checkRedirectLoop(ip, pathname)) {
+    console.log(`🚫 [Middleware] Redirect loop detected, allowing access to prevent infinite loop`)
+    return NextResponse.next()
+  }
   
   // Special debug logging for reset-password and other auth-related routes
   if (pathname.includes('reset-password') || pathname.includes('forgot-password') || pathname.includes('login') || pathname.includes('signup')) {
@@ -294,6 +326,12 @@ export async function middleware(request: NextRequest) {
   // For Capacitor apps, let them handle their own auth
   if (isCapacitorApp) {
     console.log(`📱 [Middleware] Capacitor app - allowing: ${pathname}`)
+    return NextResponse.next()
+  }
+
+  // For mobile browsers, be more lenient to prevent redirect loops
+  if (isMobile) {
+    console.log(`📱 [Middleware] Mobile browser - allowing: ${pathname}`)
     return NextResponse.next()
   }
 

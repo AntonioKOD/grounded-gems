@@ -420,7 +420,12 @@ export const FeedPost = memo(function FeedPost({
           {/* Location Tag */}
           {post.location && (
             <Link 
-              href={`/locations/${typeof post.location === 'string' ? post.location : post.location.id}`}
+              href={typeof post.location === 'string' 
+                ? `/locations/${post.location}` 
+                : post.location.slug 
+                  ? `/locations/${post.location.slug}` 
+                  : `/locations/${post.location.id}`
+              }
               className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#FF6B6B] mb-4 transition-colors bg-gray-50 px-3 py-1.5 rounded-full"
               onClick={(e) => e.stopPropagation()}
             >

@@ -208,7 +208,18 @@ Respond in the following JSON format:
     if (!openaiRes.ok) {
       const error = await openaiRes.text()
       console.error('OpenAI API error:', error)
-      return NextResponse.json({ error: 'AI planning service temporarily unavailable' }, { status: 500 })
+      
+      // Provide a more specific error message based on the status code
+      let errorMessage = 'AI planning service temporarily unavailable'
+      if (openaiRes.status === 401) {
+        errorMessage = 'AI service authentication failed'
+      } else if (openaiRes.status === 429) {
+        errorMessage = 'AI service is currently busy. Please try again in a moment.'
+      } else if (openaiRes.status >= 500) {
+        errorMessage = 'AI service is experiencing issues. Please try again later.'
+      }
+      
+      return NextResponse.json({ error: errorMessage }, { status: 500 })
     }
     
     const data = await openaiRes.json()
@@ -220,9 +231,21 @@ Respond in the following JSON format:
       const jsonStart = planRaw.indexOf('{')
       const jsonEnd = planRaw.lastIndexOf('}') + 1
       if (jsonStart === -1 || jsonEnd === -1 || jsonStart > jsonEnd) {
-        throw new Error("Valid JSON structure not found in AI response.");
+        throw new Error("Valid JSON structure not found in AI response.")
       }
-      plan = JSON.parse(planRaw.slice(jsonStart, jsonEnd))
+      
+      const jsonString = planRaw.slice(jsonStart, jsonEnd)
+      plan = JSON.parse(jsonString)
+      
+      // Validate required fields
+      if (!plan.title || !plan.summary || !Array.isArray(plan.steps)) {
+        throw new Error("AI response missing required fields")
+      }
+      
+      // Ensure steps are properly formatted
+      if (plan.steps.length === 0) {
+        throw new Error("AI response has no steps")
+      }
       
       // Add metadata about the planning session
       plan.coordinates = coordinates
@@ -237,33 +260,62 @@ Respond in the following JSON format:
       console.error('Error parsing AI response:', e)
       console.log('Raw AI response:', planRaw)
       
-      // Enhanced fallback parsing
-      const extractedTitle = planRaw.match(/title["']?\s*:\s*["']([^"']+)["']/i)?.[1] || 'Custom Hangout Plan';
-      const extractedSummary = planRaw.match(/summary["']?\s*:\s*["']([^"']+)["']/i)?.[1] || planRaw.split('\n').find(line => line.trim().length > 20 && !line.toLowerCase().includes("step")) || 'Here is a plan based on your request.';
+      // Enhanced fallback parsing with better error handling
+      let extractedTitle = 'Custom Hangout Plan'
+      let extractedSummary = 'Here is a plan based on your request.'
+      let stepsArray: string[] = []
       
-      const stepsArray: string[] = [];
-      const stepRegex = /step\s*\d+\s*[:\-]\s*(.*)/gi;
-      let match;
-      while ((match = stepRegex.exec(planRaw)) !== null) {
-        stepsArray.push(match[1].trim());
-      }
-      if (stepsArray.length === 0) {
-        // Simpler fallback if regex fails
-        planRaw.split('\n').forEach(line => {
-          if (line.trim().match(/^(\d+\.|-|Step\s*\d+:)/i) && line.trim().length > 10) {
-            stepsArray.push(line.trim().replace(/^(\d+\.|-|Step\s*\d+:)\s*/i, ''));
+      try {
+        // Try to extract title
+        const titleMatch = planRaw.match(/title["']?\s*:\s*["']([^"']+)["']/i)
+        if (titleMatch && titleMatch[1]) {
+          extractedTitle = titleMatch[1]
+        }
+        
+        // Try to extract summary
+        const summaryMatch = planRaw.match(/summary["']?\s*:\s*["']([^"']+)["']/i)
+        if (summaryMatch && summaryMatch[1]) {
+          extractedSummary = summaryMatch[1]
+        }
+        
+        // Try to extract steps using multiple patterns
+        const stepRegex = /step\s*\d+\s*[:\-]\s*(.*)/gi
+        let match
+        while ((match = stepRegex.exec(planRaw)) !== null) {
+          const step = match[1].trim()
+          if (step.length > 5) { // Only add meaningful steps
+            stepsArray.push(step)
           }
-        });
+        }
+        
+        // Fallback step extraction if regex fails
+        if (stepsArray.length === 0) {
+          const lines = planRaw.split('\n')
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (trimmed.match(/^(\d+\.|-|Step\s*\d+:)/i) && trimmed.length > 10) {
+              const step = trimmed.replace(/^(\d+\.|-|Step\s*\d+:)\s*/i, '')
+              if (step.length > 5) {
+                stepsArray.push(step)
+              }
+            }
+          }
+        }
+        
+        // If still no steps, create a generic one
+        if (stepsArray.length === 0) {
+          stepsArray.push("The AI generated a plan, but there was an issue formatting the steps. Please try rephrasing your request for better results.")
+        }
+        
+      } catch (fallbackError) {
+        console.error('Error in fallback parsing:', fallbackError)
+        stepsArray = ["We encountered an issue processing the AI response. Please try again with a different request."]
       }
-      if (stepsArray.length === 0 && planRaw.length > 0) { // Absolute last resort for steps
-          stepsArray.push("The AI tried to generate a plan, but there was an issue formatting it. The raw response was: " + planRaw.substring(0, 200) + "...");
-      }
-
 
       plan = { 
         title: extractedTitle, 
         summary: extractedSummary, 
-        steps: stepsArray.length > 0 ? stepsArray : ['Could not extract detailed steps. Please try rephrasing your request.'], 
+        steps: stepsArray,
         context,
         usedRealLocations: false, // Assume false if parsing failed
         locationIds: [],
@@ -284,8 +336,27 @@ Respond in the following JSON format:
     
   } catch (err: any) {
     console.error('AI Planner error:', err)
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = 'Failed to generate plan'
+    let statusCode = 500
+    
+    if (err.message?.includes('fetch')) {
+      errorMessage = 'Unable to connect to AI service. Please check your internet connection and try again.'
+    } else if (err.message?.includes('JSON')) {
+      errorMessage = 'Error processing AI response. Please try again.'
+    } else if (err.message?.includes('Unauthorized')) {
+      errorMessage = 'Authentication error. Please try again later.'
+      statusCode = 401
+    } else if (err.message?.includes('rate limit') || err.message?.includes('too many requests')) {
+      errorMessage = 'Too many requests. Please wait a moment and try again.'
+      statusCode = 429
+    } else {
+      errorMessage = `Failed to generate plan: ${err?.message || 'Unknown error'}`
+    }
+    
     return NextResponse.json({ 
-      error: 'Failed to generate plan: ' + (err?.message || 'Unknown error'),
+      error: errorMessage,
       plan: { // Provide a minimal fallback plan structure on catastrophic error
         title: "Plan Generation Error",
         summary: "We encountered an issue while trying to generate your plan. Please try again shortly.",
@@ -296,8 +367,9 @@ Respond in the following JSON format:
         generatedAt: new Date().toISOString(),
         userLocation: "N/A",
         nearbyLocationsCount: 0,
+        error: true
       }
-    }, { status: 500 })
+    }, { status: statusCode })
   }
 }
 

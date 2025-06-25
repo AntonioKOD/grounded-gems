@@ -12,18 +12,10 @@ export async function GET(request: NextRequest) {
     const year = now.getFullYear()
     
     // Get real data from database
-    let activeExplorers = 127
-    let newDiscoveries = 43
-    let trending = [
-      'Rooftop bars with city views',
-      'Hidden street art spots', 
-      'Local craft breweries'
-    ]
-    let goals = [
-      { title: 'Visit 5 new places', progress: 65 },
-      { title: 'Share 3 experiences', progress: 40 },
-      { title: 'Complete weekend challenge', progress: 85 }
-    ]
+    let activeExplorers = 0
+    let newDiscoveries = 0
+    let trending: string[] = []
+    let goals: Array<{ title: string; progress: number }> = []
 
     try {
       // Get active users this week
@@ -80,19 +72,7 @@ export async function GET(request: NextRequest) {
         trending = trendingKeywords
       }
 
-      // Generate community goals based on current activity
-      const totalPosts = await payload.find({
-        collection: 'posts',
-        where: { status: { equals: 'published' } },
-        limit: 1
-      })
-
-      const totalLocations = await payload.find({
-        collection: 'locations',
-        where: { status: { equals: 'published' } },
-        limit: 1
-      })
-
+      // Generate community goals based on current activity (no challenges until implemented)
       goals = [
         { 
           title: 'Visit 5 new places', 
@@ -101,16 +81,12 @@ export async function GET(request: NextRequest) {
         { 
           title: 'Share 3 experiences', 
           progress: Math.min(Math.floor((recentPosts.docs.length / 3) * 100), 100) 
-        },
-        { 
-          title: 'Complete weekend challenge', 
-          progress: Math.floor(Math.random() * 100) // This would be real challenge data
         }
       ]
 
     } catch (error) {
       console.warn('Error fetching real insights data:', error)
-      // Use fallback data if database is unavailable
+      // Use minimal fallback data if database is unavailable
     }
 
     return NextResponse.json({
@@ -132,18 +108,10 @@ export async function GET(request: NextRequest) {
       success: false,
       error: 'Failed to load weekly insights',
       data: {
-        activeExplorers: 127,
-        newDiscoveries: 43,
-        trending: [
-          'Rooftop bars with city views',
-          'Hidden street art spots', 
-          'Local craft breweries'
-        ],
-        goals: [
-          { title: 'Visit 5 new places', progress: 65 },
-          { title: 'Share 3 experiences', progress: 40 },
-          { title: 'Complete weekend challenge', progress: 85 }
-        ],
+        activeExplorers: 0,
+        newDiscoveries: 0,
+        trending: [],
+        goals: [],
         weekNumber: Math.ceil(((Date.now() - new Date(new Date().getFullYear(), 0, 1).getTime()) / 86400000 + 1) / 7),
         year: new Date().getFullYear(),
         generatedAt: new Date().toISOString()

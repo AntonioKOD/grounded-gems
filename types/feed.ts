@@ -34,6 +34,7 @@ export interface User {
     location?: {
       id: string
       name: string
+      slug?: string
     } | string
     type: string
     rating?: number
@@ -128,6 +129,7 @@ export interface User {
       theme: string
       isSaved: boolean
       isSubscribed: boolean
+      slug?: string
     }
   }
   
@@ -178,6 +180,7 @@ export interface User {
         image?: string
         rating?: number
         address?: string
+        slug?: string
       }>
       
       featuredPosts?: Array<{

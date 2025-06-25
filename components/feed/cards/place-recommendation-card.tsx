@@ -187,7 +187,7 @@ export default function PlaceRecommendationCard({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <Link href={`/locations/${place.id}`} className="block group">
+          <Link href={place.slug ? `/locations/${place.slug}` : `/locations/${place.id}`} className="block group">
             <div className="relative overflow-hidden rounded-xl bg-white hover:bg-gray-50/50 transition-all duration-300 border border-gray-100 group-hover:border-[#4ECDC4]/30 group-hover:shadow-sm">
               {/* Place image */}
               <div className="relative h-48 overflow-hidden">

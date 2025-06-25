@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { Loader2 } from "lucide-react"
+import { safeNavigate } from "@/lib/redirect-loop-prevention"
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -31,8 +32,12 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
       console.log("Protected route: User not authenticated, redirecting immediately to login from:", pathname)
       setRedirectAttempted(true)
 
-      // Immediate redirect - no timeout needed
-      router.push(`/login?redirect=${encodeURIComponent(pathname)}`)
+      // Use safe navigation to prevent redirect loops
+      // Only redirect if we're not already on the login page
+      if (pathname !== '/login') {
+        const redirectPath = `/login?redirect=${encodeURIComponent(pathname)}`
+        safeNavigate(redirectPath, router)
+      }
     }
   }, [isAuthenticated, isLoading, authChecked, router, pathname, redirectAttempted])
 

@@ -107,7 +107,8 @@ export default function EnhancedFeedContainer({
     { type: 'post' as FeedContentType, label: 'All Posts', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', description: 'Community posts and reviews' },
     { type: 'people_suggestion' as FeedContentType, label: 'People', icon: Users, color: 'bg-purple-100 text-purple-700', description: 'Discover new creators' },
     { type: 'place_recommendation' as FeedContentType, label: 'Places', icon: MapPin, color: 'bg-green-100 text-green-700', description: 'Hidden gems & recommendations' },
-    { type: 'weekly_feature' as FeedContentType, label: 'Weekly', icon: Calendar, color: 'bg-orange-100 text-orange-700', description: 'Curated weekly content' }
+    // TODO: Re-enable when weekly features system is ready
+    // { type: 'weekly_feature' as FeedContentType, label: 'Weekly', icon: Calendar, color: 'bg-orange-100 text-orange-700', description: 'Curated weekly content' }
   ]
 
   const fetchFeedItems = useCallback(async (pageNum: number = 1, refresh: boolean = false) => {
@@ -444,6 +445,9 @@ export default function EnhancedFeedContainer({
         )
 
       case 'weekly_feature':
+        // TODO: Re-enable when weekly features system is ready
+        return null
+        /* 
         // Safety check for weeklyFeature
         if (!weeklyFeature) {
           console.warn('Weekly feature is null, cannot render weekly feature item')
@@ -475,6 +479,7 @@ export default function EnhancedFeedContainer({
             className="border-0 shadow-none"
           />
         )
+        */
 
       default:
         console.warn('Unknown feed item type:', item.type)
@@ -483,12 +488,17 @@ export default function EnhancedFeedContainer({
   }
 
   // Load weekly feature when weekly tab is selected
+  // TODO: Re-enable when weekly features system is ready
+  /*
   useEffect(() => {
     if (activeFilters.includes('weekly_feature') && !weeklyFeature) {
       loadWeeklyFeature()
     }
   }, [activeFilters, weeklyFeature])
+  */
 
+  // TODO: Re-enable when weekly features system is ready
+  /*
   const loadWeeklyFeature = async () => {
     setIsLoadingWeekly(true)
     try {
@@ -531,6 +541,7 @@ export default function EnhancedFeedContainer({
       setIsLoadingWeekly(false)
     }
   }
+  */
 
   // Render weekly challenges page
   const renderWeeklyPage = () => {

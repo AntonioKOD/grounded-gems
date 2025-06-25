@@ -150,7 +150,19 @@ export default function JourneyDetailsPage() {
     try {
       const res = await fetch(`/api/journeys/${params.planId}`)
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to fetch journey")
+      
+      if (!res.ok) {
+        // Handle specific error cases
+        if (res.status === 404) {
+          throw new Error("Journey not found. It may have been deleted.")
+        } else if (res.status === 403) {
+          throw new Error("You don't have permission to view this journey.")
+        } else if (res.status === 401) {
+          throw new Error("Please log in to view this journey.")
+        } else {
+          throw new Error(data.error || "Failed to fetch journey")
+        }
+      }
       
       console.log('Raw journey data:', data.journey)
       console.log('Journey invitees:', data.journey.invitees)
@@ -170,9 +182,9 @@ export default function JourneyDetailsPage() {
       } else {
         setInviteeDetails({})
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error refreshing journey data:', err)
-      setError("Failed to refresh journey data")
+      setError(err.message || "Failed to refresh journey data")
     }
   }
 
@@ -183,7 +195,19 @@ export default function JourneyDetailsPage() {
       try {
         const res = await fetch(`/api/journeys/${params.planId}`)
         const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Failed to fetch journey")
+        
+        if (!res.ok) {
+          // Handle specific error cases
+          if (res.status === 404) {
+            throw new Error("Journey not found. It may have been deleted or you don't have access to it.")
+          } else if (res.status === 403) {
+            throw new Error("You don't have permission to view this journey.")
+          } else if (res.status === 401) {
+            throw new Error("Please log in to view this journey.")
+          } else {
+            throw new Error(data.error || "Failed to fetch journey")
+          }
+        }
         
         console.log('Raw journey data:', data.journey)
         console.log('Journey invitees:', data.journey.invitees)
@@ -199,9 +223,9 @@ export default function JourneyDetailsPage() {
         if (data.journey.invitees && data.journey.invitees.length > 0) {
           await fetchInviteeDetails(data.journey.invitees)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error fetching journey:', err)
-        setError("Failed to fetch journey")
+        setError(err.message || "Failed to fetch journey")
       } finally {
         setLoading(false)
       }

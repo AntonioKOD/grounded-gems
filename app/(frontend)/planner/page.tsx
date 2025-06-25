@@ -113,7 +113,29 @@ export default function PlannerPage() {
         })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Unknown error")
+      
+      if (!res.ok) {
+        // Handle specific error cases
+        if (res.status === 429) {
+          throw new Error("Too many requests. Please wait a moment and try again.")
+        } else if (res.status === 401) {
+          throw new Error("Authentication error. Please refresh the page and try again.")
+        } else if (res.status >= 500) {
+          throw new Error("AI service is temporarily unavailable. Please try again later.")
+        } else {
+          throw new Error(data.error || "Failed to generate plan. Please try again.")
+        }
+      }
+      
+      // Check if the plan has an error flag
+      if (data.plan?.error) {
+        throw new Error("AI encountered an issue generating your plan. Please try rephrasing your request.")
+      }
+      
+      // Validate the plan structure
+      if (!data.plan || !data.plan.title || !data.plan.steps || !Array.isArray(data.plan.steps)) {
+        throw new Error("Received invalid plan format. Please try again.")
+      }
       
       setPlan(data.plan)
       setNearbyLocationsCount(data.nearbyLocationsFound || 0)
@@ -129,7 +151,11 @@ export default function PlannerPage() {
       }
       
     } catch (err: any) {
+      console.error('Planner error:', err)
       setError(err.message || "Something went wrong. Please try again.")
+      
+      // Show error toast for better user feedback
+      toast.error(err.message || "Failed to generate plan. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -188,7 +214,11 @@ export default function PlannerPage() {
         body: JSON.stringify(journeyData)
       })
       
-      if (!res.ok) throw new Error('Failed to save plan')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to save plan')
+      }
+      
       const data = await res.json()
       const journeyId = data.journey?.id
       if (!journeyId) throw new Error('No journey ID returned')
@@ -205,10 +235,10 @@ export default function PlannerPage() {
         toast.success('Plan saved to your Gem List! 🎉')
       }
       
-    } catch (err) {
-      setSaveStatus('error')
-      toast.error('Failed to save plan. Please try again.')
+    } catch (err: any) {
       console.error('Save plan error:', err)
+      setSaveStatus('error')
+      toast.error(err.message || 'Failed to save plan')
     }
   }
 

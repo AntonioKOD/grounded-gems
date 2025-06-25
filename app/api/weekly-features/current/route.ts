@@ -320,34 +320,11 @@ async function getLocationBasedContent(
       console.error('Error fetching recent posts:', error)
     }
 
-    // Generate themed challenges
+    // Generate themed challenges - disabled until challenge system is ready
     try {
-      content.challenges = [
-        {
-          id: `challenge-${theme.id}-local`,
-          title: `${theme.emoji} Local Explorer`,
-          description: `Discover and visit ${theme.keywords[0]} locations in your area. Share your experiences and earn points!`,
-          participants: Math.floor(Math.random() * 50) + 15,
-          reward: '500 points + Explorer Badge',
-          difficulty: 'Easy',
-          theme: theme.id,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          targetCount: 3,
-          isActive: true
-        },
-        {
-          id: `challenge-${theme.id}-photo`,
-          title: `${theme.emoji} Photo Challenge`,
-          description: `Capture amazing photos of ${theme.keywords[1] || 'local spots'} and share them with the community.`,
-          participants: Math.floor(Math.random() * 30) + 10,
-          reward: '300 points + Photographer Badge',
-          difficulty: 'Medium',
-          theme: theme.id,
-          expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-          targetCount: 5,
-          isActive: true
-        }
-      ]
+      // TODO: Implement real challenge integration when challenge system is complete
+      // For now, return empty array to avoid 404 errors from non-existent endpoints
+      content.challenges = []
     } catch (error) {
       console.error('Error generating challenges:', error)
       content.challenges = []

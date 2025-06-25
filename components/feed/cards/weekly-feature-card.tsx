@@ -26,7 +26,9 @@ import {
   Trophy,
   TrendingUp,
   Eye,
-  Check
+  Check,
+  Wifi,
+  WifiOff
 } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -38,6 +40,7 @@ import { toast } from 'sonner'
 import type { WeeklyFeatureItem } from '@/types/feed'
 import { WEEKLY_THEMES } from '@/types/feed'
 import { getImageUrl } from '@/lib/image-utils'
+import { getWeeklyFeedSync } from '@/lib/weekly-feed-sync'
 
 interface WeeklyFeatureCardProps {
   item: WeeklyFeatureItem
@@ -70,10 +73,78 @@ export default function WeeklyFeatureCard({
   const [selectedContent, setSelectedContent] = useState<'locations' | 'posts' | 'challenges'>('locations')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [weeklyInsights, setWeeklyInsights] = useState<any>(null)
+  const [isSynced, setIsSynced] = useState(false)
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>('')
+  const [syncStatus, setSyncStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting')
+
+  // Initialize weekly feed sync
+  useEffect(() => {
+    const weeklySync = getWeeklyFeedSync()
+    
+    // Subscribe to feature updates
+    const unsubscribeFeature = weeklySync.subscribe('feature_updated', (data) => {
+      console.log('WeeklyFeatureCard: Received feature update from another tab')
+      setLastUpdateTime(new Date().toLocaleTimeString())
+      setIsSynced(true)
+      
+      // Update insights if available
+      if (data.insights) {
+        setWeeklyInsights(data.insights)
+      }
+      
+      // Show toast notification
+      toast.success('Weekly content updated!', {
+        description: 'New content is available from another tab',
+        duration: 3000
+      })
+    })
+
+    // Subscribe to insights updates
+    const unsubscribeInsights = weeklySync.subscribe('insights_updated', (data) => {
+      console.log('WeeklyFeatureCard: Received insights update from another tab')
+      setWeeklyInsights(data)
+      setLastUpdateTime(new Date().toLocaleTimeString())
+    })
+
+    // Subscribe to content refresh requests
+    const unsubscribeRefresh = weeklySync.subscribe('content_refresh', () => {
+      console.log('WeeklyFeatureCard: Received refresh request from another tab')
+      handleRefresh()
+    })
+
+    // Subscribe to user interactions
+    const unsubscribeInteraction = weeklySync.subscribe('user_interaction', (data) => {
+      console.log('WeeklyFeatureCard: Received user interaction from another tab:', data)
+      // Handle cross-tab interactions (e.g., likes, shares, etc.)
+      if (data.type === 'content_viewed') {
+        // Update view counts or other metrics
+      }
+    })
+
+    // Set sync status
+    setSyncStatus('connected')
+    setIsSynced(true)
+
+    // Cleanup subscriptions
+    return () => {
+      unsubscribeFeature()
+      unsubscribeInsights()
+      unsubscribeRefresh()
+      unsubscribeInteraction()
+    }
+  }, [])
 
   const handleDismiss = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
+    
+    // Broadcast dismissal to other tabs
+    const weeklySync = getWeeklyFeedSync()
+    weeklySync.broadcastInteraction('card_dismissed', {
+      featureId: item.feature.id,
+      timestamp: new Date().toISOString()
+    })
+    
     onDismiss?.()
   }
 
@@ -92,6 +163,14 @@ export default function WeeklyFeatureCard({
         await navigator.clipboard.writeText(window.location.href)
         toast.success('Link copied to clipboard!')
       }
+
+      // Broadcast share interaction to other tabs
+      const weeklySync = getWeeklyFeedSync()
+      weeklySync.broadcastInteraction('content_shared', {
+        featureId: item.feature.id,
+        method: navigator.share ? 'native' : 'clipboard',
+        timestamp: new Date().toISOString()
+      })
     } catch (error) {
       console.error('Error sharing:', error)
       if (error instanceof Error && error.name !== 'AbortError') {
@@ -103,6 +182,10 @@ export default function WeeklyFeatureCard({
   const handleRefresh = async () => {
     setIsRefreshing(true)
     try {
+      // Request refresh from other tabs
+      const weeklySync = getWeeklyFeedSync()
+      weeklySync.requestContentRefresh()
+      
       // Trigger a page refresh or refetch data
       window.location.reload()
     } catch (error) {
@@ -113,7 +196,7 @@ export default function WeeklyFeatureCard({
     }
   }
 
-  // Load real weekly insights data
+  // Load real weekly insights data with cross-tab sync
   useEffect(() => {
     const loadWeeklyInsights = async () => {
       try {
@@ -121,6 +204,10 @@ export default function WeeklyFeatureCard({
         if (response.ok) {
           const data = await response.json()
           setWeeklyInsights(data.data)
+          
+          // Broadcast insights update to other tabs
+          const weeklySync = getWeeklyFeedSync()
+          weeklySync.updateInsights(data.data)
         }
       } catch (error) {
         console.error('Error loading weekly insights:', error)
@@ -184,15 +271,26 @@ export default function WeeklyFeatureCard({
 
   const realContent = getRealContent()
 
-  // Handle location visit with real navigation
+  // Handle location visit with real navigation and cross-tab sync
   const handleLocationVisit = (location: any) => {
+    // Broadcast location visit to other tabs
+    const weeklySync = getWeeklyFeedSync()
+    weeklySync.broadcastInteraction('location_visited', {
+      locationId: location.id,
+      locationName: location.name,
+      timestamp: new Date().toISOString()
+    })
+
     if (location.coordinates) {
       // Open in maps app
       const url = `https://maps.google.com/maps?q=${location.coordinates.latitude},${location.coordinates.longitude}`
       window.open(url, '_blank')
     } else if (location.id) {
-      // Navigate to location page
-      window.open(`/locations/${location.id}`, '_blank')
+      // Navigate to location page using slug if available, otherwise use ID
+      const locationUrl = location.slug 
+        ? `/locations/${location.slug}` 
+        : `/locations/${location.id}`
+      window.open(locationUrl, '_blank')
     } else {
       // Fallback to Google Maps search
       const url = `https://maps.google.com/maps?q=${encodeURIComponent(location.name)}`
@@ -200,40 +298,71 @@ export default function WeeklyFeatureCard({
     }
   }
 
-  // Handle post view with real navigation
+  // Handle post view with cross-tab sync
   const handlePostView = (post: any) => {
+    // Broadcast post view to other tabs
+    const weeklySync = getWeeklyFeedSync()
+    weeklySync.broadcastInteraction('post_viewed', {
+      postId: post.id,
+      postTitle: post.title,
+      timestamp: new Date().toISOString()
+    })
+
     if (post.id) {
       window.open(`/post/${post.id}`, '_blank')
     } else {
-      toast.error('Post link not available')
+      toast.info('Post details coming soon!')
     }
   }
 
-  // Handle challenge join with real functionality
+  // Handle challenge join with cross-tab sync
   const handleChallengeJoin = async (challenge: any) => {
+    // Broadcast challenge join to other tabs
+    const weeklySync = getWeeklyFeedSync()
+    weeklySync.broadcastInteraction('challenge_joined', {
+      challengeId: challenge.id,
+      challengeTitle: challenge.title,
+      timestamp: new Date().toISOString()
+    })
+
+    // Check if this is a generated weekly challenge (not a real challenge from the database)
+    if (challenge.id && challenge.id.startsWith('challenge-') && challenge.theme) {
+      // This is a generated weekly challenge, show coming soon message
+      toast.info('Challenge system coming soon! Stay tuned for real challenges.')
+      return
+    }
+
+    // Only try to join real challenges that have proper API endpoints
+    if (!challenge.id || typeof challenge.id !== 'string' || challenge.id.length < 10) {
+      toast.info('This challenge is not yet available. Check back soon!')
+      return
+    }
+
     try {
-      // Create a unique challenge identifier using weekly feature ID and challenge title
-      const challengeId = challenge.id || challenge.title || 'unknown-challenge'
-      
+      // Use the correct API endpoint format that expects challengeId in request body
       const response = await fetch('/api/challenges/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ challengeId })
+        body: JSON.stringify({ challengeId: challenge.id })
       })
-
+      
+      if (response.status === 404) {
+        toast.info('Challenge system coming soon! Stay tuned for real challenges.')
+        return
+      }
+      
       if (response.ok) {
-        toast.success(`Joined "${challenge.title}" challenge!`)
-        // Haptic feedback
-        if (navigator.vibrate) {
-          navigator.vibrate(50)
-        }
+        const data = await response.json()
+        toast.success(data.message || 'Successfully joined challenge!')
+        // Refresh the challenge data
+        handleRefresh()
       } else {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to join challenge')
+        const error = await response.json()
+        toast.error(error.error || error.message || 'Failed to join challenge')
       }
     } catch (error) {
       console.error('Error joining challenge:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to join challenge')
+      toast.info('Challenge system coming soon! Stay tuned for real challenges.')
     }
   }
 
@@ -497,12 +626,14 @@ export default function WeeklyFeatureCard({
               <Button
                 size="sm"
                 onClick={() => handleChallengeJoin(challenge)}
-                disabled={isExpired || isJoined}
+                disabled={isExpired || isJoined || (challenge.id && challenge.id.startsWith('challenge-') && challenge.theme)}
                 className={`w-full transition-all ${
                   isExpired 
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
                     : isJoined
                     ? 'bg-green-500 text-white hover:bg-green-600'
+                    : (challenge.id && challenge.id.startsWith('challenge-') && challenge.theme)
+                    ? 'bg-blue-100 text-blue-600 cursor-not-allowed border border-blue-200'
                     : 'bg-gradient-to-r from-[#FFE66D] to-[#FF6B6B] text-white hover:shadow-lg'
                 }`}
               >
@@ -515,6 +646,11 @@ export default function WeeklyFeatureCard({
                   <>
                     <Check className="w-4 h-4 mr-2" />
                     Already Joined
+                  </>
+                ) : (challenge.id && challenge.id.startsWith('challenge-') && challenge.theme) ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-2" />
+                    Coming Soon
                   </>
                 ) : (
                   <>
@@ -566,6 +702,21 @@ export default function WeeklyFeatureCard({
               <div className="flex items-center gap-2 mb-1">
                 <Calendar className="h-4 w-4" />
                 <span className="text-sm font-medium opacity-90">{getCurrentWeekText()}</span>
+                {/* Sync status indicator */}
+                <div className="flex items-center gap-1 ml-2">
+                  {syncStatus === 'connected' ? (
+                    <Wifi className="h-3 w-3 text-green-300" title="Synced across tabs" />
+                  ) : syncStatus === 'connecting' ? (
+                    <div className="h-3 w-3 border border-white/50 border-t-transparent rounded-full animate-spin" title="Connecting..." />
+                  ) : (
+                    <WifiOff className="h-3 w-3 text-red-300" title="Not synced" />
+                  )}
+                  {isSynced && lastUpdateTime && (
+                    <span className="text-xs opacity-75" title={`Last updated: ${lastUpdateTime}`}>
+                      Live
+                    </span>
+                  )}
+                </div>
               </div>
               <h3 className="font-bold text-xl">{themeConfig.name}</h3>
               <p className="text-white/90 text-sm">{getLocationBasedGreeting()}</p>
@@ -704,14 +855,14 @@ export default function WeeklyFeatureCard({
                   <div className="p-3 bg-gray-50 rounded-xl text-center">
                     <div className="text-2xl font-bold text-[#FF6B6B] flex items-center justify-center gap-2">
                       <Users className="w-5 h-5" />
-                      {weeklyInsights?.activeExplorers || item.feature.content?.insights?.activeExplorers || 127}
+                      {weeklyInsights?.activeExplorers || item.feature.content?.insights?.activeExplorers || 0}
                     </div>
                     <div className="text-xs text-gray-600">Active explorers</div>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-xl text-center">
                     <div className="text-2xl font-bold text-[#4ECDC4] flex items-center justify-center gap-2">
                       <Eye className="w-5 h-5" />
-                      {weeklyInsights?.newDiscoveries || item.feature.content?.insights?.newDiscoveries || 43}
+                      {weeklyInsights?.newDiscoveries || item.feature.content?.insights?.newDiscoveries || 0}
                     </div>
                     <div className="text-xs text-gray-600">New discoveries</div>
                   </div>
@@ -722,27 +873,29 @@ export default function WeeklyFeatureCard({
                     <TrendingUp className="w-4 h-4 text-[#FF6B6B]" />
                     Trending This Week
                   </h5>
-                  {(weeklyInsights?.trending || item.feature.content?.insights?.trending || [
-                    'Rooftop bars with city views',
-                    'Hidden street art spots', 
-                    'Local craft breweries'
-                  ]).map((trend, index) => (
-                    <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
-                      <div className="w-1.5 h-1.5 bg-[#FF6B6B] rounded-full" />
-                      <span>{trend}</span>
+                  {(weeklyInsights?.trending || item.feature.content?.insights?.trending || []).length > 0 ? (
+                    (weeklyInsights?.trending || item.feature.content?.insights?.trending || []).map((trend, index) => (
+                      <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
+                        <div className="w-1.5 h-1.5 bg-[#FF6B6B] rounded-full" />
+                        <span>{trend}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-sm text-gray-500 italic">
+                      No trending data available this week
                     </div>
-                  ))}
+                  )}
                 </div>
 
                 {/* Additional real insights */}
-                {weeklyInsights && (
+                {weeklyInsights && weeklyInsights.goals && weeklyInsights.goals.length > 0 && (
                   <div className="mt-6 space-y-3">
                     <h5 className="font-medium text-gray-800 flex items-center gap-2">
                       <Target className="w-4 h-4 text-[#4ECDC4]" />
                       Community Goals
                     </h5>
                     <div className="grid grid-cols-1 gap-2">
-                      {weeklyInsights.goals?.map((goal: any, index: number) => (
+                      {weeklyInsights.goals.map((goal: any, index: number) => (
                         <div key={index} className="flex items-center justify-between p-2 bg-gradient-to-r from-[#4ECDC4]/5 to-[#FFE66D]/5 rounded-lg">
                           <span className="text-sm text-gray-700">{goal.title}</span>
                           <div className="flex items-center gap-2">
@@ -757,6 +910,15 @@ export default function WeeklyFeatureCard({
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Show message when no insights are available */}
+                {!weeklyInsights && !item.feature.content?.insights && (
+                  <div className="mt-6 text-center py-8 text-gray-500">
+                    <Target className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p className="text-sm">Weekly insights coming soon!</p>
+                    <p className="text-xs text-gray-400 mt-1">Check back for community trends and goals</p>
                   </div>
                 )}
               </div>

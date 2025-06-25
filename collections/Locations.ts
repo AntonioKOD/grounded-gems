@@ -440,6 +440,61 @@ export const Locations: CollectionConfig = {
             { label: '🏢 Business Provided', value: 'business_provided' },
             { label: '✅ Staff Verified', value: 'staff_verified' },
           ]
+        },
+        {
+          name: 'status',
+          type: 'select',
+          defaultValue: 'pending',
+          options: [
+            { label: '⏳ Pending Review', value: 'pending' },
+            { label: '✅ Approved', value: 'approved' },
+            { label: '❌ Rejected', value: 'rejected' },
+          ],
+          admin: {
+            description: 'Approval status for user-submitted tips'
+          }
+        },
+        {
+          name: 'submittedBy',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            description: 'User who submitted this tip',
+            condition: (data) => data.source === 'user_submitted'
+          }
+        },
+        {
+          name: 'submittedAt',
+          type: 'date',
+          admin: {
+            description: 'When this tip was submitted',
+            condition: (data) => data.source === 'user_submitted'
+          }
+        },
+        {
+          name: 'reviewedBy',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            description: 'Admin who reviewed this tip',
+            condition: (data) => data.source === 'user_submitted'
+          }
+        },
+        {
+          name: 'reviewedAt',
+          type: 'date',
+          admin: {
+            description: 'When this tip was reviewed',
+            condition: (data) => data.source === 'user_submitted'
+          }
+        },
+        {
+          name: 'rejectionReason',
+          type: 'text',
+          admin: {
+            description: 'Reason for rejection (if applicable)',
+            condition: (data) => data.status === 'rejected'
+          }
         }
       ]
     },

@@ -255,7 +255,7 @@ export function UserProvider({
         setIsInitialized(true)
         setFetchAttempted(false)
         // The logoutUser function already dispatches the event
-        router.replace("/login")
+        router.push("/login")
       }
     } catch (error) {
       console.error("Logout error:", error)

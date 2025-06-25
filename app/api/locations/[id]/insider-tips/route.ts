@@ -102,6 +102,7 @@ export async function POST(
       priority,
       isVerified: false,
       source: 'user_submitted' as const,
+      status: 'pending' as const,
       submittedBy: user.id,
       submittedAt: new Date().toISOString(),
     }
@@ -189,7 +190,14 @@ export async function GET(
 
     // Filter and sort tips
     const tips = (location.insiderTips || [])
-      .filter((tip: any) => tip.tip && tip.tip.trim().length > 0)
+      .filter((tip: any) => {
+        // Only show approved tips or tips from non-user sources
+        if (tip.source === 'user_submitted') {
+          return tip.status === 'approved' && tip.tip && tip.tip.trim().length > 0
+        }
+        // Show AI, business, and staff tips
+        return tip.tip && tip.tip.trim().length > 0
+      })
       .sort((a: any, b: any) => {
         // Sort by priority (high -> medium -> low), then by submission date
         const priorityOrder = { high: 0, medium: 1, low: 2 }

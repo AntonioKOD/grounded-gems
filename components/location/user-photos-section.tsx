@@ -16,8 +16,7 @@ import {
   Eye,
   Award,
   Clock,
-  X,
-  Plus
+  X
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,8 +27,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { PhotoSubmissionModal } from "./photo-submission-modal"
-import { useAuth } from "@/hooks/use-auth"
 
 interface UserPhoto {
   id: string
@@ -75,7 +72,13 @@ interface UserPhotosSectionProps {
 }
 
 export function UserPhotosSection({ locationId, locationName, className }: UserPhotosSectionProps) {
-  const { user } = useAuth()
+  console.log('🎯 UserPhotosSection component rendered with props:', {
+    locationId,
+    locationName,
+    className
+  })
+
+  const [mounted, setMounted] = useState(false)
   const [photos, setPhotos] = useState<UserPhoto[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -87,7 +90,11 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
   const [hasMore, setHasMore] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedPhoto, setSelectedPhoto] = useState<UserPhoto | null>(null)
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false)
+
+  // Set mounted state for client-side rendering
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Fetch photos
   const fetchPhotos = async (pageNum: number = 1, reset: boolean = false) => {
@@ -140,14 +147,6 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
     }
   }
 
-  // Handle successful photo submission
-  const handlePhotoSubmissionSuccess = () => {
-    setIsSubmissionModalOpen(false)
-    // Refresh photos to show any newly approved ones
-    fetchPhotos(1, true)
-    toast.success('Photo submitted for review! It will appear once approved.')
-  }
-
   // Format date
   const formatDate = (dateString: string) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -172,66 +171,48 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
     return colors[category] || colors.other
   }
 
-  // Loading skeleton
-  if (isLoading && photos.length === 0) {
+  // Don't render until mounted
+  if (!mounted) {
     return (
       <div className={cn("space-y-6", className)}>
         <div className="flex items-center justify-between">
           <Skeleton className="h-8 w-48" />
           <Skeleton className="h-10 w-32" />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-square rounded-lg" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-64" />
           ))}
         </div>
       </div>
     )
   }
 
-  // No photos state
+  // If no photos and not loading, show empty state
   if (!isLoading && photos.length === 0) {
     return (
-      <div className={cn("text-center py-12", className)}>
-        <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-          <Camera className="w-12 h-12 text-gray-400" />
+      <div className={cn("space-y-6", className)}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Community Photos</h2>
+            <p className="text-gray-600">Photos shared by visitors</p>
+          </div>
         </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">No User Photos Yet</h3>
-        <p className="text-gray-600 mb-6">
-          Be the first to share a photo of {locationName}!
-        </p>
-        {user ? (
-          <Button 
-            onClick={() => setIsSubmissionModalOpen(true)}
-            className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-          >
-            <Camera className="w-4 h-4 mr-2" />
-            Add Photo
-          </Button>
-        ) : (
-          <p className="text-gray-500 text-sm">
-            Please log in to add photos
-          </p>
-        )}
-      </div>
-    )
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className={cn("text-center py-12", className)}>
-        <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4">
-          <Camera className="w-12 h-12 text-red-400" />
-        </div>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Photos</h3>
-        <p className="text-gray-600 mb-6">{error}</p>
-        <Button 
-          onClick={() => fetchPhotos(1, true)}
-          variant="outline"
-        >
-          Try Again
-        </Button>
+        
+        <Card>
+          <CardContent className="p-12 text-center">
+            <div className="bg-gray-50 rounded-full p-6 w-fit mx-auto mb-4">
+              <Camera className="h-12 w-12 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No photos yet</h3>
+            <p className="text-gray-600 mb-4">
+              Be the first to share a photo of {locationName}
+            </p>
+            <p className="text-sm text-gray-500">
+              Photos will appear here once they're submitted and approved
+            </p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -240,69 +221,22 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
     <div className={cn("space-y-6", className)}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-[#FF6B6B]/10 rounded-full p-2">
-            <Camera className="w-5 h-5 text-[#FF6B6B]" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">User Photos</h2>
-            <p className="text-gray-600">
-              {totalCount} photo{totalCount !== 1 ? 's' : ''} shared by visitors
-            </p>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          {/* Add Photo Button */}
-          {user ? (
-            <Button
-              onClick={() => setIsSubmissionModalOpen(true)}
-              className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Photo
-            </Button>
-          ) : (
-            <Button
-              onClick={() => toast.error('Please log in to add photos')}
-              variant="outline"
-              size="sm"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Photo
-            </Button>
-          )}
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-            >
-              <Grid3X3 className="w-4 h-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="w-4 h-4" />
-            </Button>
-          </div>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Community Photos</h2>
+          <p className="text-gray-600">
+            {totalCount > 0 ? `${totalCount} photo${totalCount === 1 ? '' : 's'} shared by visitors` : 'Photos shared by visitors'}
+          </p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-4">
-        {/* Category Filter */}
         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Filter by category" />
+            <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.value} value={category.value}>
                 {category.label} ({category.count})
@@ -311,151 +245,83 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
           </SelectContent>
         </Select>
 
-        {/* Featured Filter */}
-        <Button
-          variant={showFeaturedOnly ? 'default' : 'outline'}
-          onClick={() => setShowFeaturedOnly(!showFeaturedOnly)}
-          size="sm"
-        >
-          <Award className="w-4 h-4 mr-2" />
-          Featured Only
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={viewMode === 'grid' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('grid')}
+          >
+            <Grid3X3 className="h-4 w-4 mr-2" />
+            Grid
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setViewMode('list')}
+          >
+            <List className="h-4 w-4 mr-2" />
+            List
+          </Button>
+        </div>
 
-        {/* Stats */}
-        <div className="text-sm text-gray-600 ml-auto">
-          Showing {photos.length} of {totalCount} photos
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showFeaturedOnly ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowFeaturedOnly(!showFeaturedOnly)}
+          >
+            <Award className="h-4 w-4 mr-2" />
+            Featured Only
+          </Button>
         </div>
       </div>
 
       {/* Photos Grid/List */}
-      <Tabs value={viewMode} className="space-y-6">
-        {/* Grid View */}
-        <TabsContent value="grid" className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            <AnimatePresence>
-              {photos.map((photo, index) => (
-                <motion.div
-                  key={photo.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="group cursor-pointer"
-                  onClick={() => setSelectedPhoto(photo)}
-                >
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow">
+      <Tabs value={viewMode} className="w-full">
+        <TabsList className="hidden">
+          <TabsTrigger value="grid">Grid</TabsTrigger>
+          <TabsTrigger value="list">List</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="grid" className="mt-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {photos.map((photo) => (
+              <motion.div
+                key={photo.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="overflow-hidden cursor-pointer hover:shadow-lg transition-shadow group">
+                  <CardContent className="p-0">
                     <div className="relative aspect-square">
                       <Image
                         src={photo.photo.url}
                         alt={photo.photo.alt || photo.caption || `Photo by ${photo.submittedBy.name}`}
                         fill
-                        className="object-cover transition-transform group-hover:scale-105"
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                        onClick={() => setSelectedPhoto(photo)}
                       />
-                      
-                      {/* Overlays */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                      
-                      {/* Featured Badge */}
                       {photo.featured && (
-                        <div className="absolute top-2 right-2">
+                        <div className="absolute top-2 left-2">
                           <Badge className="bg-yellow-500 text-white">
-                            <Star className="w-3 h-3 mr-1 fill-current" />
+                            <Award className="w-3 h-3 mr-1" />
                             Featured
                           </Badge>
                         </div>
                       )}
-
-                      {/* Category Badge */}
-                      <div className="absolute top-2 left-2">
+                      <div className="absolute top-2 right-2">
                         <Badge className={getCategoryColor(photo.category)}>
-                          {categories.find(c => c.value === photo.category)?.label || photo.category}
+                          {photo.category.replace('_', ' ')}
                         </Badge>
                       </div>
-
-                      {/* User Info Overlay */}
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="w-6 h-6">
-                            <AvatarImage src={photo.submittedBy.profileImage} />
-                            <AvatarFallback className="text-xs">
-                              {photo.submittedBy.name?.charAt(0) || 'U'}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-white text-sm truncate">
-                            {photo.submittedBy.name || 'Anonymous'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </TabsContent>
-
-        {/* List View */}
-        <TabsContent value="list" className="space-y-4">
-          {photos.map((photo, index) => (
-            <motion.div
-              key={photo.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.05 }}
-            >
-              <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedPhoto(photo)}>
-                <CardContent className="p-4">
-                  <div className="flex gap-4">
-                    {/* Photo Thumbnail */}
-                    <div className="relative w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden">
-                      <Image
-                        src={photo.photo.url}
-                        alt={photo.photo.alt || photo.caption || `Photo by ${photo.submittedBy.name}`}
-                        fill
-                        className="object-cover"
-                      />
                     </div>
 
-                    {/* Photo Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Badge className={getCategoryColor(photo.category)}>
-                            {categories.find(c => c.value === photo.category)?.label || photo.category}
-                          </Badge>
-                          {photo.featured && (
-                            <Badge className="bg-yellow-500 text-white">
-                              <Star className="w-3 h-3 mr-1 fill-current" />
-                              Featured
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-sm text-gray-500 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(photo.approvedAt)}
-                        </span>
-                      </div>
-
-                      {/* Caption */}
+                    <div className="p-4 space-y-3">
                       {photo.caption && (
-                        <p className="text-gray-700 mb-2 line-clamp-2">{photo.caption}</p>
-                      )}
-
-                      {/* Tags */}
-                      {photo.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {photo.tags.slice(0, 3).map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-xs">
-                              <Tag className="w-3 h-3 mr-1" />
-                              {tag}
-                            </Badge>
-                          ))}
-                          {photo.tags.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{photo.tags.length - 3} more
-                            </Badge>
-                          )}
-                        </div>
+                        <p className="text-sm text-gray-700 line-clamp-2">
+                          {photo.caption}
+                        </p>
                       )}
 
                       {/* User Info */}
@@ -477,11 +343,86 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
                         )}
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="list" className="mt-0">
+          <div className="space-y-4">
+            {photos.map((photo) => (
+              <motion.div
+                key={photo.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <Card className="cursor-pointer hover:shadow-md transition-shadow group">
+                  <CardContent className="p-4">
+                    <div className="flex gap-4">
+                      <div className="relative w-24 h-24 flex-shrink-0">
+                        <Image
+                          src={photo.photo.url}
+                          alt={photo.photo.alt || photo.caption || `Photo by ${photo.submittedBy.name}`}
+                          fill
+                          className="object-cover rounded-lg group-hover:scale-105 transition-transform duration-300"
+                          onClick={() => setSelectedPhoto(photo)}
+                        />
+                        {photo.featured && (
+                          <div className="absolute -top-1 -left-1">
+                            <Badge className="bg-yellow-500 text-white text-xs">
+                              <Award className="w-2 h-2 mr-1" />
+                              Featured
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Badge className={getCategoryColor(photo.category)}>
+                              {photo.category.replace('_', ' ')}
+                            </Badge>
+                            <span className="text-sm text-gray-500">
+                              {formatDate(photo.submittedAt)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {photo.caption && (
+                          <p className="text-sm text-gray-700 mb-3 line-clamp-2">
+                            {photo.caption}
+                          </p>
+                        )}
+
+                        {/* User Info */}
+                        <div className="flex items-center gap-2">
+                          <Avatar className="w-6 h-6">
+                            <AvatarImage src={photo.submittedBy.profileImage} />
+                            <AvatarFallback className="text-xs">
+                              {photo.submittedBy.name?.charAt(0) || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm text-gray-600">
+                            by {photo.submittedBy.name || 'Anonymous'}
+                          </span>
+                          {photo.qualityScore && (
+                            <div className="flex items-center gap-1 ml-auto">
+                              <Star className="w-3 h-3 text-yellow-500" />
+                              <span className="text-xs text-gray-500">{photo.qualityScore}/100</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -517,19 +458,6 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
           categories={categories}
         />
       )}
-
-      {/* Photo Submission Modal */}
-      <PhotoSubmissionModal
-        isOpen={isSubmissionModalOpen}
-        onClose={() => setIsSubmissionModalOpen(false)}
-        location={{ id: locationId, name: locationName }}
-        user={user ? { 
-          id: user.id, 
-          name: user.name || user.email || 'User',
-          avatar: typeof user.profileImage === 'object' ? user.profileImage?.url : user.profileImage
-        } : null}
-        onSuccess={handlePhotoSubmissionSuccess}
-      />
     </div>
   )
 }
@@ -564,7 +492,7 @@ function PhotoDetailModal({ photo, onClose, categories }: PhotoDetailModalProps)
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100001] bg-black/80 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div

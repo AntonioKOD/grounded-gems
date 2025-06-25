@@ -38,14 +38,14 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
         if (authRequired === 'true') {
           if (noToken === 'true') {
             // No token found, redirect to login
-            router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+            router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
             return
           }
 
           if (invalidToken === 'true') {
             setErrorMessage('Invalid authentication token. Please log in again.')
             setTimeout(() => {
-              router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+              router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
             }, 2000)
             return
           }
@@ -53,7 +53,7 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
           if (tokenExpired === 'true') {
             setErrorMessage('Your session has expired. Redirecting to login...')
             setTimeout(() => {
-              router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+              router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
             }, 2000)
             return
           }
@@ -61,7 +61,7 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
           if (authError === 'true') {
             setErrorMessage('Authentication error occurred. Please try again.')
             setTimeout(() => {
-              router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+              router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
             }, 2000)
             return
           }
@@ -77,7 +77,7 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
         })
 
         if (!authResponse.ok) {
-          router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+          router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
           return
         }
 
@@ -88,7 +88,7 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
         } else if (authData.authenticated && !authData.isAdmin) {
           setAuthStatus('denied')
         } else {
-          router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+          router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
         }
 
       } catch (error) {
@@ -96,7 +96,7 @@ export default function AdminAuthChecker({ children }: AdminAuthCheckerProps) {
         setAuthStatus('error')
         setErrorMessage('Error checking authentication. Please try again.')
         setTimeout(() => {
-          router.replace('/login?redirect=' + encodeURIComponent(window.location.pathname))
+          router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
         }, 3000)
       }
     }

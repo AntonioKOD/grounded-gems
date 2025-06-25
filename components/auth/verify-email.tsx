@@ -45,8 +45,8 @@ export default function VerifyEmailComponent() {
           
           // Use a more controlled redirect to prevent loops
           setTimeout(() => {
-            // Use replace instead of push to prevent back button issues
-            window.location.replace('/login?verified=true')
+            // Use router.push instead of window.location.replace to prevent loops
+            router.push('/login?verified=true')
           }, 3000)
         } else {
           if (data.error?.includes('already verified')) {

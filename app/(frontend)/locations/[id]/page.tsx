@@ -30,8 +30,8 @@ import {
   LocationHeroButtons
 } from './location-interactions'
 import { ContactActions } from './contact-actions'
-import { UserPhotosSection } from '@/components/location/user-photos-section'
-import StructuredInsiderTips from '@/components/location/structured-insider-tips'
+import { UserPhotosWrapper } from '@/components/location/user-photos-wrapper'
+import ClientInsiderTips from '@/components/location/client-insider-tips'
 import { LocationStructuredData, BreadcrumbStructuredData } from '@/components/seo/enhanced-structured-data'
 
 export const dynamic = 'force-dynamic'
@@ -666,7 +666,7 @@ export default async function LocationPage({ params }: PageProps) {
               {location.insiderTips && (
                 <Card>
                   <CardContent className="p-8">
-                    <StructuredInsiderTips
+                    <ClientInsiderTips
                       tips={location.insiderTips}
                       locationName={location.name}
                       locationId={location.id}
@@ -680,7 +680,7 @@ export default async function LocationPage({ params }: PageProps) {
               {/* User Photos Section */}
               <Card>
                 <CardContent className="p-8">
-                  <UserPhotosSection 
+                  <UserPhotosWrapper 
                     locationId={location.id} 
                     locationName={location.name}
                   />

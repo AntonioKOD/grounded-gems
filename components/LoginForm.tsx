@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MobileAuthService } from "@/lib/mobile-auth"
 import { Capacitor } from '@capacitor/core'
+import { safeNavigate } from "@/lib/redirect-loop-prevention"
 
 // Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
@@ -68,18 +69,12 @@ const LoginForm = memo(function LoginForm() {
       console.log("LoginForm: User already authenticated, redirecting immediately to:", redirectPath)
       setHasRedirected(true)
       
-      // Use a more stable redirect method to prevent loops
+      // Use safe navigation to prevent redirect loops
       if (typeof window !== 'undefined') {
-        // Small delay to prevent rapid-fire redirects
-        const redirectTimer = setTimeout(() => {
-          window.location.replace(redirectPath)
-        }, 100)
-        
-        // Cleanup timer if component unmounts
-        return () => clearTimeout(redirectTimer)
+        safeNavigate(redirectPath, router)
       }
     }
-  }, [isAuthenticated, isLoading, redirectPath, hasRedirected]) // Removed router from deps to prevent re-execution
+  }, [isAuthenticated, isLoading, redirectPath, hasRedirected, router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -144,10 +139,9 @@ const LoginForm = memo(function LoginForm() {
       // Mark as redirected to prevent multiple redirects
       setHasRedirected(true)
       
-      // Use window.location for more reliable navigation in production
-      // This prevents the Next.js Link caching issues mentioned in the GitHub discussion
+      // Use safe navigation to prevent redirect loops
       console.log("Redirecting to:", redirectPath)
-      window.location.href = redirectPath
+      safeNavigate(redirectPath, router)
       
     } catch (err: any) {
       console.error("Login error:", err)
