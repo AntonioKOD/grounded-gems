@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { CheckCircle, XCircle, Loader2, Mail } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { safeNavigate, getSafeRedirectPath, clearAuthRedirectHistory } from '@/lib/redirect-loop-prevention'
 
 type VerificationStatus = 'loading' | 'success' | 'error' | 'expired' | 'already-verified'
 
@@ -43,10 +43,13 @@ export default function VerifyEmailComponent() {
           setMessage('Your email has been verified successfully!')
           setEmail(data.user?.email || '')
           
-          // Use a more controlled redirect to prevent loops
+          // Clear auth redirect history to prevent future loops
+          clearAuthRedirectHistory()
+          
+          // Use safe navigation instead of timer-based redirect
           setTimeout(() => {
-            // Use router.push instead of window.location.replace to prevent loops
-            router.push('/login?verified=true')
+            const safeRedirect = getSafeRedirectPath('/login?verified=true', '/feed')
+            safeNavigate(safeRedirect, router)
           }, 3000)
         } else {
           if (data.error?.includes('already verified')) {
@@ -166,33 +169,55 @@ export default function VerifyEmailComponent() {
 
           <div className="space-y-2">
             {(status === 'success' || status === 'already-verified') && (
-              <Link href="/login" passHref>
-                <Button className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90">
-                  Go to Login
-                </Button>
-              </Link>
+              <Button 
+                onClick={() => {
+                  clearAuthRedirectHistory()
+                  const safeLoginPath = getSafeRedirectPath('/login', '/login')
+                  safeNavigate(safeLoginPath, router)
+                }}
+                className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90"
+              >
+                Go to Login
+              </Button>
             )}
 
             {status === 'error' && (
               <div className="space-y-2">
-                <Link href="/signup/enhanced" passHref>
-                  <Button variant="outline" className="w-full">
-                    Create New Account
-                  </Button>
-                </Link>
-                <Link href="/login" passHref>
-                  <Button className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90">
-                    Try Login Instead
-                  </Button>
-                </Link>
+                <Button 
+                  onClick={() => {
+                    clearAuthRedirectHistory()
+                    const safeSignupPath = getSafeRedirectPath('/signup/enhanced', '/signup/enhanced')
+                    safeNavigate(safeSignupPath, router)
+                  }}
+                  variant="outline" 
+                  className="w-full"
+                >
+                  Create New Account
+                </Button>
+                <Button 
+                  onClick={() => {
+                    clearAuthRedirectHistory()
+                    const safeLoginPath = getSafeRedirectPath('/login', '/login')
+                    safeNavigate(safeLoginPath, router)
+                  }}
+                  className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90"
+                >
+                  Try Login Instead
+                </Button>
               </div>
             )}
 
-            <Link href="/" passHref>
-              <Button variant="ghost" className="w-full">
-                Back to Home
-              </Button>
-            </Link>
+            <Button 
+              onClick={() => {
+                clearAuthRedirectHistory()
+                const safeHomePath = getSafeRedirectPath('/', '/')
+                safeNavigate(safeHomePath, router)
+              }}
+              variant="ghost" 
+              className="w-full"
+            >
+              Back to Home
+            </Button>
           </div>
         </CardContent>
       </Card>

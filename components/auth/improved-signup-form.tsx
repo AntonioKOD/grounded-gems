@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { UsernameInput } from "@/components/ui/username-input"
 import { cn } from "@/lib/utils"
+import { safeNavigate, getSafeRedirectPath, clearAuthRedirectHistory } from '@/lib/redirect-loop-prevention'
 
 type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
 
@@ -266,6 +267,10 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
       })
 
       await signupUser(signupData)
+      
+      // Clear auth redirect history to prevent future loops
+      clearAuthRedirectHistory()
+      
       setStatus("success")
     } catch (err: any) {
       console.error('Signup error:', err)
@@ -306,11 +311,18 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                 Resend verification email
               </Button>
             )}
-            <Link href="/login" passHref>
-              <Button className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90">
-                Go to Login
-              </Button>
-            </Link>
+            <Button 
+              onClick={() => {
+                // Clear auth history and use safe navigation
+                clearAuthRedirectHistory()
+                const safeLoginPath = getSafeRedirectPath('/login', '/login')
+                const router = { push: (path: string) => window.location.href = path }
+                safeNavigate(safeLoginPath, router)
+              }}
+              className="w-full bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:opacity-90"
+            >
+              Go to Login
+            </Button>
           </CardFooter>
         </Card>
       </div>

@@ -86,23 +86,29 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
       )
     }
 
-    // Update user's last login and device info if provided
-    if (deviceInfo) {
-      try {
-        await payload.update({
-          collection: 'users',
-          id: result.user.id,
-          data: {
-            lastLogin: new Date(),
-            deviceInfo: {
-              ...deviceInfo,
-              lastSeen: new Date(),
-            },
-          },
-        })
-      } catch (updateError) {
-        console.warn('Failed to update user device info:', updateError)
+    // Update user's last login, device info, and remember me preference
+    try {
+      const updateData: any = {
+        lastLogin: new Date(),
+        rememberMeEnabled: rememberMe,
+        lastRememberMeDate: rememberMe ? new Date() : undefined,
       }
+      
+      if (deviceInfo) {
+        updateData.deviceInfo = {
+          ...deviceInfo,
+          lastSeen: new Date(),
+        }
+      }
+      
+      await payload.update({
+        collection: 'users',
+        id: result.user.id,
+        data: updateData,
+      })
+    } catch (updateError) {
+      console.warn('Failed to update user login info:', updateError)
+      // Don't fail the login if this update fails
     }
 
     // Prepare mobile-optimized response

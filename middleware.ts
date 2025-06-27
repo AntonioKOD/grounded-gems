@@ -51,6 +51,7 @@ function checkRedirectLoop(ip: string, pathname: string): boolean {
 
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
   const token = request.cookies.get('payload-token')?.value
+  const rememberMe = request.cookies.get('remember-me')?.value === 'true'
   
   if (!token) {
     return false
@@ -67,14 +68,23 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
     // Decode payload to check expiration (basic validation)
     try {
       const payload = JSON.parse(atob(parts[1]))
+      
+      // Check token expiration
       if (payload.exp && payload.exp * 1000 < Date.now()) {
+        // If remember me is enabled, token might be expired but session could still be valid
+        // Let the client handle refresh logic in this case
+        if (rememberMe) {
+          console.log('🔄 [Middleware] Token expired but remember me enabled, allowing client to handle refresh')
+          return true // Allow client-side refresh logic to handle this
+        }
         return false
       }
+      
+      return true
     } catch {
       return false
     }
     
-    return true
   } catch {
     return false
   }

@@ -43,11 +43,10 @@ const LoginForm = memo(function LoginForm() {
 
   // Prevent redirect loops by checking if redirect path is current path
   const safeRedirectPath = useMemo(() => {
-    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
-    
-    // Use the utility to get a safe redirect path
-    return getSafeRedirectPath(redirectPath, '/feed')
-  }, [redirectPath])
+    // Always redirect to feed after login, regardless of the redirect parameter
+    // This prevents redirect loops and provides a consistent login experience
+    return '/feed'
+  }, [])
 
   const [formData, setFormData] = useState({ 
     email: "", 
@@ -142,11 +141,17 @@ const LoginForm = memo(function LoginForm() {
         window.dispatchEvent(new Event("login-success"))
       }
       
-      // Save email for future logins if remember me is checked
+      // Enhanced remember me handling
       if (formData.rememberMe && typeof window !== 'undefined') {
+        // Save email and user preference for future logins
         localStorage.setItem('savedEmail', formData.email)
+        localStorage.setItem('rememberMePreference', 'true')
+        console.log('Remember me enabled: Email saved for future logins')
       } else if (typeof window !== 'undefined') {
+        // Clear saved data if remember me is not checked
         localStorage.removeItem('savedEmail')
+        localStorage.removeItem('rememberMePreference')
+        console.log('Remember me disabled: Cleared saved email')
       }
       
       // Mark as redirected to prevent multiple redirects
@@ -167,12 +172,23 @@ const LoginForm = memo(function LoginForm() {
     }
   }
 
-  // Load saved email if available
+  // Load saved email and remember me state if available
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const savedEmail = localStorage.getItem('savedEmail')
+      const rememberMeFromCookie = document.cookie.includes('remember-me=true')
+      
       if (savedEmail) {
-        setFormData(prev => ({ ...prev, email: savedEmail, rememberMe: true }))
+        setFormData(prev => ({ 
+          ...prev, 
+          email: savedEmail, 
+          rememberMe: rememberMeFromCookie || true 
+        }))
+      }
+      
+      // Also check if user has an active remember me session
+      if (rememberMeFromCookie) {
+        console.log('User has active remember me session')
       }
     }
   }, [])
@@ -269,18 +285,33 @@ const LoginForm = memo(function LoginForm() {
                 </button>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox 
-                id="rememberMe" 
-                checked={formData.rememberMe} 
-                onCheckedChange={handleCheckboxChange} 
-              />
-              <label
-                htmlFor="rememberMe"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Remember me
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="rememberMe" 
+                  checked={formData.rememberMe} 
+                  onCheckedChange={handleCheckboxChange} 
+                />
+                <div className="flex-1">
+                  <label
+                    htmlFor="rememberMe"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Remember me for 30 days
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.rememberMe 
+                      ? "Your session will be extended and login details saved" 
+                      : "Standard 24-hour session"}
+                  </p>
+                </div>
+              </div>
+              {formData.email && typeof window !== 'undefined' && localStorage.getItem('savedEmail') === formData.email && (
+                <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 px-3 py-2 rounded-md">
+                  <CheckCircle className="h-3 w-3" />
+                  <span>Welcome back! We remembered your email.</span>
+                </div>
+              )}
             </div>
             <Button type="submit" className="w-full mt-6 bg-[#FF6B6B]" disabled={isSubmitting}>
               {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : "Log in"}
