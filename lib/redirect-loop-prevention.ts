@@ -230,23 +230,78 @@ export function safeWindowNavigate(
 }
 
 /**
- * Clear redirect history for authentication-related paths
+ * Clear authentication-related redirect history
+ * Call this after successful login/logout
  */
 export function clearAuthRedirectHistory(): void {
-  const authPaths = [
-    '/login',
-    '/signup',
-    '/forgot-password',
-    '/reset-password',
-    '/verify',
-    '/admin'
-  ]
-
+  const authPaths = ['/login', '/signup', '/logout']
   authPaths.forEach(path => {
     redirectLoopPrevention.clearPathHistory(path)
   })
-
+  
+  // Also clear profile-related authentication redirects
+  const stats = redirectLoopPrevention.getRedirectStats()
+  stats.suspiciousPaths.forEach(path => {
+    if (path.includes('/profile/') && (path.includes('/edit') || path.includes('/dashboard'))) {
+      redirectLoopPrevention.clearPathHistory(path)
+    }
+  })
+  
   console.log('🧹 [Redirect Prevention] Cleared auth-related redirect history')
+}
+
+/**
+ * Check if a path is safe for redirect after authentication
+ */
+export function isValidRedirectPath(path: string): boolean {
+  // Don't redirect to login/signup pages
+  if (path === '/login' || path === '/signup' || path.startsWith('/login') || path.startsWith('/signup')) {
+    return false
+  }
+  
+  // Check for valid profile paths
+  if (path.startsWith('/profile/')) {
+    // Profile viewing is okay
+    const profileViewPattern = /^\/profile\/[^\/]+\/?$/
+    if (profileViewPattern.test(path)) {
+      return true
+    }
+    
+    // Protected profile actions require authentication
+    const protectedActions = ['/edit', '/location-dashboard', '/creator-dashboard']
+    const hasProtectedAction = protectedActions.some(action => path.includes(action))
+    
+    if (hasProtectedAction) {
+      // Only allow if it's a valid protected action format
+      const validProtectedPattern = /^\/profile\/[^\/]+\/(edit|location-dashboard|creator-dashboard)/
+      return validProtectedPattern.test(path)
+    }
+  }
+  
+  // Most other paths are valid
+  return true
+}
+
+/**
+ * Get a safe redirect path for after authentication
+ */
+export function getSafeRedirectPath(requestedPath: string, fallback: string = '/feed'): string {
+  if (!requestedPath || !isValidRedirectPath(requestedPath)) {
+    return fallback
+  }
+  
+  // For profile actions, ensure user has permission
+  if (requestedPath.startsWith('/profile/') && 
+      (requestedPath.includes('/edit') || requestedPath.includes('/dashboard'))) {
+    // Extract profile ID and return safe profile view
+    const profileIdMatch = requestedPath.match(/^\/profile\/([^\/]+)/)
+    if (profileIdMatch) {
+      return `/profile/${profileIdMatch[1]}`
+    }
+    return fallback
+  }
+  
+  return requestedPath
 }
 
 /**

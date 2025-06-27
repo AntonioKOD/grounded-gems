@@ -1481,15 +1481,18 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
 
   // Retry map initialization
   const retryMapInit = useCallback(() => {
+    console.log('🔄 Retrying map initialization...')
     setMapError(null)
     setIsLoading(true)
     setMapLoaded(false)
     setMapReady(false)
     mapInitializedRef.current = false
     
-    // Re-initialize map
+    // Re-initialize map with a delay
     setTimeout(() => {
-      window.location.reload()
+      if (isMountedRef.current) {
+        initializeMap()
+      }
     }, 500)
   }, [])
 

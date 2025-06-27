@@ -263,4 +263,96 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// DELETE /api/guides - Delete guides (used by Payload admin)
+export async function DELETE(request: NextRequest) {
+  try {
+    const payload = await getPayload({ config })
+    const { searchParams } = new URL(request.url)
+    
+    // Get the where clause from query parameters (Payload admin sends this)
+    const whereParam = searchParams.get('where')
+    let where = {}
+    
+    if (whereParam) {
+      try {
+        where = JSON.parse(decodeURIComponent(whereParam))
+      } catch (parseError) {
+        console.error('Error parsing where clause:', parseError)
+        return NextResponse.json(
+          { success: false, error: 'Invalid where clause' },
+          { status: 400 }
+        )
+      }
+    }
+    
+    // Authenticate the user
+    let user
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+    } catch (authError) {
+      console.log('No authenticated user found for guide deletion')
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+    
+    // Check if user has permission to delete guides
+    if (!user || (user.role !== 'admin' && user.role !== 'editor')) {
+      return NextResponse.json(
+        { success: false, error: 'Insufficient permissions' },
+        { status: 403 }
+      )
+    }
+    
+    console.log('🗑️ Deleting guides with where clause:', where)
+    
+    // Find guides to delete
+    const guidesToDelete = await payload.find({
+      collection: 'guides',
+      where,
+      limit: 1000 // Set a reasonable limit
+    })
+    
+    if (guidesToDelete.docs.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'No guides found to delete' },
+        { status: 404 }
+      )
+    }
+    
+    // Delete each guide
+    const deletedGuides = []
+    for (const guide of guidesToDelete.docs) {
+      try {
+        await payload.delete({
+          collection: 'guides',
+          id: guide.id,
+          req: { user }
+        })
+        deletedGuides.push(guide.id)
+        console.log(`✅ Deleted guide: ${guide.id}`)
+      } catch (deleteError) {
+        console.error(`❌ Error deleting guide ${guide.id}:`, deleteError)
+      }
+    }
+    
+    console.log(`🗑️ Successfully deleted ${deletedGuides.length} guides`)
+    
+    return NextResponse.json({
+      success: true,
+      deletedCount: deletedGuides.length,
+      deletedIds: deletedGuides
+    })
+    
+  } catch (error) {
+    console.error('Error deleting guides:', error)
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete guides' },
+      { status: 500 }
+    )
+  }
 } 

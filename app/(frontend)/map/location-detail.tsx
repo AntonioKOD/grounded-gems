@@ -252,7 +252,17 @@ function AddToBucketListModal({
                     <Button
                       onClick={() => {
                         onClose()
-                        window.open('/bucket-list', '_blank')
+                        try {
+                          if (typeof window !== 'undefined') {
+                            const newWindow = window.open('/bucket-list', '_blank')
+                            if (!newWindow) {
+                              window.location.href = '/bucket-list'
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Error navigating to bucket list:', error)
+                          toast.error('Unable to open bucket list page')
+                        }
                       }}
                       className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200"
                     >
@@ -1024,8 +1034,20 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
             size="sm"
             onClick={() => {
               toast.dismiss(t.id)
-              // Navigate to bucket list page to create one
-              window.open('/bucket-list', '_blank')
+              // Use safer navigation method instead of window.open
+              try {
+                // Try to use router if available, fallback to window.open
+                if (typeof window !== 'undefined') {
+                  const newWindow = window.open('/bucket-list', '_blank')
+                  if (!newWindow) {
+                    // Fallback to same window if popup blocked
+                    window.location.href = '/bucket-list'
+                  }
+                }
+              } catch (error) {
+                console.error('Error navigating to bucket list:', error)
+                toast.error('Unable to open bucket list page')
+              }
             }}
             className="bg-[#ff6b6b] hover:bg-[#ff5555] text-white"
           >

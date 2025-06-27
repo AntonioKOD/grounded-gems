@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { convertHeicToJpeg } from "@/lib/heic-converter"
+import { convertHEICFile, isHEICFile } from '@/lib/heic-converter'
 
 interface PhotoSubmissionModalProps {
   isOpen: boolean
@@ -137,7 +137,7 @@ export function PhotoSubmissionModal({
       // Convert HEIC to JPEG if needed
       let processedFile = file
       if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-        processedFile = await convertHeicToJpeg(file)
+        processedFile = await convertHEICFile(file)
       }
 
       setSelectedFile(processedFile)

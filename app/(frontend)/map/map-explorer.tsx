@@ -46,6 +46,10 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 export default function MapExplorer() {
   const searchParams = useSearchParams()
   
+  // Redirect loop prevention
+  const [redirectAttempts, setRedirectAttempts] = useState(0)
+  const maxRedirectAttempts = 3
+
   // Core states only
   const [allLocations, setAllLocations] = useState<Location[]>([])
   const [filteredLocations, setFilteredLocations] = useState<Location[]>([])
@@ -63,7 +67,7 @@ export default function MapExplorer() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
-  const [locationsLoading, setLocationsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mapPadding, setMapPadding] = useState({ top: 0, right: 0, bottom: 0, left: 0}); // New state for map padding
 
@@ -92,7 +96,7 @@ export default function MapExplorer() {
     const loadLocations = async () => {
       try {
         console.log("🔄 Loading locations...")
-        setLocationsLoading(true)
+        setIsLoading(true)
         setError(null)
 
         const locations = await addedLocations()
@@ -127,7 +131,7 @@ export default function MapExplorer() {
         }
       } finally {
         if (isMounted) {
-          setLocationsLoading(false)
+          setIsLoading(false)
         }
       }
     }
@@ -181,6 +185,12 @@ export default function MapExplorer() {
     const handleSharedLocation = () => {
       if (typeof window === 'undefined') return
       
+      // Prevent redirect loops
+      if (redirectAttempts >= maxRedirectAttempts) {
+        console.log('🚫 Redirect loop prevention: Max attempts reached')
+        return
+      }
+      
       const urlParams = new URLSearchParams(window.location.search)
       const sharedLocationId = urlParams.get('locationId')
       
@@ -203,10 +213,19 @@ export default function MapExplorer() {
             setMapZoom(16) // Zoom in to show the location clearly
           }
           
-          // Clean up the URL
-          const newUrl = new URL(window.location.href)
-          newUrl.searchParams.delete('locationId')
-          window.history.replaceState({}, '', newUrl.toString())
+          // Clean up the URL safely to prevent redirect loops
+          try {
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.delete('locationId')
+            // Use replaceState to avoid adding to browser history
+            window.history.replaceState({}, '', newUrl.toString())
+            // Reset redirect attempts on successful cleanup
+            setRedirectAttempts(0)
+          } catch (error) {
+            console.error('Error cleaning up URL:', error)
+            // Increment redirect attempts on error
+            setRedirectAttempts(prev => prev + 1)
+          }
         } else {
           // Location not found in current view, try to fetch it
           console.log('🔍 Location not found in current view, fetching...')
@@ -219,9 +238,15 @@ export default function MapExplorer() {
     if (allLocations.length > 0) {
       handleSharedLocation()
     }
-  }, [allLocations])
+  }, [allLocations, redirectAttempts, maxRedirectAttempts])
 
   const fetchSharedLocation = async (locationId: string) => {
+    // Prevent redirect loops
+    if (redirectAttempts >= maxRedirectAttempts) {
+      console.log('🚫 Redirect loop prevention: Max attempts reached in fetch')
+      return
+    }
+    
     try {
       console.log('🌐 Fetching shared location:', locationId)
       const response = await fetch(`/api/locations/${locationId}`)
@@ -259,16 +284,49 @@ export default function MapExplorer() {
             setMapZoom(16)
           }
           
-          // Clean up the URL
-          const newUrl = new URL(window.location.href)
-          newUrl.searchParams.delete('locationId')
-          window.history.replaceState({}, '', newUrl.toString())
+          // Clean up the URL safely to prevent redirect loops
+          try {
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.delete('locationId')
+            // Use replaceState to avoid adding to browser history
+            window.history.replaceState({}, '', newUrl.toString())
+            // Reset redirect attempts on successful cleanup
+            setRedirectAttempts(0)
+          } catch (error) {
+            console.error('Error cleaning up URL after fetch:', error)
+            // Increment redirect attempts on error
+            setRedirectAttempts(prev => prev + 1)
+          }
         }
       } else {
         console.error('Failed to fetch shared location:', response.status)
+        // Clean up URL even if fetch fails to prevent infinite loops
+        try {
+          const newUrl = new URL(window.location.href)
+          newUrl.searchParams.delete('locationId')
+          window.history.replaceState({}, '', newUrl.toString())
+          // Reset redirect attempts on cleanup
+          setRedirectAttempts(0)
+        } catch (error) {
+          console.error('Error cleaning up URL after failed fetch:', error)
+          // Increment redirect attempts on error
+          setRedirectAttempts(prev => prev + 1)
+        }
       }
     } catch (error) {
       console.error('Error fetching shared location:', error)
+      // Clean up URL even if fetch fails to prevent infinite loops
+      try {
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete('locationId')
+        window.history.replaceState({}, '', newUrl.toString())
+        // Reset redirect attempts on cleanup
+        setRedirectAttempts(0)
+      } catch (urlError) {
+        console.error('Error cleaning up URL after fetch error:', urlError)
+        // Increment redirect attempts on error
+        setRedirectAttempts(prev => prev + 1)
+      }
     }
   }
 
@@ -524,7 +582,16 @@ export default function MapExplorer() {
         </div>
         <h3 className="text-xl font-medium text-gray-900 mb-2">Error Loading Data</h3>
         <p className="text-gray-500 max-w-md mb-4">{error}</p>
-        <Button onClick={() => window.location.reload()} className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90">
+        <Button 
+          onClick={() => {
+            // Use a safer retry mechanism instead of window.location.reload()
+            setError(null)
+            setIsLoading(true)
+            // Retry loading locations
+            loadLocations()
+          }} 
+          className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+        >
           Retry
         </Button>
       </div>
@@ -737,7 +804,7 @@ export default function MapExplorer() {
                   selectedLocation={selectedLocation}
                   onLocationSelect={handleLocationSelect}
                   searchQuery={searchQuery}
-                  isLoading={locationsLoading}
+                  isLoading={isLoading}
                   currentUser={currentUser}
                   onViewDetail={handleViewDetailsFromPreview}
                 />
@@ -764,7 +831,7 @@ export default function MapExplorer() {
                 selectedLocation={selectedLocation}
                 onLocationSelect={handleLocationSelect}
                 searchQuery={searchQuery}
-                isLoading={locationsLoading}
+                isLoading={isLoading}
                 currentUser={currentUser}
                 onViewDetail={handleViewDetailsFromPreview}
               />

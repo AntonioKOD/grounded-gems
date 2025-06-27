@@ -256,19 +256,26 @@ export async function middleware(request: NextRequest) {
     '/home-page-actions',  // Public home actions
     '/test-feed',          // Test feed pages
     '/test-feed-algorithms', // Test feed algorithms
-    '/test-upload'         // Test upload page
+    '/test-upload',        // Test upload page
+    '/profile'             // PUBLIC: User profiles (viewing) - anyone can view profiles
   ]
   
   // Define routes that require authentication
   const protectedRoutes = [
     '/feed',               // Personal feed
-    '/profile',            // User profiles (viewing and editing)
     '/notifications',      // User notifications
     '/bucket-list',        // Personal bucket lists
     '/planner',            // Trip planner
     '/add-location',       // Adding locations
     '/post/create',        // Creating posts
     '/events/create'       // Creating events
+  ]
+
+  // Define specific protected profile sub-routes that require authentication
+  const protectedProfileRoutes = [
+    '/edit',               // Profile editing
+    '/location-dashboard', // Location dashboard
+    '/creator-dashboard'   // Creator dashboard
   ]
   
   // Enhanced public route checking function
@@ -287,6 +294,17 @@ export async function middleware(request: NextRequest) {
       if (pathname.startsWith(route + '/')) return true
     }
     
+    // Special handling for profile routes - viewing profiles is public
+    if (pathname.startsWith('/profile/')) {
+      // Check if it's a protected profile sub-route
+      for (const protectedSubRoute of protectedProfileRoutes) {
+        if (pathname.includes(protectedSubRoute)) {
+          return false // This is a protected profile action
+        }
+      }
+      return true // Regular profile viewing is public
+    }
+    
     // Special handling for reset-password with tokens
     if (pathname.startsWith('/reset-password')) return true
     if (pathname.startsWith('/forgot-password')) return true
@@ -297,12 +315,22 @@ export async function middleware(request: NextRequest) {
   
   // Enhanced protected route checking function
   function isProtectedRoute(pathname: string): boolean {
+    // Check explicit protected routes
     for (const route of protectedRoutes) {
       // Exact match
       if (pathname === route) return true
       
-      // Route with sub-paths (e.g., /profile/edit)
+      // Route with sub-paths
       if (pathname.startsWith(route + '/')) return true
+    }
+    
+    // Check protected profile sub-routes
+    if (pathname.startsWith('/profile/')) {
+      for (const protectedSubRoute of protectedProfileRoutes) {
+        if (pathname.includes(protectedSubRoute)) {
+          return true // This is a protected profile action
+        }
+      }
     }
     
     return false

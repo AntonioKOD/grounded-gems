@@ -29,7 +29,16 @@ export default function ProfileEditPage() {
         })
 
         if (!response.ok) {
-          throw new Error("You must be logged in to edit your profile")
+          // Check if we're already on the login page to prevent loops
+          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            setError("You must be logged in to edit your profile")
+            return
+          }
+          
+          // Redirect to login with current page as redirect target
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+          router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
+          return
         }
 
         const data = await response.json()

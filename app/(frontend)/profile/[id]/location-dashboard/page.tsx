@@ -106,14 +106,28 @@ export default function LocationDashboard() {
           ])
         } else if (response.status === 401) {
           // User not authenticated
-          toast.error('Please log in to view dashboard')
-          router.push('/login')
+          // Check if we're already on the login page to prevent loops
+          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            toast.error('Please log in to view dashboard')
+            return
+          }
+          
+          // Redirect to login with current page as redirect target
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+          router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
           return
         } else {
           // Other error
           console.warn('Unexpected response from /api/users/me:', response.status)
-          toast.error('Unable to verify user access')
-          router.push('/login')
+          // Check if we're already on the login page to prevent loops
+          if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+            toast.error('Unable to verify user access')
+            return
+          }
+          
+          // Redirect to login with current page as redirect target  
+          const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+          router.push(`/login?redirect=${encodeURIComponent(currentPath)}`)
           return
         }
       } catch (error) {

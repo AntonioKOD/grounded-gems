@@ -2,7 +2,7 @@
 // components/login/login-form.tsx
 "use client"
 
-import { useState, useEffect, memo } from "react"
+import { useState, useEffect, memo, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Eye, EyeOff, Loader2, AlertCircle, CheckCircle } from "lucide-react"
@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { Checkbox } from "@/components/ui/checkbox"
 import { MobileAuthService } from "@/lib/mobile-auth"
 import { Capacitor } from '@capacitor/core'
-import { safeNavigate } from "@/lib/redirect-loop-prevention"
+import { safeNavigate, getSafeRedirectPath, clearAuthRedirectHistory } from "@/lib/redirect-loop-prevention"
 
 // Login API call with improved response handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
@@ -40,6 +40,14 @@ const LoginForm = memo(function LoginForm() {
   const isVerified = searchParams.get("verified") === "true"
   const { isAuthenticated, isLoading } = useAuth()
   const { preloadUser } = useAuth()
+
+  // Prevent redirect loops by checking if redirect path is current path
+  const safeRedirectPath = useMemo(() => {
+    const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
+    
+    // Use the utility to get a safe redirect path
+    return getSafeRedirectPath(redirectPath, '/feed')
+  }, [redirectPath])
 
   const [formData, setFormData] = useState({ 
     email: "", 
@@ -66,15 +74,15 @@ const LoginForm = memo(function LoginForm() {
   // Immediate redirect for authenticated users (no delay)
   useEffect(() => {
     if (!isLoading && isAuthenticated && !hasRedirected) {
-      console.log("LoginForm: User already authenticated, redirecting immediately to:", redirectPath)
+      console.log("LoginForm: User already authenticated, redirecting immediately to:", safeRedirectPath)
       setHasRedirected(true)
       
       // Use safe navigation to prevent redirect loops
       if (typeof window !== 'undefined') {
-        safeNavigate(redirectPath, router)
+        safeNavigate(safeRedirectPath, router)
       }
     }
-  }, [isAuthenticated, isLoading, redirectPath, hasRedirected, router])
+  }, [isAuthenticated, isLoading, safeRedirectPath, hasRedirected, router])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -139,9 +147,12 @@ const LoginForm = memo(function LoginForm() {
       // Mark as redirected to prevent multiple redirects
       setHasRedirected(true)
       
+      // Clear auth redirect history to prevent future loops
+      clearAuthRedirectHistory()
+      
       // Use safe navigation to prevent redirect loops
-      console.log("Redirecting to:", redirectPath)
-      safeNavigate(redirectPath, router)
+      console.log("Redirecting to:", safeRedirectPath)
+      safeNavigate(safeRedirectPath, router)
       
     } catch (err: any) {
       console.error("Login error:", err)

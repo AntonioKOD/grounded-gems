@@ -124,7 +124,7 @@ export default async function sitemap(): MetadataRoute.Sitemap {
 
     // Get published bucket lists
     const bucketListsResult = await payload.find({
-      collection: 'bucket-lists',
+      collection: 'bucketLists',
       where: {
         isPublic: {
           equals: true
