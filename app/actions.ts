@@ -721,16 +721,25 @@ export async function getUserbyId(id: string) {
       return null
     }
 
-    // Validate ID format (basic check for ObjectId or UUID)
-    if (id.length < 12) {
-      console.error("getUserbyId called with invalid id format:", id)
+    // Validate basic ID format - must be at least 12 characters
+    const cleanId = id.trim()
+    if (cleanId.length < 12) {
+      console.error("getUserbyId called with invalid id format (too short):", id)
       return null
     }
 
-    // Additional validation for common ObjectId format (24 hex characters)
-    const objectIdRegex = /^[a-fA-F0-9]{24}$/
-    if (!objectIdRegex.test(id.trim())) {
-      console.error("getUserbyId called with invalid ObjectId format:", id)
+    // More flexible ID validation - allow ObjectId (24 hex), UUID, or other formats
+    const isValidId = (
+      // ObjectId format (24 hex characters)
+      /^[a-fA-F0-9]{24}$/.test(cleanId) ||
+      // UUID format (with or without hyphens)
+      /^[a-fA-F0-9]{8}-?[a-fA-F0-9]{4}-?[a-fA-F0-9]{4}-?[a-fA-F0-9]{4}-?[a-fA-F0-9]{12}$/i.test(cleanId) ||
+      // Other alphanumeric IDs (12+ characters)
+      /^[a-zA-Z0-9_-]{12,}$/.test(cleanId)
+    )
+    
+    if (!isValidId) {
+      console.error("getUserbyId called with invalid ID format:", id)
       return null
     }
     
@@ -739,7 +748,7 @@ export async function getUserbyId(id: string) {
     try {
       const result = await payload.findByID({
         collection: "users",
-        id: id.trim(),
+        id: cleanId,
         depth: 2,
         overrideAccess: true,
       })
@@ -753,14 +762,14 @@ export async function getUserbyId(id: string) {
       }
     } catch (error: any) {
       // Handle specific Payload CMS errors
-      if (error.status === 404 || error.message?.includes('Not Found')) {
+      if (error.status === 404 || error.message?.includes('Not Found') || error.message?.includes('No Users found')) {
         console.log(`User with ID ${id} not found (404)`)
         return null
       }
       
       // Handle validation errors
       if (error.message?.includes('Invalid ID') || error.message?.includes('Cast to ObjectId failed')) {
-        console.error(`Invalid user ID format: ${id}`)
+        console.error(`Invalid user ID format for Payload: ${id}`)
         return null
       }
 
@@ -774,7 +783,9 @@ export async function getUserbyId(id: string) {
       console.error("Error fetching user from Payload:", {
         error: error.message,
         stack: error.stack,
-        userId: id
+        userId: id,
+        errorType: typeof error,
+        errorCode: error.code || 'unknown'
       })
       return null
     }

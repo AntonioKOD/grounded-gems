@@ -125,7 +125,12 @@ const LoginForm = memo(function LoginForm() {
       
       // If the login response includes user data, preload it immediately
       if (loginResponse.user) {
-        console.log("Login successful, preloading user data:", loginResponse.user)
+        console.log("Login successful, preloading user data:", {
+          userId: loginResponse.user.id,
+          userIdType: typeof loginResponse.user.id,
+          userIdLength: loginResponse.user.id?.length,
+          userName: loginResponse.user.name
+        })
         await preloadUser(loginResponse.user)
         
         // Dispatch events immediately for instant UI updates

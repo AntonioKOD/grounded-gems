@@ -32,7 +32,8 @@ import {
   Users,
   TrendingUp,
   Star,
-  Sparkles
+  Sparkles,
+  AlertCircle
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -340,8 +341,19 @@ export default function ProfileContent({
   // Fetch profile data if not provided or incomplete
   useEffect(() => {
     const fetchProfileData = async () => {
-      if (initialUserData || !userId) return
+      // Skip if we already have valid profile data
+      if (initialUserData && initialUserData.id) {
+        console.log('Using initial user data for profile:', initialUserData.id)
+        return
+      }
 
+      if (!userId) {
+        console.error('No userId provided for profile fetch')
+        setError("Profile ID is missing")
+        return
+      }
+
+      console.log('Fetching profile data for userId:', userId)
       setIsLoading(true)
       setError(null)
 
@@ -349,10 +361,13 @@ export default function ProfileContent({
         const userData = await rateLimitedApiCall(
           `profile-${userId}`,
           () => getUserbyId(userId),
-          2000
+          2000,
+          'high' // High priority for initial profile load
         )
 
         if (userData) {
+          console.log('Successfully fetched profile data:', userData.name || 'Unknown')
+          
           const mappedProfile: UserProfile = {
             id: userData.id as string,
             email: userData.email || '',
@@ -372,12 +387,21 @@ export default function ProfileContent({
           setProfile(mappedProfile)
           isDataStale.current = false
         } else {
+          console.warn('No user data returned for userId:', userId)
           setError("Could not load this profile. It may not exist or you may not have permission to view it.")
         }
       } catch (err) {
         console.error("Error fetching profile:", err)
-        if (err instanceof Error && err.message.includes('429')) {
-          setError("Too many requests. Please refresh the page in a moment.")
+        if (err instanceof Error) {
+          if (err.message.includes('429')) {
+            setError("Too many requests. Please refresh the page in a moment.")
+          } else if (err.message.includes('404') || err.message.includes('Not Found')) {
+            setError("This profile does not exist.")
+          } else if (err.message.includes('Invalid ID')) {
+            setError("Invalid profile ID format.")
+          } else {
+            setError("Failed to load profile data. Please try refreshing the page.")
+          }
         } else {
           setError("Failed to load profile data")
         }
@@ -649,31 +673,52 @@ export default function ProfileContent({
     }
   }, [])
 
-  // Loading state
-  if (isLoading) {
-    return <ProfileSkeleton />
-  }
-
-  // Error state
-  if (error) {
+  // Show error state if there's an error
+  if (error && !isLoading) {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <Card className="border-red-200 bg-red-50">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md text-center">
           <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertDescription className="text-red-600 text-2xl">⚠️</AlertDescription>
-              </div>
-              <h2 className="text-xl font-semibold text-red-800 mb-2">Profile Not Available</h2>
-              <p className="text-red-600 mb-6">{error}</p>
-              <Button onClick={() => router.push("/")} className="bg-red-600 hover:bg-red-700 text-white">
-                Return Home
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AlertCircle className="w-8 h-8 text-red-600" />
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Profile Not Available</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <div className="space-y-3">
+              <Button 
+                onClick={() => {
+                  setError(null)
+                  setIsLoading(true)
+                  // Try refetching the profile data
+                  if (initialUserData && initialUserData.id) {
+                    setProfile(initialUserData)
+                    setIsLoading(false)
+                  } else {
+                    // Trigger a refetch
+                    window.location.reload()
+                  }
+                }}
+                className="w-full bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
+              >
+                Try Again
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => router.push('/explorer')}
+                className="w-full"
+              >
+                Explore Users
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
     )
+  }
+
+  // Loading state
+  if (isLoading) {
+    return <ProfileSkeleton />
   }
 
   if (!profile) return null

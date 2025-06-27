@@ -332,11 +332,6 @@ export default function EnhancedFeedContainer({
     setHasMore(true)
   }
 
-  const handleFollowUser = async (userId: string) => {
-    // Update local state optimistically
-    toast.success('Following user!')
-  }
-
   const handleSavePlace = async (placeId: string) => {
     // Update local state optimistically
     toast.success('Place saved!')
@@ -430,7 +425,6 @@ export default function EnhancedFeedContainer({
         return (
           <PeopleSuggestionCard
             item={item as PeopleSuggestionItem}
-            onFollow={handleFollowUser}
             {...baseProps}
           />
         )

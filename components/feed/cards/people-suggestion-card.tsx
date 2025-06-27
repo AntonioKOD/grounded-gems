@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Users, UserPlus, MapPin, Star, X, ChevronRight } from 'lucide-react'
+import { Users, MapPin, Star, X, ChevronRight } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
@@ -14,54 +14,15 @@ import { getImageUrl } from '@/lib/image-utils'
 
 interface PeopleSuggestionCardProps {
   item: PeopleSuggestionItem
-  onFollow?: (userId: string) => void
   onDismiss?: () => void
   className?: string
 }
 
 export default function PeopleSuggestionCard({
   item,
-  onFollow,
   onDismiss,
   className = ""
 }: PeopleSuggestionCardProps) {
-  const [followingStates, setFollowingStates] = useState<Record<string, boolean>>({})
-  const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
-
-  const handleFollow = async (userId: string, e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    
-    setLoadingStates(prev => ({ ...prev, [userId]: true }))
-    
-    try {
-      // Call follow API
-      const response = await fetch('/api/users/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      })
-      
-      if (response.ok) {
-        setFollowingStates(prev => ({ ...prev, [userId]: true }))
-        onFollow?.(userId)
-        toast.success('Started following!')
-        
-        // Haptic feedback
-        if (navigator.vibrate) {
-          navigator.vibrate(50)
-        }
-      } else {
-        throw new Error('Failed to follow')
-      }
-    } catch (error) {
-      console.error('Error following user:', error)
-      toast.error('Failed to follow user')
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [userId]: false }))
-    }
-  }
-
   const handleDismiss = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -143,7 +104,7 @@ export default function PeopleSuggestionCard({
               </div>
 
               {/* User info with proper spacing and overflow handling */}
-              <div className="flex-1 min-w-0 mr-3">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <h4 className="font-semibold text-gray-900 truncate group-hover:text-[#FF6B6B] transition-colors">
                     {user.name}
@@ -185,36 +146,9 @@ export default function PeopleSuggestionCard({
                 </div>
               </div>
 
-              {/* Follow button with proper spacing */}
+              {/* Profile link indicator */}
               <div className="flex-shrink-0">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button
-                    size="sm"
-                    onClick={(e) => handleFollow(user.id, e)}
-                    disabled={loadingStates[user.id] || followingStates[user.id] || user.isFollowing}
-                    className={`
-                      min-w-[80px] rounded-full font-semibold transition-all duration-300
-                      ${followingStates[user.id] || user.isFollowing
-                        ? 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-300'
-                        : 'bg-gradient-to-r from-[#4ECDC4] to-[#FF6B6B] hover:from-[#4ECDC4]/90 hover:to-[#FF6B6B]/90 text-white shadow-lg hover:shadow-xl'
-                      }
-                    `}
-                  >
-                    {loadingStates[user.id] ? (
-                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    ) : followingStates[user.id] || user.isFollowing ? (
-                      'Following'
-                    ) : (
-                      <>
-                        <UserPlus className="h-4 w-4 mr-1" />
-                        Follow
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
+                <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-[#4ECDC4] transition-colors" />
               </div>
             </div>
           </Link>
