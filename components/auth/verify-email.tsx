@@ -87,7 +87,7 @@ export default function VerifyEmailComponent() {
       })
 
       if (response.ok) {
-        setMessage('A new verification email has been sent to your inbox.')
+        setMessage('A new verification email has been sent to your inbox. Don\'t forget to check your spam/junk folder if you don\'t see it!')
       } else {
         setMessage('Failed to resend verification email. Please try again.')
       }
@@ -137,7 +137,15 @@ export default function VerifyEmailComponent() {
           </div>
           <CardTitle className="text-2xl">{getTitle()}</CardTitle>
           <CardDescription>
-            {status === 'loading' && 'Please wait while we verify your email address...'}
+            {status === 'loading' && (
+              <div className="space-y-2 text-left">
+                <p className="text-center">Please wait while we verify your email address...</p>
+                <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md border border-blue-200">
+                  <p className="font-medium text-blue-800 mb-1">💡 Quick Tip:</p>
+                  <p>If you haven't received the verification email, check your <strong>spam or junk folder</strong> - emails sometimes end up there!</p>
+                </div>
+              </div>
+            )}
             {status === 'success' && 'Welcome to Sacavia! Redirecting you to login...'}
             {status === 'already-verified' && 'Your account is ready to use.'}
             {status === 'expired' && 'The verification link has expired.'}
@@ -149,6 +157,24 @@ export default function VerifyEmailComponent() {
           {message && (
             <Alert variant={status === 'success' || status === 'already-verified' ? 'default' : 'destructive'}>
               <AlertDescription>{message}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Email delivery notice */}
+          {(status === 'expired' || status === 'error') && (
+            <Alert className="border-amber-200 bg-amber-50">
+              <Mail className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-800">
+                <div className="space-y-2">
+                  <p className="font-medium">Can't find your verification email?</p>
+                  <ul className="text-sm space-y-1 ml-4 list-disc">
+                    <li>Check your <strong>spam</strong> or <strong>junk</strong> folder</li>
+                    <li>Look for emails from <strong>noreply@sacavia.com</strong></li>
+                    <li>Add our email to your contacts to prevent future emails from going to spam</li>
+                    <li>Wait a few minutes as email delivery can sometimes be delayed</li>
+                  </ul>
+                </div>
+              </AlertDescription>
             </Alert>
           )}
 
