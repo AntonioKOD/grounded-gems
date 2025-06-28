@@ -56,6 +56,7 @@ import type { UserProfile } from "@/types/user"
 import Link from "next/link"
 import { logoutUser } from "@/lib/auth"
 import { getImageUrl } from "@/lib/image-utils"
+import CreatorApplicationButton from "@/components/creator/creator-application-button"
 
 // Helper to debounce API calls
 const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
@@ -788,6 +789,14 @@ export default function ProfileContent({
                         </Link>
                       </DropdownMenuItem>
                     )}
+                    {!profile.isCreator && profile.role !== 'creator' && (
+                      <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link href="/creator-application" className="flex items-center">
+                          <Star className="h-4 w-4 mr-3" />
+                          <span>Become a Creator</span>
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem className="cursor-pointer">
                       <Settings className="h-4 w-4 mr-3" />
                       <span>Settings</span>
@@ -942,6 +951,16 @@ export default function ProfileContent({
                               Creator Dashboard
                             </Button>
                           </Link>
+                        )}
+                        
+                        {/* Creator Application Button for current user who isn't a creator */}
+                        {isCurrentUser && !profile.isCreator && profile.role !== 'creator' && (
+                          <CreatorApplicationButton 
+                            user={profile}
+                            size="sm"
+                            showStatus={true}
+                            className="bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFD93D]/90 hover:to-[#FF8E53]/90 text-white border-0"
+                          />
                         )}
                         
                         {/* Follow Button for other users */}

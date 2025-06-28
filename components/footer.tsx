@@ -1,7 +1,12 @@
+'use client'
+
 import Image from 'next/image'
 import Link from 'next/link'
+import { CreatorApplicationLink } from '@/components/creator/creator-application-button'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function Footer() {
+  const { user } = useAuth()
   return (
     <footer className="bg-gradient-to-r from-stone-800 to-amber-900 text-white/90 py-12 mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,6 +46,7 @@ export default function Footer() {
           <div>
             <h3 className="font-semibold text-amber-200 mb-4">Community</h3>
             <ul className="space-y-2 text-sm">
+              <li><CreatorApplicationLink user={user} className="text-stone-300 hover:text-amber-200 transition-colors" /></li>
               <li><Link href="/about" className="text-stone-300 hover:text-amber-200 transition-colors">Our Story</Link></li>
               <li><Link href="/guidelines" className="text-stone-300 hover:text-amber-200 transition-colors">Community Guidelines</Link></li>
               <li><Link href="/support" className="text-stone-300 hover:text-amber-200 transition-colors">Support</Link></li>

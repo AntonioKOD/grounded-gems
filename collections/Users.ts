@@ -594,6 +594,20 @@ export const Users: CollectionConfig = {
           }
         },
         {
+          name: 'applicationStatus',
+          type: 'select',
+          defaultValue: 'not_applied',
+          options: [
+            { label: 'Not Applied', value: 'not_applied' },
+            { label: 'Application Pending', value: 'pending' },
+            { label: 'Application Approved', value: 'approved' },
+            { label: 'Application Rejected', value: 'rejected' },
+          ],
+          admin: {
+            description: 'Status of creator application process'
+          }
+        },
+        {
           name: 'verification',
           type: 'group',
           admin: {
@@ -700,6 +714,62 @@ export const Users: CollectionConfig = {
               }
             },
             {
+              name: 'availableBalance',
+              type: 'number',
+              defaultValue: 0,
+              admin: {
+                readOnly: true,
+                description: 'Available balance for withdrawal'
+              }
+            },
+            {
+              name: 'pendingBalance',
+              type: 'number',
+              defaultValue: 0,
+              admin: {
+                readOnly: true,
+                description: 'Pending balance (processing payouts)'
+              }
+            },
+            {
+              name: 'totalPayouts',
+              type: 'number',
+              defaultValue: 0,
+              admin: {
+                readOnly: true,
+                description: 'Total amount paid out to creator'
+              }
+            },
+            {
+              name: 'lastPayoutDate',
+              type: 'date',
+              admin: {
+                readOnly: true,
+                description: 'Date of last payout'
+              }
+            },
+            {
+              name: 'stripeAccountId',
+              type: 'text',
+              admin: {
+                description: 'Stripe Connect account ID for payouts'
+              }
+            },
+            {
+              name: 'stripeAccountStatus',
+              type: 'select',
+              defaultValue: 'not_connected',
+              options: [
+                { label: 'Not Connected', value: 'not_connected' },
+                { label: 'Pending Setup', value: 'pending' },
+                { label: 'Active', value: 'active' },
+                { label: 'Restricted', value: 'restricted' },
+              ],
+              admin: {
+                description: 'Status of Stripe Connect account'
+              }
+            },
+            {
               name: 'withdrawalSettings',
               type: 'group',
               fields: [
@@ -717,13 +787,6 @@ export const Users: CollectionConfig = {
                   type: 'email',
                   admin: {
                     description: 'PayPal email for payouts'
-                  }
-                },
-                {
-                  name: 'stripeAccountId',
-                  type: 'text',
-                  admin: {
-                    description: 'Stripe account ID for payouts'
                   }
                 },
               ]

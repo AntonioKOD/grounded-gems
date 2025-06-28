@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { LayoutList, Calendar, Plus, MapPin, User, Search, BookOpen, LibraryBig } from "lucide-react"
+import { LayoutList, Calendar, Plus, MapPin, User, Search, BookOpen, LibraryBig, Star } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useState, useCallback, useEffect } from "react"
@@ -200,6 +200,17 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                   <Plus className="w-4 h-4 mr-3" />
                   Create Guide & Earn
                 </button>
+                {/* Creator Application for non-creators */}
+                {initialUser && !initialUser.isCreator && initialUser.role !== 'creator' && (
+                  <button
+                    onClick={() => safeNavigate('/creator-application', true)}
+                    disabled={navigating === '/creator-application'}
+                    className="flex items-center w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#FFD93D] hover:to-[#FF8E53] transition-all duration-300 rounded-xl font-medium disabled:opacity-50"
+                  >
+                    <Star className="w-4 h-4 mr-3" />
+                    Become a Creator
+                  </button>
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
