@@ -222,55 +222,48 @@ export interface EventFormData {
 
   // Timing
   startDate: string
-  startTime: string
   endDate?: string
-  endTime?: string
-  isMultiDay?: boolean
+  durationMinutes?: number
 
   // Location
-  locationType: "physical" | "virtual" | "hybrid"
   location: string
-  locationDetails?: {
-    name: string
-    address?: {
-      street?: string
-      city?: string
-      state?: string
-      zip?: string
-      country?: string
-    }
-    coordinates?: {
-      latitude: number
-      longitude: number
-    }
-  }
-  customLocation?: {
-    description?: string
-    virtualUrl?: string
-    platform?: string
+
+  // Capacity
+  capacity?: number
+
+  // Pricing
+  pricing?: {
+    isFree: boolean
+    price?: number
+    currency?: string
   }
 
-  // Capacity & ticketing
-  capacity?: number
-  ticketTiers?: {
-    tierName: string
-    price: number
-    priceId?: string
-    quantityAvailable: number
-  }[]
+  // Registration
+  registration?: {
+    requiresRegistration: boolean
+    registrationDeadline?: string
+    allowWaitlist: boolean
+  }
 
   // Organizer
-  organizer: {
-    id: string
-    name: string
-    email?: string
-    phone?: string
-    profileImage?: string
-  }
+  organizer?: string
 
   // Status
   status?: string
   isFeatured?: boolean
+
+  // Tags
+  tags?: Array<{ tag: string }>
+
+  // Requirements
+  requirements?: string
+
+  // Contact Info
+  contactInfo?: {
+    email?: string
+    phone?: string
+    website?: string
+  }
 
   // Meta
   meta?: {
@@ -279,11 +272,10 @@ export interface EventFormData {
     keywords?: string
   }
 
-  // Visibility
-  visibility: EventVisibility
+  // Legacy fields for backward compatibility
+  locationType?: "physical" | "virtual" | "hybrid"
+  visibility?: EventVisibility
   invitedUsers?: string[]
-
-  // Matchmaking
   isMatchmaking?: boolean
   matchmakingPreferences?: MatchmakingPreferences
 }

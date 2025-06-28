@@ -204,5 +204,39 @@ export const Posts: CollectionConfig = {
     { name: 'shareCount', type: 'number', defaultValue: 0 },
     { name: 'savedBy', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'saveCount', type: 'number', defaultValue: 0 },
+    
+    // Related Content Relationships
+    { 
+      name: 'relatedGuide', 
+      type: 'relationship', 
+      relationTo: 'guides',
+      admin: {
+        description: 'Guide that this post is related to or reviewing'
+      }
+    },
+    { 
+      name: 'relatedEvent', 
+      type: 'relationship', 
+      relationTo: 'events',
+      admin: {
+        description: 'Event that this post is about or promoting'
+      }
+    },
+    { 
+      name: 'relatedReview', 
+      type: 'relationship', 
+      relationTo: 'reviews',
+      admin: {
+        description: 'Review that this post is connected to'
+      }
+    },
+    { 
+      name: 'relatedSpecial', 
+      type: 'relationship', 
+      relationTo: 'specials',
+      admin: {
+        description: 'Special offer that this post is promoting'
+      }
+    },
   ],
 };

@@ -10,7 +10,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { format } from "date-fns"
-import { Upload, X, Loader2, Calendar } from "lucide-react"
+import { Upload, X, Loader2, Calendar, Plus, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { createEvent } from "@/app/(frontend)/events/actions"
 import type { EventFormData } from "@/types/event"
@@ -59,6 +60,7 @@ const eventFormSchema = z
     startTime: z.string({ required_error: "Start time is required" }),
     endDate: z.date().optional(),
     endTime: z.string().optional(),
+    durationMinutes: z.number().min(15).max(1440).optional(),
 
     // Location
     location: z.string({ required_error: "Location is required" }),
@@ -66,8 +68,29 @@ const eventFormSchema = z
     // Capacity
     capacity: z.number().int().positive().optional(),
 
+    // Pricing
+    isFree: z.boolean().default(true),
+    price: z.number().min(0).optional(),
+    currency: z.string().default("USD"),
+
+    // Registration
+    requiresRegistration: z.boolean().default(false),
+    registrationDeadline: z.date().optional(),
+    allowWaitlist: z.boolean().default(true),
+
     // Status
     status: z.enum(["draft", "published", "cancelled", "postponed"]),
+
+    // Tags
+    tags: z.array(z.string()).optional(),
+
+    // Requirements
+    requirements: z.string().optional(),
+
+    // Contact Info
+    contactEmail: z.string().email().optional(),
+    contactPhone: z.string().optional(),
+    contactWebsite: z.string().url().optional(),
 
     // Meta
     meta: z
@@ -90,6 +113,32 @@ const eventFormSchema = z
     {
       message: "End date/time must be after start date/time",
       path: ["endDate"],
+    },
+  )
+  .refine(
+    (data) => {
+      // If not free, price is required
+      if (!data.isFree && !data.price) {
+        return false
+      }
+      return true
+    },
+    {
+      message: "Price is required for paid events",
+      path: ["price"],
+    },
+  )
+  .refine(
+    (data) => {
+      // If registration required and has deadline, deadline must be before event
+      if (data.requiresRegistration && data.registrationDeadline) {
+        return data.registrationDeadline <= data.startDate
+      }
+      return true
+    },
+    {
+      message: "Registration deadline must be before event start date",
+      path: ["registrationDeadline"],
     },
   )
 
@@ -149,6 +198,23 @@ const locationRequiresReservation = (location: LocationWithCategories | undefine
   )
 }
 
+// Helper function to combine date and time
+const combineDateTime = (date: Date, time: string): string => {
+  const [timeStr, period] = time.split(' ')
+  const [hours, minutes] = timeStr.split(':').map(Number)
+  
+  let adjustedHours = hours
+  if (period === 'PM' && hours !== 12) {
+    adjustedHours += 12
+  } else if (period === 'AM' && hours === 12) {
+    adjustedHours = 0
+  }
+  
+  const combined = new Date(date)
+  combined.setHours(adjustedHours, minutes, 0, 0)
+  return combined.toISOString()
+}
+
 export default function CreateEventForm() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -173,6 +239,7 @@ export default function CreateEventForm() {
     name: string
     address: string
   } | null>(null)
+  const [currentTag, setCurrentTag] = useState("")
 
   // Default form values
   const defaultValues: Partial<EventFormValues> = {
@@ -185,7 +252,12 @@ export default function CreateEventForm() {
     startTime: format(new Date().setMinutes(Math.ceil(new Date().getMinutes() / 15) * 15), "h:mm a"),
     location: "",
     capacity: 10,
+    isFree: true,
+    currency: "USD",
+    requiresRegistration: false,
+    allowWaitlist: true,
     status: "draft",
+    tags: [],
   }
 
   // Initialize form
@@ -198,6 +270,8 @@ export default function CreateEventForm() {
   // Watch form values for conditional rendering
   const watchCategory = form.watch("category")
   const watchEventType = form.watch("eventType")
+  const watchIsFree = form.watch("isFree")
+  const watchRequiresRegistration = form.watch("requiresRegistration")
 
   // Watch location to show reservation notice
   const watchLocation = form.watch("location")
@@ -429,22 +503,87 @@ export default function CreateEventForm() {
         }
       } else {
         // Create event directly for locations that don't require reservations
-        const formData: EventFormData = {
-          ...data,
-          startDate: format(data.startDate, "yyyy-MM-dd"),
-          endDate: data.endDate ? format(data.endDate, "yyyy-MM-dd") : undefined,
-          image: eventImage,
-          locationType: "physical",
-          organizer: {
-            id: currentUser.id as string,
-            name: currentUser.name,
-            profileImage: currentUser.avatar
-          },
-          visibility: "public"
+        
+        // Combine date and time for proper datetime fields
+        const startDateTime = combineDateTime(data.startDate, data.startTime)
+        const endDateTime = data.endDate && data.endTime 
+          ? combineDateTime(data.endDate, data.endTime)
+          : undefined
+
+        // Calculate duration if not provided
+        let durationMinutes = data.durationMinutes
+        if (!durationMinutes && data.endDate && data.endTime) {
+          const start = new Date(startDateTime)
+          const end = new Date(endDateTime!)
+          durationMinutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
         }
 
-        // Create event directly
-        const result = await createEvent(formData, currentUser.id, currentUser.name, currentUser.avatar)
+        const eventData = {
+          name: data.name,
+          slug: data.slug,
+          description: data.description,
+          
+          // Media
+          image: eventImage,
+
+          // Timing - send as ISO strings for the Events collection
+          startDate: startDateTime,
+          endDate: endDateTime,
+          durationMinutes,
+
+          // Taxonomy
+          category: data.category,
+          eventType: data.eventType,
+          sportType: data.category === "sports" ? data.sportType : undefined,
+
+          // Location
+          location: data.location,
+
+          // Capacity
+          capacity: data.capacity,
+
+          // Pricing
+          pricing: {
+            isFree: data.isFree,
+            price: data.isFree ? undefined : data.price,
+            currency: data.isFree ? undefined : data.currency,
+          },
+
+          // Registration
+          registration: {
+            requiresRegistration: data.requiresRegistration,
+            registrationDeadline: data.registrationDeadline?.toISOString(),
+            allowWaitlist: data.allowWaitlist,
+          },
+
+          // Organizer - this should be the user ID
+          organizer: currentUser.id,
+
+          // Status
+          status: data.status || "draft",
+
+          // Tags
+          tags: data.tags?.map(tag => ({ tag })) || [],
+
+          // Requirements
+          requirements: data.requirements,
+
+          // Contact Info
+          contactInfo: {
+            email: data.contactEmail,
+            phone: data.contactPhone,
+            website: data.contactWebsite,
+          },
+
+          // Meta
+          meta: data.meta ? {
+            title: data.meta.title,
+            description: data.meta.description,
+          } : undefined,
+        }
+
+        // Create event directly using the action
+        const result = await createEvent(eventData, currentUser.id, currentUser.name, currentUser.avatar)
 
         if (result.success) {
           toast.success("Event created successfully!")
@@ -868,6 +1007,30 @@ export default function CreateEventForm() {
                   />
                 </div>
 
+                {/* Duration */}
+                <FormField
+                  control={form.control}
+                  name="durationMinutes"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Duration</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="15"
+                          max="1440"
+                          placeholder="Enter duration in minutes"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
+                          value={field.value}
+                        />
+                      </FormControl>
+                      <FormDescription>The duration of the event in minutes.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 {/* Capacity */}
                 <FormField
                   control={form.control}
@@ -886,6 +1049,219 @@ export default function CreateEventForm() {
                         />
                       </FormControl>
                       <FormDescription>The maximum number of participants allowed for this event.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                                 {/* Pricing */}
+                 <FormField
+                   control={form.control}
+                   name="isFree"
+                   render={({ field }) => (
+                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                       <FormControl>
+                         <Checkbox
+                           checked={field.value}
+                           onCheckedChange={field.onChange}
+                         />
+                       </FormControl>
+                       <div className="space-y-1 leading-none">
+                         <FormLabel>Is Event Free?</FormLabel>
+                         <FormDescription>Check if the event is free.</FormDescription>
+                       </div>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+                 />
+
+                {/* Price */}
+                {!watchIsFree && (
+                  <FormField
+                    control={form.control}
+                    name="price"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Price</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="Enter price"
+                            {...field}
+                            onChange={(e) => field.onChange(Number(e.target.value))}
+                            value={field.value}
+                          />
+                        </FormControl>
+                        <FormDescription>The price for the event.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {/* Currency */}
+                {!watchIsFree && (
+                  <FormField
+                    control={form.control}
+                    name="currency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Currency</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Enter currency"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>The currency for the event price.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                                 {/* Registration */}
+                 <FormField
+                   control={form.control}
+                   name="requiresRegistration"
+                   render={({ field }) => (
+                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                       <FormControl>
+                         <Checkbox
+                           checked={field.value}
+                           onCheckedChange={field.onChange}
+                         />
+                       </FormControl>
+                       <div className="space-y-1 leading-none">
+                         <FormLabel>Requires Registration?</FormLabel>
+                         <FormDescription>Check if registration is required for this event.</FormDescription>
+                       </div>
+                       <FormMessage />
+                     </FormItem>
+                   )}
+                 />
+
+                {/* Registration Deadline */}
+                {watchRequiresRegistration && (
+                  <FormField
+                    control={form.control}
+                    name="registrationDeadline"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Registration Deadline</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="date"
+                            {...field}
+                            value={field.value instanceof Date ? format(field.value, "yyyy-MM-dd") : ""}
+                            onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                          />
+                        </FormControl>
+                        <FormDescription>The deadline for registering for this event.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                                 {/* Allow Waitlist */}
+                 {watchRequiresRegistration && (
+                   <FormField
+                     control={form.control}
+                     name="allowWaitlist"
+                     render={({ field }) => (
+                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                         <FormControl>
+                           <Checkbox
+                             checked={field.value}
+                             onCheckedChange={field.onChange}
+                           />
+                         </FormControl>
+                         <div className="space-y-1 leading-none">
+                           <FormLabel>Allow Waitlist?</FormLabel>
+                           <FormDescription>Allow users to join a waitlist if the event is full.</FormDescription>
+                         </div>
+                         <FormMessage />
+                       </FormItem>
+                     )}
+                   />
+                 )}
+
+                {/* Tags */}
+                <div className="space-y-2">
+                  <FormLabel>Event Tags</FormLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add a tag"
+                      value={currentTag}
+                      onChange={(e) => setCurrentTag(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          if (currentTag.trim()) {
+                            const currentTags = form.getValues("tags") || []
+                            if (!currentTags.includes(currentTag.trim())) {
+                              form.setValue("tags", [...currentTags, currentTag.trim()])
+                            }
+                            setCurrentTag("")
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (currentTag.trim()) {
+                          const currentTags = form.getValues("tags") || []
+                          if (!currentTags.includes(currentTag.trim())) {
+                            form.setValue("tags", [...currentTags, currentTag.trim()])
+                          }
+                          setCurrentTag("")
+                        }
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(form.watch("tags") || []).map((tag, index) => (
+                      <div key={index} className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md text-sm">
+                        {tag}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            const currentTags = form.getValues("tags") || []
+                            form.setValue("tags", currentTags.filter((_, i) => i !== index))
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <FormDescription>Add tags to help users find your event.</FormDescription>
+                </div>
+
+                {/* Requirements */}
+                <FormField
+                  control={form.control}
+                  name="requirements"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Special Requirements</FormLabel>
+                      <FormControl>
+                        <Textarea 
+                          placeholder="Any special requirements, equipment needed, age restrictions, etc." 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormDescription>Any special requirements for attendees.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -990,6 +1366,56 @@ export default function CreateEventForm() {
                           <Textarea placeholder="Enter meta description" {...field} value={field.value || ""} />
                         </FormControl>
                         <FormDescription>Description for search engines.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Contact Information */}
+                <div className="space-y-4 border rounded-lg p-4">
+                  <h3 className="text-lg font-medium">Contact Information</h3>
+
+                  <FormField
+                    control={form.control}
+                    name="contactEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="Enter contact email" {...field} />
+                        </FormControl>
+                        <FormDescription>Email for event inquiries.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="contactPhone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Phone</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Enter contact phone" {...field} />
+                        </FormControl>
+                        <FormDescription>Phone number for event inquiries.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="contactWebsite"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Website</FormLabel>
+                        <FormControl>
+                          <Input type="url" placeholder="Enter website URL" {...field} />
+                        </FormControl>
+                        <FormDescription>Website for more event information.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

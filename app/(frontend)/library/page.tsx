@@ -66,7 +66,7 @@ interface LibraryItem {
     }
     category?: string
     difficulty: string
-    duration: {
+    duration?: {
       value: number
       unit: string
     }
@@ -163,7 +163,7 @@ export default function LibraryPage() {
   }
 
   const formatPrice = (item: LibraryItem) => {
-    if (item.purchase.amount === 0) return 'Free'
+    if (!item.purchase || item.purchase.amount === undefined || item.purchase.amount === 0) return 'Free'
     return `$${item.purchase.amount}`
   }
 
@@ -213,18 +213,18 @@ export default function LibraryPage() {
         {/* Access Count */}
         <div className="absolute top-3 left-3 bg-black/70 text-white px-2 py-1 rounded text-xs flex items-center">
           <Eye className="h-3 w-3 mr-1" />
-          {item.purchase.downloadCount}
+          {item.purchase.downloadCount || 0}
         </div>
       </div>
       
       <CardHeader className="pb-2">
         <CardTitle className="text-lg line-clamp-2 mb-3">
           <Link 
-            href={`/guides/${item.guide.slug}`}
+            href={`/guides/${item.guide.slug || item.guide.id}`}
             onClick={() => handleGuideAccess(item.guide.id)}
             className="hover:text-blue-600 transition-colors"
           >
-            {item.guide.title}
+            {item.guide.title || 'Untitled Guide'}
           </Link>
         </CardTitle>
         
@@ -244,18 +244,20 @@ export default function LibraryPage() {
           <div className="flex items-center">
             <MapPin className="h-4 w-4 mr-1" />
             <span>
-              {item.guide.primaryLocation?.name}
+              {item.guide.primaryLocation?.name || 'Location not specified'}
               {item.guide.primaryLocation?.address?.city && `, ${item.guide.primaryLocation.address.city}`}
             </span>
           </div>
-          <div className="flex items-center">
-            <Clock className="h-4 w-4 mr-1" />
-            <span>{item.guide.duration.value} {item.guide.duration.unit}</span>
-          </div>
+          {item.guide.duration && (
+            <div className="flex items-center">
+              <Clock className="h-4 w-4 mr-1" />
+              <span>{item.guide.duration.value} {item.guide.duration.unit}</span>
+            </div>
+          )}
         </div>
         
         <CardDescription className="line-clamp-2 text-sm mb-3">
-          {item.guide.description}
+          {item.guide.description || 'No description available'}
         </CardDescription>
 
         {/* Purchase Metadata */}
@@ -263,9 +265,9 @@ export default function LibraryPage() {
           <div className="flex items-center justify-between">
             <span className="flex items-center">
               <Calendar className="h-3 w-3 mr-1" />
-              Purchased {formatDistanceToNow(new Date(item.purchase.purchaseDate), { addSuffix: true })}
+              Purchased {item.purchase.purchaseDate ? formatDistanceToNow(new Date(item.purchase.purchaseDate), { addSuffix: true }) : 'Unknown date'}
             </span>
-            {getPaymentMethodIcon(item.purchase.paymentMethod)}
+            {getPaymentMethodIcon(item.purchase.paymentMethod || 'unknown')}
           </div>
           {item.purchase.lastAccessedAt && (
             <div className="flex items-center">
@@ -280,7 +282,7 @@ export default function LibraryPage() {
         {/* Action Buttons */}
         <div className="flex gap-2">
           <Link 
-            href={`/guides/${item.guide.slug}`}
+            href={`/guides/${item.guide.slug || item.guide.id}`}
             onClick={() => handleGuideAccess(item.guide.id)}
             className="flex-1"
           >
@@ -291,7 +293,7 @@ export default function LibraryPage() {
           </Link>
           
           {!item.purchase.hasReviewed && (
-            <Link href={`/guides/${item.guide.slug}#review`}>
+            <Link href={`/guides/${item.guide.slug || item.guide.id}#review`}>
               <Button variant="outline" size="sm">
                 <MessageSquare className="h-4 w-4" />
               </Button>

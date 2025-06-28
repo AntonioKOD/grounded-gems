@@ -125,6 +125,32 @@ export const Reviews: CollectionConfig = {
     { name: 'usersWhoMarkedHelpful',   type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'usersWhoMarkedUnhelpful', type: 'relationship', relationTo: 'users', hasMany: true },
     { name: 'usersWhoReported',         type: 'relationship', relationTo: 'users', hasMany: true },
+    
+    // Related Content Relationships
+    { 
+      name: 'relatedPost', 
+      type: 'relationship', 
+      relationTo: 'posts',
+      admin: {
+        description: 'Post that this review is connected to'
+      }
+    },
+    { 
+      name: 'verifiedPurchase', 
+      type: 'relationship', 
+      relationTo: 'guide-purchases',
+      admin: {
+        description: 'Guide purchase that verifies this review (for guide reviews)'
+      }
+    },
+    { 
+      name: 'locationInteraction', 
+      type: 'relationship', 
+      relationTo: 'locationInteractions',
+      admin: {
+        description: 'Location interaction that triggered this review'
+      }
+    },
   ],
   hooks: {
     beforeChange: [
@@ -137,5 +163,25 @@ export const Reviews: CollectionConfig = {
       },
     ],
   },
+  indexes: [
+    {
+      fields: ['status', 'createdAt'],
+    },
+    {
+      fields: ['author', 'createdAt'],
+    },
+    {
+      fields: ['reviewType', 'location'],
+    },
+    {
+      fields: ['reviewType', 'event'],
+    },
+    {
+      fields: ['reviewType', 'special'],
+    },
+    {
+      fields: ['rating', 'status'],
+    },
+  ],
   timestamps: true,
 }

@@ -93,6 +93,42 @@ export const Notifications: CollectionConfig = {
         { label: "Proximity Alert", value: "proximity_alert" },
         { label: "Check-in", value: "check_in" },
         { label: "Location Trending", value: "location_trending" },
+        { label: "Location Followed", value: "location_followed" },
+        // Guide-related notifications
+        { label: "Guide Purchased", value: "guide_purchased" },
+        { label: "Guide Reviewed", value: "guide_reviewed" },
+        { label: "Guide Published", value: "guide_published" },
+        { label: "Guide Featured", value: "guide_featured" },
+        // Challenge-related notifications
+        { label: "Challenge Completed", value: "challenge_completed" },
+        { label: "Challenge Joined", value: "challenge_joined" },
+        { label: "Challenge Milestone", value: "challenge_milestone" },
+        // Creator-related notifications
+        { label: "Creator Milestone", value: "creator_milestone" },
+        { label: "Creator Payout", value: "creator_payout" },
+        { label: "Creator Badge Earned", value: "creator_badge" },
+        // Subscription-related notifications
+        { label: "Subscription Updated", value: "subscription_updated" },
+        { label: "Subscription Expired", value: "subscription_expired" },
+        { label: "Subscription Renewed", value: "subscription_renewed" },
+        // Payout-related notifications
+        { label: "Payout Processed", value: "payout_processed" },
+        { label: "Payout Failed", value: "payout_failed" },
+        // Photo submission notifications
+        { label: "Photo Approved", value: "photo_approved" },
+        { label: "Photo Rejected", value: "photo_rejected" },
+        // Event notifications
+        { label: "Event Created", value: "event_created" },
+        { label: "Event Cancelled", value: "event_cancelled" },
+        { label: "Event Reminder", value: "event_reminder" },
+        // Journey notifications (add missing ones)
+        { label: "Journey Invite", value: "journey_invite" },
+        { label: "Journey Invite Accepted", value: "journey_invite_accepted" },
+        { label: "Journey Invite Declined", value: "journey_invite_declined" },
+        // System notifications
+        { label: "System Maintenance", value: "system_maintenance" },
+        { label: "Feature Update", value: "feature_update" },
+        { label: "Welcome", value: "welcome" },
       ],
     },
     {
@@ -107,7 +143,22 @@ export const Notifications: CollectionConfig = {
     {
       name: "relatedTo",
       type: "relationship",
-      relationTo: ["posts", "users", "locations", "events", "specials", "eventRequests", "journeys"],
+      relationTo: [
+        "posts", 
+        "users", 
+        "locations", 
+        "events", 
+        "specials", 
+        "eventRequests", 
+        "journeys",
+        "guides",
+        "challenges",
+        "challengeParticipation",
+        "locationFollowers",
+        "reviews",
+        "guide-purchases",
+        "payouts"
+      ],
       hasMany: false,
     },
     {

@@ -34,6 +34,8 @@ import { Payouts } from './collections/Payouts'
 import Challenges from './collections/Challenges'
 import ChallengeSuggestions from './collections/ChallengeSuggestions'
 import ChallengeVotes from './collections/ChallengeVotes'
+import { ChallengeParticipation } from './collections/ChallengeParticipation'
+import { LocationFollowers } from './collections/LocationFollowers'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -141,5 +143,7 @@ export default buildConfig({
     Challenges,
     ChallengeSuggestions,
     ChallengeVotes,
+    ChallengeParticipation,
+    LocationFollowers,
   ],
 })

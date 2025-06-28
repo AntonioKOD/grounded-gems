@@ -543,6 +543,7 @@ export const Locations: CollectionConfig = {
     },
     { name: 'averageRating', type: 'number', admin: { readOnly: true } },
     { name: 'reviewCount', type: 'number', admin: { readOnly: true } },
+    { name: 'followerCount', type: 'number', admin: { readOnly: true, description: 'Number of users following this location' } },
     { name: 'foursquareId', type: 'text', admin: { description: 'Foursquare place ID for API integration' } },
   ],
 };

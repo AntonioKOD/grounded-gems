@@ -55,6 +55,7 @@ export async function createEvent(formData: EventFormData, userId: string, userN
       // Timing
       startDate: formData.startDate,
       endDate: formData.endDate,
+      durationMinutes: formData.durationMinutes,
 
       // Taxonomy
       category: formData.category,
@@ -67,11 +68,38 @@ export async function createEvent(formData: EventFormData, userId: string, userN
       // Capacity
       capacity: formData.capacity,
 
+      // Pricing
+      pricing: formData.pricing ? {
+        isFree: formData.pricing.isFree,
+        price: formData.pricing.price,
+        currency: formData.pricing.currency,
+      } : undefined,
+
+      // Registration
+      registration: formData.registration ? {
+        requiresRegistration: formData.registration.requiresRegistration,
+        registrationDeadline: formData.registration.registrationDeadline,
+        allowWaitlist: formData.registration.allowWaitlist,
+      } : undefined,
+
       // Organizer - this should be the user ID
       organizer: userId,
 
       // Status
       status: formData.status || "draft",
+
+      // Tags
+      tags: formData.tags,
+
+      // Requirements
+      requirements: formData.requirements,
+
+      // Contact Info
+      contactInfo: formData.contactInfo ? {
+        email: formData.contactInfo.email,
+        phone: formData.contactInfo.phone,
+        website: formData.contactInfo.website,
+      } : undefined,
 
       // Meta
       meta: formData.meta ? {

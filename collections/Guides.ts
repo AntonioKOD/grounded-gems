@@ -679,6 +679,26 @@ export const Guides: CollectionConfig = {
         },
       ],
     },
+    
+    // Related Content Relationships
+    { 
+      name: 'relatedPosts', 
+      type: 'relationship', 
+      relationTo: 'posts',
+      hasMany: true,
+      admin: {
+        description: 'Posts that are related to or promoting this guide'
+      }
+    },
+    { 
+      name: 'relatedEvents', 
+      type: 'relationship', 
+      relationTo: 'events',
+      hasMany: true,
+      admin: {
+        description: 'Events that are based on or promoting this guide'
+      }
+    },
   ],
   timestamps: true,
   hooks: {
