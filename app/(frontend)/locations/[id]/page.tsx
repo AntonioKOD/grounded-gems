@@ -1,9 +1,10 @@
 import { Metadata } from 'next'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { parseLocationParam } from '@/lib/slug-utils'
 import { getPrimaryImageUrl } from '@/lib/image-utils'
+import { handleLocationRedirect } from '@/lib/redirect-utils'
 import Image from 'next/image'
 import Link from 'next/link'
 import { 
@@ -238,8 +239,14 @@ export default async function LocationPage({ params }: PageProps) {
 
     const location = locationResult.docs[0] as LocationData
 
-    if (id && location.slug && location.slug !== slug) {
-      redirect(`/locations/${location.slug}`)
+    // Handle canonical URL redirects (ID to slug)
+    // Only redirect if accessing by legacy ID and a slug exists
+    if (parsedParams.isLegacyId && location.slug && location.slug !== resolvedParams.id) {
+      handleLocationRedirect(
+        `/locations/${resolvedParams.id}`,
+        `/locations/${location.slug}`,
+        'canonical'
+      )
     }
 
     // Helper functions

@@ -1,57 +1,53 @@
 "use client"
 
-import React from "react"
-import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
-
-interface ErrorBoundaryState {
-  hasError: boolean
-  error?: Error
-}
+import React from 'react'
+import { isNextRedirectError, handleRedirectError } from '@/lib/redirect-utils'
 
 interface ErrorBoundaryProps {
   children: React.ReactNode
-  fallback?: React.ComponentType<{ error?: Error; retry: () => void }>
+  fallback?: React.ComponentType<{ error: Error; resetError: () => void }>
 }
 
-class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+interface ErrorBoundaryState {
+  hasError: boolean
+  error: Error | null
+}
+
+export class LocationErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, error: null }
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // Check if this is a Next.js redirect (not a real error)
+    if (isNextRedirectError(error)) {
+      // Don't treat redirects as errors
+      return { hasError: false, error: null }
+    }
+
     return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("Error caught by ErrorBoundary:", error, errorInfo)
-  }
+    // Handle redirect errors gracefully
+    if (handleRedirectError(error, 'LocationErrorBoundary')) {
+      // This was a redirect, not a real error
+      return
+    }
 
-  retry = () => {
-    this.setState({ hasError: false, error: undefined })
+    // Log real errors
+    console.error('Location page error:', error, errorInfo)
   }
 
   render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) {
-        const FallbackComponent = this.props.fallback
-        return <FallbackComponent error={this.state.error} retry={this.retry} />
-      }
-
+    if (this.state.hasError && this.state.error) {
+      const FallbackComponent = this.props.fallback || DefaultErrorFallback
       return (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center space-y-4">
-          <div className="text-red-500 text-lg font-semibold">
-            Something went wrong
-          </div>
-          <p className="text-gray-600 max-w-md">
-            We encountered an error while loading this content. Please try again.
-          </p>
-          <Button onClick={this.retry} className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Try again
-          </Button>
-        </div>
+        <FallbackComponent 
+          error={this.state.error} 
+          resetError={() => this.setState({ hasError: false, error: null })}
+        />
       )
     }
 
@@ -59,4 +55,45 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-export default ErrorBoundary 
+function DefaultErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full bg-white shadow-lg rounded-lg p-6">
+        <div className="flex items-center space-x-2 text-red-600 mb-4">
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <h2 className="text-lg font-semibold">Something went wrong</h2>
+        </div>
+        <p className="text-gray-600 mb-4">
+          We encountered an error while loading this location page.
+        </p>
+        <div className="space-y-2">
+          <button
+            onClick={resetError}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={() => window.location.href = '/locations'}
+            className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded hover:bg-gray-300 transition-colors"
+          >
+            Browse All Locations
+          </button>
+        </div>
+        {process.env.NODE_ENV === 'development' && (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-gray-500">Error Details (Dev)</summary>
+            <pre className="mt-2 text-xs bg-gray-100 p-2 rounded overflow-auto">
+              {error.message}
+            </pre>
+          </details>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Export both named and default exports for compatibility
+export default LocationErrorBoundary 

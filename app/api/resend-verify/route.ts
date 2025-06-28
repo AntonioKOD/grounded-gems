@@ -50,18 +50,29 @@ export async function POST(request: NextRequest) {
       to: email,
       subject: 'Verify Your Sacavia Account',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #FF6B6B;">Verify Your Sacavia Account</h2>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #FF6B6B; margin-bottom: 20px;">Verify Your Sacavia Account</h2>
           <p>Hi ${user.name},</p>
           <p>Please verify your email address by clicking the link below:</p>
-          <a href="${baseUrl}/verify?token=${user._verificationToken}" 
-             style="background-color: #FF6B6B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
-            Verify Email
-          </a>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${baseUrl}/verify?token=${user._verificationToken}" 
+               style="background-color: #FF6B6B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
+              Verify Email
+            </a>
+          </div>
           <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-          <p>${baseUrl}/verify?token=${user._verificationToken}</p>
-          <p>This link will expire in 24 hours.</p>
-          <p>If you didn't create an account with Sacavia, please ignore this email.</p>
+          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">${baseUrl}/verify?token=${user._verificationToken}</p>
+          
+          <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-weight: bold; color: #856404;">📧 Email Delivery Notice:</p>
+            <p style="margin: 10px 0 0 0; color: #856404;">
+              If you don't see this email in your inbox, please check your <strong>spam or junk folder</strong>. 
+              To ensure you receive future emails from Sacavia, add <strong>noreply@sacavia.com</strong> to your contacts.
+            </p>
+          </div>
+          
+          <p style="color: #666; font-size: 14px;">This link will expire in 24 hours.</p>
+          <p style="color: #666; font-size: 14px;">If you didn't create an account with Sacavia, please ignore this email.</p>
         </div>
       `,
     })
