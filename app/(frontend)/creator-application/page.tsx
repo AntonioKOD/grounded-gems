@@ -1,4 +1,4 @@
-import { getServerSideUser } from '@/lib/payload-utils'
+import { getServerSideUser } from '@/lib/auth-server'
 import { redirect } from 'next/navigation'
 import CreatorApplicationForm from '@/components/creator/creator-application-form'
 
