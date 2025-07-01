@@ -10,7 +10,7 @@ export const SECURITY_CONFIG = {
     REFRESH_TOKEN_EXPIRY: 30 * 24 * 60 * 60 * 1000, // 30 days
     MAX_LOGIN_ATTEMPTS: 5,
     LOCKOUT_DURATION: 15 * 60 * 1000, // 15 minutes
-    ADMIN_EMAIL: 'antonio_kodheli@icloud.com', // Authorized admin email
+    ADMIN_EMAILS: ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'], // Authorized admin emails
     COOKIE_SETTINGS: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -15,7 +15,8 @@ export const Payouts: CollectionConfig = {
   access: {
     read: ({ req: { user } }) => {
       // Admin can read all payouts
-      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') return true
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      if (user?.role === 'admin' || adminEmails.includes(user?.email || '')) return true
       
       // Creators can read their own payouts
       if (user) {
@@ -28,15 +29,18 @@ export const Payouts: CollectionConfig = {
     },
     create: ({ req: { user } }) => {
       // Only allow creation through API routes
-      return user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com'
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      return user?.role === 'admin' || adminEmails.includes(user?.email || '')
     },
     update: ({ req: { user } }) => {
       // Only admins can update payouts
-      return user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com'
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      return user?.role === 'admin' || adminEmails.includes(user?.email || '')
     },
     delete: ({ req: { user } }) => {
       // Only admins can delete payouts
-      return user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com'
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      return user?.role === 'admin' || adminEmails.includes(user?.email || '')
     },
   },
   fields: [

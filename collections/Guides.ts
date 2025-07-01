@@ -18,7 +18,8 @@ export const Guides: CollectionConfig = {
   access: {
     read: ({ req: { user } }) => {
       // Admin can read all guides
-      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') return true
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      if (user?.role === 'admin' || adminEmails.includes(user?.email || '')) return true
       
       // Public can read published guides, creators can read their own guides
       if (!user) {
@@ -35,18 +36,20 @@ export const Guides: CollectionConfig = {
       }
     },
     create: ({ req: { user } }) => {
-      return user?.role === 'admin' || user?.role === 'creator' || user?.role === 'user' || user?.email === 'antonio_kodheli@icloud.com'
+      const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+      return user?.role === 'admin' || user?.role === 'creator' || user?.role === 'user' || adminEmails.includes(user?.email || '')
     },
     update: ({ req: { user }, data }) => {
       console.log(`🔒 Access control - Update check for user: ${user?.email}`)
       console.log(`🔒 User role: ${user?.role}`)
       console.log(`🔒 Data being updated:`, data ? Object.keys(data) : 'No data')
       
-      // Admin can update any guide and any field
-      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') {
-        console.log(`✅ Admin access granted for update`)
-        return true
-      }
+              // Admin can update any guide and any field
+        const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+        if (user?.role === 'admin' || adminEmails.includes(user?.email || '')) {
+          console.log(`✅ Admin access granted for update`)
+          return true
+        }
       
       // Users can update their own guides
       console.log(`🔍 Checking creator access for user: ${user?.id}`)
@@ -55,8 +58,9 @@ export const Guides: CollectionConfig = {
       }
     },
     delete: ({ req: { user } }) => {
-      // Admin can delete any guide
-      if (user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') return true
+              // Admin can delete any guide
+        const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+        if (user?.role === 'admin' || adminEmails.includes(user?.email || '')) return true
       // Users can delete their own guides
       return {
         creator: { equals: user?.id }
@@ -751,7 +755,8 @@ export const Guides: CollectionConfig = {
           }
           
           // Update admin review information - check for admin email directly
-          const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+          const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+          const isAdmin = adminEmails.includes(req?.user?.email || '') || req?.user?.role === 'admin'
           if (isAdmin && data.status) {
             if (!data.adminNotes) data.adminNotes = {}
             data.adminNotes.lastReviewed = new Date().toISOString()
@@ -770,7 +775,8 @@ export const Guides: CollectionConfig = {
     afterRead: [
       ({ doc, req }) => {
         // Log when guides are read
-        const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+        const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+        const isAdmin = adminEmails.includes(req?.user?.email || '') || req?.user?.role === 'admin'
         if (isAdmin) {
           console.log(`📖 Guide read - ID: ${doc.id}, Status: ${doc.status}`)
         }
@@ -780,7 +786,8 @@ export const Guides: CollectionConfig = {
     afterChange: [
       ({ doc, operation, req }) => {
         // Log successful changes
-        const isAdmin = req?.user?.email === 'antonio_kodheli@icloud.com' || req?.user?.role === 'admin'
+        const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+        const isAdmin = adminEmails.includes(req?.user?.email || '') || req?.user?.role === 'admin'
         if (isAdmin) {
           console.log(`✅ Guide ${operation} - ID: ${doc.id}, Status: ${doc.status}`)
         }

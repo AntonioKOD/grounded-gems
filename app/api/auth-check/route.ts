@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
       }
       
       // Check admin email
-      const allowedAdminEmail = 'antonio_kodheli@icloud.com'
-      isAdmin = payload.email === allowedAdminEmail
+      const allowedAdminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+              isAdmin = allowedAdminEmails.includes(payload.email)
     }
   } catch (error) {
     console.error('Error decoding token:', error)

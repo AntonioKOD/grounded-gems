@@ -222,11 +222,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL('/login?redirect=/admin', request.url))
       }
 
-      // Check if user email matches the allowed admin email
+      // Check if user email matches the allowed admin emails
       const userEmail = payload.email
-      const allowedAdminEmail = 'antonio_kodheli@icloud.com' // Centralized in security config
+      const allowedAdminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'] // Centralized in security config
       
-      if (userEmail !== allowedAdminEmail) {
+      if (!allowedAdminEmails.includes(userEmail)) {
         console.log(`🚫 [Middleware] Unauthorized admin access attempt from: ${userEmail}`)
         // For unauthorized access, always show access denied (regardless of initial load)
         return new NextResponse('Access Denied: Admin access restricted', { status: 403 })
