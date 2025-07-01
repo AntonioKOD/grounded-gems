@@ -422,18 +422,12 @@ export function MatchmakingSessionDetail({ id }: MatchmakingSessionDetailProps) 
             <CardContent className="space-y-4">
               {isOrganizer ? (
                 <>
-                  <Button className="w-full" variant="outline">
-                    Send Message to All
-                  </Button>
                   <Button className="w-full" variant="destructive">
                     Cancel Session
                   </Button>
                 </>
               ) : (
                 <>
-                  <Button className="w-full" variant="outline">
-                    Contact Organizer
-                  </Button>
                   <Button className="w-full" variant="outline">
                     Share Session
                   </Button>

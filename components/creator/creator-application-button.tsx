@@ -1,8 +1,9 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Star, ArrowRight, Clock, CheckCircle, XCircle } from 'lucide-react'
+import { Star, ArrowRight, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 interface CreatorApplicationButtonProps {
@@ -27,21 +28,61 @@ export default function CreatorApplicationButton({
   showStatus = false,
   className = ''
 }: CreatorApplicationButtonProps) {
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
   // Don't show if user is already a creator
   if (user?.role === 'creator' || user?.isCreator) {
     return null
   }
 
-  const applicationStatus = user?.creatorProfile?.applicationStatus || 'not_applied'
+  // Fetch application status when component mounts
+  useEffect(() => {
+    if (user?.id) {
+      const fetchApplicationStatus = async () => {
+        setIsLoading(true)
+        try {
+          const response = await fetch('/api/creator-application', {
+            method: 'GET',
+            credentials: 'include',
+          })
+
+          if (response.ok) {
+            const result = await response.json()
+            if (result.success) {
+              setApplicationStatus(result.status)
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching application status:', error)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      fetchApplicationStatus()
+    }
+  }, [user?.id])
+
+  // Use fetched status or fallback to user profile status
+  const currentStatus = applicationStatus || user?.creatorProfile?.applicationStatus || 'not_applied'
 
   // Status-specific content
   const getStatusContent = () => {
-    switch (applicationStatus) {
+    switch (currentStatus) {
       case 'pending':
         return {
           text: 'Application Pending',
           icon: <Clock className="h-4 w-4" />,
           badge: 'Under Review',
+          disabled: true,
+          variant: 'outline' as const
+        }
+      case 'reviewing':
+        return {
+          text: 'Under Review',
+          icon: <Clock className="h-4 w-4" />,
+          badge: 'Reviewing',
           disabled: true,
           variant: 'outline' as const
         }
@@ -98,13 +139,13 @@ export default function CreatorApplicationButton({
         variant={statusContent.variant} 
         size={size}
         className={className}
-        disabled={statusContent.disabled}
-        asChild={!statusContent.disabled}
+        disabled={statusContent.disabled || isLoading}
+        asChild={!statusContent.disabled && !isLoading}
       >
-        {statusContent.disabled ? (
+        {statusContent.disabled || isLoading ? (
           <div className="flex items-center">
-            {statusContent.icon}
-            <span className="ml-2">{statusContent.text}</span>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : statusContent.icon}
+            <span className="ml-2">{isLoading ? 'Loading...' : statusContent.text}</span>
           </div>
         ) : (
           <Link href="/creator-application" className="flex items-center">
@@ -115,11 +156,11 @@ export default function CreatorApplicationButton({
         )}
       </Button>
       
-      {showStatus && statusContent.badge && (
+      {showStatus && statusContent.badge && !isLoading && (
         <Badge 
           variant={
-            applicationStatus === 'pending' ? 'secondary' : 
-            applicationStatus === 'approved' ? 'default' : 
+            currentStatus === 'pending' || currentStatus === 'reviewing' ? 'secondary' : 
+            currentStatus === 'approved' ? 'default' : 
             'destructive'
           }
         >
@@ -145,6 +186,7 @@ export function CreatorApplicationLink({
   const getLinkText = () => {
     switch (applicationStatus) {
       case 'pending':
+      case 'reviewing':
         return 'Application Status'
       case 'rejected':
         return 'Reapply as Creator'

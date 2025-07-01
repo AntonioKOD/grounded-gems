@@ -17,11 +17,7 @@ export default async function CreatorApplicationPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <CreatorApplicationForm 
-        userId={user.id} 
-        onSubmissionSuccess={() => {
-          // Could redirect to a success page or show a modal
-          window.location.href = '/profile/' + user.id + '?tab=creator'
-        }}
+        userId={user.id}
       />
     </div>
   )

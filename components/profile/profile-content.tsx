@@ -815,10 +815,6 @@ export default function ProfileContent({
                       <span>Share Profile</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="cursor-pointer">
-                      <MessageCircle className="h-4 w-4 mr-3" />
-                      <span>Send Message</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem className="cursor-pointer">
                       <Bookmark className="h-4 w-4 mr-3" />
                       <span>Save Profile</span>
                     </DropdownMenuItem>

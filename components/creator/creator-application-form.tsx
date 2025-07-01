@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Star, MapPin, Users, Zap } from 'lucide-react'
+import { Loader2, Star, MapPin, Users, Zap, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface CreatorApplicationFormProps {
   userId: string
@@ -29,7 +31,11 @@ const specialtyOptions = [
 ]
 
 export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: CreatorApplicationFormProps) {
+  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [existingApplication, setExistingApplication] = useState<any>(null)
+  const [error, setError] = useState<string>('')
   const [formData, setFormData] = useState({
     motivation: '',
     experienceLevel: '',
@@ -38,6 +44,31 @@ export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: 
     portfolioDescription: '',
     socialMedia: '',
   })
+
+  // Check for existing application on mount
+  useEffect(() => {
+    const checkExistingApplication = async () => {
+      try {
+        const response = await fetch('/api/creator-application', {
+          method: 'GET',
+          credentials: 'include', // Include cookies for authentication
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.hasApplication) {
+            setExistingApplication(result.application)
+          }
+        }
+      } catch (error) {
+        console.error('Error checking existing application:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    checkExistingApplication()
+  }, [])
 
   const handleSpecialtyChange = (specialty: string, checked: boolean) => {
     setFormData(prev => ({
@@ -51,35 +82,136 @@ export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError('')
 
     try {
       const response = await fetch('/api/creator-application', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`, // Simplified for demo
         },
-        body: JSON.stringify({
-          userId,
-          ...formData,
-        }),
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify(formData),
       })
 
       const result = await response.json()
 
       if (result.success) {
-        onSubmissionSuccess?.()
-        // Show success message
-        alert('Application submitted successfully! We\'ll review it and get back to you soon.')
+        // Call the optional callback if provided
+        if (onSubmissionSuccess) {
+          onSubmissionSuccess()
+        } else {
+          // Default behavior: redirect to profile page
+          router.push(`/profile/${userId}?tab=creator`)
+        }
       } else {
-        alert(result.error || 'Failed to submit application')
+        setError(result.error || 'Failed to submit application')
       }
     } catch (error) {
       console.error('Error submitting application:', error)
-      alert('Failed to submit application. Please try again.')
+      setError('Failed to submit application. Please try again.')
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2">Loading application status...</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Show existing application status
+  if (existingApplication) {
+    const getStatusIcon = (status: string) => {
+      switch (status) {
+        case 'pending':
+          return <Clock className="h-5 w-5 text-yellow-500" />
+        case 'reviewing':
+          return <AlertCircle className="h-5 w-5 text-blue-500" />
+        case 'approved':
+          return <CheckCircle className="h-5 w-5 text-green-500" />
+        case 'rejected':
+          return <AlertCircle className="h-5 w-5 text-red-500" />
+        default:
+          return <Clock className="h-5 w-5 text-gray-500" />
+      }
+    }
+
+    const getStatusMessage = (status: string) => {
+      switch (status) {
+        case 'pending':
+          return 'Your application is pending review. We\'ll get back to you within 3-5 business days.'
+        case 'reviewing':
+          return 'Your application is currently under review. We\'ll notify you once we have an update.'
+        case 'approved':
+          return 'Congratulations! Your creator application has been approved. You can now start creating guides!'
+        case 'rejected':
+          return 'Your application was not approved at this time. You can submit a new application if you\'d like to try again.'
+        default:
+          return 'Application status unknown.'
+      }
+    }
+
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Creator Application Status
+          </h1>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 mb-4">
+              {getStatusIcon(existingApplication.status)}
+              <h3 className="text-lg font-semibold capitalize">
+                {existingApplication.status.replace('_', ' ')} Application
+              </h3>
+            </div>
+            
+            <p className="text-gray-600 mb-6">
+              {getStatusMessage(existingApplication.status)}
+            </p>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium mb-2">Application Details</h4>
+                <div className="space-y-2 text-sm text-gray-600">
+                  <p><strong>Submitted:</strong> {new Date(existingApplication.createdAt).toLocaleDateString()}</p>
+                  <p><strong>Experience Level:</strong> {existingApplication.experienceLevel}</p>
+                  <p><strong>Specialties:</strong> {existingApplication.specialties?.length || 0} selected</p>
+                </div>
+              </div>
+              
+              {existingApplication.status === 'rejected' && existingApplication.rejectionReason && (
+                <div>
+                  <h4 className="font-medium mb-2">Feedback</h4>
+                  <p className="text-sm text-gray-600">{existingApplication.rejectionReason}</p>
+                </div>
+              )}
+            </div>
+
+            {existingApplication.status === 'rejected' && (
+              <div className="mt-6 pt-6 border-t">
+                <Button 
+                  onClick={() => setExistingApplication(null)}
+                  className="w-full"
+                >
+                  Submit New Application
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -127,6 +259,14 @@ export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: 
           </CardContent>
         </Card>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert className="mb-6" variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Application Form */}
       <Card>

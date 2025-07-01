@@ -231,6 +231,12 @@ export const CreatorApplications: CollectionConfig = {
             let notificationMessage = '';
             let priority = 'normal';
 
+            // Get current user data to preserve existing creatorProfile
+            const currentUser = await req.payload.findByID({
+              collection: 'users',
+              id: doc.applicant
+            });
+
             switch (doc.status) {
               case 'approved':
                 notificationTitle = '🎉 Creator Application Approved!';
@@ -244,8 +250,11 @@ export const CreatorApplications: CollectionConfig = {
                   data: {
                     role: 'creator',
                     isCreator: true,
-                    'creatorProfile.applicationStatus': 'approved',
-                    'creatorProfile.joinedCreatorProgram': new Date().toISOString(),
+                    creatorProfile: {
+                      ...currentUser.creatorProfile,
+                      applicationStatus: 'approved',
+                      joinedCreatorProgram: new Date().toISOString(),
+                    },
                   },
                 });
                 break;
@@ -259,7 +268,10 @@ export const CreatorApplications: CollectionConfig = {
                   collection: 'users',
                   id: doc.applicant,
                   data: {
-                    'creatorProfile.applicationStatus': 'rejected',
+                    creatorProfile: {
+                      ...currentUser.creatorProfile,
+                      applicationStatus: 'rejected',
+                    },
                   },
                 });
                 break;
@@ -267,6 +279,20 @@ export const CreatorApplications: CollectionConfig = {
               case 'needs_info':
                 notificationTitle = 'Creator Application - More Information Needed';
                 notificationMessage = 'We need some additional information for your creator application. Please check your application and provide the requested details.';
+                break;
+                
+              case 'reviewing':
+                // Update status to reviewing
+                await req.payload.update({
+                  collection: 'users',
+                  id: doc.applicant,
+                  data: {
+                    creatorProfile: {
+                      ...currentUser.creatorProfile,
+                      applicationStatus: 'reviewing',
+                    },
+                  },
+                });
                 break;
             }
 

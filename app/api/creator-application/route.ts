@@ -6,21 +6,19 @@ import config from '@/payload.config'
 export async function POST(request: NextRequest) {
   try {
     const payload = await getPayload({ config })
-    const data = await request.json()
-
-    // Get the user from the request (you'll need to implement auth middleware)
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    
+    // Use Payload's built-in authentication
+    const authResult = await payload.auth({ headers: request.headers })
+    
+    if (!authResult.user) {
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
 
-    // For now, we'll assume the user ID is passed in the request body
-    // In a real implementation, you'd extract this from the JWT token
+    const data = await request.json()
     const { 
-      userId,
       motivation, 
       experienceLevel, 
       localAreas, 
@@ -29,12 +27,7 @@ export async function POST(request: NextRequest) {
       socialMedia 
     } = data
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'User ID is required' },
-        { status: 400 }
-      )
-    }
+    const userId = authResult.user.id
 
     // Check if user already has a pending application
     const existingApplication = await payload.find({
@@ -55,26 +48,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user details
-    const user = await payload.findByID({
-      collection: 'users',
-      id: userId
-    })
-
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
-    // Create the application
+    // Create the application (the beforeChange hook will populate applicant info)
     const application = await payload.create({
       collection: 'creatorApplications',
       data: {
-        applicant: userId,
-        applicantName: user.name || user.username || user.email,
-        applicantEmail: user.email,
         motivation,
         experienceLevel,
         localAreas,
@@ -82,15 +59,24 @@ export async function POST(request: NextRequest) {
         portfolioDescription,
         socialMedia,
         status: 'pending',
-      }
+      },
+      user: authResult.user // Pass user context for hooks
     })
 
-    // Update user's application status
+    // Update user's application status - get current user first to preserve other data
+    const currentUser = await payload.findByID({
+      collection: 'users',
+      id: userId
+    })
+
     await payload.update({
       collection: 'users',
       id: userId,
       data: {
-        'creatorProfile.applicationStatus': 'pending'
+        creatorProfile: {
+          ...currentUser.creatorProfile,
+          applicationStatus: 'pending'
+        }
       }
     })
 
@@ -109,7 +95,7 @@ export async function POST(request: NextRequest) {
           recipient: admin.id,
           type: 'creator_application_submitted',
           title: 'New Creator Application',
-          message: `${user.name || user.email} has submitted a creator application for review.`,
+          message: `${authResult.user.name || authResult.user.email} has submitted a creator application for review.`,
           priority: 'normal',
           relatedTo: {
             relationTo: 'creatorApplications',
@@ -139,15 +125,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const payload = await getPayload({ config })
-    const url = new URL(request.url)
-    const userId = url.searchParams.get('userId')
-
-    if (!userId) {
+    
+    // Use Payload's built-in authentication
+    const authResult = await payload.auth({ headers: request.headers })
+    
+    if (!authResult.user) {
       return NextResponse.json(
-        { success: false, error: 'User ID is required' },
-        { status: 400 }
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
       )
     }
+
+    const userId = authResult.user.id
 
     // Get user's latest application
     const applications = await payload.find({

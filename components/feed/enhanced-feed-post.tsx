@@ -40,6 +40,7 @@ import { CommentSystemLight } from "@/components/post/comment-system-light"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import MediaCarousel from "@/components/ui/media-carousel"
 
 interface EnhancedFeedPostProps {
   post: Post
@@ -381,154 +382,21 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       >
         {/* Main Media - Reduced height to make room for caption */}
         <div className="absolute inset-0 w-full" style={{ height: 'calc(100% - 120px)' }}>
-          {/* Enhanced Media Display */}
+          {/* Enhanced Media Display with Carousel */}
           {hasMedia && (
             <div className="relative mb-4">
-              {/* Video Content */}
-              {currentMedia.type === 'video' && (
-                <div className="relative w-full rounded-2xl overflow-hidden bg-black mb-4">
-                  <video
-                    ref={videoRef}
-                    src={currentMedia.url}
-                    className="w-full h-auto object-cover"
-                    loop
-                    muted={isVideoMuted}
-                    playsInline
-                    preload="metadata"
-                    poster={currentMedia.thumbnail || undefined}
-                    onTimeUpdate={handleVideoTimeUpdate}
-                    onPlay={() => setIsVideoPlaying(true)}
-                    onPause={() => setIsVideoPlaying(false)}
-                    onClick={handleVideoPlay}
-                    style={{ aspectRatio: '16/10' }}
-                  />
-                  
-                  {/* Video controls overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent">
-                    {/* Play/Pause button */}
-                    <button
-                      onClick={handleVideoPlay}
-                      className="absolute inset-0 flex items-center justify-center group"
-                    >
-                      <AnimatePresence>
-                        {!isVideoPlaying && (
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                            className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-active:scale-95 transition-transform"
-                          >
-                            <Play className="h-8 w-8 text-gray-900 ml-1" />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </button>
-                    
-                    {/* Video controls */}
-                    <div className="absolute top-3 right-3 flex gap-2">
-                      <button
-                        onClick={handleVideoMute}
-                        className="w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center"
-                      >
-                        {isVideoMuted ? (
-                          <VolumeX className="h-4 w-4" />
-                        ) : (
-                          <Volume2 className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <div className="w-full bg-gray-600/50 rounded-full h-1">
-                        <div
-                          className="bg-white rounded-full h-1 transition-all duration-300"
-                          style={{ width: `${videoProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Image Content */}
-              {currentMedia.type === 'image' && (
-                <div className="relative w-full rounded-2xl overflow-hidden bg-gray-100">
-                  <div className="relative" style={{ aspectRatio: '16/10' }}>
-                                      <Image
-                    src={currentMedia.url}
-                    alt={post.title || "Post image"}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 50vw"
-                    className="object-cover"
-                    priority={priority <= 2}
-                    quality={85}
-                    placeholder="blur"
-                    blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8A0XGARt12BhtuKCo2ARCh1w7Lg1iCgQIU/9k="
-                    onLoad={() => {
-                      setIsLoadingImage(false)
-                    }}
-                    onError={() => {
-                      console.error(`Failed to load image: ${currentMedia.url}`)
-                    }}
-                  />
-                    
-                    {/* Image navigation for multiple images */}
-                    {photos.length > 1 && (
-                      <>
-                        <div className="absolute top-3 right-3">
-                          <Badge variant="secondary" className="bg-black/70 text-white border-none">
-                            {currentImageIndex + 1} / {photos.length}
-                          </Badge>
-                        </div>
-                        
-                        {/* Navigation arrows */}
-                        {currentImageIndex > 0 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setCurrentImageIndex(prev => prev - 1)
-                            }}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center hover:bg-black/90 transition-colors"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                          </button>
-                        )}
-                        
-                        {currentImageIndex < photos.length - 1 && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setCurrentImageIndex(prev => prev + 1)
-                            }}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center hover:bg-black/90 transition-colors"
-                          >
-                            <ChevronRight className="h-4 w-4" />
-                          </button>
-                        )}
-                        
-                        {/* Image dots indicator */}
-                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1">
-                          {photos.map((_, index) => (
-                            <button
-                              key={index}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setCurrentImageIndex(index)
-                              }}
-                              className={`w-2 h-2 rounded-full transition-colors ${
-                                index === currentImageIndex 
-                                  ? 'bg-white' 
-                                  : 'bg-white/50'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
+              <MediaCarousel
+                items={mediaItems.map(item => ({
+                  ...item,
+                  alt: item.type === 'video' ? 'Post video' : post.title || 'Post image'
+                }))}
+                aspectRatio="16/10"
+                showControls={true}
+                showDots={true}
+                showCounter={true}
+                className="rounded-2xl overflow-hidden bg-gray-100"
+                priority={priority <= 2}
+              />
             </div>
           )}
         </div>

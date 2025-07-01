@@ -208,7 +208,7 @@ export class MobileNotificationService {
    * Web fallback for notifications
    */
   private static showWebFallbackNotification(notification: MobileNotificationData): void {
-    // Use the existing web notification system
+    // Try browser notification first
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification(notification.title, {
         body: notification.body,
@@ -216,12 +216,16 @@ export class MobileNotificationService {
         data: notification.data
       })
     } else {
-      // Show a visual notification in the UI
+      // Show a visual notification in the UI using our toast system
       console.log('Web notification fallback:', notification)
       
-      // Dispatch custom event for UI components to handle
+      // Dispatch custom event for the NotificationProvider to handle
       window.dispatchEvent(new CustomEvent('mobile-notification-fallback', {
-        detail: notification
+        detail: {
+          title: notification.title,
+          body: notification.body,
+          data: notification.data
+        }
       }))
     }
   }

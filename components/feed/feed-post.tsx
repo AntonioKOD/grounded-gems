@@ -58,6 +58,7 @@ import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
 import CommentsModal from './comments-modal'
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import MediaCarousel from "@/components/ui/media-carousel"
 
 interface FeedPostProps {
   post: Post
@@ -466,92 +467,52 @@ export const FeedPost = memo(function FeedPost({
             </div>
           )}
 
-          {/* Media Display with Video Support */}
+          {/* Enhanced Media Display with Carousel */}
           {hasMedia && (
             <div className="mb-4">
-              {/* Video Content */}
-              {videoUrl && (
-                <div className="relative w-full rounded-2xl overflow-hidden bg-black">
-                  <video
-                    ref={videoRef}
-                    src={videoUrl}
-                    className="w-full h-auto object-cover"
-                    loop
-                    muted={isVideoMuted}
-                    playsInline
-                    preload="metadata"
-                    onTimeUpdate={handleVideoTimeUpdate}
-                    onPlay={() => setIsVideoPlaying(true)}
-                    onPause={() => setIsVideoPlaying(false)}
-                    onClick={handleVideoPlay}
-                    style={{ aspectRatio: '16/10' }}
-                  />
+              <MediaCarousel
+                items={(() => {
+                  const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
                   
-                  {/* Video controls overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent">
-                    {/* Play/Pause button */}
-                    <button
-                      onClick={handleVideoPlay}
-                      className="absolute inset-0 flex items-center justify-center group"
-                    >
-                      <AnimatePresence>
-                        {!isVideoPlaying && (
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                            exit={{ scale: 0 }}
-                            className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center group-active:scale-95 transition-transform"
-                          >
-                            <Play className="h-8 w-8 text-gray-900 ml-1" />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </button>
-                    
-                    {/* Video controls */}
-                    <div className="absolute top-3 right-3 flex gap-2">
-                      <button
-                        onClick={handleVideoMute}
-                        className="w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center"
-                      >
-                        {isVideoMuted ? (
-                          <VolumeX className="h-4 w-4" />
-                        ) : (
-                          <Volume2 className="h-4 w-4" />
-                        )}
-                      </button>
-                    </div>
-                    
-                    {/* Progress bar */}
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <div className="w-full bg-white/30 rounded-full h-1">
-                        <div 
-                          className="bg-white rounded-full h-1 transition-all duration-100"
-                          style={{ width: `${videoProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Image Content */}
-              {imageUrl && !videoUrl && (
-                <div className="relative">
-                  <Image
-                    src={imageUrl}
-                    alt={post.content || "Post image"}
-                    width={600}
-                    height={400}
-                    className="w-full h-auto object-cover rounded-2xl"
-                    unoptimized={true}
-                    onError={(e) => {
-                      console.error('Image load error:', e)
-                      e.currentTarget.src = '/placeholder-image.jpg'
-                    }}
-                  />
-                </div>
-              )}
+                  // Add main image
+                  if (imageUrl) {
+                    items.push({ 
+                      type: 'image', 
+                      url: imageUrl, 
+                      alt: post.content || "Post image" 
+                    })
+                  }
+                  
+                  // Add main video
+                  if (videoUrl) {
+                    items.push({ 
+                      type: 'video', 
+                      url: videoUrl,
+                      thumbnail: imageUrl || undefined,
+                      alt: "Post video"
+                    })
+                  }
+                  
+                  // Add photos
+                  photos.forEach((photoUrl, index) => {
+                    if (photoUrl) {
+                      items.push({ 
+                        type: 'image', 
+                        url: photoUrl, 
+                        alt: `Photo ${index + 1}` 
+                      })
+                    }
+                  })
+                  
+                  return items
+                })()}
+                aspectRatio="16/10"
+                showControls={true}
+                showDots={true}
+                showCounter={true}
+                className="rounded-2xl overflow-hidden bg-gray-50"
+                priority={true}
+              />
             </div>
           )}
         </CardContent>

@@ -104,30 +104,8 @@ export default function MobileAppInit() {
     }
   }, [])
 
-  // Listen for notification fallback events (web)
-  useEffect(() => {
-    const handleNotificationFallback = (event: CustomEvent) => {
-      const notification = event.detail
-      
-      // Show a visual notification in the UI
-      // You could integrate this with a toast library or custom notification component
-      console.log('Showing fallback notification:', notification)
-      
-      // For now, just show an alert (you might want to replace this with a better UI)
-      if (notification.title && notification.body) {
-        // You could dispatch to a toast system here instead
-        setTimeout(() => {
-          alert(`${notification.title}\n${notification.body}`)
-        }, 100)
-      }
-    }
-
-    window.addEventListener('mobile-notification-fallback', handleNotificationFallback as EventListener)
-
-    return () => {
-      window.removeEventListener('mobile-notification-fallback', handleNotificationFallback as EventListener)
-    }
-  }, [])
+  // The notification fallback is now handled by the NotificationProvider
+  // No need for separate handling here
 
   // This component doesn't render anything visible
   return null

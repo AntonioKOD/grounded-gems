@@ -282,6 +282,31 @@
     border: 2px solid white;
     box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
   }
+
+  /* Notification toast positioning for mobile */
+  .notification-toast-container {
+    position: fixed;
+    top: 80px; /* Below mobile top nav */
+    right: 16px;
+    left: 16px;
+    z-index: 9999;
+    pointer-events: none;
+  }
+
+  .notification-toast-container > * {
+    pointer-events: auto;
+    margin-bottom: 8px;
+  }
+}
+
+/* Desktop notification toast positioning */
+@media (min-width: 768px) {
+  .notification-toast-container-desktop {
+    top: 1rem !important;
+    right: 1rem !important;
+    left: auto !important;
+    width: auto !important;
+  }
 }
 
 /* Top navigation enhancements for floating design */
