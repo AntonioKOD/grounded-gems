@@ -11,6 +11,11 @@ export const CreatorApplications: CollectionConfig = {
       // Admins can read all applications
       if (user?.role === 'admin') return true;
       
+      // Specific admin emails can also read all applications
+      if (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email)) {
+        return true;
+      }
+      
       // Users can only read their own applications
       if (user) {
         return {
@@ -22,14 +27,42 @@ export const CreatorApplications: CollectionConfig = {
       return false;
     },
     create: ({ req: { user } }) => Boolean(user), // Any logged-in user can apply
-    update: ({ req: { user } }) => user?.role === 'admin', // Only admins can update status
-    delete: ({ req: { user } }) => user?.role === 'admin', // Only admins can delete
+    update: ({ req: { user } }) => {
+      // Admins can update applications
+      if (user?.role === 'admin') return true;
+      
+      // Specific admin emails can also update applications
+      if (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email)) {
+        return true;
+      }
+      
+      return false;
+    },
+    delete: ({ req: { user } }) => {
+      // Admins can delete applications
+      if (user?.role === 'admin') return true;
+      
+      // Specific admin emails can also delete applications
+      if (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email)) {
+        return true;
+      }
+      
+      return false;
+    },
   },
   admin: {
     useAsTitle: 'applicantName',
-    defaultColumns: ['applicantName', 'applicant', 'status', 'experienceLevel', 'createdAt'],
+    defaultColumns: ['applicantName', 'applicantEmail', 'status', 'experienceLevel', 'specialties', 'createdAt'],
+    defaultSort: 'createdAt',
     group: 'Creator Management',
-    description: 'Review and manage creator applications',
+    description: 'Review and manage creator applications. When you approve an application, the user will automatically become a creator and receive a notification.',
+    pagination: {
+      defaultLimit: 25,
+    },
+    listSearchableFields: ['applicantName', 'applicantEmail', 'localAreas'],
+    preview: (doc) => {
+      return `${doc.applicantName} - ${doc.status}`
+    },
   },
   fields: [
     // Basic applicant info
@@ -162,7 +195,9 @@ export const CreatorApplications: CollectionConfig = {
       type: 'textarea',
       admin: {
         description: 'Internal notes for admin review (not visible to applicant)',
-        condition: (data, siblingData, { user }) => user?.role === 'admin',
+        condition: (data, siblingData, { user }) => {
+          return user?.role === 'admin' || (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email));
+        },
       },
     },
     {
@@ -171,7 +206,10 @@ export const CreatorApplications: CollectionConfig = {
       relationTo: 'users',
       admin: {
         description: 'Admin who reviewed this application',
-        condition: (data, siblingData, { user }) => user?.role === 'admin',
+        condition: (data, siblingData, { user }) => {
+          return user?.role === 'admin' || (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email));
+        },
+        readOnly: true,
       },
     },
     {
@@ -179,15 +217,17 @@ export const CreatorApplications: CollectionConfig = {
       type: 'date',
       admin: {
         description: 'When the application was reviewed',
-        condition: (data) => data.status !== 'pending',
+        condition: (data) => data.status && data.status !== 'pending',
+        readOnly: true,
       },
     },
     {
       name: 'rejectionReason',
       type: 'textarea',
       admin: {
-        description: 'Reason for rejection (will be sent to applicant)',
-        condition: (data) => data.status === 'rejected',
+        description: 'Reason for rejection (will be sent to applicant) - This message will be included in the notification to the user',
+        condition: (data) => data.status === 'rejected' || data.status === 'needs_info',
+        placeholder: 'Please provide specific feedback that will help the applicant improve their application...',
       },
     },
   ],
@@ -208,10 +248,13 @@ export const CreatorApplications: CollectionConfig = {
           }
         }
         
-        // Set review timestamp when status changes
-        if (data.status && data.status !== 'pending' && !data.reviewedAt) {
-          data.reviewedAt = new Date().toISOString();
-          if (req.user?.role === 'admin') {
+        // Set review timestamp and reviewer when status changes from pending
+        if (operation === 'update' && data.status && data.status !== 'pending') {
+          // Only set these if they're not already set (to preserve original review data)
+          if (!data.reviewedAt) {
+            data.reviewedAt = new Date().toISOString();
+          }
+          if (!data.reviewedBy && req.user && (req.user.role === 'admin' || ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(req.user.email))) {
             data.reviewedBy = req.user.id;
           }
         }
@@ -261,7 +304,9 @@ export const CreatorApplications: CollectionConfig = {
                 
               case 'rejected':
                 notificationTitle = 'Creator Application Update';
-                notificationMessage = `Your creator application was not approved at this time. ${doc.rejectionReason || 'Please feel free to apply again in the future.'}`;
+                notificationMessage = doc.rejectionReason 
+                  ? `Your creator application was not approved at this time. Feedback: ${doc.rejectionReason}`
+                  : 'Your creator application was not approved at this time. Please feel free to apply again in the future with additional experience or information.';
                 
                 // Update user application status
                 await req.payload.update({
@@ -277,8 +322,22 @@ export const CreatorApplications: CollectionConfig = {
                 break;
                 
               case 'needs_info':
-                notificationTitle = 'Creator Application - More Information Needed';
-                notificationMessage = 'We need some additional information for your creator application. Please check your application and provide the requested details.';
+                notificationTitle = 'Creator Application - Additional Information Needed';
+                notificationMessage = doc.rejectionReason 
+                  ? `We need some additional information for your creator application. Details: ${doc.rejectionReason}`
+                  : 'We need some additional information for your creator application. Please check your application and provide the requested details.';
+                
+                // Update user application status
+                await req.payload.update({
+                  collection: 'users',
+                  id: doc.applicant,
+                  data: {
+                    creatorProfile: {
+                      ...currentUser.creatorProfile,
+                      applicationStatus: 'needs_info',
+                    },
+                  },
+                });
                 break;
                 
               case 'reviewing':

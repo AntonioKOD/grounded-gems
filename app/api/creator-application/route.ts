@@ -84,7 +84,10 @@ export async function POST(request: NextRequest) {
     const admins = await payload.find({
       collection: 'users',
       where: {
-        role: { equals: 'admin' }
+        or: [
+          { role: { equals: 'admin' } },
+          { email: { in: ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'] } }
+        ]
       }
     })
 
@@ -94,9 +97,9 @@ export async function POST(request: NextRequest) {
         data: {
           recipient: admin.id,
           type: 'creator_application_submitted',
-          title: 'New Creator Application',
-          message: `${authResult.user.name || authResult.user.email} has submitted a creator application for review.`,
-          priority: 'normal',
+          title: '🆕 New Creator Application Submitted',
+          message: `${authResult.user.name || authResult.user.email} has submitted a creator application for review. Experience: ${experienceLevel}, Specialties: ${specialties.length} selected.`,
+          priority: 'high',
           relatedTo: {
             relationTo: 'creatorApplications',
             value: application.id,

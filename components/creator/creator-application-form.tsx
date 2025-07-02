@@ -97,12 +97,15 @@ export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: 
       const result = await response.json()
 
       if (result.success) {
+        // Set the application data to show the status
+        setExistingApplication({
+          ...result.application,
+          status: 'pending'
+        })
+        
         // Call the optional callback if provided
         if (onSubmissionSuccess) {
           onSubmissionSuccess()
-        } else {
-          // Default behavior: redirect to profile page
-          router.push(`/profile/${userId}?tab=creator`)
         }
       } else {
         setError(result.error || 'Failed to submit application')
@@ -147,13 +150,15 @@ export default function CreatorApplicationForm({ userId, onSubmissionSuccess }: 
     const getStatusMessage = (status: string) => {
       switch (status) {
         case 'pending':
-          return 'Your application is pending review. We\'ll get back to you within 3-5 business days.'
+          return 'Thank you for applying! Your application has been submitted and is pending review. We\'ll get back to you within 3-5 business days.'
         case 'reviewing':
-          return 'Your application is currently under review. We\'ll notify you once we have an update.'
+          return 'Great news! Your application is currently under review by our team. We\'ll notify you once we have an update.'
         case 'approved':
-          return 'Congratulations! Your creator application has been approved. You can now start creating guides!'
+          return 'Congratulations! Your creator application has been approved. You can now start creating and selling guides!'
         case 'rejected':
-          return 'Your application was not approved at this time. You can submit a new application if you\'d like to try again.'
+          return 'Your application was not approved at this time. Please review the feedback below and feel free to submit a new application.'
+        case 'needs_info':
+          return 'We need some additional information to complete your application review. Please see the details below.'
         default:
           return 'Application status unknown.'
       }
