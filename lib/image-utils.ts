@@ -252,30 +252,15 @@ export async function testMediaUrl(url: string): Promise<boolean> {
  * Transform API media URLs to direct blob URLs in development
  */
 function transformToBlobUrl(url: string): string {
+  // Don't transform if not in development or if it's not an API media URL
   if (!isDevelopment || !url.includes('/api/media/file/')) {
     return url
   }
   
-  // Only transform if we have blob storage configured
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return url
-  }
-  
-  try {
-    const filename = url.split('/api/media/file/')[1]
-    if (filename) {
-      // Use the blob hostname configured in next.config.ts
-      const blobHostname = 'lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com'
-      const blobUrl = `https://${blobHostname}/${filename}`
-      
-      if (isDevelopment) {
-        console.log('📸 Transformed API URL to blob URL:', { original: url, blob: blobUrl })
-      }
-      
-      return blobUrl
-    }
-  } catch (error) {
-    console.error('Error transforming blob URL:', error)
+  // For now, just return the original URL since we're using local file serving
+  // The /api/media/file/[filename] route handles video serving properly
+  if (isDevelopment) {
+    console.log('📸 Keeping API URL for local serving:', url)
   }
   
   return url

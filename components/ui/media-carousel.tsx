@@ -41,13 +41,23 @@ export default function MediaCarousel({
   onItemChange,
   priority = false
 }: MediaCarouselProps) {
+  // Debug: Log media items (only in development)
+  if (process.env.NODE_ENV === 'development' && items.some(item => item.type === 'video')) {
+    console.log('🎬 MediaCarousel received video items:', items.filter(item => item.type === 'video'))
+  }
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
   const [isDragging, setIsDragging] = useState(false)
   const [direction, setDirection] = useState(0)
+  const [isVisible, setIsVisible] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Define currentItem early to avoid initialization errors
+  const currentItem = items[currentIndex]
+
+
 
   // Auto-play functionality
   useEffect(() => {
@@ -62,12 +72,53 @@ export default function MediaCarousel({
     return () => clearInterval(interval)
   }, [autoPlay, autoPlayInterval, isDragging, items.length])
 
+  // Intersection Observer for video autoplay/pause
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setIsVisible(entry.isIntersecting)
+        })
+      },
+      { 
+        threshold: 0.3, // Play when 30% visible
+        rootMargin: '20px'
+      }
+    )
+
+    observer.observe(container)
+    
+    // Check initial visibility
+    const rect = container.getBoundingClientRect()
+    const isInitiallyVisible = rect.top < window.innerHeight && rect.bottom > 0
+    setIsVisible(isInitiallyVisible)
+    
+    return () => observer.disconnect()
+  }, [])
+
+  // Auto-play/pause videos based on visibility (simplified)
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || currentItem?.type !== 'video') return
+
+    if (isVisible && video.paused) {
+      video.play().catch((error) => {
+        console.log('🎬 Video autoplay prevented:', error.message)
+      })
+    } else if (!isVisible && !video.paused) {
+      video.pause()
+    }
+  }, [isVisible, currentItem?.type])
+
   // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') handlePrevious()
       if (e.key === 'ArrowRight') handleNext()
-      if (e.key === ' ' && currentItem.type === 'video') {
+      if (e.key === ' ' && currentItem?.type === 'video') {
         e.preventDefault()
         togglePlayPause()
       }
@@ -76,8 +127,6 @@ export default function MediaCarousel({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentIndex])
-
-  const currentItem = items[currentIndex]
 
   const handleNext = useCallback(() => {
     if (currentIndex < items.length - 1) {
@@ -147,17 +196,64 @@ export default function MediaCarousel({
             blurDataURL={generateBlurDataUrl()}
             quality={85}
           />
-        ) : currentItem?.type === 'video' ? (
-          <video
-            ref={videoRef}
-            src={currentItem.url}
-            poster={currentItem.thumbnail}
-            className="w-full h-full object-cover"
-            muted={isMuted}
-            playsInline
-            onPlay={() => setIsPlaying(true)}
-            onPause={() => setIsPlaying(false)}
-          />
+                ) : currentItem?.type === 'video' ? (
+          <div className="relative w-full h-full">
+            <video
+              ref={(ref) => {
+                if (ref) {
+                  videoRef.current = ref
+                  // Try to play when video is ready
+                  const handleCanPlay = () => {
+                    ref.play().catch(() => {
+                      // Autoplay blocked - user will need to click
+                    })
+                  }
+                  ref.removeEventListener('canplay', handleCanPlay)
+                  ref.addEventListener('canplay', handleCanPlay)
+                }
+              }}
+              src={currentItem.url}
+              className="w-full h-full object-cover"
+              muted={isMuted}
+              loop
+              playsInline
+              preload="auto"
+              autoPlay
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onError={(e) => {
+                console.error('🎬 Video error:', currentItem.url, e.currentTarget.error)
+              }}
+            />
+            {/* Tap to toggle sound or play video */}
+            <div className="absolute inset-0" onClick={(e) => {
+              e.stopPropagation()
+              const video = videoRef.current
+              if (video) {
+                if (video.paused) {
+                  console.log('🎬 User clicked - trying to play video')
+                  video.play().catch((error) => {
+                    console.error('🎬 Failed to play video on click:', error)
+                  })
+                } else {
+                  toggleMute()
+                }
+              }
+            }}>
+              {/* Sound indicator - subtle */}
+              <div className="absolute top-3 right-3 text-white/70 transition-opacity">
+                {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+              </div>
+              {/* Show play button if video is paused */}
+              {!isPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
+                    <Play className="h-8 w-8 text-white ml-1" />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         ) : null}
       </div>
     )
@@ -205,41 +301,64 @@ export default function MediaCarousel({
                 placeholder="blur"
                 blurDataURL={generateBlurDataUrl()}
               />
-            ) : currentItem?.type === 'video' ? (
+                        ) : currentItem?.type === 'video' ? (
               <div className="relative w-full h-full">
                 <video
-                  ref={videoRef}
+                  ref={(ref) => {
+                    if (ref) {
+                      videoRef.current = ref
+                      // Try to play when video is ready
+                      const handleCanPlay = () => {
+                        ref.play().catch(() => {
+                          // Autoplay blocked - user will need to click
+                        })
+                      }
+                      ref.removeEventListener('canplay', handleCanPlay)
+                      ref.addEventListener('canplay', handleCanPlay)
+                    }
+                  }}
                   src={currentItem.url}
-                  poster={currentItem.thumbnail}
                   className="w-full h-full object-cover"
                   muted={isMuted}
+                  loop
                   playsInline
+                  preload="auto"
+                  autoPlay
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onClick={togglePlayPause}
+                  onError={(e) => {
+                    console.error('🎬 Video error:', currentItem.url, e.currentTarget.error)
+                  }}
                 />
                 
-                {/* Video controls overlay */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="lg"
-                    onClick={togglePlayPause}
-                    className="text-white bg-black/50 hover:bg-black/70 rounded-full"
-                  >
-                    {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
-                  </Button>
+                {/* Tap to toggle sound or play video */}
+                <div className="absolute inset-0" onClick={(e) => {
+                  e.stopPropagation()
+                  const video = videoRef.current
+                  if (video) {
+                    if (video.paused) {
+                      console.log('🎬 User clicked carousel - trying to play video')
+                      video.play().catch((error) => {
+                        console.error('🎬 Failed to play carousel video on click:', error)
+                      })
+                    } else {
+                      toggleMute()
+                    }
+                  }
+                }}>
+                  {/* Sound indicator - subtle */}
+                  <div className="absolute top-3 right-3 text-white/70 transition-opacity">
+                    {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  </div>
+                  {/* Show play button if video is paused */}
+                  {!isPlaying && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center">
+                        <Play className="h-8 w-8 text-white ml-1" />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {/* Mute toggle */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={toggleMute}
-                  className="absolute top-3 left-3 text-white bg-black/50 hover:bg-black/70 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
               </div>
             ) : null}
           </motion.div>

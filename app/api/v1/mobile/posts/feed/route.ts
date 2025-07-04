@@ -228,16 +228,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         }
       }
 
-      // Add video if exists - enhanced handling
+      // Add video if exists - reels-style (no thumbnail)
       if (post.video) {
         const videoUrl = typeof post.video === 'object' ? post.video.url : post.video
         if (videoUrl) {
           const videoItem = {
             type: 'video',
             url: videoUrl,
-            thumbnail: post.videoThumbnail 
-              ? (typeof post.videoThumbnail === 'object' ? post.videoThumbnail.url : post.videoThumbnail)
-              : (typeof post.image === 'object' ? post.image.url : post.image), // Use main image as fallback thumbnail
+            // No thumbnail for reels-style autoplay
             duration: typeof post.video === 'object' ? post.video.duration : undefined,
             alt: 'Post video'
           }

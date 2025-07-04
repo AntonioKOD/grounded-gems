@@ -676,32 +676,33 @@ export default function CreatePostForm({
                       animate={{ opacity: 1, scale: 1 }}
                       className="relative aspect-square rounded-xl overflow-hidden group"
                     >
-                      {isVideo ? (
-                        <>
-                          <video 
-                            src={url} 
-                            className="w-full h-full object-cover" 
-                            muted 
-                            playsInline
-                            preload="metadata"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const video = e.currentTarget
-                              if (video.paused) {
-                                video.play()
-                              } else {
-                                video.pause()
-                              }
-                            }}
-                          />
-                          {/* Play button overlay */}
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
-                              <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
+                            {isVideo ? (
+        <>
+          <video 
+            src={url} 
+            className="w-full h-full object-cover" 
+            autoPlay
+            muted 
+            loop
+            playsInline
+            preload="auto"
+            onClick={(e) => {
+              e.stopPropagation()
+              const video = e.currentTarget
+              if (video.muted) {
+                video.muted = false
+              } else {
+                video.muted = true
+              }
+            }}
+          />
+          {/* Sound indicator - tap to unmute */}
+          <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+            <Video className="h-3 w-3" />
+            <span className="text-[10px]">TAP</span>
+          </div>
+        </>
+      ) : (
                         <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
                       )}
                       

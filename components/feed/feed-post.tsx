@@ -130,7 +130,6 @@ export const FeedPost = memo(function FeedPost({
   const mediaItems = useMemo(() => {
     // If post has a media array from API, use it directly (this is the correct approach for videos)
     if (Array.isArray(post.media) && post.media.length > 0) {
-      console.log(`📱 FeedPost ${post.id} using API media array:`, post.media)
       return post.media.map((item: any) => ({
         type: item.type,
         url: item.url,
@@ -178,7 +177,6 @@ export const FeedPost = memo(function FeedPost({
       }
     })
     
-    console.log(`📱 FeedPost ${post.id} using fallback media construction:`, items)
     return items
   }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.videoThumbnail, post.content, post.id])
 
@@ -202,13 +200,7 @@ export const FeedPost = memo(function FeedPost({
     }).filter(Boolean)
   }, [post.photos])
 
-  console.log(`📱 FeedPost ${post.id} using getImageUrl:`, {
-    originalImage: post.image,
-    imageUrl,
-    videoUrl,
-    photos,
-    hasMedia
-  })
+
 
   // Handle like action
   const handleLike = useCallback(async (e: React.MouseEvent) => {
