@@ -24,6 +24,7 @@ import {
   Loader2
 } from 'lucide-react'
 import { toast } from 'sonner'
+import TestEarningsButton from '@/components/creator/test-earnings-button'
 
 interface CreatorStats {
   totalEarnings: number
@@ -276,6 +277,17 @@ export default function CreatorEarningsDashboard({ userId }: CreatorEarningsDash
 
   return (
     <div className="space-y-6">
+      {/* Development Test Button - Only show in development */}
+      {(typeof window !== 'undefined' && window.location.hostname === 'localhost') && (
+        <TestEarningsButton 
+          userId={userId} 
+          onTestDataCreated={() => {
+            toast.success('Test data created! Refreshing dashboard...')
+            setTimeout(() => fetchEarningsData(), 1000)
+          }}
+        />
+      )}
+
       {/* Period Selector */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Creator Earnings</h2>

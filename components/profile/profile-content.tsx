@@ -33,7 +33,8 @@ import {
   TrendingUp,
   Star,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  DollarSign
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -57,6 +58,7 @@ import Link from "next/link"
 import { logoutUser } from "@/lib/auth"
 import { getImageUrl } from "@/lib/image-utils"
 import CreatorApplicationButton from "@/components/creator/creator-application-button"
+import CreatorEarningsDashboard from "@/components/guides/creator-earnings-dashboard"
 
 // Helper to debounce API calls
 const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
@@ -1045,6 +1047,16 @@ export default function ProfileContent({
                     <Users className="h-4 w-4" />
                     <span>About</span>
                   </TabsTrigger>
+                  {/* Creator Earnings Tab - Only show for creators and current user */}
+                  {isCurrentUser && (profile?.isCreator || profile?.role === 'creator') && (
+                    <TabsTrigger
+                      value="earnings"
+                      className="flex-1 data-[state=active]:bg-white data-[state=active]:text-[#FF6B6B] data-[state=active]:shadow-sm font-medium rounded-lg transition-all duration-300 flex items-center gap-2 px-4 py-3"
+                    >
+                      <DollarSign className="h-4 w-4" />
+                      <span>Earnings</span>
+                    </TabsTrigger>
+                  )}
                 </TabsList>
               </div>
 
@@ -1281,6 +1293,15 @@ export default function ProfileContent({
                   </Card>
                 </div>
               </TabsContent>
+
+              {/* Creator Earnings Tab Content */}
+              {isCurrentUser && (profile?.isCreator || profile?.role === 'creator') && (
+                <TabsContent value="earnings" className="mt-0">
+                  <div className="p-6 pt-4">
+                    <CreatorEarningsDashboard userId={userId} />
+                  </div>
+                </TabsContent>
+              )}
             </Tabs>
           </Card>
         </div>

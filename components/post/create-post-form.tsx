@@ -68,9 +68,11 @@ export default function CreatePostForm({
   // Media state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
+  const [videoDurations, setVideoDurations] = useState<Record<number, string>>({})
   const [isDragging, setIsDragging] = useState(false)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false)
 
   // Validation state
   const [errors, setErrors] = useState<string[]>([])
@@ -158,28 +160,71 @@ export default function CreatePostForm({
   }
 
   // Enhanced file handling with validation
-  const processFiles = (files: File[]) => {
+  const processFiles = async (files: File[]) => {
     const MAX_FILES = 5
-    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+    const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
+    const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
     
     if (selectedFiles.length + files.length > MAX_FILES) {
       toast.error(`Maximum ${MAX_FILES} files allowed`)
       return
     }
     
+    setIsProcessingFiles(true)
+    
     const validFiles: File[] = []
     const newPreviewUrls: string[] = []
     
     for (const file of files) {
-      // Validate size
-      if (file.size > MAX_SIZE) {
-        toast.error(`${file.name} is too large. Max size: 10MB`)
-        continue
-      }
-      
-      // Validate type
-      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-        toast.error(`${file.name} is not a supported file type`)
+      // Validate file type and size based on type
+      if (file.type.startsWith('image/')) {
+        // Validate image size
+        if (file.size > MAX_IMAGE_SIZE) {
+          toast.error(`${file.name} is too large. Max size for images: 10MB`)
+          continue
+        }
+        
+        // Validate image format
+        const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+        if (!allowedImageTypes.includes(file.type.toLowerCase())) {
+          toast.error(`${file.name} is not a supported image format. Use JPEG, PNG, WebP, or GIF.`)
+          continue
+        }
+      } else if (file.type.startsWith('video/')) {
+        // Validate video size
+        if (file.size > MAX_VIDEO_SIZE) {
+          toast.error(`${file.name} is too large. Max size for videos: 50MB`)
+          continue
+        }
+        
+        // Validate video format - match backend validation
+        const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/quicktime', 'video/avi']
+        if (!allowedVideoTypes.includes(file.type.toLowerCase())) {
+          toast.error(`${file.name} is not a supported video format. Please use MP4, WebM, OGG, MOV, or AVI.`)
+          continue
+        }
+        
+        // Check video duration (optional - prevent extremely long videos)
+        const video = document.createElement('video')
+        video.src = URL.createObjectURL(file)
+        try {
+          await new Promise((resolve, reject) => {
+            video.onloadedmetadata = () => {
+              if (video.duration > 600) { // 10 minutes max
+                reject(new Error('Video too long'))
+              } else {
+                resolve(video.duration)
+              }
+            }
+            video.onerror = () => reject(new Error('Invalid video'))
+          })
+        } catch (error) {
+          toast.error(`${file.name} is invalid or too long (max 10 minutes).`)
+          URL.revokeObjectURL(video.src)
+          continue
+        }
+      } else {
+        toast.error(`${file.name} is not a supported file type. Please choose images or videos only.`)
         continue
       }
       
@@ -190,15 +235,36 @@ export default function CreatePostForm({
     if (validFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...validFiles])
       setPreviewUrls(prev => [...prev, ...newPreviewUrls])
+      
+      // Load video durations
+      validFiles.forEach((file, index) => {
+        if (file.type.startsWith('video/')) {
+          const video = document.createElement('video')
+          video.src = newPreviewUrls[index]
+          video.onloadedmetadata = () => {
+            const duration = video.duration
+            const minutes = Math.floor(duration / 60)
+            const seconds = Math.floor(duration % 60)
+            const durationString = `${minutes}:${seconds.toString().padStart(2, '0')}`
+            setVideoDurations(prev => ({
+              ...prev,
+              [selectedFiles.length + index]: durationString
+            }))
+          }
+        }
+      })
+      
       toast.success(`Added ${validFiles.length} file(s)`)
     }
+    
+    setIsProcessingFiles(false)
   }
 
   // File input handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     if (files.length > 0) {
-      processFiles(files)
+      await processFiles(files)
     }
     e.target.value = ''
   }
@@ -216,13 +282,13 @@ export default function CreatePostForm({
     }
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
     
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
-      processFiles(files)
+      await processFiles(files)
     }
   }
 
@@ -232,6 +298,23 @@ export default function CreatePostForm({
     setPreviewUrls(prev => {
       URL.revokeObjectURL(prev[index])
       return prev.filter((_, i) => i !== index)
+    })
+    
+    // Clean up video duration
+    setVideoDurations(prev => {
+      const newDurations = { ...prev }
+      delete newDurations[index]
+      // Re-index remaining durations
+      const reindexed: Record<number, string> = {}
+      Object.entries(newDurations).forEach(([key, value]) => {
+        const keyIndex = parseInt(key)
+        if (keyIndex > index) {
+          reindexed[keyIndex - 1] = value
+        } else if (keyIndex < index) {
+          reindexed[keyIndex] = value
+        }
+      })
+      return reindexed
     })
     
     if (navigator.vibrate) {
@@ -246,6 +329,7 @@ export default function CreatePostForm({
     setSelectedFiles([])
     previewUrls.forEach(url => URL.revokeObjectURL(url))
     setPreviewUrls([])
+    setVideoDurations({})
     setShowLocationInput(false)
     setErrors([])
     
@@ -287,6 +371,15 @@ export default function CreatePostForm({
         } else if (file.type.startsWith('video/')) {
           formData.append("videos", file)
         }
+      })
+
+      // Debug info
+      console.log('📝 CreatePostForm: Submitting post with files:', {
+        totalFiles: selectedFiles.length,
+        imageFiles: selectedFiles.filter(f => f.type.startsWith('image/')).length,
+        videoFiles: selectedFiles.filter(f => f.type.startsWith('video/')).length,
+        fileTypes: selectedFiles.map(f => f.type),
+        fileSizes: selectedFiles.map(f => `${f.name}: ${(f.size / 1024 / 1024).toFixed(2)}MB`)
       })
 
       const result = await createPost(formData)
@@ -491,7 +584,30 @@ export default function CreatePostForm({
                       className="relative aspect-square rounded-xl overflow-hidden group"
                     >
                       {isVideo ? (
-                        <video src={url} className="w-full h-full object-cover" muted />
+                        <>
+                          <video 
+                            src={url} 
+                            className="w-full h-full object-cover" 
+                            muted 
+                            playsInline
+                            preload="metadata"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const video = e.currentTarget
+                              if (video.paused) {
+                                video.play()
+                              } else {
+                                video.pause()
+                              }
+                            }}
+                          />
+                          {/* Play button overlay */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center">
+                              <div className="w-0 h-0 border-l-[8px] border-l-white border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent ml-1"></div>
+                            </div>
+                          </div>
+                        </>
                       ) : (
                         <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
                       )}
@@ -499,7 +615,10 @@ export default function CreatePostForm({
                       {/* Remove button - larger for mobile */}
                       <button
                         type="button"
-                        onClick={() => removeFile(index)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeFile(index)
+                        }}
                         className="absolute top-2 right-2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                         style={{ minHeight: '32px', minWidth: '32px' }}
                       >
@@ -508,8 +627,22 @@ export default function CreatePostForm({
                       
                       {/* File type indicator */}
                       <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                        {isVideo ? 'VID' : 'IMG'}
+                        {isVideo ? (
+                          <span className="flex items-center gap-1">
+                            <Video className="h-3 w-3" />
+                            VID
+                          </span>
+                        ) : (
+                          'IMG'
+                        )}
                       </div>
+                      
+                      {/* Video duration */}
+                      {isVideo && videoDurations[index] && (
+                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                          {videoDurations[index]}
+                        </div>
+                      )}
                     </motion.div>
                   )
                 })}
@@ -569,7 +702,7 @@ export default function CreatePostForm({
                     {isDragging ? 'Drop your files here!' : 'Drag & drop photos/videos here'}
                   </p>
                   <p className="text-xs text-gray-400">
-                    Or use the buttons below • Max 5 files, 10MB each
+                    Or use the buttons below • Max 5 files • Images: 10MB, Videos: 50MB
                   </p>
                 </div>
               </div>
@@ -603,7 +736,8 @@ export default function CreatePostForm({
                   variant="ghost"
                   size={isMobileDevice ? "sm" : "sm"}
                   onClick={() => imageInputRef.current?.click()}
-                  className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-green-600 hover:text-green-700 hover:bg-green-50 transition-all flex-shrink-0`}
+                  disabled={isProcessingFiles}
+                  className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-green-600 hover:text-green-700 hover:bg-green-50 transition-all flex-shrink-0 disabled:opacity-50`}
                   style={{ minHeight: '40px', minWidth: '60px' }}
                 >
                   <ImageIcon className="h-4 w-4" />
@@ -616,11 +750,16 @@ export default function CreatePostForm({
                   variant="ghost"
                   size={isMobileDevice ? "sm" : "sm"}
                   onClick={() => videoInputRef.current?.click()}
-                  className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-purple-600 hover:text-purple-700 hover:bg-purple-50 transition-all flex-shrink-0`}
+                  disabled={isProcessingFiles}
+                  className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-purple-600 hover:text-purple-700 hover:bg-purple-50 transition-all flex-shrink-0 disabled:opacity-50`}
                   style={{ minHeight: '40px', minWidth: '60px' }}
                 >
-                  <Video className="h-4 w-4" />
-                  {!isMobileDevice && <span className="ml-1">Video</span>}
+                  {isProcessingFiles ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Video className="h-4 w-4" />
+                  )}
+                  {!isMobileDevice && <span className="ml-1">Videos</span>}
                 </Button>
 
                 {/* Location Button */}
@@ -685,7 +824,7 @@ export default function CreatePostForm({
             <input
               ref={videoInputRef}
               type="file"
-              accept="video/*"
+              accept="video/mp4,video/webm,video/ogg,video/mov,video/quicktime,video/avi"
               multiple
               onChange={handleFileChange}
               className="hidden"

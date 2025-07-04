@@ -116,18 +116,26 @@ export async function POST(
       }
     })
 
-    // Update creator's balance
-    const newAvailableBalance = availableBalance - amount
-    const newPendingBalance = (creator.creatorProfile?.earnings?.pendingBalance || 0) + amount
+    // Update creator's balance in their profile
+    const currentEarnings = creator.creatorProfile?.earnings || {}
+    const newAvailableBalance = Math.max(0, availableBalance - amount)
+    const newPendingBalance = (currentEarnings.pendingBalance || 0) + amount
+    const newTotalPayouts = (currentEarnings.totalPayouts || 0) + amount
 
     await payload.update({
       collection: 'users',
       id: creatorId,
       data: {
-        'creatorProfile.earnings.availableBalance': newAvailableBalance,
-        'creatorProfile.earnings.pendingBalance': newPendingBalance,
-        'creatorProfile.earnings.lastPayoutDate': new Date().toISOString(),
-        'creatorProfile.earnings.totalPayouts': (creator.creatorProfile?.earnings?.totalPayouts || 0) + amount
+        creatorProfile: {
+          ...creator.creatorProfile,
+          earnings: {
+            ...currentEarnings,
+            availableBalance: newAvailableBalance,
+            pendingBalance: newPendingBalance,
+            lastPayoutDate: new Date().toISOString(),
+            totalPayouts: newTotalPayouts
+          }
+        }
       }
     })
 

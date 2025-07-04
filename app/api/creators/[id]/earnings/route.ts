@@ -61,6 +61,25 @@ export async function GET(
     const guideIds = creatorGuides.docs.map(guide => guide.id)
 
     if (guideIds.length === 0) {
+      // Get Stripe Connect status for creators with no guides
+      let stripeConnect = {
+        connected: false,
+        isReady: false,
+        accountId: null,
+        chargesEnabled: false,
+        payoutsEnabled: false
+      }
+
+      if (creator.creatorProfile?.stripeAccountId) {
+        stripeConnect = {
+          connected: true,
+          isReady: creator.creatorProfile?.stripeAccountStatus === 'active',
+          accountId: creator.creatorProfile?.stripeAccountId,
+          chargesEnabled: creator.creatorProfile?.stripeAccountStatus === 'active',
+          payoutsEnabled: creator.creatorProfile?.stripeAccountStatus === 'active'
+        }
+      }
+
       return NextResponse.json({
         success: true,
         data: {
@@ -74,7 +93,9 @@ export async function GET(
             totalViews: 0,
             monthlyViews: 0,
             averageRating: 0,
-            conversionRate: 0
+            conversionRate: 0,
+            availableBalance: 0,
+            pendingBalance: 0
           },
           recentSales: [],
           monthlyData: [],
@@ -82,9 +103,10 @@ export async function GET(
             availableBalance: 0,
             pendingBalance: 0,
             nextPayoutDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            payoutMethod: creator.creatorProfile.earnings?.withdrawalSettings?.payoutMethod || 'Not set',
-            minimumPayout: 50
-          }
+            payoutMethod: creator.creatorProfile?.stripeAccountId ? 'stripe' : 'Not set',
+            minimumPayout: 25
+          },
+          stripeConnect
         }
       })
     }
@@ -195,10 +217,46 @@ export async function GET(
       })
     }
 
-    // Calculate payout information
-    const availableBalance = totalEarnings // Simplified - in reality would subtract already paid amounts
-    const pendingBalance = monthlyEarnings // Recent earnings pending
+    // Get creator's payout history to calculate correct balances
+    const payouts = await payload.find({
+      collection: 'payouts',
+      where: {
+        creator: { equals: creatorId }
+      },
+      limit: 1000
+    })
+
+    const totalPayouts = payouts.docs.reduce((sum, payout) => {
+      return payout.status === 'completed' ? sum + payout.amount : sum
+    }, 0)
+
+    const pendingPayouts = payouts.docs.reduce((sum, payout) => {
+      return payout.status === 'pending' || payout.status === 'processing' ? sum + payout.amount : sum
+    }, 0)
+
+    // Calculate correct available balance
+    const availableBalance = Math.max(0, totalEarnings - totalPayouts - pendingPayouts)
+    const pendingBalance = pendingPayouts
     const nextPayoutDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Next week
+
+    // Get Stripe Connect status
+    let stripeConnect = {
+      connected: false,
+      isReady: false,
+      accountId: null,
+      chargesEnabled: false,
+      payoutsEnabled: false
+    }
+
+    if (creator.creatorProfile?.stripeAccountId) {
+      stripeConnect = {
+        connected: true,
+        isReady: creator.creatorProfile?.stripeAccountStatus === 'active',
+        accountId: creator.creatorProfile?.stripeAccountId,
+        chargesEnabled: creator.creatorProfile?.stripeAccountStatus === 'active',
+        payoutsEnabled: creator.creatorProfile?.stripeAccountStatus === 'active'
+      }
+    }
 
     const response = {
       success: true,
@@ -211,9 +269,11 @@ export async function GET(
           totalGuides: creatorGuides.totalDocs,
           publishedGuides: creatorGuides.docs.length,
           totalViews,
-          monthlyViews,
+          monthlyViews: Math.round(totalViews * 0.3), // Estimate 30% of total views are monthly
           averageRating,
           conversionRate,
+          availableBalance,
+          pendingBalance,
           topSellingGuide
         },
         recentSales,
@@ -222,9 +282,10 @@ export async function GET(
           availableBalance,
           pendingBalance,
           nextPayoutDate: nextPayoutDate.toISOString(),
-          payoutMethod: creator.creatorProfile.earnings?.withdrawalSettings?.payoutMethod || 'Not set',
-          minimumPayout: 50
-        }
+          payoutMethod: creator.creatorProfile?.stripeAccountId ? 'stripe' : 'Not set',
+          minimumPayout: 25
+        },
+        stripeConnect
       }
     }
 

@@ -208,16 +208,29 @@ export async function POST(
         })
         
         if (creator?.creatorProfile) {
-          const newTotalEarnings = (creator.creatorProfile.earnings?.totalEarnings || 0) + (creatorEarnings / 100)
-          const newTotalSales = (creator.creatorProfile.stats?.totalSales || 0) + 1
+          const currentEarnings = creator.creatorProfile.earnings || {}
+          const currentStats = creator.creatorProfile.stats || {}
+          const newTotalEarnings = (currentEarnings.totalEarnings || 0) + (creatorEarnings / 100)
+          const newAvailableBalance = (currentEarnings.availableBalance || 0) + (creatorEarnings / 100)
+          const newTotalSales = (currentStats.totalSales || 0) + 1
           
           await payload.update({
             collection: 'users',
             id: creatorId,
             data: {
-              'creatorProfile.earnings.totalEarnings': newTotalEarnings,
-              'creatorProfile.stats.totalSales': newTotalSales,
-              'creatorProfile.stats.totalEarnings': newTotalEarnings
+              creatorProfile: {
+                ...creator.creatorProfile,
+                earnings: {
+                  ...currentEarnings,
+                  totalEarnings: newTotalEarnings,
+                  availableBalance: newAvailableBalance
+                },
+                stats: {
+                  ...currentStats,
+                  totalSales: newTotalSales,
+                  totalEarnings: newTotalEarnings
+                }
+              }
             }
           })
         }
