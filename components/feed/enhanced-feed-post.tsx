@@ -123,7 +123,63 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const [showComments, setShowComments] = useState(false)
   const [showFullContent, setShowFullContent] = useState(false)
 
-  // Process and normalize media data using proper image utilities
+  // Process media from API response (preferred) or fallback to individual fields
+  const mediaItems = useMemo(() => {
+    // If post has a media array from API, use it directly (this is the correct approach for videos)
+    if (Array.isArray(post.media) && post.media.length > 0) {
+      console.log(`📱 EnhancedFeedPost ${post.id} using API media array:`, post.media)
+      return post.media.map((item: any) => ({
+        type: item.type,
+        url: item.url,
+        thumbnail: item.thumbnail,
+        alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
+      }))
+    }
+
+    // Fallback: reconstruct from individual fields (legacy support)
+    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
+    
+    const imageUrl = getImageUrl(post.image || post.featuredImage)
+    const videoUrl = getVideoUrl(post.video)
+    const photos = Array.isArray(post.photos) 
+      ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
+      : []
+
+    // Prioritize video if available
+    if (videoUrl) {
+      items.push({ 
+        type: 'video', 
+        url: videoUrl,
+        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : post.videoThumbnail,
+        alt: "Post video"
+      })
+    }
+    
+    // Add main image only if no video
+    if (imageUrl !== "/placeholder.svg" && !videoUrl) {
+      items.push({ 
+        type: 'image', 
+        url: imageUrl,
+        alt: post.title || 'Post image'
+      })
+    }
+    
+    // Add photos, avoiding duplicates
+    photos.forEach((photoUrl, index) => {
+      if (photoUrl && photoUrl !== imageUrl) {
+        items.push({ 
+          type: 'image', 
+          url: photoUrl,
+          alt: `Photo ${index + 1}`
+        })
+      }
+    })
+    
+    console.log(`📱 EnhancedFeedPost ${post.id} using fallback media construction:`, items)
+    return items
+  }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.videoThumbnail, post.title, post.id])
+
+  // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {
     const url = getImageUrl(post.image || post.featuredImage)
     return url !== "/placeholder.svg" ? url : null
@@ -140,35 +196,6 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
   }, [post.photos])
-
-  // Create media items array for carousel - prioritize videos
-  const mediaItems = useMemo(() => {
-    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
-    
-    // Prioritize video if available (videos should appear first)
-    if (videoUrl) {
-      items.push({ 
-        type: 'video', 
-        url: videoUrl,
-        thumbnail: imageUrl || post.videoThumbnail || undefined
-      })
-    }
-    
-    // Add main image only if no video, or as additional media
-    if (imageUrl && !videoUrl) {
-      items.push({ type: 'image', url: imageUrl })
-    }
-    
-    // Add photos, avoiding duplicates
-    photos.forEach(photoUrl => {
-      if (photoUrl && photoUrl !== imageUrl) {
-        items.push({ type: 'image', url: photoUrl })
-      }
-    })
-    
-    console.log(`📱 EnhancedFeedPost ${post.id} media items:`, items)
-    return items
-  }, [imageUrl, videoUrl, photos, post.id, post.videoThumbnail])
 
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]
@@ -387,10 +414,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
           {hasMedia && (
             <div className="relative mb-4">
               <MediaCarousel
-                items={mediaItems.map(item => ({
-                  ...item,
-                  alt: item.type === 'video' ? 'Post video' : post.title || 'Post image'
-                }))}
+                items={mediaItems}
                 aspectRatio="16/10"
                 showControls={true}
                 showDots={true}

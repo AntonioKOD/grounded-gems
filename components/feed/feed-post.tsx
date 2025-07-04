@@ -126,7 +126,65 @@ export const FeedPost = memo(function FeedPost({
   const [imageLoadStates, setImageLoadStates] = useState<Record<number, boolean>>({})
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
 
-  // Process and normalize media data using proper image utilities
+  // Process media from API response (preferred) or fallback to individual fields
+  const mediaItems = useMemo(() => {
+    // If post has a media array from API, use it directly (this is the correct approach for videos)
+    if (Array.isArray(post.media) && post.media.length > 0) {
+      console.log(`📱 FeedPost ${post.id} using API media array:`, post.media)
+      return post.media.map((item: any) => ({
+        type: item.type,
+        url: item.url,
+        thumbnail: item.thumbnail,
+        alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
+      }))
+    }
+
+    // Fallback: reconstruct from individual fields (legacy support)
+    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
+    
+    const imageUrl = getImageUrl(post.image || post.featuredImage)
+    const videoUrl = getVideoUrl(post.video)
+    const photos = Array.isArray(post.photos) 
+      ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
+      : []
+
+    // Prioritize video if available
+    if (videoUrl) {
+      items.push({ 
+        type: 'video', 
+        url: videoUrl,
+        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : post.videoThumbnail,
+        alt: "Post video"
+      })
+    }
+    
+    // Add main image only if no video
+    if (imageUrl !== "/placeholder.svg" && !videoUrl) {
+      items.push({ 
+        type: 'image', 
+        url: imageUrl, 
+        alt: post.content || "Post image" 
+      })
+    }
+    
+    // Add photos, avoiding duplicates
+    photos.forEach((photoUrl, index) => {
+      if (photoUrl && photoUrl !== imageUrl) {
+        items.push({ 
+          type: 'image', 
+          url: photoUrl, 
+          alt: `Photo ${index + 1}` 
+        })
+      }
+    })
+    
+    console.log(`📱 FeedPost ${post.id} using fallback media construction:`, items)
+    return items
+  }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.videoThumbnail, post.content, post.id])
+
+  const hasMedia = mediaItems.length > 0
+
+  // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {
     const url = getImageUrl(post.image || post.featuredImage)
     return url !== "/placeholder.svg" ? url : null
@@ -143,8 +201,6 @@ export const FeedPost = memo(function FeedPost({
       return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
   }, [post.photos])
-
-  const hasMedia = !!(imageUrl || videoUrl || photos.length > 0)
 
   console.log(`📱 FeedPost ${post.id} using getImageUrl:`, {
     originalImage: post.image,
@@ -471,42 +527,7 @@ export const FeedPost = memo(function FeedPost({
           {hasMedia && (
             <div className="mb-4">
               <MediaCarousel
-                items={(() => {
-                  const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
-                  
-                  // Prioritize video if available (videos should appear first)
-                  if (videoUrl) {
-                    items.push({ 
-                      type: 'video', 
-                      url: videoUrl,
-                      thumbnail: imageUrl || post.videoThumbnail || undefined,
-                      alt: "Post video"
-                    })
-                  }
-                  
-                  // Add main image (only if no video, or as additional media)
-                  if (imageUrl && !videoUrl) {
-                    items.push({ 
-                      type: 'image', 
-                      url: imageUrl, 
-                      alt: post.content || "Post image" 
-                    })
-                  }
-                  
-                  // Add photos
-                  photos.forEach((photoUrl, index) => {
-                    if (photoUrl && photoUrl !== imageUrl) { // Avoid duplicates
-                      items.push({ 
-                        type: 'image', 
-                        url: photoUrl, 
-                        alt: `Photo ${index + 1}` 
-                      })
-                    }
-                  })
-                  
-                  console.log(`📱 FeedPost ${post.id} media items:`, items)
-                  return items
-                })()}
+                items={mediaItems}
                 aspectRatio="16/10"
                 showControls={true}
                 showDots={true}

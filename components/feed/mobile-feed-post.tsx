@@ -78,38 +78,59 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const [videoError, setVideoError] = useState(false)
   const [hasValidMedia, setHasValidMedia] = useState(false)
 
-  // Use normalized URLs directly from post
-  const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
-  
+  // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
-    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
+    // If post has a media array from API, use it directly (this is the correct approach for videos)
+    if (Array.isArray(post.media) && post.media.length > 0) {
+      console.log(`📱 MobileFeedPost ${post.id} using API media array:`, post.media)
+      return post.media.map((item: any) => ({
+        type: item.type,
+        url: item.url,
+        thumbnail: item.thumbnail,
+        alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
+      }))
+    }
+
+    // Fallback: reconstruct from individual fields (legacy support)
+    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
     
     // Prioritize video if available
     if (post.video && typeof post.video === 'string') {
       items.push({ 
         type: 'video', 
         url: post.video,
-        thumbnail: (post.image && typeof post.image === 'string') ? post.image : post.videoThumbnail
+        thumbnail: (post.image && typeof post.image === 'string') ? post.image : post.videoThumbnail,
+        alt: "Post video"
       })
     }
     
     // Add main image only if no video
     if (post.image && typeof post.image === 'string' && !post.video) {
-      items.push({ type: 'image', url: post.image })
+      items.push({ 
+        type: 'image', 
+        url: post.image,
+        alt: "Post image"
+      })
     }
     
     // Add photos, avoiding duplicates
     if (Array.isArray(post.photos)) {
-      post.photos.forEach(photo => {
+      post.photos.forEach((photo, index) => {
         if (typeof photo === 'string' && photo !== post.image) {
-          items.push({ type: 'image', url: photo })
+          items.push({ 
+            type: 'image', 
+            url: photo,
+            alt: `Photo ${index + 1}`
+          })
         }
       })
     }
     
-    console.log(`📱 MobileFeedPost ${post.id} media items:`, items)
+    console.log(`📱 MobileFeedPost ${post.id} using fallback media construction:`, items)
     return items
-  }, [post.image, post.video, post.photos, post.videoThumbnail, post.id])
+  }, [post.media, post.image, post.video, post.photos, post.videoThumbnail, post.id])
+
+  const hasMedia = mediaItems.length > 0
 
   // Process media URLs with better error handling using proper image utils
   const processedImageUrl = useMemo(() => {

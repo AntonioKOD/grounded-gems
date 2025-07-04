@@ -99,11 +99,55 @@ export default function MobileFeedContainer({
 
   // Normalize post data to ensure consistent media URLs and interaction states using proper image utilities
   const normalizePost = useCallback((post: any): Post => {
-    // Use proper image utilities that handle development proxy
+    // Preserve the media array from the API if it exists (preferred for video display)
+    let normalizedMedia = post.media
+
+    // If no media array, create one from individual fields for backward compatibility
+    if (!Array.isArray(post.media) || post.media.length === 0) {
+      const mediaItems = []
+      
+      const normalizedVideo = getVideoUrl(post.video)
+      const normalizedImage = getImageUrl(post.image || post.featuredImage)
+      
+      // Prioritize video
+      if (normalizedVideo) {
+        mediaItems.push({
+          type: 'video',
+          url: normalizedVideo,
+          thumbnail: normalizedImage !== "/placeholder.svg" ? normalizedImage : post.videoThumbnail,
+          alt: 'Post video'
+        })
+      }
+      
+      // Add main image only if no video
+      if (normalizedImage !== "/placeholder.svg" && !normalizedVideo) {
+        mediaItems.push({
+          type: 'image',
+          url: normalizedImage,
+          alt: 'Post image'
+        })
+      }
+      
+      // Add photos
+      if (Array.isArray(post.photos)) {
+        post.photos.forEach((photo, index) => {
+          const photoUrl = getImageUrl(photo)
+          if (photoUrl !== "/placeholder.svg" && photoUrl !== normalizedImage) {
+            mediaItems.push({
+              type: 'image',
+              url: photoUrl,
+              alt: `Photo ${index + 1}`
+            })
+          }
+        })
+      }
+      
+      normalizedMedia = mediaItems
+    }
+
+    // Legacy field normalization for backward compatibility
     const normalizedImage = getImageUrl(post.image || post.featuredImage)
     const normalizedVideo = getVideoUrl(post.video)
-
-    // Handle photos array
     const normalizedPhotos = Array.isArray(post.photos) 
       ? post.photos.map(photo => {
           const photoUrl = getImageUrl(photo)
@@ -111,19 +155,20 @@ export default function MobileFeedContainer({
         }).filter(Boolean)
       : []
 
-    // Handle video thumbnail
     const normalizedVideoThumbnail = (() => {
       if (post.videoThumbnail) {
         const thumbnailUrl = getImageUrl(post.videoThumbnail)
         return thumbnailUrl !== "/placeholder.svg" ? thumbnailUrl : null
       }
-      // Fallback to image if video exists
       if (normalizedVideo && normalizedImage !== "/placeholder.svg") return normalizedImage
       return null
     })()
 
     return {
       ...post,
+      // Prioritize media array from API
+      media: normalizedMedia,
+      // Keep legacy fields for backward compatibility
       image: normalizedImage !== "/placeholder.svg" ? normalizedImage : null,
       video: normalizedVideo,
       photos: normalizedPhotos,

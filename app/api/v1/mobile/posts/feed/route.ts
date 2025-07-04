@@ -232,7 +232,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       if (post.video) {
         const videoUrl = typeof post.video === 'object' ? post.video.url : post.video
         if (videoUrl) {
-          media.push({
+          const videoItem = {
             type: 'video',
             url: videoUrl,
             thumbnail: post.videoThumbnail 
@@ -240,7 +240,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
               : (typeof post.image === 'object' ? post.image.url : post.image), // Use main image as fallback thumbnail
             duration: typeof post.video === 'object' ? post.video.duration : undefined,
             alt: 'Post video'
-          })
+          }
+          media.push(videoItem)
+          console.log(`📹 Added video to post ${post.id}:`, videoItem)
         }
       }
 
@@ -257,7 +259,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         media = media.concat(validPhotos)
       }
 
-      return {
+      const formattedPost = {
         id: post.id,
         caption: post.content || '',
         author: {
@@ -296,6 +298,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         // Add engagement score for sorting
         _engagementScore: likeCount + commentCount * 2 + saveCount * 3
       }
+
+      console.log(`📝 Final formatted post ${post.id}:`, {
+        id: formattedPost.id,
+        mediaCount: formattedPost.media.length,
+        mediaTypes: formattedPost.media.map(m => m.type),
+        hasVideo: formattedPost.media.some(m => m.type === 'video')
+      })
+
+      return formattedPost
     })
 
     console.log('✅ All posts formatted successfully')

@@ -82,18 +82,62 @@ export default function ModernDiscoveryFeed({
 
   // Helper function to normalize post data using proper image utilities
   const normalizePost = useCallback((post: any): Post => {
-    // Handle image field - can be string, object, or boolean
+    // Preserve the media array from the API if it exists (preferred for video display)
+    let normalizedMedia = post.media
+
+    // If no media array, create one from individual fields for backward compatibility
+    if (!Array.isArray(post.media) || post.media.length === 0) {
+      const mediaItems = []
+      
+      const normalizedVideo = getVideoUrl(post.video)
+      const normalizedImage = getImageUrl(post.image || post.featuredImage)
+      
+      // Prioritize video
+      if (normalizedVideo) {
+        mediaItems.push({
+          type: 'video',
+          url: normalizedVideo,
+          thumbnail: normalizedImage !== "/placeholder.svg" ? normalizedImage : post.videoThumbnail,
+          alt: 'Post video'
+        })
+      }
+      
+      // Add main image only if no video
+      if (normalizedImage !== "/placeholder.svg" && !normalizedVideo) {
+        mediaItems.push({
+          type: 'image',
+          url: normalizedImage,
+          alt: 'Post image'
+        })
+      }
+      
+      // Add photos
+      if (Array.isArray(post.photos)) {
+        post.photos.forEach((photo, index) => {
+          const photoUrl = getImageUrl(photo)
+          if (photoUrl !== "/placeholder.svg" && photoUrl !== normalizedImage) {
+            mediaItems.push({
+              type: 'image',
+              url: photoUrl,
+              alt: `Photo ${index + 1}`
+            })
+          }
+        })
+      }
+      
+      normalizedMedia = mediaItems
+    }
+
+    // Legacy field normalization for backward compatibility
     const normalizedImage = (() => {
       const imageUrl = getImageUrl(post.image || post.featuredImage)
       return imageUrl !== "/placeholder.svg" ? imageUrl : null
     })()
 
-    // Handle video field - can be string, object, or boolean  
     const normalizedVideo = (() => {
       return getVideoUrl(post.video)
     })()
 
-    // Handle photos array
     const normalizedPhotos = (() => {
       if (!Array.isArray(post.photos)) return []
       return post.photos
@@ -104,19 +148,20 @@ export default function ModernDiscoveryFeed({
         .filter(Boolean)
     })()
 
-    // Handle video thumbnail
     const normalizedVideoThumbnail = (() => {
       if (post.videoThumbnail) {
         const thumbnailUrl = getImageUrl(post.videoThumbnail)
         return thumbnailUrl !== "/placeholder.svg" ? thumbnailUrl : null
       }
-      // Fallback to image if video exists
       if (normalizedVideo && normalizedImage) return normalizedImage
       return null
     })()
 
     return {
       ...post,
+      // Prioritize media array from API
+      media: normalizedMedia,
+      // Keep legacy fields for backward compatibility
       image: normalizedImage,
       video: normalizedVideo,
       photos: normalizedPhotos,
