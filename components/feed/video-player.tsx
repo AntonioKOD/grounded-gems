@@ -254,6 +254,15 @@ export default function VideoPlayer({
     return () => clearTimeout(timeout)
   }, [isLoading, hasError, src, onError])
 
+  // Reset states when src changes
+  useEffect(() => {
+    setHasError(false)
+    setIsLoading(true)
+    setIsPlaying(false)
+    setViewCompleted(false)
+    setHasStartedPlaying(false)
+  }, [src])
+
   return (
     <div
       ref={containerRef}

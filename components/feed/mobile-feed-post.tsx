@@ -82,29 +82,34 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const hasMedia = !!(post.image || post.video || (post.photos && post.photos.length > 0))
   
   const mediaItems = useMemo(() => {
-    const items: Array<{ type: 'image' | 'video'; url: string }> = []
+    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
     
-    // Add main image
-    if (post.image && typeof post.image === 'string') {
+    // Prioritize video if available
+    if (post.video && typeof post.video === 'string') {
+      items.push({ 
+        type: 'video', 
+        url: post.video,
+        thumbnail: (post.image && typeof post.image === 'string') ? post.image : post.videoThumbnail
+      })
+    }
+    
+    // Add main image only if no video
+    if (post.image && typeof post.image === 'string' && !post.video) {
       items.push({ type: 'image', url: post.image })
     }
     
-    // Add main video
-    if (post.video && typeof post.video === 'string') {
-      items.push({ type: 'video', url: post.video })
-    }
-    
-    // Add photos
+    // Add photos, avoiding duplicates
     if (Array.isArray(post.photos)) {
       post.photos.forEach(photo => {
-        if (typeof photo === 'string') {
+        if (typeof photo === 'string' && photo !== post.image) {
           items.push({ type: 'image', url: photo })
         }
       })
     }
     
+    console.log(`📱 MobileFeedPost ${post.id} media items:`, items)
     return items
-  }, [post.image, post.video, post.photos])
+  }, [post.image, post.video, post.photos, post.videoThumbnail, post.id])
 
   // Process media URLs with better error handling using proper image utils
   const processedImageUrl = useMemo(() => {

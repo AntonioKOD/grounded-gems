@@ -213,38 +213,48 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
                  })
       }
 
-      // Enhanced media handling
+      // Enhanced media handling with better video support
       let media: any[] = []
       
       // Add main image
       if (post.image) {
-        media.push({
-          type: 'image',
-          url: typeof post.image === 'object' ? post.image.url : post.image,
-          alt: typeof post.image === 'object' ? post.image.alt : undefined
-        })
+        const imageUrl = typeof post.image === 'object' ? post.image.url : post.image
+        if (imageUrl) {
+          media.push({
+            type: 'image',
+            url: imageUrl,
+            alt: typeof post.image === 'object' ? post.image.alt : undefined
+          })
+        }
       }
 
-      // Add video if exists
+      // Add video if exists - enhanced handling
       if (post.video) {
-        media.push({
-          type: 'video',
-          url: typeof post.video === 'object' ? post.video.url : post.video,
-          thumbnail: post.videoThumbnail 
-            ? (typeof post.videoThumbnail === 'object' ? post.videoThumbnail.url : post.videoThumbnail)
-            : undefined
-        })
+        const videoUrl = typeof post.video === 'object' ? post.video.url : post.video
+        if (videoUrl) {
+          media.push({
+            type: 'video',
+            url: videoUrl,
+            thumbnail: post.videoThumbnail 
+              ? (typeof post.videoThumbnail === 'object' ? post.videoThumbnail.url : post.videoThumbnail)
+              : (typeof post.image === 'object' ? post.image.url : post.image), // Use main image as fallback thumbnail
+            duration: typeof post.video === 'object' ? post.video.duration : undefined,
+            alt: 'Post video'
+          })
+        }
       }
 
       // Add photos array if exists
       if (post.photos && Array.isArray(post.photos)) {
-        media = media.concat(
-          post.photos.map((photo: any) => ({
+        const validPhotos = post.photos
+          .map((photo: any) => ({
             type: 'image',
             url: typeof photo === 'object' ? photo.url : photo,
             alt: typeof photo === 'object' ? photo.alt : undefined
           }))
-        )
+          .filter(photo => photo.url) // Only include photos with valid URLs
+
+        media = media.concat(validPhotos)
       }
 
       return {

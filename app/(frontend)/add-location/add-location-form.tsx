@@ -6,6 +6,7 @@ import type React from "react"
 
 import { useEffect, useState, useRef, use } from "react"
 import Image from "next/image"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
@@ -111,6 +112,8 @@ export default function AddLocationForm() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [formSubmitType, setFormSubmitType] = useState<"publish" | "draft">("publish")
   const [slugEdited, setSlugEdited] = useState(false)
+  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false)
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState<{ isDuplicate: boolean; message?: string; existingLocation?: any } | null>(null)
 
   // Basic info
   const [locationName, setLocationName] = useState("")
@@ -757,6 +760,37 @@ export default function AddLocationForm() {
     setBusinessHours(updatedHours)
   }
 
+  // Check for duplicate locations
+  const checkForDuplicates = async (name: string, fullAddress: string): Promise<{ isDuplicate: boolean; message?: string; existingLocation?: any }> => {
+    try {
+      setIsCheckingDuplicate(true)
+      
+      // Call API to check for duplicates
+      const response = await fetch('/api/locations/check-duplicate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: name.trim(),
+          address: fullAddress.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to check for duplicates')
+      }
+
+      const result = await response.json()
+      return result
+    } catch (error) {
+      console.error('Error checking for duplicates:', error)
+      return { isDuplicate: false, message: 'Unable to check for duplicates' }
+    } finally {
+      setIsCheckingDuplicate(false)
+    }
+  }
+
   // Form validation
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
@@ -775,8 +809,8 @@ export default function AddLocationForm() {
     return Object.keys(errors).length === 0
   }
 
-  // Form submission
-  const prepareSubmission = (saveAsDraft = false) => {
+  // Form submission with duplicate checking
+  const prepareSubmission = async (saveAsDraft = false) => {
     if (!validateForm() && !saveAsDraft) {
       // Find the first tab with an error and switch to it
       if (formErrors.name || formErrors.slug || formErrors.description) {
@@ -792,6 +826,26 @@ export default function AddLocationForm() {
       })
 
       return
+    }
+
+    // Check for duplicates unless saving as draft
+    if (!saveAsDraft) {
+      const fullAddress = [address.street, address.city, address.state, address.zip, address.country]
+        .filter(Boolean)
+        .join(', ')
+
+      const duplicateCheck = await checkForDuplicates(locationName, fullAddress)
+      setDuplicateCheckResult(duplicateCheck)
+
+      if (duplicateCheck.isDuplicate) {
+        toast({
+          title: "Potential Duplicate Found",
+          description: duplicateCheck.message,
+          variant: "destructive",
+        })
+        setActiveTab("basic") // Show the basic tab where the duplicate warning will appear
+        return
+      }
     }
 
     setFormSubmitType(saveAsDraft ? "draft" : "publish")
@@ -978,9 +1032,9 @@ export default function AddLocationForm() {
         </CardHeader>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault()
-            prepareSubmission(false)
+            await prepareSubmission(false)
           }}
         >
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -1040,6 +1094,65 @@ export default function AddLocationForm() {
                       className={`h-14 md:h-12 text-base ${formErrors.name ? "border-red-500" : ""}`}
                     />
                     {formErrors.name && <p className="text-red-500 text-sm">{formErrors.name}</p>}
+                    
+                    {/* Duplicate check indicator */}
+                    {isCheckingDuplicate && (
+                      <div className="flex items-center gap-2 text-blue-600 text-sm mt-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Checking for existing locations...
+                      </div>
+                    )}
+                    
+                    {/* Duplicate warning */}
+                    {duplicateCheckResult?.isDuplicate && (
+                      <Alert className="mt-3 border-orange-200 bg-orange-50">
+                        <AlertTriangle className="h-4 w-4 text-orange-600" />
+                        <AlertDescription className="text-orange-800">
+                          <div className="space-y-2">
+                            <p className="font-medium">{duplicateCheckResult.message}</p>
+                            {duplicateCheckResult.existingLocation && (
+                              <div className="bg-orange-100 p-3 rounded-md">
+                                <p className="font-medium text-sm">Existing location:</p>
+                                <p className="text-sm">{duplicateCheckResult.existingLocation.name}</p>
+                                <p className="text-xs text-orange-700">
+                                  {duplicateCheckResult.existingLocation.address?.street}, {duplicateCheckResult.existingLocation.address?.city}
+                                </p>
+                                <Link 
+                                  href={`/locations/${duplicateCheckResult.existingLocation.slug}`}
+                                  className="text-xs text-orange-600 hover:text-orange-800 underline inline-flex items-center gap-1 mt-1"
+                                  target="_blank"
+                                >
+                                  View existing location <ExternalLink className="h-3 w-3" />
+                                </Link>
+                              </div>
+                            )}
+                            <div className="flex gap-2 mt-3">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setDuplicateCheckResult(null)}
+                                className="text-orange-600 border-orange-200 hover:bg-orange-100"
+                              >
+                                Continue Anyway
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setLocationName("")
+                                  setDuplicateCheckResult(null)
+                                }}
+                                className="text-gray-600"
+                              >
+                                Clear Name
+                              </Button>
+                            </div>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -2013,9 +2126,9 @@ export default function AddLocationForm() {
               type="button"
               variant="outline"
               className="border-[#FF6B6B] text-[#FF6B6B] hover:bg-[#FF6B6B]/5 h-14 md:h-12 text-base font-medium w-full md:w-auto order-2"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.preventDefault()
-                prepareSubmission(true)
+                await prepareSubmission(true)
               }}
               disabled={isSubmitting}
             >

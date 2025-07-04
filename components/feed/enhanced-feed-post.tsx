@@ -141,33 +141,34 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     }).filter(Boolean)
   }, [post.photos])
 
-  // Create media items array for carousel - simplified
+  // Create media items array for carousel - prioritize videos
   const mediaItems = useMemo(() => {
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string }> = []
     
-    // Add main image
-    if (imageUrl) {
-      items.push({ type: 'image', url: imageUrl })
-    }
-    
-    // Add main video
+    // Prioritize video if available (videos should appear first)
     if (videoUrl) {
       items.push({ 
         type: 'video', 
         url: videoUrl,
-        thumbnail: imageUrl || undefined
+        thumbnail: imageUrl || post.videoThumbnail || undefined
       })
     }
     
-    // Add photos
+    // Add main image only if no video, or as additional media
+    if (imageUrl && !videoUrl) {
+      items.push({ type: 'image', url: imageUrl })
+    }
+    
+    // Add photos, avoiding duplicates
     photos.forEach(photoUrl => {
-      if (photoUrl) {
+      if (photoUrl && photoUrl !== imageUrl) {
         items.push({ type: 'image', url: photoUrl })
       }
     })
     
+    console.log(`📱 EnhancedFeedPost ${post.id} media items:`, items)
     return items
-  }, [imageUrl, videoUrl, photos])
+  }, [imageUrl, videoUrl, photos, post.id, post.videoThumbnail])
 
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]

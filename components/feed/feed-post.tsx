@@ -474,8 +474,18 @@ export const FeedPost = memo(function FeedPost({
                 items={(() => {
                   const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
                   
-                  // Add main image
-                  if (imageUrl) {
+                  // Prioritize video if available (videos should appear first)
+                  if (videoUrl) {
+                    items.push({ 
+                      type: 'video', 
+                      url: videoUrl,
+                      thumbnail: imageUrl || post.videoThumbnail || undefined,
+                      alt: "Post video"
+                    })
+                  }
+                  
+                  // Add main image (only if no video, or as additional media)
+                  if (imageUrl && !videoUrl) {
                     items.push({ 
                       type: 'image', 
                       url: imageUrl, 
@@ -483,19 +493,9 @@ export const FeedPost = memo(function FeedPost({
                     })
                   }
                   
-                  // Add main video
-                  if (videoUrl) {
-                    items.push({ 
-                      type: 'video', 
-                      url: videoUrl,
-                      thumbnail: imageUrl || undefined,
-                      alt: "Post video"
-                    })
-                  }
-                  
                   // Add photos
                   photos.forEach((photoUrl, index) => {
-                    if (photoUrl) {
+                    if (photoUrl && photoUrl !== imageUrl) { // Avoid duplicates
                       items.push({ 
                         type: 'image', 
                         url: photoUrl, 
@@ -504,6 +504,7 @@ export const FeedPost = memo(function FeedPost({
                     }
                   })
                   
+                  console.log(`📱 FeedPost ${post.id} media items:`, items)
                   return items
                 })()}
                 aspectRatio="16/10"

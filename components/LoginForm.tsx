@@ -17,7 +17,7 @@ import { MobileAuthService } from "@/lib/mobile-auth"
 import { Capacitor } from '@capacitor/core'
 import { safeNavigate, getSafeRedirectPath, clearAuthRedirectHistory } from "@/lib/redirect-loop-prevention"
 
-// Login API call with improved response handling
+// Enhanced login API call with detailed error handling
 async function loginUser({ email, password, rememberMe }: { email: string; password: string; rememberMe: boolean }) {
   const res = await fetch("/api/users/login", {
     method: "POST",
@@ -28,8 +28,37 @@ async function loginUser({ email, password, rememberMe }: { email: string; passw
     credentials: "include",
     body: JSON.stringify({ email, password, rememberMe }),
   })
+  
   const data = await res.json()
-  if (!res.ok) throw new Error(data.error || data.message || "Authentication failed")
+  
+  if (!res.ok) {
+    // Enhanced error handling with specific status codes
+    switch (res.status) {
+      case 400:
+        throw new Error(data.error || "Invalid email or password format")
+      case 401:
+        if (data.error?.includes("verification") || data.error?.includes("verify")) {
+          throw new Error("Please verify your email address before logging in. Check your inbox for a verification link.")
+        }
+        if (data.error?.includes("locked") || data.error?.includes("disabled")) {
+          throw new Error("Your account has been temporarily locked. Please contact support or try again later.")
+        }
+        throw new Error("Invalid email or password. Please check your credentials and try again.")
+      case 403:
+        throw new Error("Your account access has been restricted. Please contact support for assistance.")
+      case 422:
+        throw new Error("Please check your email format and ensure your password meets the requirements.")
+      case 429:
+        throw new Error("Too many login attempts. Please wait a few minutes before trying again.")
+      case 500:
+        throw new Error("Our servers are experiencing issues. Please try again in a few moments.")
+      case 503:
+        throw new Error("Service temporarily unavailable. Please try again later.")
+      default:
+        throw new Error(data.error || data.message || `Authentication failed (${res.status})`)
+    }
+  }
+  
   return data
 }
 
@@ -56,8 +85,10 @@ const LoginForm = memo(function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [errorType, setErrorType] = useState<'general' | 'verification' | 'locked' | 'rate-limit' | 'server'>('general')
   const [hasRedirected, setHasRedirected] = useState(false)
   const [verificationShown, setVerificationShown] = useState(false)
+  const [showResendVerification, setShowResendVerification] = useState(false)
 
   // Show verification success message
   useEffect(() => {
@@ -86,11 +117,43 @@ const LoginForm = memo(function LoginForm() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
-    if (error) setError("")
+    if (error) {
+      setError("")
+      setErrorType('general')
+      setShowResendVerification(false)
+    }
   }
 
   const handleCheckboxChange = (checked: boolean) => {
     setFormData(prev => ({ ...prev, rememberMe: checked }))
+  }
+
+  // Resend verification email
+  const handleResendVerification = async () => {
+    if (!formData.email) {
+      setError("Please enter your email address first")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/resend-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: formData.email }),
+      })
+
+      if (response.ok) {
+        setError("Verification email sent! Please check your inbox and spam folder.")
+        setErrorType('general')
+        setShowResendVerification(false)
+      } else {
+        const data = await response.json()
+        setError(data.error || "Failed to resend verification email. Please try again.")
+      }
+    } catch (error) {
+      console.error("Resend verification error:", error)
+      setError("Network error. Please check your connection and try again.")
+    }
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -166,7 +229,29 @@ const LoginForm = memo(function LoginForm() {
       
     } catch (err: any) {
       console.error("Login error:", err)
-      setError(err.message || "Login failed. Please check your credentials and try again.")
+      
+      // Enhanced error categorization and user guidance
+      const errorMessage = err.message || "Login failed. Please check your credentials and try again."
+      setError(errorMessage)
+      
+      // Categorize error types for better UX
+      if (errorMessage.includes("verify") || errorMessage.includes("verification")) {
+        setErrorType('verification')
+        setShowResendVerification(true)
+      } else if (errorMessage.includes("locked") || errorMessage.includes("disabled")) {
+        setErrorType('locked')
+      } else if (errorMessage.includes("Too many") || errorMessage.includes("rate")) {
+        setErrorType('rate-limit')
+      } else if (errorMessage.includes("server") || errorMessage.includes("Service")) {
+        setErrorType('server')
+      } else {
+        setErrorType('general')
+      }
+      
+      // Haptic feedback for errors
+      if (navigator.vibrate) {
+        navigator.vibrate([200, 100, 200])
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -235,10 +320,85 @@ const LoginForm = memo(function LoginForm() {
             </Alert>
           )}
           {error && (
-            <Alert variant="destructive" className="mb-6">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Authentication failed</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+            <Alert variant={errorType === 'verification' ? "default" : "destructive"} className={`mb-6 ${
+              errorType === 'verification' ? 'border-blue-200 bg-blue-50' : ''
+            }`}>
+              <AlertCircle className={`h-4 w-4 ${
+                errorType === 'verification' ? 'text-blue-600' : ''
+              }`} />
+              <AlertTitle className={errorType === 'verification' ? 'text-blue-800' : ''}>
+                {errorType === 'verification' ? 'Email Verification Required' : 
+                 errorType === 'locked' ? 'Account Locked' :
+                 errorType === 'rate-limit' ? 'Too Many Attempts' :
+                 errorType === 'server' ? 'Server Issue' :
+                 'Authentication Failed'}
+              </AlertTitle>
+              <AlertDescription className={errorType === 'verification' ? 'text-blue-700' : ''}>
+                {error}
+                
+                {/* Verification error - show resend option */}
+                {showResendVerification && (
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResendVerification}
+                      className="text-blue-700 border-blue-300 hover:bg-blue-100"
+                    >
+                      Resend Verification Email
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Rate limit error - show waiting guidance */}
+                {errorType === 'rate-limit' && (
+                  <div className="mt-2 text-sm">
+                    <p>Try these steps:</p>
+                    <ul className="mt-1 ml-4 list-disc">
+                      <li>Wait 5-10 minutes before trying again</li>
+                      <li>Check your internet connection</li>
+                      <li>Clear your browser cache if the issue persists</li>
+                    </ul>
+                  </div>
+                )}
+                
+                {/* Server error - show retry guidance */}
+                {errorType === 'server' && (
+                  <div className="mt-2 text-sm">
+                    <p>This is usually temporary. You can:</p>
+                    <ul className="mt-1 ml-4 list-disc">
+                      <li>Refresh the page and try again</li>
+                      <li>Check our status page for updates</li>
+                      <li>Contact support if the issue continues</li>
+                    </ul>
+                  </div>
+                )}
+                
+                {/* Account locked - show support guidance */}
+                {errorType === 'locked' && (
+                  <div className="mt-2 text-sm">
+                    <p>Your account needs attention:</p>
+                    <ul className="mt-1 ml-4 list-disc">
+                      <li>Wait 30 minutes and try again</li>
+                      <li>Use "Forgot password" to reset your password</li>
+                      <li>Contact support if you need immediate access</li>
+                    </ul>
+                  </div>
+                )}
+                
+                {/* General error - show basic guidance */}
+                {errorType === 'general' && !error.includes("sent") && (
+                  <div className="mt-2 text-sm">
+                    <p>Double-check your:</p>
+                    <ul className="mt-1 ml-4 list-disc">
+                      <li>Email address spelling</li>
+                      <li>Password (remember it's case-sensitive)</li>
+                      <li>Internet connection</li>
+                    </ul>
+                  </div>
+                )}
+              </AlertDescription>
             </Alert>
           )}
           <form onSubmit={handleLogin} className="space-y-4">

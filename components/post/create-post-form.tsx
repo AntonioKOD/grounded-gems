@@ -63,7 +63,12 @@ export default function CreatePostForm({
   // Form state
   const [postContent, setPostContent] = useState("")
   const [locationName, setLocationName] = useState("")
+  const [selectedLocation, setSelectedLocation] = useState<{ id: string; name: string; address: string } | null>(null)
   const [showLocationInput, setShowLocationInput] = useState(false)
+  const [locationQuery, setLocationQuery] = useState("")
+  const [locationResults, setLocationResults] = useState<Array<{ id: string; name: string; address: string }>>([])
+  const [isSearchingLocations, setIsSearchingLocations] = useState(false)
+  const [showLocationResults, setShowLocationResults] = useState(false)
 
   // Media state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -322,10 +327,95 @@ export default function CreatePostForm({
     }
   }
 
+  // Location search functionality
+  const searchLocations = async (query: string) => {
+    if (query.length < 2) {
+      setLocationResults([])
+      setShowLocationResults(false)
+      return
+    }
+
+    setIsSearchingLocations(true)
+    try {
+      const response = await fetch(`/api/locations/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.locations) {
+          const formattedLocations = data.locations.map((loc: any) => ({
+            id: loc.id,
+            name: loc.name,
+            address: typeof loc.address === 'string' 
+              ? loc.address 
+              : [loc.address?.street, loc.address?.city, loc.address?.state].filter(Boolean).join(', ')
+          }))
+          setLocationResults(formattedLocations)
+          setShowLocationResults(true)
+        } else {
+          setLocationResults([])
+          setShowLocationResults(false)
+        }
+      } else {
+        console.error('Location search failed:', response.statusText)
+        setLocationResults([])
+        setShowLocationResults(false)
+      }
+    } catch (error) {
+      console.error('Location search error:', error)
+      setLocationResults([])
+      setShowLocationResults(false)
+    } finally {
+      setIsSearchingLocations(false)
+    }
+  }
+
+  // Debounced location search
+  useEffect(() => {
+    if (locationQuery.length < 2) {
+      setLocationResults([])
+      setShowLocationResults(false)
+      return
+    }
+
+    const timeoutId = setTimeout(() => {
+      searchLocations(locationQuery)
+    }, 300)
+
+    return () => clearTimeout(timeoutId)
+  }, [locationQuery])
+
+  // Handle location selection
+  const handleLocationSelect = (location: { id: string; name: string; address: string }) => {
+    setSelectedLocation(location)
+    setLocationName(location.name)
+    setLocationQuery("")
+    setShowLocationResults(false)
+    setLocationResults([])
+  }
+
+  // Handle location clear
+  const handleLocationClear = () => {
+    setSelectedLocation(null)
+    setLocationName("")
+    setLocationQuery("")
+    setShowLocationResults(false)
+    setLocationResults([])
+  }
+
   // Reset form
   const resetForm = () => {
     setPostContent("")
     setLocationName("")
+    setSelectedLocation(null)
+    setLocationQuery("")
+    setLocationResults([])
+    setShowLocationResults(false)
     setSelectedFiles([])
     previewUrls.forEach(url => URL.revokeObjectURL(url))
     setPreviewUrls([])
@@ -361,7 +451,10 @@ export default function CreatePostForm({
       formData.append("content", postContent.trim())
       formData.append("type", "post")
 
-      if (locationName.trim()) {
+      if (selectedLocation) {
+        formData.append("locationId", selectedLocation.id)
+        formData.append("locationName", selectedLocation.name)
+      } else if (locationName.trim()) {
         formData.append("locationName", locationName.trim())
       }
       
@@ -658,26 +751,116 @@ export default function CreatePostForm({
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-2"
                 >
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
-                    <Input
-                      value={locationName}
-                      onChange={(e) => setLocationName(e.target.value)}
-                      placeholder="Add location (optional)"
-                      className="pl-10 h-12 rounded-xl border-gray-200 focus:border-blue-500"
-                      style={{ fontSize: isMobileDevice ? '16px' : '14px' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowLocationInput(false)
-                        setLocationName("")
-                      }}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
+                  {/* Selected Location Display */}
+                  {selectedLocation && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-4 w-4 text-blue-600" />
+                          <div>
+                            <p className="font-medium text-blue-900">{selectedLocation.name}</p>
+                            <p className="text-sm text-blue-700">{selectedLocation.address}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleLocationClear}
+                          className="text-blue-400 hover:text-blue-600 transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Location Search Input */}
+                  {!selectedLocation && (
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+                      <Input
+                        value={locationQuery}
+                        onChange={(e) => setLocationQuery(e.target.value)}
+                        placeholder="Search for a location..."
+                        className="pl-10 h-12 rounded-xl border-gray-200 focus:border-blue-500"
+                        style={{ fontSize: isMobileDevice ? '16px' : '14px' }}
+                        onFocus={() => {
+                          if (locationQuery.length >= 2) {
+                            setShowLocationResults(true)
+                          }
+                        }}
+                        onBlur={() => {
+                          // Delay hiding results to allow for clicks
+                          setTimeout(() => {
+                            setShowLocationResults(false)
+                          }, 200)
+                        }}
+                      />
+                      {isSearchingLocations && (
+                        <Loader2 className="absolute right-12 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowLocationInput(false)
+                          handleLocationClear()
+                        }}
+                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+
+                      {/* Search Results Dropdown */}
+                      {showLocationResults && (locationResults.length > 0 || locationQuery.length >= 2) && (
+                        <div className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+                          {locationResults.length > 0 ? (
+                            <>
+                              <div className="p-2 border-b bg-gray-50 text-xs text-gray-600 font-medium">
+                                Found {locationResults.length} location{locationResults.length !== 1 ? 's' : ''}
+                              </div>
+                              {locationResults.map((location) => (
+                                <button
+                                  key={location.id}
+                                  type="button"
+                                  onClick={() => handleLocationSelect(location)}
+                                  className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                                    <div>
+                                      <p className="font-medium text-gray-900">{location.name}</p>
+                                      <p className="text-sm text-gray-600">{location.address}</p>
+                                    </div>
+                                  </div>
+                                </button>
+                              ))}
+                            </>
+                          ) : (
+                            <div className="p-3 text-center text-gray-500">
+                              <p className="text-sm">No locations found for "{locationQuery}"</p>
+                              <p className="text-xs mt-1">You can still type a custom location name</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Manual Location Input Fallback */}
+                  {!selectedLocation && locationQuery.length === 0 && (
+                    <div className="text-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Switch to manual input mode
+                          setLocationQuery("")
+                          setShowLocationResults(false)
+                        }}
+                        className="text-sm text-gray-500 hover:text-gray-700"
+                      >
+                        Or type a custom location name
+                      </button>
+                    </div>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -769,14 +952,14 @@ export default function CreatePostForm({
                   size={isMobileDevice ? "sm" : "sm"}
                   onClick={() => setShowLocationInput(!showLocationInput)}
                   className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} transition-all flex-shrink-0 ${
-                    showLocationInput || locationName 
+                    showLocationInput || selectedLocation || locationName 
                       ? 'text-orange-600 bg-orange-50' 
                       : 'text-orange-600 hover:text-orange-700 hover:bg-orange-50'
                   }`}
                   style={{ minHeight: '40px', minWidth: '60px' }}
                 >
                   <MapPin className="h-4 w-4" />
-                  {!isMobileDevice && <span className="ml-1">Location</span>}
+                  {!isMobileDevice && <span className="ml-1">{selectedLocation ? selectedLocation.name.slice(0, 8) + '...' : 'Location'}</span>}
                 </Button>
               </div>
 
