@@ -544,7 +544,7 @@ export const FeedPost = memo(function FeedPost({
             <div className="mb-4">
               <MediaCarousel
                 media={mediaItems}
-                aspectRatio="auto"
+                aspectRatio="video"
                 showControls={true}
                 showDots={true}
                 enableVideoPreview={true}

@@ -195,17 +195,19 @@ export default function MediaCarousel({
     if (!item) return null
 
     return (
-      <div className={cn('relative overflow-hidden rounded-xl', className)}>
+      <div className={cn(
+        'relative overflow-hidden rounded-xl',
+        aspectRatio === 'auto' && 'min-h-[300px] h-[400px]',
+        aspectRatio === 'square' && 'aspect-square',
+        aspectRatio === 'video' && 'aspect-video',
+        className
+      )}>
         {item.type === 'image' ? (
           <Image
               src={item.url}
               alt={item.alt || 'Media'}
               fill
-              className={cn(
-                "object-cover",
-                aspectRatio === 'square' && "aspect-square",
-                aspectRatio === 'video' && "aspect-video"
-              )}
+              className="object-cover"
               sizes="(max-width: 768px) 100vw, 50vw"
               quality={85}
               unoptimized={item.url.includes('/api/media/file/')}
@@ -237,11 +239,7 @@ export default function MediaCarousel({
               ref={(el) => { videoRefs.current[0] = el }}
               src={item.url}
               poster={item.thumbnail}
-              className={cn(
-                "w-full h-full object-cover",
-                aspectRatio === 'square' && "aspect-square",
-                aspectRatio === 'video' && "aspect-video"
-              )}
+              className="w-full h-full object-cover"
               muted={videoStates[0]?.isMuted !== false}
               loop
               playsInline
@@ -312,7 +310,13 @@ export default function MediaCarousel({
   return (
     <div 
       ref={carouselRef}
-      className={cn('relative overflow-hidden rounded-xl group', className)}
+      className={cn(
+        'relative overflow-hidden rounded-xl group',
+        aspectRatio === 'auto' && 'min-h-[300px] h-[400px]',
+        aspectRatio === 'square' && 'aspect-square',
+        aspectRatio === 'video' && 'aspect-video',
+        className
+      )}
     >
       {/* Main carousel container */}
       <div className="relative w-full h-full">
@@ -336,11 +340,7 @@ export default function MediaCarousel({
                   src={media[currentIndex].url}
                   alt={media[currentIndex].alt || `Image ${currentIndex + 1}`}
                   fill
-                  className={cn(
-                    "object-cover",
-                    aspectRatio === 'square' && "aspect-square",
-                    aspectRatio === 'video' && "aspect-video"
-                  )}
+                  className="object-cover"
                   sizes="(max-width: 768px) 100vw, 50vw"
                   quality={85}
                   unoptimized={media[currentIndex].url.includes('/api/media/file/')}
@@ -373,11 +373,7 @@ export default function MediaCarousel({
                   ref={(el) => { videoRefs.current[currentIndex] = el }}
                   src={media[currentIndex].url}
                   poster={media[currentIndex].thumbnail}
-                  className={cn(
-                    "w-full h-full object-cover",
-                    aspectRatio === 'square' && "aspect-square",
-                    aspectRatio === 'video' && "aspect-video"
-                  )}
+                  className="w-full h-full object-cover"
                   muted={videoStates[currentIndex]?.isMuted !== false}
                   loop
                   playsInline
