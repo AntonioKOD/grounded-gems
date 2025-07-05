@@ -158,12 +158,12 @@ function handleRangeRequest(
   })
 }
 
-// Get content type based on file extension
+// Get content type based on file extension - comprehensive image format support
 function getContentType(filename: string): string {
   const ext = path.extname(filename).toLowerCase()
   
   const mimeTypes: Record<string, string> = {
-    // Images
+    // Modern image formats
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.png': 'image/png',
@@ -171,6 +171,24 @@ function getContentType(filename: string): string {
     '.webp': 'image/webp',
     '.svg': 'image/svg+xml',
     '.avif': 'image/avif',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
+    
+    // Legacy image formats
+    '.bmp': 'image/bmp',
+    '.tiff': 'image/tiff',
+    '.tif': 'image/tiff',
+    '.ico': 'image/x-icon',
+    '.icon': 'image/x-icon',
+    
+    // Professional image formats
+    '.jp2': 'image/jp2',
+    '.jpx': 'image/jpx',
+    '.jpm': 'image/jpm',
+    '.psd': 'image/vnd.adobe.photoshop',
+    '.raw': 'image/x-canon-crw',
+    '.pbm': 'image/x-portable-bitmap',
+    '.ppm': 'image/x-portable-pixmap',
     
     // Videos
     '.mp4': 'video/mp4',

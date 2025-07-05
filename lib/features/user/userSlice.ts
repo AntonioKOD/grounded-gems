@@ -8,6 +8,8 @@ export interface UserData {
   profileImage?: {
     url: string
     alt?: string
+    filename?: string
+    sizes?: { [key: string]: string }
   }
   location?: {
     coordinates?: {
@@ -102,6 +104,12 @@ export const fetchUser = createAsyncThunk(
         if (data.user) {
           console.log('🖼️ [userSlice] Profile image data received:', {
             profileImage: data.user.profileImage,
+            profileImageStructure: data.user.profileImage ? {
+              id: data.user.profileImage.id,
+              url: data.user.profileImage.url,
+              filename: data.user.profileImage.filename,
+              sizes: data.user.profileImage.sizes ? Object.keys(data.user.profileImage.sizes) : null
+            } : null,
             avatar: data.user.avatar,
             name: data.user.name,
             id: data.user.id

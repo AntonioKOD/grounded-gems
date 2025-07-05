@@ -62,24 +62,23 @@ export const fetchFeedPosts = createAsyncThunk(
         return { posts: state.feed.posts, hasMore: state.feed.hasMore }
       }
 
-      // Fetch posts using API endpoint
-      const params = new URLSearchParams({
-        type: feedType,
-        sortBy: sortBy,
+      // Fetch posts using mobile API endpoint with proper media URL processing
+      const apiParams = new URLSearchParams({
+        feedType: feedType === 'all' ? 'personalized' : feedType,
+        sortBy: sortBy === 'recent' ? 'createdAt' : sortBy,
         page: page.toString(),
         limit: '10'
       })
       
-      if (category) params.append('category', category)
-      if (currentUserId) params.append('userId', currentUserId)
+      if (category) apiParams.append('category', category)
 
-      const response = await fetch(`/api/feed?${params}`)
+      const response = await fetch(`/api/v1/mobile/posts/feed?${apiParams}`)
       if (!response.ok) {
         throw new Error(`Failed to fetch feed: ${response.statusText}`)
       }
       
       const data = await response.json()
-      const posts: Post[] = data.posts || []
+      const posts: Post[] = data.data?.posts || data.posts || []
 
       return {
         posts,
@@ -112,24 +111,23 @@ export const loadMorePosts = createAsyncThunk(
       const { currentUserId } = params
       const nextPage = page + 1
 
-      // Fetch more posts using API endpoint
-      const params = new URLSearchParams({
-        type: feedType,
-        sortBy: sortBy,
+      // Fetch more posts using mobile API endpoint with proper media URL processing
+      const apiParams = new URLSearchParams({
+        feedType: feedType === 'all' ? 'personalized' : feedType,
+        sortBy: sortBy === 'recent' ? 'createdAt' : sortBy,
         page: nextPage.toString(),
         limit: '10'
       })
       
-      if (category) params.append('category', category)
-      if (currentUserId) params.append('userId', currentUserId)
+      if (category) apiParams.append('category', category)
 
-      const response = await fetch(`/api/feed?${params}`)
+      const response = await fetch(`/api/v1/mobile/posts/feed?${apiParams}`)
       if (!response.ok) {
         throw new Error(`Failed to load more posts: ${response.statusText}`)
       }
       
       const data = await response.json()
-      const morePosts: Post[] = data.posts || []
+      const morePosts: Post[] = data.data?.posts || data.posts || []
 
       return {
         posts: morePosts,

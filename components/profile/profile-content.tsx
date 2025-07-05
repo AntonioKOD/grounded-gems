@@ -60,6 +60,9 @@ import { getImageUrl } from "@/lib/image-utils"
 import CreatorApplicationButton from "@/components/creator/creator-application-button"
 import CreatorEarningsDashboard from "@/components/guides/creator-earnings-dashboard"
 
+// Environment check for debugging
+const isDevelopment = process.env.NODE_ENV === 'development'
+
 // Helper to debounce API calls
 const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
   let timeout: NodeJS.Timeout
@@ -639,8 +642,19 @@ export default function ProfileContent({
 
   // Get profile image URL using proper image utility
   const getProfileImageUrl = () => {
-    if (!profile?.profileImage?.url) return "/placeholder.svg"
-    const imageUrl = getImageUrl(profile.profileImage.url)
+    if (!profile?.profileImage) return "/placeholder.svg"
+    const imageUrl = getImageUrl(profile.profileImage)
+    
+    if (isDevelopment) {
+      console.log('🖼️ [ProfileContent] Profile image processing:', {
+        profileId: profile.id,
+        hasProfileImage: !!profile.profileImage,
+        profileImageStructure: profile.profileImage,
+        processedUrl: imageUrl,
+        isPlaceholder: imageUrl === "/placeholder.svg"
+      })
+    }
+    
     return imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder.svg"
   }
 

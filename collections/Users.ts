@@ -267,7 +267,12 @@ export const Users: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
-      async ({ data, req, operation }) => {
+      async ({ data, req, operation, originalDoc }) => {
+        // Track username changes for 7-day cooldown
+        if (operation === 'update' && data.username && originalDoc?.username && data.username !== originalDoc.username) {
+          data.lastUsernameChange = new Date()
+        }
+        
         // Initialize creatorProfile for creators if it doesn't exist
         if ((data.role === 'creator' || data.isCreator) && !data.creatorProfile) {
           data.creatorProfile = {
@@ -434,22 +439,41 @@ export const Users: CollectionConfig = {
       name: 'username', 
       type: 'text', 
       unique: true,
+      required: false, // Not required for updates, only for new accounts if desired
       admin: {
         description: 'Unique username for the user (no spaces, lowercase)'
       },
-      validate: (value: any, { operation }: any) => {
+      validate: (value: any, { operation, data, originalDoc }: any) => {
         // For update operations, allow empty username if it's not being changed
         if (operation === 'update' && (!value || value === '')) {
           return true
         }
         
-        // For create operations or when username is being set, validate
-        if (!value) return 'Username is required'
-        if (!/^[a-z0-9_-]+$/.test(value)) {
-          return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'
+        // For update operations, check if username is actually being changed
+        if (operation === 'update' && originalDoc?.username && value === originalDoc.username) {
+          return true // Username hasn't changed, allow it
         }
-        if (value.length < 3) return 'Username must be at least 3 characters long'
-        if (value.length > 30) return 'Username must be less than 30 characters'
+        
+        // For create operations or when username is being set/changed, validate
+        if (value) {
+          if (!/^[a-z0-9_-]+$/.test(value)) {
+            return 'Username can only contain lowercase letters, numbers, hyphens, and underscores'
+          }
+          if (value.length < 3) return 'Username must be at least 3 characters long'
+          if (value.length > 30) return 'Username must be less than 30 characters'
+          
+          // Check 7-day cooldown ONLY when username is actually being changed
+          if (operation === 'update' && originalDoc?.username && value !== originalDoc.username && originalDoc?.lastUsernameChange) {
+            const lastChange = new Date(originalDoc.lastUsernameChange)
+            const now = new Date()
+            const daysSinceLastChange = (now.getTime() - lastChange.getTime()) / (1000 * 60 * 60 * 24)
+            
+            if (daysSinceLastChange < 7) {
+              return `You can only change your username once every 7 days. Please wait ${Math.ceil(7 - daysSinceLastChange)} more days.`
+            }
+          }
+        }
+        
         return true
       }
     },

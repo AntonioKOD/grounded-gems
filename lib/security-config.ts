@@ -38,7 +38,12 @@ export const SECURITY_CONFIG = {
     MAX_PASSWORD_LENGTH: 128,
     MIN_PASSWORD_LENGTH: 8,
     MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
-    ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+    ALLOWED_IMAGE_TYPES: [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+      'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+      'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
+      'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
+    ],
     ALLOWED_VIDEO_TYPES: ['video/mp4', 'video/webm', 'video/ogg']
   },
 

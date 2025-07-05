@@ -61,6 +61,38 @@ export class FeedAlgorithm {
   }
 
   /**
+   * Helper function to process media URLs consistently across all fetch methods
+   */
+  private processMediaUrl(mediaItem: any): string | null {
+    if (!mediaItem) return null
+    
+    let url: string | null = null
+    
+    if (typeof mediaItem === 'string') {
+      url = mediaItem
+    } else if (typeof mediaItem === 'object') {
+      // Try different URL sources in order of preference
+      url = mediaItem.url || 
+            mediaItem.sizes?.card?.url || 
+            mediaItem.sizes?.thumbnail?.url || 
+            mediaItem.thumbnailURL ||
+            (mediaItem.filename ? `/api/media/file/${mediaItem.filename}` : null)
+    }
+    
+    if (!url) return null
+    
+    // Ensure URL is properly formatted
+    if (url.startsWith('/') && !url.startsWith('http')) {
+      // For relative URLs, ensure they're properly formatted
+      if (!url.startsWith('/api/media/')) {
+        url = `/api/media/file/${url.replace(/^\/+/, '')}`
+      }
+    }
+    
+    return url
+  }
+
+  /**
    * Generate the main feed
    */
   async generateFeed(params: FeedAlgorithmParams): Promise<FeedItem[]> {
@@ -265,6 +297,52 @@ export class FeedAlgorithm {
         const isLiked = userLikedPosts.includes(post.id)
         const isSaved = userSavedPosts.includes(post.id)
         
+        // Enhanced media handling with better URL processing
+        let media: any[] = []
+        
+        // Add main image
+        if (post.image) {
+          const imageUrl = this.processMediaUrl(post.image)
+          if (imageUrl) {
+            media.push({
+              type: 'image',
+              url: imageUrl,
+              alt: typeof post.image === 'object' ? post.image.alt : undefined
+            })
+          }
+        }
+
+        // Add video if exists - reels-style (no thumbnail)
+        if (post.video) {
+          const videoUrl = this.processMediaUrl(post.video)
+          if (videoUrl) {
+            const videoItem = {
+              type: 'video',
+              url: videoUrl,
+              // No thumbnail for reels-style autoplay
+              duration: typeof post.video === 'object' ? post.video.duration : undefined,
+              alt: 'Post video'
+            }
+            media.push(videoItem)
+          }
+        }
+
+        // Add photos array if exists
+        if (post.photos && Array.isArray(post.photos)) {
+          const validPhotos = post.photos
+            .map((photo: any) => {
+              const photoUrl = this.processMediaUrl(photo)
+              return photoUrl ? {
+                type: 'image',
+                url: photoUrl,
+                alt: typeof photo === 'object' ? photo.alt : undefined
+              } : null
+            })
+            .filter(photo => photo !== null) // Only include photos with valid URLs
+
+          media = media.concat(validPhotos)
+        }
+        
         return {
           id: `post_${post.id}`,
           type: 'post',
@@ -278,12 +356,17 @@ export class FeedAlgorithm {
             author: {
               id: post.author?.id || '',
               name: post.author?.name || 'Anonymous',
-              avatar: post.author?.avatar?.url,
-              profileImage: post.author?.profileImage
+              avatar: this.processMediaUrl(post.author?.avatar || post.author?.profileImage),
+              profileImage: post.author?.profileImage ? {
+                url: this.processMediaUrl(post.author.profileImage)
+              } : null
             },
-            image: post.featuredImage?.url || post.image?.url,
-            video: post.video?.url,
-            photos: post.photos?.map((photo: any) => photo.url || photo) || [],
+            // Enhanced media array for modern feed display
+            media,
+            // Legacy fields for backward compatibility
+            image: this.processMediaUrl(post.featuredImage || post.image),
+            video: this.processMediaUrl(post.video),
+            photos: post.photos?.map((photo: any) => this.processMediaUrl(photo)).filter(Boolean) || [],
             location: post.location,
             type: post.type || 'post',
             rating: post.rating,
@@ -347,7 +430,7 @@ export class FeedAlgorithm {
           name: user.name || 'Anonymous User',
           username: user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'user',
           bio: user.bio || 'Passionate explorer sharing amazing discoveries',
-          avatar: user.profileImage?.url || user.avatar?.url,
+          avatar: this.processMediaUrl(user.profileImage || user.avatar),
           followersCount: user.followersCount || 0,
           postsCount: user.postsCount || 0,
           mutualConnections: this.calculateMutualConnections(user.id, socialCircle),
@@ -406,7 +489,7 @@ export class FeedAlgorithm {
           id: location.id,
           name: location.name,
           description: location.description || location.shortDescription || '',
-          image: location.featuredImage?.url,
+          image: this.processMediaUrl(location.featuredImage),
           rating: location.averageRating || 0,
           reviewCount: location.reviewCount || 0,
           categories: location.categories?.map((cat: any) => cat.name || cat) || [],
@@ -463,12 +546,14 @@ export class FeedAlgorithm {
           id: guide.id,
           title: guide.title,
           description: guide.description,
-          coverImage: guide.coverImage,
+          coverImage: this.processMediaUrl(guide.coverImage),
           author: {
             id: guide.creator?.id || '',
             name: guide.creator?.name || 'Anonymous',
-            avatar: guide.creator?.avatar?.url,
-            profileImage: guide.creator?.profileImage
+            avatar: this.processMediaUrl(guide.creator?.avatar || guide.creator?.profileImage),
+            profileImage: guide.creator?.profileImage ? {
+              url: this.processMediaUrl(guide.creator.profileImage)
+            } : null
           },
           price: guide.price || 0,
           rating: guide.averageRating || 0,
@@ -577,20 +662,20 @@ export class FeedAlgorithm {
           isActive: feature.isActive,
           status: feature.status,
           publishedAt: feature.publishedAt,
-          coverImage: feature.coverImage?.url ? {
-            url: feature.coverImage.url,
-            alt: feature.coverImage.alt
+          coverImage: feature.coverImage ? {
+            url: this.processMediaUrl(feature.coverImage),
+            alt: typeof feature.coverImage === 'object' ? feature.coverImage.alt : undefined
           } : null,
           gallery: feature.gallery?.map((item: any) => ({
-            url: item.image?.url,
+            url: this.processMediaUrl(item.image),
             caption: item.caption,
-            alt: item.image?.alt
+            alt: typeof item.image === 'object' ? item.image.alt : undefined
           })).filter((item: any) => item.url) || [],
           featuredLocations: feature.featuredLocations?.map((location: any) => ({
             id: location.id,
             name: location.name,
             description: location.description,
-            image: location.featuredImage?.url,
+            image: this.processMediaUrl(location.featuredImage),
             rating: location.averageRating,
             reviewCount: location.reviewCount,
             categories: location.categories?.map((cat: any) => cat.name || cat) || [],
@@ -603,9 +688,9 @@ export class FeedAlgorithm {
             author: {
               id: post.author?.id,
               name: post.author?.name,
-              avatar: post.author?.profileImage?.url || post.author?.avatar?.url
+              avatar: this.processMediaUrl(post.author?.profileImage || post.author?.avatar)
             },
-            image: post.featuredImage?.url || post.image?.url,
+            image: this.processMediaUrl(post.featuredImage || post.image),
             createdAt: post.createdAt
           })) || [],
           featuredGuides: feature.featuredGuides?.map((guide: any) => ({
@@ -615,9 +700,9 @@ export class FeedAlgorithm {
             author: {
               id: guide.author?.id,
               name: guide.author?.name,
-              avatar: guide.author?.profileImage?.url || guide.author?.avatar?.url
+              avatar: this.processMediaUrl(guide.author?.profileImage || guide.author?.avatar)
             },
-            coverImage: guide.coverImage?.url,
+            coverImage: this.processMediaUrl(guide.coverImage),
             pricing: guide.pricing,
             rating: guide.averageRating,
             reviewCount: guide.reviewCount
@@ -704,9 +789,9 @@ export class FeedAlgorithm {
           author: {
             id: post.author?.id || '',
             name: post.author?.name || 'Anonymous',
-            avatar: post.author?.profileImage?.url || post.author?.avatar?.url
+            avatar: this.processMediaUrl(post.author?.profileImage || post.author?.avatar)
           },
-          image: post.featuredImage?.url || post.image?.url,
+          image: this.processMediaUrl(post.featuredImage || post.image),
           readTime: this.calculateReadTime(post.content || post.description || ''),
           category: post.category || 'Travel',
           tags: post.tags?.map((tag: any) => typeof tag === 'string' ? tag : tag.tag) || [],

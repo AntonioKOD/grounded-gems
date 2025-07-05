@@ -66,6 +66,7 @@ export default function PlannerPage() {
   const [coordinates, setCoordinates] = useState<{latitude: number, longitude: number} | null>(null)
   const [nearbyLocationsCount, setNearbyLocationsCount] = useState<number>(0)
   const [userLocationName, setUserLocationName] = useState<string>('')
+  const [verifiedLocationsUsed, setVerifiedLocationsUsed] = useState<number>(0)
 
   // Request location permission on component mount
   useEffect(() => {
@@ -140,14 +141,16 @@ export default function PlannerPage() {
       setPlan(data.plan)
       setNearbyLocationsCount(data.nearbyLocationsFound || 0)
       setUserLocationName(data.userLocation || '')
+      setVerifiedLocationsUsed(data.verifiedLocationsUsed || 0)
       
       // Show enhanced success message based on real locations usage
       if (data.usedRealLocations && data.nearbyLocationsFound > 0) {
-        toast.success(`🎯 Plan created using ${data.nearbyLocationsFound} verified locations near ${data.userLocation}!`)
+        const verifiedUsed = data.verifiedLocationsUsed || data.nearbyLocationsFound
+        toast.success(`🎯 Plan created using ${verifiedUsed} verified locations near ${data.userLocation}!`)
       } else if (data.nearbyLocationsFound > 0) {
         toast.success(`📍 Found ${data.nearbyLocationsFound} nearby locations - plan customized for ${data.userLocation}`)
       } else {
-        toast.success("✨ Plan created! Consider adding your location for personalized recommendations.")
+        toast.success("✨ Plan created! Consider enabling location services for personalized recommendations.")
       }
       
     } catch (err: any) {
@@ -489,8 +492,14 @@ ${planSteps}
                         {nearbyLocationsCount > 0 && (
                           <p>🎯 Found {nearbyLocationsCount} nearby verified locations</p>
                         )}
-                        {plan.usedRealLocations && (
+                        {plan.usedRealLocations && plan.verifiedLocationsUsed && (
+                          <p>✨ This plan includes {plan.verifiedLocationsUsed} real places from our database</p>
+                        )}
+                        {plan.usedRealLocations && !plan.verifiedLocationsUsed && (
                           <p>✨ This plan includes real places from our database</p>
+                        )}
+                        {plan.parseError && (
+                          <p>⚠️ Plan was generated with database locations despite parsing issues</p>
                         )}
                       </div>
                     </div>

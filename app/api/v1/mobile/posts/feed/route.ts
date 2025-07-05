@@ -213,24 +213,55 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
                  })
       }
 
-      // Enhanced media handling with better video support
+      // Enhanced media handling with better video support and proper URL processing
       let media: any[] = []
+      
+      // Helper function to process media URLs
+      const processMediaUrl = (mediaItem: any): string | null => {
+        if (!mediaItem) return null
+        
+        let url: string | null = null
+        
+        if (typeof mediaItem === 'string') {
+          url = mediaItem
+        } else if (typeof mediaItem === 'object') {
+          // Try different URL sources in order of preference
+          url = mediaItem.url || 
+                mediaItem.sizes?.card?.url || 
+                mediaItem.sizes?.thumbnail?.url || 
+                mediaItem.thumbnailURL ||
+                (mediaItem.filename ? `/api/media/file/${mediaItem.filename}` : null)
+        }
+        
+        if (!url) return null
+        
+        // Ensure URL is properly formatted
+        if (url.startsWith('/') && !url.startsWith('http')) {
+          // For relative URLs, ensure they're properly formatted
+          if (!url.startsWith('/api/media/')) {
+            url = `/api/media/file/${url.replace(/^\/+/, '')}`
+          }
+        }
+        
+        return url
+      }
       
       // Add main image
       if (post.image) {
-        const imageUrl = typeof post.image === 'object' ? post.image.url : post.image
+        const imageUrl = processMediaUrl(post.image)
         if (imageUrl) {
           media.push({
             type: 'image',
             url: imageUrl,
             alt: typeof post.image === 'object' ? post.image.alt : undefined
           })
+          console.log(`📸 Added image to post ${post.id}:`, imageUrl)
         }
       }
 
       // Add video if exists - reels-style (no thumbnail)
       if (post.video) {
-        const videoUrl = typeof post.video === 'object' ? post.video.url : post.video
+        const videoUrl = processMediaUrl(post.video)
         if (videoUrl) {
           const videoItem = {
             type: 'video',
@@ -247,14 +278,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       // Add photos array if exists
       if (post.photos && Array.isArray(post.photos)) {
         const validPhotos = post.photos
-          .map((photo: any) => ({
-            type: 'image',
-            url: typeof photo === 'object' ? photo.url : photo,
-            alt: typeof photo === 'object' ? photo.alt : undefined
-          }))
-          .filter(photo => photo.url) // Only include photos with valid URLs
+          .map((photo: any) => {
+            const photoUrl = processMediaUrl(photo)
+            return photoUrl ? {
+              type: 'image',
+              url: photoUrl,
+              alt: typeof photo === 'object' ? photo.alt : undefined
+            } : null
+          })
+          .filter(photo => photo !== null) // Only include photos with valid URLs
 
         media = media.concat(validPhotos)
+        console.log(`📸 Added ${validPhotos.length} photos to post ${post.id}`)
       }
 
       const formattedPost = {

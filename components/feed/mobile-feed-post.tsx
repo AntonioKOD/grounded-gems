@@ -543,6 +543,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
                 className="object-cover w-full h-full"
                 loading="lazy"
                 sizes="100vw"
+                unoptimized={processedImageUrl.includes('/api/media/file/')}
                 onLoadingComplete={() => setIsLoadingImage(false)}
                 onError={() => {
                   console.error(`Failed to load image: ${processedImageUrl}`)
@@ -1044,6 +1045,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
                   className="object-cover"
                   priority={currentVideoIndex === 0}
                   sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  unoptimized={(mediaItems[currentVideoIndex]?.url || '').includes('/api/media/file/')}
                   onError={(e) => {
                     console.error('Image load error:', e)
                     e.currentTarget.src = '/placeholder-image.jpg'

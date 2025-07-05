@@ -2,17 +2,47 @@
 
 import React, { useState } from "react"
 import Image from "next/image"
-import { Heart, MessageCircle, Bookmark, Play, Image as ImageIcon, MapPin, ChevronLeft, ChevronRight, X, Share2 } from "lucide-react"
+import { Heart, MessageCircle, Bookmark, Play, Image as ImageIcon, MapPin, ChevronLeft, ChevronRight, X, Share2, Video } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import type { Post } from "@/types/feed"
+import MediaCarousel from "@/components/ui/media-carousel"
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+
+interface Post {
+  id: string
+  title?: string
+  content?: string
+  caption?: string
+  image?: string
+  video?: string
+  videos?: any[]
+  photos?: any[]
+  media?: Array<{
+    type: 'image' | 'video'
+    url: string
+    thumbnail?: string
+    alt?: string
+    duration?: number
+  }>
+  createdAt: string
+  likeCount?: number
+  commentCount?: number
+  likes?: number
+  type?: string
+  rating?: number
+  location?: {
+    id: string
+    name: string
+  }
+}
 
 interface PostsGridProps {
   posts: Post[]
-  isCurrentUser: boolean
+  isCurrentUser?: boolean
 }
 
 interface PostModalProps {
@@ -200,6 +230,99 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
     setImageLoadingStates(prev => ({ ...prev, [postId]: true }))
   }
 
+  // Helper function to get media for a post
+  const getPostMedia = (post: Post) => {
+    const media = []
+    
+    // If post already has media array, use it
+    if (post.media && Array.isArray(post.media)) {
+      return post.media
+    }
+    
+    // Otherwise, construct media array from individual fields
+    
+    // Add main video first (if exists)
+    const videoUrl = getVideoUrl(post.video)
+    if (videoUrl) {
+      media.push({
+        type: 'video' as const,
+        url: videoUrl,
+        thumbnail: getImageUrl(post.image) !== '/placeholder.svg' ? getImageUrl(post.image) : undefined,
+        alt: 'Post video',
+        duration: undefined // Could be extracted from video metadata if needed
+      })
+    }
+    
+    // Add videos array
+    if (post.videos && Array.isArray(post.videos)) {
+      post.videos.forEach(video => {
+        const url = getVideoUrl(video)
+        if (url) {
+          media.push({
+            type: 'video' as const,
+            url,
+            thumbnail: undefined,
+            alt: 'Post video'
+          })
+        }
+      })
+    }
+    
+    // Add main image (only if no video)
+    if (!videoUrl && post.image) {
+      const imageUrl = getImageUrl(post.image)
+      if (imageUrl !== '/placeholder.svg') {
+        media.push({
+          type: 'image' as const,
+          url: imageUrl,
+          alt: 'Post image'
+        })
+      }
+    }
+    
+    // Add photos array
+    if (post.photos && Array.isArray(post.photos)) {
+      post.photos.forEach((photo, index) => {
+        const imageUrl = getImageUrl(photo)
+        if (imageUrl !== '/placeholder.svg') {
+          media.push({
+            type: 'image' as const,
+            url: imageUrl,
+            alt: `Photo ${index + 1}`
+          })
+        }
+      })
+    }
+    
+    return media
+  }
+
+  // Helper function to get primary display URL for grid thumbnail
+  const getPrimaryDisplayUrl = (post: Post) => {
+    const media = getPostMedia(post)
+    if (media.length > 0) {
+      // For videos, use thumbnail if available, otherwise use video URL
+      if (media[0].type === 'video') {
+        return media[0].thumbnail || media[0].url
+      }
+      return media[0].url
+    }
+    
+    // Fallback to legacy fields
+    return getImageUrl(post.image) !== '/placeholder.svg' ? getImageUrl(post.image) : null
+  }
+
+  // Helper function to determine if post has video content
+  const hasVideoContent = (post: Post) => {
+    const media = getPostMedia(post)
+    return media.some(item => item.type === 'video')
+  }
+
+  // Helper function to get media count
+  const getMediaCount = (post: Post) => {
+    return getPostMedia(post).length
+  }
+
   if (posts.length === 0) {
     return (
       <div className="text-center py-16">
@@ -227,108 +350,168 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
   return (
     <>
       <div className="grid grid-cols-3 gap-1 sm:gap-2 md:gap-3">
-        {posts.map((post, index) => (
-          <Card
-            key={post.id}
-            className="aspect-square relative overflow-hidden cursor-pointer group border-0 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-            onClick={() => setSelectedPost(post)}
-          >
-            {post.image ? (
-              <>
-                {imageLoadingStates[post.id] && (
-                  <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
-                    <ImageIcon className="h-8 w-8 text-gray-400" />
+        {posts.map((post, index) => {
+          const primaryUrl = getPrimaryDisplayUrl(post)
+          const isVideo = hasVideoContent(post)
+          const mediaCount = getMediaCount(post)
+          
+          return (
+            <Card
+              key={post.id}
+              className="aspect-square relative overflow-hidden cursor-pointer group border-0 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+              onClick={() => setSelectedPost(post)}
+            >
+              {primaryUrl ? (
+                <>
+                  {imageLoadingStates[post.id] && (
+                    <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
+                      <ImageIcon className="h-8 w-8 text-gray-400" />
+                    </div>
+                  )}
+                  
+                  {isVideo ? (
+                    <div className="relative w-full h-full">
+                      <Image
+                        src={primaryUrl}
+                        alt={post.title || "Post"}
+                        fill
+                        className="object-cover transition-all duration-300 group-hover:scale-110"
+                        onLoadingComplete={() => handleImageLoad(post.id)}
+                        onLoadStart={() => handleImageLoadStart(post.id)}
+                      />
+                      
+                      {/* Video indicator */}
+                      <div className="absolute top-2 right-2 bg-black/70 text-white p-1 rounded-full">
+                        <Video className="h-3 w-3" />
+                      </div>
+                      
+                      {/* Play button overlay */}
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center">
+                          <Play className="h-6 w-6 text-gray-800 ml-1" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <Image
+                      src={primaryUrl}
+                      alt={post.title || "Post"}
+                      fill
+                      className="object-cover transition-all duration-300 group-hover:scale-110"
+                      onLoadingComplete={() => handleImageLoad(post.id)}
+                      onLoadStart={() => handleImageLoadStart(post.id)}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300">
+                  <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-gray-500 transition-colors" />
+                </div>
+              )}
+
+              {/* Media count indicator */}
+              {mediaCount > 1 && (
+                <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                  <ImageIcon className="h-3 w-3" />
+                  {mediaCount}
+                </div>
+              )}
+
+              {/* Overlay with stats */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
+                <div className="flex items-center gap-3 text-white text-sm">
+                  {post.likeCount !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <span>❤️</span>
+                      <span>{post.likeCount}</span>
+                    </div>
+                  )}
+                  {post.commentCount !== undefined && (
+                    <div className="flex items-center gap-1">
+                      <span>💬</span>
+                      <span>{post.commentCount}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Post Modal */}
+      {selectedPost && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setSelectedPost(null)}>
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex flex-col lg:flex-row h-full">
+              {/* Media Section */}
+              <div className="flex-1 bg-black flex items-center justify-center min-h-[40vh] lg:min-h-[60vh]">
+                {getPostMedia(selectedPost).length > 0 ? (
+                  <MediaCarousel
+                    media={getPostMedia(selectedPost)}
+                    aspectRatio="auto"
+                    enableVideoPreview={true}
+                    videoPreviewMode="click"
+                    className="w-full h-full"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                    <ImageIcon className="h-24 w-24 text-gray-400" />
                   </div>
                 )}
-                <Image
-                  src={post.image}
-                  alt={post.title || "Post"}
-                  fill
-                  className="object-cover transition-all duration-300 group-hover:scale-110"
-                  onLoadingComplete={() => handleImageLoad(post.id)}
-                  onLoadStart={() => handleImageLoadStart(post.id)}
-                />
-              </>
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300">
-                <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-gray-500 transition-colors" />
               </div>
-            )}
 
-            {/* Overlay with stats */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center">
-              <div className="flex items-center gap-6 text-white transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-                <div className="flex items-center gap-2">
-                  <Heart className="h-5 w-5 fill-white" />
-                  <span className="font-semibold text-lg">{post.likeCount || 0}</span>
+              {/* Details Section */}
+              <div className="lg:w-96 p-6 flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="text-xl font-semibold">{selectedPost.title || "Post"}</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedPost(null)}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ✕
+                  </Button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5 fill-white" />
-                  <span className="font-semibold text-lg">{post.commentCount || 0}</span>
+
+                <div className="flex-1">
+                  {selectedPost.content && (
+                    <p className="text-gray-700 mb-4">{selectedPost.content}</p>
+                  )}
+                  
+                  {selectedPost.location && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+                      <span>📍</span>
+                      <span>{selectedPost.location.name}</span>
+                    </div>
+                  )}
+
+                  {selectedPost.rating && (
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+                      <span>⭐</span>
+                      <span>{selectedPost.rating}/5</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <div className="flex items-center justify-between text-sm text-gray-500">
+                    <span>{new Date(selectedPost.createdAt).toLocaleDateString()}</span>
+                    <div className="flex items-center gap-4">
+                      {selectedPost.likeCount !== undefined && (
+                        <span>❤️ {selectedPost.likeCount}</span>
+                      )}
+                      {selectedPost.commentCount !== undefined && (
+                        <span>💬 {selectedPost.commentCount}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-
-            {/* Post type indicator */}
-            {post.type === "video" && (
-              <div className="absolute top-3 right-3 z-10">
-                <div className="bg-black/80 backdrop-blur-sm rounded-full p-2 shadow-lg">
-                  <Play className="h-4 w-4 text-white" />
-                </div>
-              </div>
-            )}
-
-            {/* Multiple images indicator */}
-            {post.type === "carousel" && (
-              <div className="absolute top-3 right-3 z-10">
-                <div className="bg-black/80 backdrop-blur-sm rounded-full p-2 shadow-lg">
-                  <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
-                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                    <div className="w-1.5 h-1.5 bg-white rounded-full"></div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Location badge */}
-            {post.location && (
-              <div className="absolute bottom-3 left-3 z-10">
-                <Badge className="bg-black/80 backdrop-blur-sm text-white text-xs px-3 py-1.5 border-0 shadow-lg">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {post.location.name}
-                </Badge>
-              </div>
-            )}
-
-            {/* Rating badge */}
-            {post.rating && (
-              <div className="absolute top-3 left-3 z-10">
-                <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 text-xs px-3 py-1.5 border-0 shadow-lg font-semibold">
-                  ⭐ {post.rating}
-                </Badge>
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
-
-      {/* Post Detail Modal */}
-      {selectedPost && (
-        <PostModal
-          post={selectedPost}
-          isOpen={!!selectedPost}
-          onClose={() => setSelectedPost(null)}
-          onLike={(postId) => {
-            // Handle like functionality
-            console.log("Like post:", postId)
-          }}
-          onSave={(postId) => {
-            // Handle save functionality
-            console.log("Save post:", postId)
-          }}
-        />
+          </div>
+        </div>
       )}
     </>
   )

@@ -40,13 +40,12 @@ interface MobileUploadResponse {
 // Maximum file size (10MB for mobile)
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB in bytes
 
-// Allowed image types
+// Allowed image types - comprehensive support for modern and legacy formats
 const ALLOWED_TYPES = [
-  'image/jpeg',
-  'image/jpg', 
-  'image/png',
-  'image/webp',
-  'image/gif'
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+  'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
+  'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
 ]
 
 // Environment flag to disable strict validation (useful for debugging)
@@ -108,11 +107,73 @@ function validateImageBuffer(buffer: Buffer, mimeType: string): boolean {
     return isValidGif
   }
   
+  // SVG validation (XML-based, starts with < or <?xml)
+  if (mimeType.includes('svg')) {
+    const bufferText = buffer.toString('utf8', 0, Math.min(100, buffer.length))
+    const isValidSvg = bufferText.includes('<svg') || bufferText.includes('<?xml')
+    console.log('🔍 SVG validation:', { isValidSvg, startsWithSvgTag: bufferText.includes('<svg'), startsWithXml: bufferText.includes('<?xml') })
+    return isValidSvg
+  }
+  
+  // AVIF validation (ftyp box with AVIF)
+  if (mimeType.includes('avif')) {
+    const ftypBox = buffer.indexOf(Buffer.from('ftyp'))
+    const isValidAvif = ftypBox > 0 && buffer.indexOf(Buffer.from('avif'), ftypBox) > ftypBox
+    console.log('🔍 AVIF validation:', { isValidAvif, ftypBoxFound: ftypBox > 0 })
+    return isValidAvif
+  }
+  
+  // HEIC/HEIF validation (ftyp box with HEIC)
+  if (mimeType.includes('heic') || mimeType.includes('heif')) {
+    const ftypBox = buffer.indexOf(Buffer.from('ftyp'))
+    const isValidHeic = ftypBox > 0 && (
+      buffer.indexOf(Buffer.from('heic'), ftypBox) > ftypBox ||
+      buffer.indexOf(Buffer.from('heif'), ftypBox) > ftypBox
+    )
+    console.log('🔍 HEIC/HEIF validation:', { isValidHeic, ftypBoxFound: ftypBox > 0 })
+    return isValidHeic
+  }
+  
+  // BMP validation (starts with 'BM')
+  if (mimeType.includes('bmp')) {
+    const isValidBmp = firstBytes[0] === 0x42 && firstBytes[1] === 0x4D
+    console.log('🔍 BMP validation:', { 
+      isValidBmp, 
+      expected: '42 4D (BM)', 
+      actual: `${firstBytes[0].toString(16)} ${firstBytes[1].toString(16)}` 
+    })
+    return isValidBmp
+  }
+  
+  // TIFF validation (starts with 'II*' or 'MM*')
+  if (mimeType.includes('tiff') || mimeType.includes('tif')) {
+    const isValidTiff = (firstBytes[0] === 0x49 && firstBytes[1] === 0x49 && firstBytes[2] === 0x2A) || // II*
+                       (firstBytes[0] === 0x4D && firstBytes[1] === 0x4D && firstBytes[2] === 0x00) // MM*
+    console.log('🔍 TIFF validation:', { 
+      isValidTiff, 
+      actual: `${firstBytes[0].toString(16)} ${firstBytes[1].toString(16)} ${firstBytes[2].toString(16)}` 
+    })
+    return isValidTiff
+  }
+  
+  // ICO validation (starts with 00 00 01 00)
+  if (mimeType.includes('ico') || mimeType.includes('icon')) {
+    const isValidIco = firstBytes[0] === 0x00 && firstBytes[1] === 0x00 && 
+                      firstBytes[2] === 0x01 && firstBytes[3] === 0x00
+    console.log('🔍 ICO validation:', { 
+      isValidIco, 
+      expected: '00 00 01 00', 
+      actual: `${firstBytes[0].toString(16)} ${firstBytes[1].toString(16)} ${firstBytes[2].toString(16)} ${firstBytes[3].toString(16)}` 
+    })
+    return isValidIco
+  }
+  
   // If we don't recognize the MIME type, be more permissive
   console.log('🔍 Unknown MIME type, performing basic validation')
   
   // Basic validation: check if it looks like it could be an image
   // Most image formats have specific signatures in the first few bytes
+  const bufferText = buffer.toString('utf8', 0, Math.min(100, buffer.length))
   const couldBeImage = 
     // JPEG
     (firstBytes[0] === 0xFF && firstBytes[1] === 0xD8) ||
@@ -124,9 +185,16 @@ function validateImageBuffer(buffer: Buffer, mimeType: string): boolean {
     (firstBytes[0] === 0x42 && firstBytes[1] === 0x4D) ||
     // WebP (RIFF container)
     (firstBytes[0] === 0x52 && firstBytes[1] === 0x49 && firstBytes[2] === 0x46 && firstBytes[3] === 0x46) ||
-    // TIFF
+    // TIFF (little endian)
     (firstBytes[0] === 0x49 && firstBytes[1] === 0x49 && firstBytes[2] === 0x2A && firstBytes[3] === 0x00) ||
-    (firstBytes[0] === 0x4D && firstBytes[1] === 0x4D && firstBytes[2] === 0x00 && firstBytes[3] === 0x2A)
+    // TIFF (big endian)
+    (firstBytes[0] === 0x4D && firstBytes[1] === 0x4D && firstBytes[2] === 0x00 && firstBytes[3] === 0x2A) ||
+    // ICO
+    (firstBytes[0] === 0x00 && firstBytes[1] === 0x00 && firstBytes[2] === 0x01 && firstBytes[3] === 0x00) ||
+    // AVIF/HEIC (ftyp box)
+    (buffer.indexOf(Buffer.from('ftyp')) > 0) ||
+    // SVG (XML-based)
+    (bufferText.includes('<svg') || bufferText.includes('<?xml'))
   
   console.log('🔍 Generic image validation:', { couldBeImage })
   

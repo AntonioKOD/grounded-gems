@@ -326,12 +326,36 @@ export const FeedPost = memo(function FeedPost({
       .substring(0, 2)
   }
 
-  // Get author profile image URL using proper image utility
+  // User profile helpers with enhanced debugging
   const getAuthorProfileImageUrl = useCallback(() => {
-    if (!post.author) return "/placeholder.svg"
-    const profileImageUrl = getImageUrl(post.author.profileImage?.url || post.author.avatar)
+    // Try to get profile image from the author object
+    let imageSource = null
+    
+    if (post.author.profileImage?.url || post.author.profileImage) {
+      imageSource = post.author.profileImage
+    } else if (post.author.avatar) {
+      imageSource = post.author.avatar
+    }
+    
+    const profileImageUrl = getImageUrl(imageSource)
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🖼️ [FeedPost] Author profile image processing:', {
+        postId: post.id,
+        authorId: post.author.id,
+        authorName: post.author.name,
+        hasProfileImage: !!post.author.profileImage,
+        hasAvatar: !!post.author.avatar,
+        profileImageStructure: post.author.profileImage,
+        avatar: post.author.avatar,
+        imageSource,
+        processedUrl: profileImageUrl,
+        isPlaceholder: profileImageUrl === "/placeholder.svg"
+      })
+    }
+    
     return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
-  }, [post.author?.profileImage?.url, post.author?.avatar])
+  }, [post.author.profileImage, post.author.avatar, post.id, post.author.id, post.author.name])
 
   // Video player controls
   const handleVideoPlay = useCallback(() => {
@@ -519,13 +543,13 @@ export const FeedPost = memo(function FeedPost({
           {hasMedia && (
             <div className="mb-4">
               <MediaCarousel
-                items={mediaItems}
-                aspectRatio="16/10"
+                media={mediaItems}
+                aspectRatio="auto"
                 showControls={true}
                 showDots={true}
-                showCounter={true}
+                enableVideoPreview={true}
+                videoPreviewMode="hover"
                 className="rounded-2xl overflow-hidden bg-gray-50"
-                priority={true}
               />
             </div>
           )}

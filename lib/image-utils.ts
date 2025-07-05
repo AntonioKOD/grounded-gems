@@ -71,11 +71,20 @@ export function getImageUrl(image: any): string {
   if (typeof image === "string" && image.trim() !== "") {
     let url = image.trim()
     
-    // In development, transform API media URLs to blob URLs
+    // Transform API media URLs for local development
     url = transformToBlobUrl(url)
     
+    // Ensure the URL is properly formatted for serving
+    if (url.startsWith('/') && !url.startsWith('http')) {
+      const baseUrl = getBaseUrlSafely()
+      url = `${baseUrl}${url}`
+    }
+    
     if (isDevelopment) {
-      console.log('📸 getImageUrl: String URL found:', url)
+      console.log('📸 getImageUrl: String URL processed:', {
+        original: image,
+        processed: url
+      })
     }
     return url
   }
@@ -87,29 +96,68 @@ export function getImageUrl(image: any): string {
       console.log('📸 getImageUrl: Media object received:', {
         type: typeof image,
         keys: Object.keys(image),
+        id: image.id,
         url: image.url,
+        filename: image.filename,
         thumbnailURL: image.thumbnailURL,
-        sizes: image.sizes,
-        filename: image.filename
+        sizes: image.sizes ? Object.keys(image.sizes) : null,
+        hasCardSize: image.sizes?.card?.url,
+        hasThumbnailSize: image.sizes?.thumbnail?.url
       })
     }
     
-    // Try different URL sources in order of preference
-    let url = image.url || 
-              image.sizes?.card?.url || 
-              image.sizes?.thumbnail?.url || 
-              image.thumbnailURL ||
-              "/placeholder.svg"
+    // Try different URL sources in order of preference for Payload CMS
+    let url = null
     
-    // In development, transform API media URLs to blob URLs
-    url = transformToBlobUrl(url)
+    // 1. Direct URL from media object (most common)
+    if (image.url) {
+      url = image.url
+    }
+    // 2. Try card size for better quality
+    else if (image.sizes?.card?.url) {
+      url = image.sizes.card.url
+    }
+    // 3. Try thumbnail size as fallback
+    else if (image.sizes?.thumbnail?.url) {
+      url = image.sizes.thumbnail.url
+    }
+    // 4. Legacy thumbnailURL field
+    else if (image.thumbnailURL) {
+      url = image.thumbnailURL
+    }
+    // 5. Construct URL from filename if available
+    else if (image.filename) {
+      url = `/api/media/file/${image.filename}`
+    }
+    // 6. Try to use ID-based URL if available
+    else if (image.id) {
+      url = `/api/media/file/${image.id}`
+    }
+    // 7. Fallback to placeholder
+    else {
+      url = "/placeholder.svg"
+    }
+    
+    // Transform API media URLs for local development
+    if (url !== "/placeholder.svg") {
+      url = transformToBlobUrl(url)
+      
+      // Ensure the URL is properly formatted for serving
+      if (url.startsWith('/') && !url.startsWith('http')) {
+        const baseUrl = getBaseUrlSafely()
+        url = `${baseUrl}${url}`
+      }
+    }
                 
     if (isDevelopment) {
       console.log('📸 getImageUrl: Media object processed:', {
-        hasUrl: !!image.url,
+        hasDirectUrl: !!image.url,
         hasCardUrl: !!image.sizes?.card?.url,
         hasThumbnailUrl: !!image.sizes?.thumbnail?.url,
         hasThumbnailURL: !!image.thumbnailURL,
+        hasFilename: !!image.filename,
+        hasId: !!image.id,
+        selectedUrl: url,
         finalUrl: url,
         isPlaceholder: url === "/placeholder.svg"
       })
@@ -119,7 +167,10 @@ export function getImageUrl(image: any): string {
   }
 
   if (isDevelopment) {
-    console.log('📸 getImageUrl: No valid image found, returning placeholder. Input was:', image)
+    console.log('📸 getImageUrl: No valid image found, returning placeholder. Input was:', {
+      type: typeof image,
+      value: image
+    })
   }
   return "/placeholder.svg"
 }
@@ -137,6 +188,12 @@ export function getVideoUrl(video: any): string | null {
     // In development, transform API media URLs to blob URLs
     url = transformToBlobUrl(url)
     
+    // Ensure the URL is properly formatted for serving
+    if (url.startsWith('/') && !url.startsWith('http')) {
+      const baseUrl = getBaseUrlSafely()
+      url = `${baseUrl}${url}`
+    }
+    
     return url
   }
   
@@ -146,6 +203,12 @@ export function getVideoUrl(video: any): string | null {
     
     // In development, transform API media URLs to blob URLs
     url = transformToBlobUrl(url)
+    
+    // Ensure the URL is properly formatted for serving
+    if (url.startsWith('/') && !url.startsWith('http')) {
+      const baseUrl = getBaseUrlSafely()
+      url = `${baseUrl}${url}`
+    }
     
     return url
   }

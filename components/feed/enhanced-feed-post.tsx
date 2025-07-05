@@ -200,13 +200,17 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   const hasMedia = mediaItems.length > 0
   const currentMedia = mediaItems[currentMediaIndex]
 
-  console.log(`📱 Enhanced Post ${post.id} using getImageUrl:`, {
+  console.log(`📱 Enhanced Post ${post.id} media debug:`, {
     originalImage: post.image,
     imageUrl,
     videoUrl,
     photos,
     mediaItems: mediaItems.length,
-    hasMedia
+    hasMedia,
+    postMediaArray: post.media,
+    firstMediaItem: mediaItems[0],
+    mediaTypes: mediaItems.map(m => m.type),
+    mediaUrls: mediaItems.map(m => m.url)
   })
 
   // Handle like action with haptics and animations
@@ -414,13 +418,13 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
           {hasMedia && (
             <div className="relative mb-4">
               <MediaCarousel
-                items={mediaItems}
-                aspectRatio="16/10"
+                media={mediaItems}
+                aspectRatio="auto"
                 showControls={true}
                 showDots={true}
-                showCounter={true}
+                enableVideoPreview={true}
+                videoPreviewMode="hover"
                 className="rounded-2xl overflow-hidden bg-gray-100"
-                priority={priority <= 2}
               />
             </div>
           )}

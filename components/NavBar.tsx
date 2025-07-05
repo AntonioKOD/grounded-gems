@@ -59,17 +59,33 @@ export default function NavBar({ initialUser }: NavBarProps) {
 
   // Reset image error when user changes
   useEffect(() => {
-    setImageError(false);
+    setImageError(false)
     if (user) {
       console.log('🖼️ [NavBar] User data received:', {
         userId: user.id,
         userName: user.name,
         profileImage: user.profileImage,
         avatar: user.avatar,
-        hasProfileImageUrl: !!user.profileImage?.url
+        hasProfileImageUrl: !!user.profileImage?.url,
+        profileImageStructure: user.profileImage ? {
+          id: user.profileImage.id,
+          url: user.profileImage.url,
+          filename: user.profileImage.filename,
+          sizes: user.profileImage.sizes ? Object.keys(user.profileImage.sizes) : null
+        } : null
       })
+      
+      // Test the getImageUrl function with current user data
+      if (user.profileImage) {
+        const processedUrl = getImageUrl(user.profileImage)
+        console.log('🖼️ [NavBar] Profile image URL processing:', {
+          original: user.profileImage.url || user.profileImage,
+          processed: processedUrl,
+          isPlaceholder: processedUrl === "/placeholder.svg"
+        })
+      }
     }
-  }, [user?.profileImage?.url, user]);
+  }, [user?.profileImage?.url, user])
 
   // Listen for user updates to refresh navbar immediately
   useEffect(() => {
@@ -112,6 +128,30 @@ export default function NavBar({ initialUser }: NavBarProps) {
     { href: "/guides", label: "Guides", priority: 3 },
     { href: "/map", label: "Explore", priority: 4 },
   ];
+
+  // Function to get the best available profile image URL
+  const getProfileImageUrl = () => {
+    if (!user) return "/placeholder.svg"
+    
+    // Try profile image first
+    if (user.profileImage) {
+      const url = getImageUrl(user.profileImage)
+      if (url !== "/placeholder.svg") {
+        return url
+      }
+    }
+    
+    // Try avatar field as fallback
+    if (user.avatar) {
+      const url = getImageUrl(user.avatar)
+      if (url !== "/placeholder.svg") {
+        return url
+      }
+    }
+    
+    // Final fallback to placeholder
+    return "/placeholder.svg"
+  }
 
   // Show loading state during authentication check
   if (!isHydrated) {
@@ -266,15 +306,20 @@ export default function NavBar({ initialUser }: NavBarProps) {
                         variant="ghost"
                         className="relative h-10 w-10 lg:h-11 lg:w-11 rounded-full p-0 overflow-hidden ring-2 ring-transparent hover:ring-[#4ECDC4]/40 transition-all duration-300 shadow-md hover:shadow-lg"
                       >
-                        {user?.profileImage?.url && !imageError ? (
+                        {(user?.profileImage || user?.avatar) && !imageError ? (
                           <Image
-                            src={getImageUrl(user.profileImage.url)} 
+                            src={getProfileImageUrl()} 
                             alt={user.profileImage?.alt || user.name || 'User avatar'}
                             width={44}
                             height={44}
                             className="h-full w-full rounded-full object-cover"
                             onError={(e) => {
-                              console.error('NavBar: Profile image failed to load:', user.profileImage?.url, e)
+                              console.error('NavBar: Profile image failed to load:', {
+                                originalUrl: user.profileImage?.url,
+                                processedUrl: getProfileImageUrl(),
+                                mediaObject: user.profileImage,
+                                error: e
+                              })
                               setImageError(true)
                             }}
                           />

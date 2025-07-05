@@ -189,10 +189,15 @@ export default function CreatePostForm({
           continue
         }
         
-        // Validate image format
-        const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+        // Validate image format - comprehensive support for modern and legacy formats
+        const allowedImageTypes = [
+          'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+          'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+          'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
+          'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
+        ]
         if (!allowedImageTypes.includes(file.type.toLowerCase())) {
-          toast.error(`${file.name} is not a supported image format. Use JPEG, PNG, WebP, or GIF.`)
+          toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
           continue
         }
       } else if (file.type.startsWith('video/')) {

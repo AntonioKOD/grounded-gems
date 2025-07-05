@@ -23,11 +23,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
-    // Fetch the full user data with relationships
+    console.log('🔍 [API] Fetching user with profile image relationship...')
+
+    // Fetch the full user data with relationships - INCREASED DEPTH for profile images
     const fullUser = await payload.findByID({
       collection: 'users',
       id: user.id,
-      depth: 2, // Need depth to populate profileImage media relationship
+      depth: 3, // Increased depth to ensure profileImage media relationship is populated
+    })
+
+    console.log('🖼️ [API] Profile image data structure:', {
+      hasProfileImage: !!fullUser.profileImage,
+      profileImageType: typeof fullUser.profileImage,
+      profileImageKeys: fullUser.profileImage ? Object.keys(fullUser.profileImage) : null,
+      profileImageUrl: fullUser.profileImage?.url,
+      profileImageId: fullUser.profileImage?.id,
+      profileImageFilename: fullUser.profileImage?.filename
     })
 
     // Extract post IDs from the relationships
@@ -39,25 +50,42 @@ export async function GET(request: NextRequest) {
       ? fullUser.likedPosts.map((post: any) => typeof post === 'string' ? post : post.id || post)
       : []
 
-    console.log('API: User saved posts:', { 
+    console.log('📊 [API] User interaction data:', { 
       rawSavedPosts: fullUser.savedPosts, 
       extractedSavedPostIds: savedPostIds,
       rawLikedPosts: fullUser.likedPosts,
       extractedLikedPostIds: likedPostIds
     })
 
+    // Prepare response with enhanced profile image handling
+    const responseData = {
+      id: fullUser.id,
+      name: fullUser.name,
+      email: fullUser.email,
+      profileImage: fullUser.profileImage ? {
+        id: fullUser.profileImage.id,
+        url: fullUser.profileImage.url,
+        filename: fullUser.profileImage.filename,
+        alt: fullUser.profileImage.alt,
+        // Include sizes if available
+        sizes: fullUser.profileImage.sizes
+      } : null,
+      location: fullUser.location,
+      savedPosts: savedPostIds,
+      likedPosts: likedPostIds,
+      role: fullUser.role,
+      // Add any other fields you need
+    }
+
+    console.log('✅ [API] Sending user response with profile image:', {
+      userId: responseData.id,
+      hasProfileImage: !!responseData.profileImage,
+      profileImageUrl: responseData.profileImage?.url,
+      profileImageFilename: responseData.profileImage?.filename
+    })
+
     const response = NextResponse.json({ 
-      user: {
-        id: fullUser.id,
-        name: fullUser.name,
-        email: fullUser.email,
-        profileImage: fullUser.profileImage,
-        location: fullUser.location,
-        savedPosts: savedPostIds,
-        likedPosts: likedPostIds,
-        role: fullUser.role,
-        // Add any other fields you need
-      }
+      user: responseData
     })
 
     // Add headers to prevent caching issues in production
@@ -67,9 +95,8 @@ export async function GET(request: NextRequest) {
     response.headers.set('Surrogate-Control', 'no-store')
 
     return response
-
   } catch (error) {
-    console.error('Error fetching current user:', error)
+    console.error('❌ [API] Error fetching user:', error)
     
     // More specific error handling
     if (error instanceof Error) {

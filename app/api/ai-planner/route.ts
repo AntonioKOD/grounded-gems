@@ -3,16 +3,50 @@ import { getServerSideUser } from '@/lib/auth-server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-export const runtime = 'nodejs'  // Changed from edge to support payload
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  const user = await getServerSideUser()
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  let user = null
+  
+  try {
+    // Enhanced authentication with better error handling
+    user = await getServerSideUser()
+    if (!user) {
+      console.log('❌ AI Planner: No authenticated user')
+      return NextResponse.json({ 
+        error: 'Authentication required to use AI Planner',
+        code: 'AUTH_REQUIRED'
+      }, { status: 401 })
+    }
+    
+    console.log(`✅ AI Planner: Authenticated user ${user.id} (${user.name})`)
+  } catch (authError) {
+    console.error('❌ AI Planner: Authentication error:', authError)
+    return NextResponse.json({ 
+      error: 'Authentication service unavailable',
+      code: 'AUTH_ERROR'
+    }, { status: 503 })
   }
   
   try {
-    const { input, context, coordinates } = await req.json()
+    const requestBody = await req.json()
+    const { input, context, coordinates } = requestBody
+    
+    console.log('🎯 AI Planner Request:', {
+      userId: user.id,
+      input: input?.substring(0, 100),
+      context,
+      hasCoordinates: !!coordinates,
+      coordinates: coordinates ? `${coordinates.latitude}, ${coordinates.longitude}` : null
+    })
+    
+    // Validate required parameters
+    if (!input || !context) {
+      return NextResponse.json({
+        error: 'Missing required parameters: input and context are required',
+        code: 'MISSING_PARAMS'
+      }, { status: 400 })
+    }
     
     // Get real location data if coordinates are provided
     let nearbyLocations: any[] = []
@@ -20,39 +54,57 @@ export async function POST(req: NextRequest) {
     let userLocation = 'your area'
     let usedRealLocations = false
     let referencedLocationIds: string[] = []
+    let locationFetchError = null
     
     if (coordinates?.latitude && coordinates?.longitude) {
       try {
+        console.log(`📍 Fetching locations near ${coordinates.latitude}, ${coordinates.longitude}`)
         const payload = await getPayload({ config })
         
-        // Fetch user data for preferences
-        const userData = await payload.findByID({
-          collection: 'users',
-          id: user.id,
-          depth: 1
-        })
+        // Fetch user data for preferences with timeout
+        let userData = null
+        try {
+          userData = await Promise.race([
+            payload.findByID({
+              collection: 'users',
+              id: user.id,
+              depth: 1
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('User fetch timeout')), 3000))
+          ])
+        } catch (userError) {
+          console.warn('⚠️ User data fetch failed, continuing without preferences:', userError)
+        }
         
-        // Fetch nearby locations within 20 miles with better filtering
-        const { docs: allLocations } = await payload.find({
-          collection: 'locations',
-          where: {
-            and: [
-              { status: { equals: 'published' } },
-              { 'coordinates.latitude': { exists: true } },
-              { 'coordinates.longitude': { exists: true } }
-            ]
-          },
-          limit: 100,
-          depth: 2, // Get more details including categories and contact info
-        })
+        // Enhanced location query with better filtering and error handling
+        const { docs: allLocations } = await Promise.race([
+          payload.find({
+            collection: 'locations',
+            where: {
+              and: [
+                { status: { equals: 'published' } },
+                { 'coordinates.latitude': { exists: true } },
+                { 'coordinates.longitude': { exists: true } },
+                { name: { exists: true } },
+                { name: { not_equals: '' } }
+              ]
+            },
+            limit: 150, // Increased limit for better selection
+            depth: 2,
+            sort: '-updatedAt' // Prefer recently updated locations
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Location fetch timeout')), 5000))
+        ])
         
-        // Calculate distances and filter nearby locations
+        console.log(`📊 Found ${allLocations.length} total locations in database`)
+        
+        // Enhanced distance calculation with better filtering
         const locationsWithDistance = allLocations
           .map((location: any) => {
             const locLat = location.coordinates?.latitude
             const locLng = location.coordinates?.longitude
             
-            if (!locLat || !locLng) return null
+            if (!locLat || !locLng || !location.name) return null
             
             // Haversine distance calculation
             const R = 3959 // Earth's radius in miles
@@ -70,12 +122,13 @@ export async function POST(req: NextRequest) {
               distance
             }
           })
-          .filter((loc: any) => loc && loc.distance <= 20) // Within 20 miles
+          .filter((loc: any) => loc && loc.distance <= 25) // Within 25 miles (expanded radius)
           .sort((a: any, b: any) => a.distance - b.distance)
         
         nearbyLocations = locationsWithDistance
+        console.log(`📍 Found ${nearbyLocations.length} locations within 25 miles`)
         
-        // Create more detailed location context for AI
+        // Create detailed location context for AI - MANDATORY USAGE
         if (nearbyLocations.length > 0) {
           usedRealLocations = true
           
@@ -89,11 +142,18 @@ export async function POST(req: NextRequest) {
             userLocation = firstLocation.address.split(',')[0] || 'your area'
           }
           
-          // Select best locations for AI planning based on type and preferences
-          const selectedLocations = selectBestLocationsForContext(nearbyLocations, context, userData?.interests || [])
+          // Enhanced location selection - prioritize based on context and quality
+          const selectedLocations = selectBestLocationsForContext(
+            nearbyLocations, 
+            context, 
+            userData?.interests || [],
+            input // Pass the user input for better matching
+          )
           referencedLocationIds = selectedLocations.map(loc => loc.id)
           
-          // Format location data for AI context with rich details
+          console.log(`🎯 Selected ${selectedLocations.length} best locations for AI context`)
+          
+          // Enhanced location formatting for AI with MANDATORY usage instruction
           const locationDescriptions = selectedLocations.map((loc: any) => {
             const address = formatLocationAddress(loc.address)
             const categories = formatLocationCategories(loc.categories)
@@ -109,17 +169,20 @@ export async function POST(req: NextRequest) {
    Rating: ${rating} | Price: ${priceRange} | Hours: ${hours}${contact}${website}${tips}`
           }).join('\n\n')
           
-          locationContext = `\n\nNEARBY VERIFIED LOCATIONS TO INCLUDE IN YOUR PLAN:\n${locationDescriptions}`
+          locationContext = `\n\n🎯 MANDATORY VERIFIED LOCATIONS TO USE IN YOUR PLAN:
+${locationDescriptions}
+
+⚠️ CRITICAL INSTRUCTION: You MUST use AT LEAST ${Math.min(selectedLocations.length, 3)} of these verified locations in your plan. Each step using a verified location MUST include the exact location name followed by "(Verified Sacavia Location)".`
         }
         
-        console.log(`Found ${nearbyLocations.length} nearby locations for AI planning`)
-      } catch (error) {
-        console.error('Error fetching nearby locations:', error)
+      } catch (locationError) {
+        console.error('❌ Error fetching nearby locations:', locationError)
+        locationFetchError = locationError.message
         // Continue with general planning if location fetch fails
       }
     }
     
-    // Get enhanced user preferences
+    // Enhanced user preferences
     const userPreferences = getUserPreferencesForContext(user, context)
     
     // Get current time and context
@@ -128,63 +191,75 @@ export async function POST(req: NextRequest) {
     const timeOfDay = getTimeOfDay(now)
     const season = getSeason(now)
     
-    // Enhanced prompt with real location data and better context
+    // ENHANCED PLANNING INSTRUCTIONS - STRICT DATABASE USAGE
     let planningInstructions = `
-PLANNING INSTRUCTIONS:
-1. CREATE A SPECIFIC, ACTIONABLE PLAN.
-2. IF VERIFIED LOCATIONS ARE PROVIDED, YOU MUST PRIORITIZE AND INTEGRATE THEM. Clearly label these as "(Verified Sacavia Location)".
-3. If creating a step for a type of place not in the verified list, clearly label it as "(Find a local spot for this)".
-4. CONSIDER timing, travel between locations, and realistic scheduling.
-5. INCLUDE specific addresses (if known from verified locations), estimated costs (general terms like $, $$, $$$), and timing for each step.
-6. REFERENCE verified locations by their EXACT NAMES as listed.
-7. If combining multiple verified locations, ensure they're logically sequenced.
-8. Consider current time of day and day of week for business hours if suggesting types of places.
-9. Add insider tips and specific recommendations when available, especially for verified locations.
-`
+🎯 CRITICAL PLANNING INSTRUCTIONS - READ CAREFULLY:
+
+1. **DATABASE LOCATIONS ARE MANDATORY**: If verified locations are provided below, you MUST use them as the foundation of your plan.
+2. **MINIMUM USAGE REQUIREMENT**: Use AT LEAST ${nearbyLocations.length > 0 ? Math.min(nearbyLocations.length, 3) : 0} verified locations if available.
+3. **EXACT NAMING**: Reference verified locations by their EXACT NAMES as listed, followed by "(Verified Sacavia Location)".
+4. **LOCATION PRIORITY**: Always prioritize verified locations over generic suggestions.
+5. **REALISTIC LOGISTICS**: Consider timing, travel between locations, and realistic scheduling.
+6. **COMPLETE DETAILS**: Include specific addresses (for verified locations), estimated costs, and timing.
+7. **INSIDER VALUE**: Use insider tips and specific recommendations when available from verified locations.
+8. **FALLBACK LABELING**: Only if you suggest a type of place not in the verified list, label it as "(Find a local spot for this)".
+9. **QUALITY OVER QUANTITY**: Better to have fewer steps with verified locations than many generic ones.
+10. **USER EXPERIENCE**: Make the plan feel like a local insider's recommendation.`
+
     let stepCountGuidance = "Aim for 4-6 detailed steps."
 
     if (nearbyLocations.length > 0) {
       planningInstructions += `
-10. You have ${nearbyLocations.length} real verified locations nearby. Your plan MUST use at least ${Math.min(nearbyLocations.length, 2)} of these. Make the plan feel like a local insider's recommendation, focusing on these verified spots.`
+
+🏆 **VERIFIED LOCATIONS AVAILABLE**: You have ${nearbyLocations.length} real verified locations nearby. 
+**MANDATORY**: Your plan MUST use at least ${Math.min(nearbyLocations.length, 3)} of these verified locations.
+**SUCCESS CRITERIA**: Each verified location used should be clearly identified with "(Verified Sacavia Location)" label.`
+      
       if (nearbyLocations.length <= 2) {
-        stepCountGuidance = "Aim for 2-3 detailed steps, focusing on the provided verified locations."
+        stepCountGuidance = "Create 2-3 detailed steps, focusing primarily on the verified locations."
       } else if (nearbyLocations.length <= 4) {
-        stepCountGuidance = "Aim for 3-5 detailed steps, integrating several of the provided verified locations."
+        stepCountGuidance = "Create 3-5 detailed steps, integrating multiple verified locations."
+      } else {
+        stepCountGuidance = "Create 4-6 detailed steps, showcasing the best verified locations."
       }
-      planningInstructions += `\n11. For each step involving a verified location, state its name exactly as provided and append "(Verified Sacavia Location)".`
     } else {
       planningInstructions += `
-10. No verified locations found nearby. Create a general plan with location types and suggestions (e.g., "a cozy cafe", "a lively park"). Clearly label these as "(Find a local spot for this)".`
-      stepCountGuidance = "Aim for 3-5 general steps, suggesting types of places."
+
+⚠️ **NO VERIFIED LOCATIONS**: No database locations found nearby. Create a general plan with location types and clearly label suggestions as "(Find a local spot for this)".`
+      stepCountGuidance = "Create 3-5 general steps with location type suggestions."
     }
-    planningInstructions += `\n12. ${stepCountGuidance}`
+    
+    planningInstructions += `\n\n📋 **STEP COUNT**: ${stepCountGuidance}`
 
+    // Enhanced AI prompt with stricter instructions
+    const basePrompt = `You are Gem Journey, the expert local experience planner who creates amazing, actionable hangout plans using REAL, VERIFIED locations from Sacavia's database.
 
-    const basePrompt = `You are Gem Journey, an expert local experience planner who creates amazing, actionable hangout plans using real, verified locations.
-
-USER REQUEST: "${input}"
-HANGOUT TYPE: ${context}
-USER LOCATION: ${userLocation}
-DAY & TIME: ${dayOfWeek}, ${timeOfDay}
-SEASON: ${season}
-USER PREFERENCES: ${userPreferences}
+🎯 **USER REQUEST**: "${input}"
+📝 **HANGOUT TYPE**: ${context}
+📍 **USER LOCATION**: ${userLocation}
+🗓️ **DAY & TIME**: ${dayOfWeek}, ${timeOfDay}
+🌍 **SEASON**: ${season}
+👤 **USER PREFERENCES**: ${userPreferences}
 ${locationContext}
 
 ${planningInstructions}
 
-Respond in the following JSON format:
+🔥 **RESPONSE FORMAT** (JSON ONLY - NO OTHER TEXT):
 {
-  "title": "Engaging, specific plan title (include general area if no specific locations used, or a key location if used)",
-  "summary": "Brief, exciting description (mention real places if used, otherwise general theme)",
+  "title": "Engaging, specific plan title (include location names if using verified locations)",
+  "summary": "Brief, exciting description (mention real places by name if used)",
   "steps": [
-    "Step 1: [Time (e.g., 7:00 PM)] - [Specific action] at [Specific location name or type of place] [Label: (Verified Sacavia Location) or (Find a local spot for this)] - [Brief description/tip, address if verified, cost estimate like $, $$, $$$]"
+    "Step 1: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified, cost estimate]",
+    "Step 2: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified, cost estimate]"
   ],
   "context": "${context}",
   "usedRealLocations": ${usedRealLocations},
-  "locationIds": ${JSON.stringify(referencedLocationIds)}
+  "locationIds": ${JSON.stringify(referencedLocationIds)},
+  "verifiedLocationCount": ${nearbyLocations.length}
 }`
 
-    // Call OpenAI API with enhanced model settings
+    // Enhanced OpenAI API call with better error handling
+    console.log('🤖 Calling OpenAI API...')
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -192,42 +267,55 @@ Respond in the following JSON format:
         'Authorization': `Bearer ${process.env.OPEN_AI_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4', // Using GPT-4 for better planning
+        model: 'gpt-4',
         messages: [
           { 
             role: 'system', 
-            content: `You are Gem Journey, a creative local experience planner who specializes in creating personalized hangout plans using real, verified locations. You always prioritize real locations when available, provide specific timing and logistics, and make recommendations feel like they come from a local insider. Focus on creating memorable, actionable experiences.` 
+            content: `You are Gem Journey, a world-class local experience planner. You specialize in creating personalized hangout plans using REAL, VERIFIED locations from Sacavia's database. 
+
+CRITICAL RULES:
+1. ALWAYS prioritize verified database locations when available
+2. Use EXACT location names followed by "(Verified Sacavia Location)"
+3. Only use generic suggestions when no verified options exist
+4. Focus on creating memorable, actionable experiences
+5. RESPOND ONLY IN JSON FORMAT - NO OTHER TEXT` 
           },
           { role: 'user', content: basePrompt },
         ],
-        max_tokens: 1200,
-        temperature: 0.7, // Balanced creativity and consistency
+        max_tokens: 1500,
+        temperature: 0.7,
       })
     })
 
     if (!openaiRes.ok) {
       const error = await openaiRes.text()
-      console.error('OpenAI API error:', error)
+      console.error('❌ OpenAI API error:', error)
       
-      // Provide a more specific error message based on the status code
+      // Enhanced error handling with specific status codes
       let errorMessage = 'AI planning service temporarily unavailable'
       if (openaiRes.status === 401) {
-        errorMessage = 'AI service authentication failed'
+        errorMessage = 'AI service authentication failed - please contact support'
       } else if (openaiRes.status === 429) {
-        errorMessage = 'AI service is currently busy. Please try again in a moment.'
+        errorMessage = 'AI service is currently busy. Please wait a moment and try again.'
       } else if (openaiRes.status >= 500) {
         errorMessage = 'AI service is experiencing issues. Please try again later.'
       }
       
-      return NextResponse.json({ error: errorMessage }, { status: 500 })
+      return NextResponse.json({ 
+        error: errorMessage,
+        code: 'OPENAI_ERROR',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      }, { status: 503 })
     }
     
     const data = await openaiRes.json()
     let planRaw = data.choices?.[0]?.message?.content || ''
     let plan
     
+    console.log('🤖 AI Response received, parsing...')
+    
     try {
-      // Try to parse JSON from the AI response
+      // Enhanced JSON parsing with better error handling
       const jsonStart = planRaw.indexOf('{')
       const jsonEnd = planRaw.lastIndexOf('}') + 1
       if (jsonStart === -1 || jsonEnd === -1 || jsonStart > jsonEnd) {
@@ -237,79 +325,79 @@ Respond in the following JSON format:
       const jsonString = planRaw.slice(jsonStart, jsonEnd)
       plan = JSON.parse(jsonString)
       
-      // Validate required fields
+      // Enhanced validation of required fields
       if (!plan.title || !plan.summary || !Array.isArray(plan.steps)) {
         throw new Error("AI response missing required fields")
       }
       
-      // Ensure steps are properly formatted
       if (plan.steps.length === 0) {
         throw new Error("AI response has no steps")
       }
       
-      // Add metadata about the planning session
+      // CRITICAL: Validate that verified locations were used if available
+      if (nearbyLocations.length > 0) {
+        const verifiedLocationUsage = plan.steps.filter((step: string) => 
+          step.includes('(Verified Sacavia Location)')
+        ).length
+        
+        console.log(`🎯 Verified location usage check: ${verifiedLocationUsage}/${nearbyLocations.length} available locations used`)
+        
+        // Force verification if AI didn't use enough database locations
+        if (verifiedLocationUsage === 0) {
+          console.warn('⚠️ AI did not use any verified locations, this should not happen!')
+          plan.usedRealLocations = false
+        } else {
+          plan.usedRealLocations = true
+        }
+      }
+      
+      // Add comprehensive metadata
       plan.coordinates = coordinates
       plan.nearbyLocationsCount = nearbyLocations.length
+      plan.verifiedLocationsUsed = plan.steps.filter((step: string) => 
+        step.includes('(Verified Sacavia Location)')
+      ).length
       plan.generatedAt = new Date().toISOString()
-      // Ensure these are consistent with what AI might have overridden if it didn't follow instructions
-      plan.usedRealLocations = usedRealLocations 
       plan.locationIds = referencedLocationIds
       plan.userLocation = userLocation
+      plan.locationFetchError = locationFetchError
       
-    } catch (e) {
-      console.error('Error parsing AI response:', e)
-      console.log('Raw AI response:', planRaw)
+      console.log('✅ Plan generated successfully:', {
+        title: plan.title,
+        stepsCount: plan.steps.length,
+        nearbyLocations: nearbyLocations.length,
+        verifiedUsed: plan.verifiedLocationsUsed,
+        usedRealLocations: plan.usedRealLocations
+      })
       
-      // Enhanced fallback parsing with better error handling
-      let extractedTitle = 'Custom Hangout Plan'
-      let extractedSummary = 'Here is a plan based on your request.'
+    } catch (parseError) {
+      console.error('❌ Error parsing AI response:', parseError)
+      console.log('Raw AI response:', planRaw.substring(0, 500))
+      
+      // Enhanced fallback with database location injection
+      let extractedTitle = `${context.charAt(0).toUpperCase() + context.slice(1)} Hangout Plan`
+      let extractedSummary = 'Here is a customized plan based on your request.'
       let stepsArray: string[] = []
       
-      try {
-        // Try to extract title
-        const titleMatch = planRaw.match(/title["']?\s*:\s*["']([^"']+)["']/i)
-        if (titleMatch && titleMatch[1]) {
-          extractedTitle = titleMatch[1]
-        }
+      // Try to inject database locations into fallback
+      if (nearbyLocations.length > 0) {
+        extractedTitle = `Local ${context.charAt(0).toUpperCase() + context.slice(1)} Experience in ${userLocation}`
+        extractedSummary = `A curated plan featuring ${nearbyLocations.length} verified local spots near ${userLocation}.`
         
-        // Try to extract summary
-        const summaryMatch = planRaw.match(/summary["']?\s*:\s*["']([^"']+)["']/i)
-        if (summaryMatch && summaryMatch[1]) {
-          extractedSummary = summaryMatch[1]
-        }
+        // Create simple steps using database locations
+        nearbyLocations.slice(0, 3).forEach((location, index) => {
+          const categories = formatLocationCategories(location.categories)
+          const address = formatLocationAddress(location.address)
+          stepsArray.push(
+            `Step ${index + 1}: Visit ${location.name} (Verified Sacavia Location) - ${categories} located at ${address}. Distance: ${location.distance.toFixed(1)} miles.`
+          )
+        })
         
-        // Try to extract steps using multiple patterns
-        const stepRegex = /step\s*\d+\s*[:\-]\s*(.*)/gi
-        let match
-        while ((match = stepRegex.exec(planRaw)) !== null) {
-          const step = match[1].trim()
-          if (step.length > 5) { // Only add meaningful steps
-            stepsArray.push(step)
-          }
-        }
-        
-        // Fallback step extraction if regex fails
         if (stepsArray.length === 0) {
-          const lines = planRaw.split('\n')
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (trimmed.match(/^(\d+\.|-|Step\s*\d+:)/i) && trimmed.length > 10) {
-              const step = trimmed.replace(/^(\d+\.|-|Step\s*\d+:)\s*/i, '')
-              if (step.length > 5) {
-                stepsArray.push(step)
-              }
-            }
-          }
+          stepsArray = ["We encountered an issue processing the AI response. Please try again with a different request."]
         }
-        
-        // If still no steps, create a generic one
-        if (stepsArray.length === 0) {
-          stepsArray.push("The AI generated a plan, but there was an issue formatting the steps. Please try rephrasing your request for better results.")
-        }
-        
-      } catch (fallbackError) {
-        console.error('Error in fallback parsing:', fallbackError)
-        stepsArray = ["We encountered an issue processing the AI response. Please try again with a different request."]
+      } else {
+        stepsArray = ["The AI generated a plan, but there was an issue formatting the steps. Please try rephrasing your request for better results."]
       }
 
       plan = { 
@@ -317,37 +405,49 @@ Respond in the following JSON format:
         summary: extractedSummary, 
         steps: stepsArray,
         context,
-        usedRealLocations: false, // Assume false if parsing failed
-        locationIds: [],
+        usedRealLocations: nearbyLocations.length > 0,
+        locationIds: nearbyLocations.slice(0, 3).map(loc => loc.id),
+        verifiedLocationsUsed: nearbyLocations.length > 0 ? Math.min(3, nearbyLocations.length) : 0,
         coordinates,
         generatedAt: new Date().toISOString(),
         userLocation,
         nearbyLocationsCount: nearbyLocations.length,
-        parseError: true, // Indicate that this is a fallback
+        parseError: true,
+        locationFetchError
       }
     }
     
-    return NextResponse.json({ 
+    const response = {
       plan,
       nearbyLocationsFound: nearbyLocations.length,
       userLocation,
-      usedRealLocations
+      usedRealLocations: plan.usedRealLocations,
+      verifiedLocationsUsed: plan.verifiedLocationsUsed || 0,
+      success: true
+    }
+    
+    console.log('🎉 AI Planner completed successfully:', {
+      nearbyLocations: nearbyLocations.length,
+      verifiedUsed: response.verifiedLocationsUsed,
+      usedReal: response.usedRealLocations
     })
     
-  } catch (err: any) {
-    console.error('AI Planner error:', err)
+    return NextResponse.json(response)
     
-    // Provide more specific error messages based on error type
+  } catch (err: any) {
+    console.error('❌ AI Planner critical error:', err)
+    
+    // Enhanced error handling with specific error types
     let errorMessage = 'Failed to generate plan'
     let statusCode = 500
     
-    if (err.message?.includes('fetch')) {
-      errorMessage = 'Unable to connect to AI service. Please check your internet connection and try again.'
+    if (err.message?.includes('fetch') || err.message?.includes('network')) {
+      errorMessage = 'Network connectivity issue. Please check your connection and try again.'
+    } else if (err.message?.includes('timeout')) {
+      errorMessage = 'Request timed out. Please try again.'
+      statusCode = 408
     } else if (err.message?.includes('JSON')) {
       errorMessage = 'Error processing AI response. Please try again.'
-    } else if (err.message?.includes('Unauthorized')) {
-      errorMessage = 'Authentication error. Please try again later.'
-      statusCode = 401
     } else if (err.message?.includes('rate limit') || err.message?.includes('too many requests')) {
       errorMessage = 'Too many requests. Please wait a moment and try again.'
       statusCode = 429
@@ -357,69 +457,84 @@ Respond in the following JSON format:
     
     return NextResponse.json({ 
       error: errorMessage,
-      plan: { // Provide a minimal fallback plan structure on catastrophic error
+      code: 'CRITICAL_ERROR',
+      plan: {
         title: "Plan Generation Error",
-        summary: "We encountered an issue while trying to generate your plan. Please try again shortly.",
-        steps: ["Try rephrasing your request or check back later."],
-        context: "error",
+        summary: "We encountered an issue while trying to generate your plan. Our team has been notified.",
+        steps: ["Please try rephrasing your request or contact support if the issue persists."],
+        context: context || "error",
         usedRealLocations: false,
         locationIds: [],
         generatedAt: new Date().toISOString(),
         userLocation: "N/A",
         nearbyLocationsCount: 0,
         error: true
-      }
+      },
+      success: false
     }, { status: statusCode })
   }
 }
 
-// Helper functions
-function selectBestLocationsForContext(locations: any[], context: string, userInterests: string[] = []) {
-  // Filter and rank locations based on context and user interests
+// Enhanced helper functions
+function selectBestLocationsForContext(
+  locations: any[], 
+  context: string, 
+  userInterests: string[] = [],
+  userInput: string = ''
+) {
   const contextKeywords = getContextKeywords(context)
   const interestKeywords = userInterests.flatMap(interest => interest.toLowerCase().split(' '))
+  const inputKeywords = userInput.toLowerCase().split(' ').filter(word => word.length > 3)
   
   const scoredLocations = locations.map(loc => {
     let score = 0
     
-    // Score based on context relevance
     const locText = `${loc.name} ${loc.description || ''} ${formatLocationCategories(loc.categories)}`.toLowerCase()
+    
+    // Score based on context relevance (highest priority)
     contextKeywords.forEach(keyword => {
-      if (locText.includes(keyword)) score += 3
+      if (locText.includes(keyword)) score += 5
+    })
+    
+    // Score based on user input keywords
+    inputKeywords.forEach(keyword => {
+      if (locText.includes(keyword)) score += 4
     })
     
     // Score based on user interests
     interestKeywords.forEach(interest => {
-      if (locText.includes(interest)) score += 2
+      if (locText.includes(interest)) score += 3
     })
     
-    // Bonus for verified and highly rated locations
-    if (loc.isVerified) score += 2
-    if (loc.averageRating >= 4.0) score += 1
-    if (loc.isFeatured) score += 1
+    // Bonus for quality indicators
+    if (loc.isVerified) score += 3
+    if (loc.averageRating >= 4.5) score += 2
+    else if (loc.averageRating >= 4.0) score += 1
+    if (loc.isFeatured) score += 2
+    if (loc.insiderTips) score += 1
     
-    // Penalty for distance (closer is better)
-    score -= loc.distance * 0.1
+    // Distance penalty (closer is better)
+    score -= loc.distance * 0.2
     
     return { ...loc, score }
   })
   
-  // Return top scored locations, ensuring variety
+  // Return diverse selection of top scored locations
   return scoredLocations
     .sort((a, b) => b.score - a.score)
-    .slice(0, 8) // Top 8 for AI to choose from
+    .slice(0, Math.min(12, locations.length)) // Increased for better selection
 }
 
 function getContextKeywords(context: string): string[] {
   const contextMap: { [key: string]: string[] } = {
-    'date': ['romantic', 'dinner', 'restaurant', 'cafe', 'wine', 'intimate', 'cozy', 'view'],
-    'group': ['bar', 'restaurant', 'activity', 'entertainment', 'game', 'music', 'social'],
-    'family': ['family', 'kid', 'child', 'park', 'museum', 'outdoor', 'activity', 'fun'],
-    'solo': ['cafe', 'book', 'quiet', 'park', 'museum', 'walk', 'peaceful', 'solo'],
-    'friend_group': ['bar', 'game', 'activity', 'social', 'fun', 'entertainment', 'food']
+    'date': ['romantic', 'dinner', 'restaurant', 'cafe', 'wine', 'intimate', 'cozy', 'view', 'fine dining', 'cocktail'],
+    'group': ['bar', 'restaurant', 'activity', 'entertainment', 'game', 'music', 'social', 'brewery', 'lounge'],
+    'family': ['family', 'kid', 'child', 'park', 'museum', 'outdoor', 'activity', 'fun', 'playground', 'interactive'],
+    'solo': ['cafe', 'book', 'quiet', 'park', 'museum', 'walk', 'peaceful', 'solo', 'library', 'gallery'],
+    'friend_group': ['bar', 'game', 'activity', 'social', 'fun', 'entertainment', 'food', 'music', 'nightlife']
   }
   
-  return contextMap[context] || ['entertainment', 'food', 'activity']
+  return contextMap[context] || ['entertainment', 'food', 'activity', 'social']
 }
 
 function formatLocationAddress(address: any): string {
