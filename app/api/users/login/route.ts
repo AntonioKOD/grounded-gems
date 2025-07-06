@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       const user = userExists.docs[0]
 
       // Check if account is verified
-      if (!user.verified) {
+      if (!user._verified) {
         return NextResponse.json(
           { 
             error: 'Please verify your email address before logging in. Check your inbox for a verification link.',
@@ -73,20 +73,44 @@ export async function POST(request: NextRequest) {
     }
 
     // Attempt to login using Payload's auth
-    const result = await payload.login({
-      collection: 'users',
-      data: {
-        email,
-        password,
-      },
-      req: request,
-    })
+    let result
+    try {
+      result = await payload.login({
+        collection: 'users',
+        data: {
+          email,
+          password,
+        },
+        req: request,
+      })
+    } catch (loginError: any) {
+      console.error('Login attempt failed:', loginError)
+      
+      // Handle specific login failures
+      if (loginError.message?.includes('Invalid login credentials') || 
+          loginError.message?.includes('password') || 
+          loginError.message?.includes('credentials') ||
+          loginError.name === 'ValidationError' ||
+          loginError.status === 401) {
+        return NextResponse.json(
+          { 
+            error: 'Email or password incorrect. Please check your credentials and try again.',
+            errorType: 'incorrect_credentials',
+            hint: 'Remember that passwords are case-sensitive'
+          },
+          { status: 401 }
+        )
+      }
+      
+      // Re-throw other errors to be handled by the main catch block
+      throw loginError
+    }
 
-    if (!result.user) {
+    if (!result || !result.user) {
       return NextResponse.json(
         { 
-          error: 'The password you entered is incorrect. Please check your password and try again.',
-          errorType: 'incorrect_password',
+          error: 'Email or password incorrect. Please check your credentials and try again.',
+          errorType: 'incorrect_credentials',
           hint: 'Remember that passwords are case-sensitive'
         },
         { status: 401 }
@@ -172,20 +196,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Login error:', error)
     
-    // Handle specific Payload auth errors
-    if (error.message?.includes('Invalid login credentials')) {
-      return NextResponse.json(
-        { 
-          error: 'The password you entered is incorrect. Please check your password and try again.',
-          errorType: 'incorrect_password',
-          hint: 'Remember that passwords are case-sensitive'
-        },
-        { status: 401 }
-      )
-    }
-
     return NextResponse.json(
-      { error: 'Authentication failed. Please try again.' },
+      { 
+        error: 'Authentication service unavailable. Please try again in a few moments.',
+        errorType: 'server_error'
+      },
       { status: 500 }
     )
   }

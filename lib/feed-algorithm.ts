@@ -437,7 +437,7 @@ export class FeedAlgorithm {
           isFollowing: false,
           interests: user.interests || [],
           location: user.location || null,
-          verified: user.verified || false,
+          verified: user._verified || false,
           createdAt: user.createdAt
         }
       }))

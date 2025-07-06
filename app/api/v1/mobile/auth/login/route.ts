@@ -100,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
       const user = userExists.docs[0]
 
       // Check if account is verified
-      if (!user.verified) {
+      if (!user._verified) {
         return NextResponse.json(
           {
             success: false,
@@ -142,20 +142,47 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
     }
 
     // Attempt to login using Payload's auth
-    const result = await payload.login({
-      collection: 'users',
-      data: { email, password },
-      req: request,
-    })
+    let result
+    try {
+      result = await payload.login({
+        collection: 'users',
+        data: { email, password },
+        req: request,
+      })
+    } catch (loginError: any) {
+      console.error('Mobile login attempt failed:', loginError)
+      
+      // Handle specific login failures
+      if (loginError.message?.includes('Invalid login credentials') || 
+          loginError.message?.includes('password') || 
+          loginError.message?.includes('credentials') ||
+          loginError.name === 'ValidationError' ||
+          loginError.status === 401) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Incorrect credentials',
+            error: 'Email or password incorrect. Please check your credentials and try again.',
+            code: 'INCORRECT_CREDENTIALS',
+            errorType: 'incorrect_credentials',
+            hint: 'Remember that passwords are case-sensitive'
+          },
+          { status: 401 }
+        )
+      }
+      
+      // Re-throw other errors to be handled by the main catch block
+      throw loginError
+    }
 
-    if (!result.user || !result.token) {
+    if (!result || !result.user || !result.token) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Incorrect password',
-          error: 'The password you entered is incorrect. Please check your password and try again.',
-          code: 'INCORRECT_PASSWORD',
-          errorType: 'incorrect_password',
+          message: 'Incorrect credentials',
+          error: 'Email or password incorrect. Please check your credentials and try again.',
+          code: 'INCORRECT_CREDENTIALS',
+          errorType: 'incorrect_credentials',
           hint: 'Remember that passwords are case-sensitive'
         },
         { status: 401 }
@@ -229,26 +256,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
   } catch (error) {
     console.error('Mobile login error:', error)
     
-    // Handle specific Payload auth errors
-    if (error.message?.includes('Invalid login credentials')) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Incorrect password',
-          error: 'The password you entered is incorrect. Please check your password and try again.',
-          code: 'INCORRECT_PASSWORD',
-          errorType: 'incorrect_password',
-          hint: 'Remember that passwords are case-sensitive'
-        },
-        { status: 401 }
-      )
-    }
-    
     return NextResponse.json(
       {
         success: false,
         message: 'Internal server error',
-        error: 'Authentication service unavailable. Please try again.',
+        error: 'Authentication service unavailable. Please try again in a few moments.',
         code: 'SERVER_ERROR',
         errorType: 'server_error'
       },

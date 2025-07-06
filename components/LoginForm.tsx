@@ -42,9 +42,10 @@ async function loginUser({ email, password, rememberMe }: { email: string; passw
             suggestSignup: data.suggestSignup
           }))
         case 'incorrect_password':
+        case 'incorrect_credentials':
           throw new Error(JSON.stringify({
             message: data.error,
-            type: 'incorrect_password',
+            type: 'incorrect_credentials',
             hint: data.hint
           }))
         case 'unverified_email':
@@ -160,7 +161,7 @@ const LoginForm = memo(function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const [errorType, setErrorType] = useState<'general' | 'verification' | 'locked' | 'rate-limit' | 'server' | 'user_not_found' | 'incorrect_password' | 'unverified_email' | 'account_locked' | 'validation'>('general')
+  const [errorType, setErrorType] = useState<'general' | 'verification' | 'locked' | 'rate-limit' | 'server' | 'user_not_found' | 'incorrect_password' | 'incorrect_credentials' | 'unverified_email' | 'account_locked' | 'validation'>('general')
   const [errorData, setErrorData] = useState<{
     suggestSignup?: boolean
     hint?: string
@@ -420,14 +421,14 @@ const LoginForm = memo(function LoginForm() {
                 errorType === 'unverified_email' || errorType === 'verification' ? 'text-blue-800' : 
                 errorType === 'user_not_found' ? 'text-orange-800' : ''
               }`}>
-                {errorType === 'unverified_email' || errorType === 'verification' ? 'Email Verification Required' : 
-                 errorType === 'user_not_found' ? 'Account Not Found' :
-                 errorType === 'incorrect_password' ? 'Incorrect Password' :
-                 errorType === 'account_locked' || errorType === 'locked' ? 'Account Locked' :
-                 errorType === 'rate-limit' ? 'Too Many Attempts' :
-                 errorType === 'server' ? 'Server Issue' :
-                 errorType === 'validation' ? 'Invalid Input' :
-                 'Login Failed'}
+                                 {errorType === 'unverified_email' || errorType === 'verification' ? 'Email Verification Required' : 
+                  errorType === 'user_not_found' ? 'Account Not Found' :
+                  errorType === 'incorrect_password' || errorType === 'incorrect_credentials' ? 'Incorrect Credentials' :
+                  errorType === 'account_locked' || errorType === 'locked' ? 'Account Locked' :
+                  errorType === 'rate-limit' ? 'Too Many Attempts' :
+                  errorType === 'server' ? 'Server Issue' :
+                  errorType === 'validation' ? 'Invalid Input' :
+                  'Login Failed'}
               </AlertTitle>
               <AlertDescription className={`${
                 errorType === 'unverified_email' || errorType === 'verification' ? 'text-blue-700' : 
@@ -453,29 +454,30 @@ const LoginForm = memo(function LoginForm() {
                   </div>
                 )}
                 
-                {/* Incorrect password - show helpful tips */}
-                {errorType === 'incorrect_password' && (
-                  <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                    <p className="text-sm text-red-800 font-medium mb-2">
-                      Password Tips:
-                    </p>
-                    <ul className="text-sm text-red-700 space-y-1">
-                      <li>• Check if Caps Lock is on</li>
-                      <li>• Passwords are case-sensitive</li>
-                      <li>• Make sure you're using the correct password</li>
-                    </ul>
-                    <Link href="/forgot-password" prefetch={false}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-full mt-2 text-red-700 border-red-300 hover:bg-red-100"
-                      >
-                        Reset Password
-                      </Button>
-                    </Link>
-                  </div>
-                )}
+                                 {/* Incorrect credentials - show helpful tips */}
+                 {(errorType === 'incorrect_password' || errorType === 'incorrect_credentials') && (
+                   <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                     <p className="text-sm text-red-800 font-medium mb-2">
+                       Login Tips:
+                     </p>
+                     <ul className="text-sm text-red-700 space-y-1">
+                       <li>• Double-check your email address</li>
+                       <li>• Check if Caps Lock is on</li>
+                       <li>• Passwords are case-sensitive</li>
+                       <li>• Make sure you're using the correct credentials</li>
+                     </ul>
+                     <Link href="/forgot-password" prefetch={false}>
+                       <Button
+                         type="button"
+                         variant="outline"
+                         size="sm"
+                         className="w-full mt-2 text-red-700 border-red-300 hover:bg-red-100"
+                       >
+                         Reset Password
+                       </Button>
+                     </Link>
+                   </div>
+                 )}
                 
                 {/* Verification error - show resend option */}
                 {(errorType === 'unverified_email' || errorType === 'verification') && showResendVerification && (
