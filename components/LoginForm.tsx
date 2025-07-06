@@ -32,30 +32,105 @@ async function loginUser({ email, password, rememberMe }: { email: string; passw
   const data = await res.json()
   
   if (!res.ok) {
-    // Enhanced error handling with specific status codes
+    // Enhanced error handling with specific error types from API
+    if (data.errorType) {
+      switch (data.errorType) {
+        case 'user_not_found':
+          throw new Error(JSON.stringify({
+            message: data.error,
+            type: 'user_not_found',
+            suggestSignup: data.suggestSignup
+          }))
+        case 'incorrect_password':
+          throw new Error(JSON.stringify({
+            message: data.error,
+            type: 'incorrect_password',
+            hint: data.hint
+          }))
+        case 'unverified_email':
+          throw new Error(JSON.stringify({
+            message: data.error,
+            type: 'unverified_email',
+            userEmail: data.userEmail
+          }))
+        case 'account_locked':
+          throw new Error(JSON.stringify({
+            message: data.error,
+            type: 'account_locked'
+          }))
+        default:
+          throw new Error(JSON.stringify({
+            message: data.error,
+            type: 'general'
+          }))
+      }
+    }
+    
+    // Legacy error handling for backward compatibility
     switch (res.status) {
       case 400:
-        throw new Error(data.error || "Invalid email or password format")
+        throw new Error(JSON.stringify({
+          message: data.error || "Invalid email or password format",
+          type: 'validation'
+        }))
       case 401:
         if (data.error?.includes("verification") || data.error?.includes("verify")) {
-          throw new Error("Please verify your email address before logging in. Check your inbox for a verification link.")
+          throw new Error(JSON.stringify({
+            message: "Please verify your email address before logging in. Check your inbox for a verification link.",
+            type: 'verification'
+          }))
         }
         if (data.error?.includes("locked") || data.error?.includes("disabled")) {
-          throw new Error("Your account has been temporarily locked. Please contact support or try again later.")
+          throw new Error(JSON.stringify({
+            message: "Your account has been temporarily locked. Please contact support or try again later.",
+            type: 'locked'
+          }))
         }
-        throw new Error("Invalid email or password. Please check your credentials and try again.")
+        throw new Error(JSON.stringify({
+          message: "Invalid email or password. Please check your credentials and try again.",
+          type: 'general'
+        }))
       case 403:
-        throw new Error("Your account access has been restricted. Please contact support for assistance.")
+        throw new Error(JSON.stringify({
+          message: "Your account access has been restricted. Please contact support for assistance.",
+          type: 'locked'
+        }))
+      case 404:
+        throw new Error(JSON.stringify({
+          message: "No account found with this email address. Please check your email or sign up for a new account.",
+          type: 'user_not_found',
+          suggestSignup: true
+        }))
       case 422:
-        throw new Error("Please check your email format and ensure your password meets the requirements.")
+        throw new Error(JSON.stringify({
+          message: "Please check your email format and ensure your password meets the requirements.",
+          type: 'validation'
+        }))
+      case 423:
+        throw new Error(JSON.stringify({
+          message: "Your account has been temporarily locked due to too many failed login attempts. Please try again in 30 minutes or reset your password.",
+          type: 'account_locked'
+        }))
       case 429:
-        throw new Error("Too many login attempts. Please wait a few minutes before trying again.")
+        throw new Error(JSON.stringify({
+          message: "Too many login attempts. Please wait a few minutes before trying again.",
+          type: 'rate-limit'
+        }))
       case 500:
-        throw new Error("Our servers are experiencing issues. Please try again in a few moments.")
+        throw new Error(JSON.stringify({
+          message: "Our servers are experiencing issues. Please try again in a few moments.",
+          type: 'server'
+        }))
       case 503:
-        throw new Error("Service temporarily unavailable. Please try again later.")
+        throw new Error(JSON.stringify({
+          message: "Service temporarily unavailable. Please try again later.",
+          type: 'server'
+        }))
       default:
-        throw new Error(data.error || data.message || `Authentication failed (${res.status})`)
+        throw new Error(JSON.stringify({
+          message: data.error || data.message || `Authentication failed (${res.status})`,
+          type: 'general'
+        }))
     }
   }
   
@@ -85,7 +160,12 @@ const LoginForm = memo(function LoginForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
-  const [errorType, setErrorType] = useState<'general' | 'verification' | 'locked' | 'rate-limit' | 'server'>('general')
+  const [errorType, setErrorType] = useState<'general' | 'verification' | 'locked' | 'rate-limit' | 'server' | 'user_not_found' | 'incorrect_password' | 'unverified_email' | 'account_locked' | 'validation'>('general')
+  const [errorData, setErrorData] = useState<{
+    suggestSignup?: boolean
+    hint?: string
+    userEmail?: string
+  }>({})
   const [hasRedirected, setHasRedirected] = useState(false)
   const [verificationShown, setVerificationShown] = useState(false)
   const [showResendVerification, setShowResendVerification] = useState(false)
@@ -120,6 +200,7 @@ const LoginForm = memo(function LoginForm() {
     if (error) {
       setError("")
       setErrorType('general')
+      setErrorData({})
       setShowResendVerification(false)
     }
   }
@@ -164,6 +245,7 @@ const LoginForm = memo(function LoginForm() {
     
     setIsSubmitting(true)
     setError("")
+    setErrorData({})
 
     try {
       console.log("Starting login process...")
@@ -230,22 +312,28 @@ const LoginForm = memo(function LoginForm() {
     } catch (err: any) {
       console.error("Login error:", err)
       
-      // Enhanced error categorization and user guidance
-      const errorMessage = err.message || "Login failed. Please check your credentials and try again."
-      setError(errorMessage)
+      // Parse error data if it's a JSON string
+      let errorInfo = { message: "Login failed. Please check your credentials and try again.", type: 'general' }
       
-      // Categorize error types for better UX
-      if (errorMessage.includes("verify") || errorMessage.includes("verification")) {
-        setErrorType('verification')
+      try {
+        const parsedError = JSON.parse(err.message)
+        errorInfo = parsedError
+      } catch {
+        // If parsing fails, use the raw error message
+        errorInfo.message = err.message || errorInfo.message
+      }
+      
+      setError(errorInfo.message)
+      setErrorType(errorInfo.type as any)
+      setErrorData({
+        suggestSignup: errorInfo.suggestSignup,
+        hint: errorInfo.hint,
+        userEmail: errorInfo.userEmail
+      })
+      
+      // Set verification resend option for email verification errors
+      if (errorInfo.type === 'unverified_email' || errorInfo.type === 'verification') {
         setShowResendVerification(true)
-      } else if (errorMessage.includes("locked") || errorMessage.includes("disabled")) {
-        setErrorType('locked')
-      } else if (errorMessage.includes("Too many") || errorMessage.includes("rate")) {
-        setErrorType('rate-limit')
-      } else if (errorMessage.includes("server") || errorMessage.includes("Service")) {
-        setErrorType('server')
-      } else {
-        setErrorType('general')
       }
       
       // Haptic feedback for errors
@@ -320,24 +408,77 @@ const LoginForm = memo(function LoginForm() {
             </Alert>
           )}
           {error && (
-            <Alert variant={errorType === 'verification' ? "default" : "destructive"} className={`mb-6 ${
-              errorType === 'verification' ? 'border-blue-200 bg-blue-50' : ''
+            <Alert variant={errorType === 'unverified_email' || errorType === 'verification' ? "default" : "destructive"} className={`mb-6 ${
+              errorType === 'unverified_email' || errorType === 'verification' ? 'border-blue-200 bg-blue-50' : 
+              errorType === 'user_not_found' ? 'border-orange-200 bg-orange-50' : ''
             }`}>
               <AlertCircle className={`h-4 w-4 ${
-                errorType === 'verification' ? 'text-blue-600' : ''
+                errorType === 'unverified_email' || errorType === 'verification' ? 'text-blue-600' : 
+                errorType === 'user_not_found' ? 'text-orange-600' : ''
               }`} />
-              <AlertTitle className={errorType === 'verification' ? 'text-blue-800' : ''}>
-                {errorType === 'verification' ? 'Email Verification Required' : 
-                 errorType === 'locked' ? 'Account Locked' :
+              <AlertTitle className={`${
+                errorType === 'unverified_email' || errorType === 'verification' ? 'text-blue-800' : 
+                errorType === 'user_not_found' ? 'text-orange-800' : ''
+              }`}>
+                {errorType === 'unverified_email' || errorType === 'verification' ? 'Email Verification Required' : 
+                 errorType === 'user_not_found' ? 'Account Not Found' :
+                 errorType === 'incorrect_password' ? 'Incorrect Password' :
+                 errorType === 'account_locked' || errorType === 'locked' ? 'Account Locked' :
                  errorType === 'rate-limit' ? 'Too Many Attempts' :
                  errorType === 'server' ? 'Server Issue' :
-                 'Authentication Failed'}
+                 errorType === 'validation' ? 'Invalid Input' :
+                 'Login Failed'}
               </AlertTitle>
-              <AlertDescription className={errorType === 'verification' ? 'text-blue-700' : ''}>
+              <AlertDescription className={`${
+                errorType === 'unverified_email' || errorType === 'verification' ? 'text-blue-700' : 
+                errorType === 'user_not_found' ? 'text-orange-700' : ''
+              }`}>
                 {error}
                 
+                {/* User not found - show signup option */}
+                {errorType === 'user_not_found' && errorData.suggestSignup && (
+                  <div className="mt-4 p-3 bg-orange-100 rounded-lg border border-orange-200">
+                    <p className="text-sm text-orange-800 font-medium mb-2">
+                      Don't have an account yet?
+                    </p>
+                    <Link href="/signup" prefetch={false}>
+                      <Button
+                        type="button"
+                        className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                        size="sm"
+                      >
+                        Create Account
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                
+                {/* Incorrect password - show helpful tips */}
+                {errorType === 'incorrect_password' && (
+                  <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                    <p className="text-sm text-red-800 font-medium mb-2">
+                      Password Tips:
+                    </p>
+                    <ul className="text-sm text-red-700 space-y-1">
+                      <li>• Check if Caps Lock is on</li>
+                      <li>• Passwords are case-sensitive</li>
+                      <li>• Make sure you're using the correct password</li>
+                    </ul>
+                    <Link href="/forgot-password" prefetch={false}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full mt-2 text-red-700 border-red-300 hover:bg-red-100"
+                      >
+                        Reset Password
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+                
                 {/* Verification error - show resend option */}
-                {showResendVerification && (
+                {(errorType === 'unverified_email' || errorType === 'verification') && showResendVerification && (
                   <div className="mt-3 pt-3 border-t border-blue-200">
                     <Button
                       type="button"
@@ -376,7 +517,7 @@ const LoginForm = memo(function LoginForm() {
                 )}
                 
                 {/* Account locked - show support guidance */}
-                {errorType === 'locked' && (
+                {(errorType === 'account_locked' || errorType === 'locked') && (
                   <div className="mt-2 text-sm">
                     <p>Your account needs attention:</p>
                     <ul className="mt-1 ml-4 list-disc">

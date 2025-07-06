@@ -44,6 +44,9 @@ interface MobileLoginResponse {
   }
   error?: string
   code?: string
+  errorType?: string
+  suggestSignup?: boolean
+  hint?: string
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<MobileLoginResponse>> {
@@ -59,13 +62,84 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
           success: false,
           message: 'Validation failed',
           error: validationResult.error.errors[0].message,
-          code: 'VALIDATION_ERROR'
+          code: 'VALIDATION_ERROR',
+          errorType: 'validation'
         },
         { status: 400 }
       )
     }
 
     const { email, password, rememberMe, deviceInfo } = validationResult.data
+
+    // First, check if user exists
+    try {
+      const userExists = await payload.find({
+        collection: 'users',
+        where: {
+          email: {
+            equals: email.toLowerCase(),
+          },
+        },
+        limit: 1,
+      })
+
+      if (userExists.docs.length === 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Account not found',
+            error: 'No account found with this email address. Please check your email or sign up for a new account.',
+            code: 'USER_NOT_FOUND',
+            errorType: 'user_not_found',
+            suggestSignup: true
+          },
+          { status: 404 }
+        )
+      }
+
+      const user = userExists.docs[0]
+
+      // Check if account is verified
+      if (!user.verified) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Email verification required',
+            error: 'Please verify your email address before logging in. Check your inbox for a verification link.',
+            code: 'UNVERIFIED_EMAIL',
+            errorType: 'unverified_email'
+          },
+          { status: 401 }
+        )
+      }
+
+      // Check if account is locked or disabled
+      if (user.loginAttempts >= 5) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Account temporarily locked',
+            error: 'Your account has been temporarily locked due to too many failed login attempts. Please try again in 30 minutes or reset your password.',
+            code: 'ACCOUNT_LOCKED',
+            errorType: 'account_locked'
+          },
+          { status: 423 }
+        )
+      }
+
+    } catch (userCheckError) {
+      console.error('Error checking user existence:', userCheckError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Account verification failed',
+          error: 'Unable to verify account. Please try again.',
+          code: 'VERIFICATION_ERROR',
+          errorType: 'server_error'
+        },
+        { status: 500 }
+      )
+    }
 
     // Attempt to login using Payload's auth
     const result = await payload.login({
@@ -78,9 +152,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
       return NextResponse.json(
         {
           success: false,
-          message: 'Authentication failed',
-          error: 'Invalid email or password',
-          code: 'INVALID_CREDENTIALS'
+          message: 'Incorrect password',
+          error: 'The password you entered is incorrect. Please check your password and try again.',
+          code: 'INCORRECT_PASSWORD',
+          errorType: 'incorrect_password',
+          hint: 'Remember that passwords are case-sensitive'
         },
         { status: 401 }
       )
@@ -92,6 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
         lastLogin: new Date(),
         rememberMeEnabled: rememberMe,
         lastRememberMeDate: rememberMe ? new Date() : undefined,
+        loginAttempts: 0, // Reset failed login attempts on successful login
       }
       
       if (deviceInfo) {
@@ -152,12 +229,28 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
   } catch (error) {
     console.error('Mobile login error:', error)
     
+    // Handle specific Payload auth errors
+    if (error.message?.includes('Invalid login credentials')) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Incorrect password',
+          error: 'The password you entered is incorrect. Please check your password and try again.',
+          code: 'INCORRECT_PASSWORD',
+          errorType: 'incorrect_password',
+          hint: 'Remember that passwords are case-sensitive'
+        },
+        { status: 401 }
+      )
+    }
+    
     return NextResponse.json(
       {
         success: false,
         message: 'Internal server error',
-        error: 'Authentication service unavailable',
-        code: 'SERVER_ERROR'
+        error: 'Authentication service unavailable. Please try again.',
+        code: 'SERVER_ERROR',
+        errorType: 'server_error'
       },
       { status: 500 }
     )

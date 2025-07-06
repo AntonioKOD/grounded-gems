@@ -16,6 +16,62 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // First, check if user exists
+    try {
+      const userExists = await payload.find({
+        collection: 'users',
+        where: {
+          email: {
+            equals: email.toLowerCase(),
+          },
+        },
+        limit: 1,
+      })
+
+      if (userExists.docs.length === 0) {
+        return NextResponse.json(
+          { 
+            error: 'No account found with this email address. Please check your email or sign up for a new account.',
+            errorType: 'user_not_found',
+            suggestSignup: true
+          },
+          { status: 404 }
+        )
+      }
+
+      const user = userExists.docs[0]
+
+      // Check if account is verified
+      if (!user.verified) {
+        return NextResponse.json(
+          { 
+            error: 'Please verify your email address before logging in. Check your inbox for a verification link.',
+            errorType: 'unverified_email',
+            userEmail: email
+          },
+          { status: 401 }
+        )
+      }
+
+      // Check if account is locked or disabled
+      if (user.loginAttempts >= 5) {
+        return NextResponse.json(
+          { 
+            error: 'Your account has been temporarily locked due to too many failed login attempts. Please try again in 30 minutes or reset your password.',
+            errorType: 'account_locked'
+          },
+          { status: 423 }
+        )
+      }
+
+    } catch (userCheckError) {
+      console.error('Error checking user existence:', userCheckError)
+      return NextResponse.json(
+        { error: 'Unable to verify account. Please try again.' },
+        { status: 500 }
+      )
+    }
+
     // Attempt to login using Payload's auth
     const result = await payload.login({
       collection: 'users',
@@ -28,7 +84,11 @@ export async function POST(request: NextRequest) {
 
     if (!result.user) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { 
+          error: 'The password you entered is incorrect. Please check your password and try again.',
+          errorType: 'incorrect_password',
+          hint: 'Remember that passwords are case-sensitive'
+        },
         { status: 401 }
       )
     }
@@ -61,6 +121,7 @@ export async function POST(request: NextRequest) {
           lastLogin: new Date(),
           rememberMeEnabled: rememberMe,
           lastRememberMeDate: rememberMe ? new Date() : undefined,
+          loginAttempts: 0, // Reset failed login attempts on successful login
         },
       })
     } catch (updateError) {
@@ -110,8 +171,21 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error)
+    
+    // Handle specific Payload auth errors
+    if (error.message?.includes('Invalid login credentials')) {
+      return NextResponse.json(
+        { 
+          error: 'The password you entered is incorrect. Please check your password and try again.',
+          errorType: 'incorrect_password',
+          hint: 'Remember that passwords are case-sensitive'
+        },
+        { status: 401 }
+      )
+    }
+
     return NextResponse.json(
-      { error: 'Authentication failed' },
+      { error: 'Authentication failed. Please try again.' },
       { status: 500 }
     )
   }
