@@ -241,6 +241,10 @@ const LoginForm = memo(function LoginForm() {
       } else {
         if (response.status === 429) {
           setError(data.error || "Please wait a moment before requesting another verification email.")
+        } else if (data.code === 'TOKEN_GENERATION_FAILED') {
+          setError(data.error || "Unable to generate verification token. Please try again in a few minutes.")
+        } else if (data.code === 'NO_TOKEN_AVAILABLE') {
+          setError(data.error || "Unable to generate verification token. Please contact support.")
         } else {
           setError(data.error || "Failed to resend verification email. Please try again.")
         }

@@ -80,13 +80,69 @@ export async function POST(request: NextRequest) {
       ? 'https://www.sacavia.com' 
       : 'http://localhost:3000'
     
-    // Check if user has a verification token
-    if (!user._verificationToken) {
+    // Generate a new verification token if one doesn't exist or has expired
+    let verificationToken = user._verificationToken
+    
+    // Check if token exists and hasn't expired
+    const tokenExpired = user._verificationTokenExpiry && new Date(user._verificationTokenExpiry) < new Date()
+    
+    console.log('Resend verification debug:', {
+      email: user.email,
+      hasToken: !!verificationToken,
+      tokenExpired,
+      expiryDate: user._verificationTokenExpiry
+    })
+    
+    if (!verificationToken || tokenExpired) {
+      // Generate a new verification token
+      const crypto = require('crypto')
+      verificationToken = crypto.randomBytes(32).toString('hex')
+      
+      // Update the user with the new verification token
+      try {
+        await payload.update({
+          collection: 'users',
+          id: user.id,
+          data: {
+            _verificationToken: verificationToken,
+            _verificationTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+          },
+        })
+        console.log('Generated new verification token for user:', user.email, 'Token:', verificationToken.substring(0, 10) + '...')
+      } catch (updateError) {
+        console.error('Failed to generate new verification token:', updateError)
+        
+        // Try to use the existing token if available, even if expired
+        if (user._verificationToken) {
+          console.log('Falling back to existing token for user:', user.email)
+          verificationToken = user._verificationToken
+        } else {
+          return NextResponse.json(
+            { 
+              error: 'Failed to generate verification token. Please try again in a few minutes.',
+              success: false,
+              code: 'TOKEN_GENERATION_FAILED'
+            },
+            { status: 500 }
+          )
+        }
+      }
+    }
+    
+    // Final check to ensure we have a valid token
+    if (!verificationToken) {
+      console.error('No verification token available for user:', user.email)
       return NextResponse.json(
-        { error: 'No verification token found. Please contact support.' },
-        { status: 400 }
+        { 
+          error: 'Unable to generate verification token. Please contact support.',
+          success: false,
+          code: 'NO_TOKEN_AVAILABLE'
+        },
+        { status: 500 }
       )
     }
+    
+    console.log('Sending verification email to:', user.email, 'with token:', verificationToken.substring(0, 10) + '...')
     
     await payload.sendEmail({
       to: email,
@@ -97,13 +153,13 @@ export async function POST(request: NextRequest) {
           <p>Hi ${user.name || 'there'},</p>
           <p>Please verify your email address by clicking the link below:</p>
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${baseUrl}/verify?token=${user._verificationToken}" 
+            <a href="${baseUrl}/verify?token=${verificationToken}" 
                style="background-color: #FF6B6B; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">
               Verify Email
             </a>
           </div>
           <p>If the button doesn't work, copy and paste this URL into your browser:</p>
-          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">${baseUrl}/verify?token=${user._verificationToken}</p>
+          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; word-break: break-all;">${baseUrl}/verify?token=${verificationToken}</p>
           
           <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
             <p style="margin: 0; font-weight: bold; color: #856404;">📧 Email Delivery Notice:</p>

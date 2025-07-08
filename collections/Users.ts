@@ -994,6 +994,14 @@ export const Users: CollectionConfig = {
       }
     },
     { 
+      name: '_verificationTokenExpiry', 
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Expiration time for verification token'
+      }
+    },
+    { 
       name: 'loginAttempts', 
       type: 'number',
       defaultValue: 0,
