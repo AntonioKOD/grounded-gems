@@ -1007,7 +1007,23 @@ export const Users: CollectionConfig = {
       defaultValue: 0,
       admin: {
         hidden: true,
-        description: 'Number of failed login attempts (for account locking)'
+        description: 'Number of failed login attempts'
+      }
+    },
+    {
+      name: 'lastFailedLogin',
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Timestamp of last failed login attempt'
+      }
+    },
+    {
+      name: 'accountLockedUntil',
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Timestamp until which the account is locked'
       }
     },
     { 
