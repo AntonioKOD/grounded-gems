@@ -81,20 +81,9 @@ async function loginUser({ email, password, rememberMe }: { email: string; passw
             type: 'verification'
           }))
         }
-        if (data.error?.includes("locked") || data.error?.includes("disabled")) {
-          throw new Error(JSON.stringify({
-            message: "Your account has been temporarily locked. Please contact support or try again later.",
-            type: 'locked'
-          }))
-        }
         throw new Error(JSON.stringify({
           message: "Invalid email or password. Please check your credentials and try again.",
           type: 'general'
-        }))
-      case 403:
-        throw new Error(JSON.stringify({
-          message: "Your account access has been restricted. Please contact support for assistance.",
-          type: 'locked'
         }))
       case 404:
         throw new Error(JSON.stringify({
@@ -107,30 +96,10 @@ async function loginUser({ email, password, rememberMe }: { email: string; passw
           message: "Please check your email format and ensure your password meets the requirements.",
           type: 'validation'
         }))
-      case 423:
-        throw new Error(JSON.stringify({
-          message: "Your account has been temporarily locked due to too many failed login attempts. Please try again in 30 minutes or reset your password.",
-          type: 'account_locked'
-        }))
-      case 429:
-        throw new Error(JSON.stringify({
-          message: "Too many login attempts. Please wait a few minutes before trying again.",
-          type: 'rate-limit'
-        }))
-      case 500:
-        throw new Error(JSON.stringify({
-          message: "Our servers are experiencing issues. Please try again in a few moments.",
-          type: 'server'
-        }))
-      case 503:
-        throw new Error(JSON.stringify({
-          message: "Service temporarily unavailable. Please try again later.",
-          type: 'server'
-        }))
       default:
         throw new Error(JSON.stringify({
-          message: data.error || data.message || `Authentication failed (${res.status})`,
-          type: 'general'
+          message: "An unexpected error occurred. Please try again.",
+          type: 'server'
         }))
     }
   }
@@ -549,18 +518,6 @@ const LoginForm = memo(function LoginForm() {
                       <li>Refresh the page and try again</li>
                       <li>Check our status page for updates</li>
                       <li>Contact support if the issue continues</li>
-                    </ul>
-                  </div>
-                )}
-                
-                {/* Account locked - show support guidance */}
-                {(errorType === 'account_locked' || errorType === 'locked') && (
-                  <div className="mt-2 text-sm">
-                    <p>Your account needs attention:</p>
-                    <ul className="mt-1 ml-4 list-disc">
-                      <li>Wait 30 minutes and try again</li>
-                      <li>Use "Forgot password" to reset your password</li>
-                      <li>Contact support if you need immediate access</li>
                     </ul>
                   </div>
                 )}

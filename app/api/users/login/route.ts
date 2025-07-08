@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
-import { checkAccountLock, handleFailedLogin, resetLoginAttempts } from '@/lib/account-security'
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,21 +53,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Check account lock status
-      const lockInfo = await checkAccountLock(user.id)
-      if (lockInfo.isLocked) {
-        const remainingMinutes = Math.ceil((lockInfo.remainingTime || 0) / (60 * 1000))
-        return NextResponse.json(
-          { 
-            error: `Your account is temporarily locked. Please try again in ${remainingMinutes} minutes or reset your password.`,
-            errorType: 'account_locked',
-            remainingTime: lockInfo.remainingTime,
-            nextAttemptTime: new Date(Date.now() + (lockInfo.remainingTime || 0)).toISOString()
-          },
-          { status: 423 }
-        )
-      }
-
       // Attempt to login using Payload's auth
       let result
       try {
@@ -80,34 +64,15 @@ export async function POST(request: NextRequest) {
           },
           req: request,
         })
-
-        // Reset login attempts on successful login
-        await resetLoginAttempts(user.id)
-
-      } catch (loginError: any) {
+      } catch (loginError) {
         console.error('Login attempt failed:', loginError)
-        
-        // Handle failed login attempt
-        const failedLoginInfo = await handleFailedLogin(user.id)
-        
-        // Prepare error message based on remaining attempts
-        let errorMessage = 'Email or password incorrect. '
-        if (failedLoginInfo.attemptsRemaining > 0) {
-          errorMessage += `You have ${failedLoginInfo.attemptsRemaining} attempts remaining before your account is locked.`
-        } else if (failedLoginInfo.isLocked) {
-          const lockMinutes = Math.ceil((failedLoginInfo.remainingTime || 0) / (60 * 1000))
-          errorMessage += `Your account has been locked. Please try again in ${lockMinutes} minutes or reset your password.`
-        }
-        
         return NextResponse.json(
           { 
-            error: errorMessage,
-            errorType: failedLoginInfo.isLocked ? 'account_locked' : 'incorrect_credentials',
-            hint: 'Remember that passwords are case-sensitive',
-            attemptsRemaining: failedLoginInfo.attemptsRemaining,
-            nextLockDuration: failedLoginInfo.nextLockDuration
+            error: 'Email or password incorrect. Please check your credentials and try again.',
+            errorType: 'incorrect_credentials',
+            hint: 'Remember that passwords are case-sensitive'
           },
-          { status: failedLoginInfo.isLocked ? 423 : 401 }
+          { status: 401 }
         )
       }
 
@@ -149,7 +114,6 @@ export async function POST(request: NextRequest) {
             lastLogin: new Date(),
             rememberMeEnabled: rememberMe,
             lastRememberMeDate: rememberMe ? new Date() : undefined,
-            loginAttempts: 0, // Reset failed login attempts on successful login
           },
         })
       } catch (updateError) {
@@ -170,7 +134,7 @@ export async function POST(request: NextRequest) {
           role: result.user.role,
           rememberMeEnabled: rememberMe,
         },
-        token: result.token, // Include token for mobile apps
+        token: result.token,
         sessionExpires: rememberMe 
           ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days
           : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours

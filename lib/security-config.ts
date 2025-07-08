@@ -8,15 +8,6 @@ export const SECURITY_CONFIG = {
   AUTH: {
     TOKEN_EXPIRY: 24 * 60 * 60 * 1000, // 24 hours
     REFRESH_TOKEN_EXPIRY: 30 * 24 * 60 * 60 * 1000, // 30 days
-    MAX_LOGIN_ATTEMPTS: 5,
-    LOCKOUT_DURATION: 30 * 60 * 1000, // 30 minutes (updated to match UI message)
-    LOCKOUT_RESET_AFTER: 60 * 60 * 1000, // Reset attempt counter after 1 hour of no failures
-    PROGRESSIVE_DELAYS: [
-      1 * 60 * 1000,  // 1 minute after first failure
-      5 * 60 * 1000,  // 5 minutes after second failure
-      15 * 60 * 1000, // 15 minutes after third failure
-      30 * 60 * 1000  // 30 minutes after fourth failure
-    ],
     ADMIN_EMAILS: ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'], // Authorized admin emails
     COOKIE_SETTINGS: {
       httpOnly: true,

@@ -1001,31 +1001,7 @@ export const Users: CollectionConfig = {
         description: 'Expiration time for verification token'
       }
     },
-    { 
-      name: 'loginAttempts', 
-      type: 'number',
-      defaultValue: 0,
-      admin: {
-        hidden: true,
-        description: 'Number of failed login attempts'
-      }
-    },
-    {
-      name: 'lastFailedLogin',
-      type: 'date',
-      admin: {
-        hidden: true,
-        description: 'Timestamp of last failed login attempt'
-      }
-    },
-    {
-      name: 'accountLockedUntil',
-      type: 'date',
-      admin: {
-        hidden: true,
-        description: 'Timestamp until which the account is locked'
-      }
-    },
+
     { 
       name: 'lastLogin', 
       type: 'date',

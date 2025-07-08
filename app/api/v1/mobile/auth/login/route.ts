@@ -113,20 +113,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
         )
       }
 
-      // Check if account is locked or disabled
-      if (user.loginAttempts >= 5) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Account temporarily locked',
-            error: 'Your account has been temporarily locked due to too many failed login attempts. Please try again in 30 minutes or reset your password.',
-            code: 'ACCOUNT_LOCKED',
-            errorType: 'account_locked'
-          },
-          { status: 423 }
-        )
-      }
-
     } catch (userCheckError) {
       console.error('Error checking user existence:', userCheckError)
       return NextResponse.json(
