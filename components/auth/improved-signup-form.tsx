@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { UsernameInput } from "@/components/ui/username-input"
 import { cn } from "@/lib/utils"
 import { safeNavigate, getSafeRedirectPath, clearAuthRedirectHistory } from '@/lib/redirect-loop-prevention'
+import LocationPermissionEnforcer from "./location-permission-enforcer"
 
 type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
 
@@ -55,6 +56,8 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
   const [error, setError] = useState<string>("")
   const [showPassword, setShowPassword] = useState(false)
   const [passwordStrength, setPasswordStrength] = useState(0)
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false)
+  const [showLocationEnforcer, setShowLocationEnforcer] = useState(false)
   const [userData, setUserData] = useState<UserData>({
     email: "",
     password: "",
@@ -102,28 +105,82 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     { id: "connect", label: "Meet like-minded people", description: "Connect with local community", emoji: "👥" }
   ]
 
-  // Acquire geolocation on mount
+  // Check location permission on mount
   useEffect(() => {
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords: { latitude, longitude } }) => {
-          setUserData(prev => ({
-            ...prev,
-            location: {
-              ...prev.location,
-              coordinates: { latitude, longitude }
+      // Check if we already have permission
+      navigator.permissions?.query({ name: 'geolocation' }).then((result) => {
+        if (result.state === 'granted') {
+          // Already have permission, get location
+          navigator.geolocation.getCurrentPosition(
+            ({ coords: { latitude, longitude } }) => {
+              setUserData(prev => ({
+                ...prev,
+                location: {
+                  ...prev.location,
+                  coordinates: { latitude, longitude }
+                }
+              }))
+              setLocationPermissionGranted(true)
+            },
+            (err) => {
+              console.warn("Geolocation unavailable or denied", err)
+              setShowLocationEnforcer(true)
             }
-          }))
-        },
-        (err) => {
-          console.warn("Geolocation unavailable or denied", err)
+          )
+        } else if (result.state === 'denied') {
+          // Permission denied, show enforcer
+          setShowLocationEnforcer(true)
+        } else {
+          // Permission not determined, show enforcer
+          setShowLocationEnforcer(true)
         }
-      )
+      }).catch(() => {
+        // Permissions API not supported, try to get location directly
+        navigator.geolocation.getCurrentPosition(
+          ({ coords: { latitude, longitude } }) => {
+            setUserData(prev => ({
+              ...prev,
+              location: {
+                ...prev.location,
+                coordinates: { latitude, longitude }
+              }
+            }))
+            setLocationPermissionGranted(true)
+          },
+          (err) => {
+            console.warn("Geolocation unavailable or denied", err)
+            setShowLocationEnforcer(true)
+          }
+        )
+      })
+    } else {
+      // Geolocation not supported
+      setShowLocationEnforcer(true)
     }
   }, [])
 
   const updateUserData = (field: keyof UserData | string, value: any) => {
     setUserData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleLocationGranted = (coordinates: { latitude: number; longitude: number }) => {
+    setUserData(prev => ({
+      ...prev,
+      location: {
+        ...prev.location,
+        coordinates
+      }
+    }))
+    setLocationPermissionGranted(true)
+    setShowLocationEnforcer(false)
+  }
+
+  const handleLocationDenied = () => {
+    setShowLocationEnforcer(false)
+    // You can choose to block signup or allow it without location
+    // For now, we'll allow signup but show a warning
+    setError("Location is required for the best experience. You can still sign up, but some features may be limited.")
   }
 
   const toggleInterest = (interestId: string) => {
@@ -200,7 +257,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username && userData.usernameValid
+      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username && userData.usernameValid && locationPermissionGranted
       case 2: return userData.interests.length > 0
       case 3: return userData.primaryUseCase && userData.travelRadius && userData.budgetPreference
       default: return false
@@ -214,7 +271,9 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     try {
       // Ensure we have coordinates
       if (!userData.location?.coordinates?.latitude || !userData.location?.coordinates?.longitude) {
-        throw new Error("Please enable location to sign up.")
+        setShowLocationEnforcer(true)
+        setStatus("idle")
+        return
       }
 
       // Validate username before sending
@@ -366,6 +425,18 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
             </Alert>
           )}
 
+          {showLocationEnforcer && (
+            <div className="mb-6">
+              <LocationPermissionEnforcer
+                onLocationGranted={handleLocationGranted}
+                onLocationDenied={handleLocationDenied}
+                required={true}
+                title="Location Required for Signup"
+                description="We need your location to provide personalized recommendations and show you nearby places. This is required to create your account."
+              />
+            </div>
+          )}
+
           {/* Step 1: Account Creation & Basic Info */}
           {currentStep === 1 && (
             <div className="space-y-4">
@@ -485,7 +556,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="location">Location (Optional)</Label>
+                <Label htmlFor="location">Location</Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -500,7 +571,14 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                     className="pl-10"
                   />
                 </div>
-                <p className="text-xs text-gray-500">Helps us show relevant nearby places</p>
+                {locationPermissionGranted ? (
+                  <div className="flex items-center gap-2 text-xs text-green-600">
+                    <CheckCircle className="h-3 w-3" />
+                    <span>Location enabled - GPS coordinates captured</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">Location permission required for signup</p>
+                )}
               </div>
 
               <div className="space-y-3 border-t pt-4">

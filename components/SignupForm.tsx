@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
+import LocationPermissionEnforcer from "@/components/auth/location-permission-enforcer"
 
 type Status = "idle" | "loading" | "success" | "error" | "resending" | "resent"
 
@@ -26,25 +27,63 @@ export default function SignupForm() {
   const [passwordStrength, setPasswordStrength] = useState(0)
   const [status, setStatus] = useState<Status>("idle")
   const [error, setError] = useState<string>("")
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false)
+  const [showLocationEnforcer, setShowLocationEnforcer] = useState(false)
 
-  // Acquire geolocation on mount
+  // Check location permission on mount
   useEffect(() => {
     if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        ({ coords: { latitude, longitude } }) => {
-          setFormData((prev: any) => ({
-            ...prev,
-            coords: {
-              ...prev.coords,
-              latitude,
-              longitude,
+      // Check if we already have permission
+      navigator.permissions?.query({ name: 'geolocation' }).then((result) => {
+        if (result.state === 'granted') {
+          // Already have permission, get location
+          navigator.geolocation.getCurrentPosition(
+            ({ coords: { latitude, longitude } }) => {
+              setFormData((prev: any) => ({
+                ...prev,
+                coords: {
+                  ...prev.coords,
+                  latitude,
+                  longitude,
+                },
+              }))
+              setLocationPermissionGranted(true)
             },
-          }))
-        },
-        (err) => {
-          console.warn("Geolocation unavailable or denied", err)
-        },
-      )
+            (err) => {
+              console.warn("Geolocation unavailable or denied", err)
+              setShowLocationEnforcer(true)
+            }
+          )
+        } else if (result.state === 'denied') {
+          // Permission denied, show enforcer
+          setShowLocationEnforcer(true)
+        } else {
+          // Permission not determined, show enforcer
+          setShowLocationEnforcer(true)
+        }
+      }).catch(() => {
+        // Permissions API not supported, try to get location directly
+        navigator.geolocation.getCurrentPosition(
+          ({ coords: { latitude, longitude } }) => {
+            setFormData((prev: any) => ({
+              ...prev,
+              coords: {
+                ...prev.coords,
+                latitude,
+                longitude,
+              },
+            }))
+            setLocationPermissionGranted(true)
+          },
+          (err) => {
+            console.warn("Geolocation unavailable or denied", err)
+            setShowLocationEnforcer(true)
+          }
+        )
+      })
+    } else {
+      // Geolocation not supported
+      setShowLocationEnforcer(true)
     }
   }, [])
 
@@ -62,6 +101,23 @@ export default function SignupForm() {
     }
   }
 
+  const handleLocationGranted = (coordinates: { latitude: number; longitude: number }) => {
+    setFormData((prev: any) => ({
+      ...prev,
+      coords: {
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+      },
+    }))
+    setLocationPermissionGranted(true)
+    setShowLocationEnforcer(false)
+  }
+
+  const handleLocationDenied = () => {
+    setShowLocationEnforcer(false)
+    setError("Location is required for signup. Please enable location services to continue.")
+  }
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setError("")
@@ -70,7 +126,9 @@ export default function SignupForm() {
     try {
       // Ensure we have coordinates
       if (formData.coords.latitude == null || formData.coords.longitude == null) {
-        throw new Error("Please enable location to sign up.")
+        setShowLocationEnforcer(true)
+        setStatus("idle")
+        return
       }
       // Call signupUser with geolocation data included
       await signupUser(formData)
@@ -146,6 +204,18 @@ export default function SignupForm() {
               <AlertTitle>Error</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
+          )}
+
+          {showLocationEnforcer && (
+            <div className="mb-6">
+              <LocationPermissionEnforcer
+                onLocationGranted={handleLocationGranted}
+                onLocationDenied={handleLocationDenied}
+                required={true}
+                title="Location Required for Signup"
+                description="We need your location to provide personalized recommendations and show you nearby places. This is required to create your account."
+              />
+            </div>
           )}
           <form onSubmit={handleSignup} className="space-y-4">
             <div className="space-y-2">
@@ -228,7 +298,22 @@ export default function SignupForm() {
               )}
             </div>
 
-            <Button type="submit" className="w-full" disabled={status === "loading"}>
+            {/* Location Status */}
+            <div className="space-y-2">
+              {locationPermissionGranted ? (
+                <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-3 rounded-lg">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Location enabled - GPS coordinates captured</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>Location permission required for signup</span>
+                </div>
+              )}
+            </div>
+
+            <Button type="submit" className="w-full" disabled={status === "loading" || !locationPermissionGranted}>
               {status === "loading" ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
