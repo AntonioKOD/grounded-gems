@@ -985,5 +985,90 @@ export const Users: CollectionConfig = {
         description: 'Expiration time for password reset token'
       }
     },
+    { 
+      name: 'lastResendVerificationTime', 
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Timestamp of last verification email resend (for rate limiting)'
+      }
+    },
+    { 
+      name: 'loginAttempts', 
+      type: 'number',
+      defaultValue: 0,
+      admin: {
+        hidden: true,
+        description: 'Number of failed login attempts (for account locking)'
+      }
+    },
+    { 
+      name: 'lastLogin', 
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'Timestamp of last successful login'
+      }
+    },
+    { 
+      name: 'rememberMeEnabled', 
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        hidden: true,
+        description: 'Whether user has enabled remember me functionality'
+      }
+    },
+    { 
+      name: 'lastRememberMeDate', 
+      type: 'date',
+      admin: {
+        hidden: true,
+        description: 'When remember me was last enabled'
+      }
+    },
+    { 
+      name: 'deviceInfo', 
+      type: 'group',
+      admin: {
+        hidden: true,
+        description: 'Device information for mobile authentication'
+      },
+      fields: [
+        { 
+          name: 'deviceId', 
+          type: 'text',
+          admin: {
+            description: 'Unique device identifier'
+          }
+        },
+        { 
+          name: 'platform', 
+          type: 'select',
+          options: [
+            { label: 'iOS', value: 'ios' },
+            { label: 'Android', value: 'android' },
+            { label: 'Web', value: 'web' }
+          ],
+          admin: {
+            description: 'Platform the user is using'
+          }
+        },
+        { 
+          name: 'appVersion', 
+          type: 'text',
+          admin: {
+            description: 'App version (for mobile)'
+          }
+        },
+        { 
+          name: 'lastSeen', 
+          type: 'date',
+          admin: {
+            description: 'When the device was last active'
+          }
+        }
+      ]
+    },
   ],
 };

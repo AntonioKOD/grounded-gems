@@ -218,23 +218,38 @@ const LoginForm = memo(function LoginForm() {
     }
 
     try {
+      // Show loading state
+      setError("Sending verification email...")
+      
       const response = await fetch("/api/resend-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: formData.email }),
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        setError("Verification email sent! Please check your inbox and spam folder.")
+        setError("✅ Verification email sent! Please check your inbox and spam folder.")
         setErrorType('general')
         setShowResendVerification(false)
+        
+        // Clear the success message after 5 seconds
+        setTimeout(() => {
+          setError("")
+        }, 5000)
       } else {
-        const data = await response.json()
-        setError(data.error || "Failed to resend verification email. Please try again.")
+        if (response.status === 429) {
+          setError(data.error || "Please wait a moment before requesting another verification email.")
+        } else {
+          setError(data.error || "Failed to resend verification email. Please try again.")
+        }
+        setShowResendVerification(true) // Keep the button visible for retry
       }
     } catch (error) {
       console.error("Resend verification error:", error)
       setError("Network error. Please check your connection and try again.")
+      setShowResendVerification(true) // Keep the button visible for retry
     }
   }
 
@@ -480,17 +495,33 @@ const LoginForm = memo(function LoginForm() {
                  )}
                 
                 {/* Verification error - show resend option */}
-                {(errorType === 'unverified_email' || errorType === 'verification') && showResendVerification && (
+                {(errorType === 'unverified_email' || errorType === 'verification') && (
                   <div className="mt-3 pt-3 border-t border-blue-200">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleResendVerification}
-                      className="text-blue-700 border-blue-300 hover:bg-blue-100"
-                    >
-                      Resend Verification Email
-                    </Button>
+                    <div className="space-y-2">
+                      <p className="text-sm text-blue-700 font-medium">
+                        📧 Need a new verification email?
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResendVerification}
+                        className="text-blue-700 border-blue-300 hover:bg-blue-100 w-full"
+                        disabled={error === "Sending verification email..."}
+                      >
+                        {error === "Sending verification email..." ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          "Resend Verification Email"
+                        )}
+                      </Button>
+                      <p className="text-xs text-blue-600">
+                        Check your spam/junk folder if you don't see the email
+                      </p>
+                    </div>
                   </div>
                 )}
                 

@@ -14,6 +14,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Basic rate limiting - check if this email has been requested recently
+    const rateLimitKey = `resend_verify_${email.toLowerCase()}`
+    const rateLimitData = await payload.find({
+      collection: 'users',
+      where: {
+        email: {
+          equals: email.toLowerCase(),
+        },
+      },
+      limit: 1,
+    })
+
+    if (rateLimitData.docs.length > 0) {
+      const user = rateLimitData.docs[0]
+      const lastResendTime = user.lastResendVerificationTime
+      
+      if (lastResendTime) {
+        const timeSinceLastResend = Date.now() - new Date(lastResendTime).getTime()
+        const minInterval = 60 * 1000 // 1 minute minimum between resends
+        
+        if (timeSinceLastResend < minInterval) {
+          const remainingTime = Math.ceil((minInterval - timeSinceLastResend) / 1000)
+          return NextResponse.json(
+            { 
+              error: `Please wait ${remainingTime} seconds before requesting another verification email.`,
+              success: false,
+              rateLimited: true
+            },
+            { status: 429 }
+          )
+        }
+      }
+    }
+
     // Find user by email
     const users = await payload.find({
       collection: 'users',
@@ -46,13 +80,21 @@ export async function POST(request: NextRequest) {
       ? 'https://www.sacavia.com' 
       : 'http://localhost:3000'
     
+    // Check if user has a verification token
+    if (!user._verificationToken) {
+      return NextResponse.json(
+        { error: 'No verification token found. Please contact support.' },
+        { status: 400 }
+      )
+    }
+    
     await payload.sendEmail({
       to: email,
       subject: 'Verify Your Sacavia Account',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #FF6B6B; margin-bottom: 20px;">Verify Your Sacavia Account</h2>
-          <p>Hi ${user.name},</p>
+          <p>Hi ${user.name || 'there'},</p>
           <p>Please verify your email address by clicking the link below:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${baseUrl}/verify?token=${user._verificationToken}" 
@@ -77,14 +119,35 @@ export async function POST(request: NextRequest) {
       `,
     })
 
+    // Update user record to track the last resend time
+    try {
+      await payload.update({
+        collection: 'users',
+        id: user.id,
+        data: {
+          lastResendVerificationTime: new Date(),
+        },
+      })
+    } catch (updateError) {
+      console.warn('Failed to update user resend verification time:', updateError)
+      // Don't fail the resend if this update fails
+    }
+
     return NextResponse.json(
-      { message: 'Verification email sent successfully' },
+      { 
+        message: 'Verification email sent successfully',
+        success: true,
+        email: email
+      },
       { status: 200 }
     )
   } catch (error) {
     console.error('Resend verification error:', error)
     return NextResponse.json(
-      { error: 'Failed to resend verification email' },
+      { 
+        error: 'Failed to resend verification email. Please try again in a few minutes.',
+        success: false
+      },
       { status: 500 }
     )
   }
