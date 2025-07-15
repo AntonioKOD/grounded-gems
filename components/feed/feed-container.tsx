@@ -224,7 +224,7 @@ export default function FeedContainer({
 
       {/* Posts */}
       <div className="space-y-10">
-        {loading ? (
+        {loading && posts.length === 0 ? (
           <Card className="p-16 flex justify-center items-center bg-gradient-to-br from-gray-50 to-white border-0 shadow-lg">
             <div className="flex flex-col items-center gap-6">
               <div className="relative">

@@ -11,8 +11,10 @@ const rootReducer = combineReducers({
   posts: postsSlice,
 })
 
-// Create persisted reducer only on client side
-const createPersistedReducer = () => {
+export const makeStore = () => {
+  let finalReducer = rootReducer
+  
+  // Only use persistence on client side
   if (typeof window !== 'undefined') {
     const storage = require('redux-persist/lib/storage').default
     const persistConfig = {
@@ -21,14 +23,11 @@ const createPersistedReducer = () => {
       whitelist: ['user', 'posts'], // Only persist user and posts state
       blacklist: ['feed'], // Don't persist feed state as it should be fresh on reload
     }
-    return persistReducer(persistConfig, rootReducer)
+    finalReducer = persistReducer(persistConfig, rootReducer) as any
   }
-  return rootReducer
-}
-
-export const makeStore = () => {
+  
   const store = configureStore({
-    reducer: rootReducer,
+    reducer: finalReducer,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {

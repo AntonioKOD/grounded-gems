@@ -14,41 +14,7 @@ interface StoreProviderProps {
   initialUser?: UserData | null
 }
 
-// Optimized minimal loading component with timeout
-function MinimalLoading() {
-  const [showTimeout, setShowTimeout] = useState(false)
 
-  useEffect(() => {
-    // Show timeout message after 2 seconds (reduced from 3)
-    const timeoutId = setTimeout(() => {
-      setShowTimeout(true)
-    }, 2000)
-
-    return () => clearTimeout(timeoutId)
-  }, [])
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-white">
-      <div className="text-center space-y-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FF6B6B] mx-auto"></div>
-        <div className="space-y-2">
-          <p className="text-gray-600 text-sm">Loading Sacavia...</p>
-          {showTimeout && (
-            <div className="space-y-2">
-              <p className="text-gray-500 text-xs">This is taking longer than expected</p>
-              <button 
-                onClick={() => window.location.reload()} 
-                className="text-[#FF6B6B] hover:text-[#FF6B6B]/80 text-xs underline transition-colors"
-              >
-                Reload page
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function StoreProvider({ children, initialUser }: StoreProviderProps) {
   const storeRef = useRef<AppStore | null>(null)
@@ -170,15 +136,13 @@ export default function StoreProvider({ children, initialUser }: StoreProviderPr
     )
   }
 
+  // For routes that need persistence, still render children immediately
+  // but initialize the persistor in the background
   return (
     <Provider store={storeRef.current}>
       <PersistGate 
-        loading={<MinimalLoading />} 
+        loading={null} 
         persistor={persistorRef.current}
-        onBeforeLift={() => {
-          // Additional setup before lifting the gate
-          setIsReady(true)
-        }}
       >
         {children}
       </PersistGate>

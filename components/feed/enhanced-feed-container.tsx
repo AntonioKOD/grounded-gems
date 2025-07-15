@@ -283,7 +283,7 @@ export default function EnhancedFeedContainer({
   }
 
   // Loading skeleton
-  if (isLoading) {
+  if (isLoading && feedItems.length === 0) {
     return (
       <div className={`space-y-6 ${className}`}>
         <div className="flex items-center justify-between">
@@ -535,7 +535,7 @@ export default function EnhancedFeedContainer({
         )}
 
         {/* Loading skeleton */}
-        {isLoading && (
+        {isLoading && feedItems.length === 0 && (
           <div className="space-y-6">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -559,23 +559,23 @@ export default function EnhancedFeedContainer({
         )}
 
         {/* Feed items */}
-        {!isLoading && (
+        {feedItems.length > 0 && (
           <div className="space-y-6">
             {feedItems.map((item, index) => renderFeedItem(item, index))}
-            
-            {/* Empty state */}
-            {feedItems.length === 0 && !error && (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
-                  <TrendingUp className="h-8 w-8 text-gray-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts yet</h3>
-                <p className="text-gray-600 mb-6">Be the first to share something amazing!</p>
-                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                  Create Your First Post
-                </Button>
-              </div>
-            )}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {feedItems.length === 0 && !isLoading && !error && (
+          <div className="text-center py-12">
+            <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+              <TrendingUp className="h-8 w-8 text-gray-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts yet</h3>
+            <p className="text-gray-600 mb-6">Be the first to share something amazing!</p>
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+              Create Your First Post
+            </Button>
           </div>
         )}
 
