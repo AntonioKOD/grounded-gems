@@ -384,7 +384,6 @@ export function PostCard({ post, user, className = "", onPostUpdated }: PostCard
           <div className="mt-3 mb-2 rounded-md overflow-hidden relative">
             <div className="aspect-video relative">
               <Image
-                unoptimized={true}
                 src={currentPost.image || "/placeholder.svg"}
                 alt={currentPost.title || "Post image"}
                 fill

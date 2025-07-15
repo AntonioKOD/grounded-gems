@@ -5084,6 +5084,38 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
   return posts.map((post: any) => {
     try {
       const postId = String(post.id)
+      // Build media array for frontend
+      const media: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = [];
+      // Video first
+      if (post.video) {
+        media.push({
+          type: 'video',
+          url: post.video,
+          thumbnail: post.videoThumbnail || post.image || post.featuredImage,
+          alt: 'Post video',
+        });
+      }
+      // Main image (if not already used as video thumbnail)
+      const mainImage = post.image || post.featuredImage;
+      if (mainImage && (!post.videoThumbnail || mainImage !== post.videoThumbnail)) {
+        media.push({
+          type: 'image',
+          url: mainImage,
+          alt: post.title || 'Post image',
+        });
+      }
+      // Photos
+      if (Array.isArray(post.photos)) {
+        post.photos.forEach((photo: any, idx: number) => {
+          if (photo && photo !== mainImage) {
+            media.push({
+              type: 'image',
+              url: photo,
+              alt: `Photo ${idx + 1}`,
+            });
+          }
+        });
+      }
       
       // Debug media objects for first few posts
       if (posts.indexOf(post) < 2) {
@@ -5102,7 +5134,6 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
           name: typeof post.author === "object" && post.author ? post.author.name : "Unknown User",
           avatar: (() => {
             if (typeof post.author === "object" && post.author) {
-              // Try multiple possible avatar fields
               if (post.author.profileImage?.url) return post.author.profileImage.url;
               if (post.author.avatar) return post.author.avatar;
               if (post.author.profilePicture?.url) return post.author.profilePicture.url;
@@ -5126,27 +5157,13 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         image: post.image || post.featuredImage || undefined,
         video: post.video || undefined,
         videoThumbnail: post.videoThumbnail || undefined,
-        photos: (() => {
-          // Handle photos array - preserve complete objects
-          if (Array.isArray(post.photos)) {
-            return post.photos.filter(Boolean);
-          } else if (Array.isArray(post.gallery)) {
-            // Also check for gallery field as fallback
-            return post.gallery.map((item: any) => {
-              if (typeof item === 'object' && item?.image) {
-                return item.image;
-              }
-              return item;
-            }).filter(Boolean);
-          }
-          return undefined;
-        })(),
+        photos: (Array.isArray(post.photos) ? post.photos.filter(Boolean) : undefined),
         likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
         commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
         shareCount: post.shares || 0,
         saveCount: Array.isArray(post.savedBy) ? post.savedBy.length : 0,
-        isLiked: userLikedPosts.includes(postId), // Check if user has liked this post
-        isSaved: userSavedPosts.includes(postId), // Check if user has saved this post
+        isLiked: userLikedPosts.includes(postId),
+        isSaved: userSavedPosts.includes(postId),
         type: post.type || "post",
         rating: post.rating,
         location: post.location
@@ -5156,7 +5173,9 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
             }
           : undefined,
         categories: Array.isArray(post.categories) ? post.categories : [],
-        tags: Array.isArray(post.tags) ? post.tags : []
+        tags: Array.isArray(post.tags) ? post.tags : [],
+        // Add the media array for frontend
+        media,
       }
     } catch (formatError) {
       console.error("Error formatting post:", formatError, post)
