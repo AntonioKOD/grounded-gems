@@ -19,13 +19,13 @@ export async function GET(
       where: {
         slug: { equals: slug }
       },
-      populate: [
-        'creator',
-        'creator.profileImage',
-        'primaryLocation',
-        'locations.location',
-        'featuredImage'
-      ],
+      populate: {
+        creator: {},
+        'creator.profileImage': {},
+        primaryLocation: {},
+        'locations.location': {},
+        featuredImage: {}
+      },
       limit: 1
     })
     
@@ -36,8 +36,8 @@ export async function GET(
         { status: 404 }
       )
     }
-    
-    const guide = result.docs[0]
+
+    const guide = result.docs[0]!
     console.log('✅ Found guide:', guide.title, 'Status:', guide.status)
     
     // Check if guide is published (unless user is the creator or admin)

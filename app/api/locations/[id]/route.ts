@@ -37,7 +37,7 @@ export async function GET(
         
         if (slugResult.docs.length > 0) {
           location = slugResult.docs[0]
-          console.log('✅ Found location via slug:', location.name)
+          console.log('✅ Found location via slug:', location?.name)
         }
       } catch (error) {
         console.log('❌ Slug lookup failed:', error)

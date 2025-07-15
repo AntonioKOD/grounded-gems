@@ -137,6 +137,16 @@ export default function AddictiveFeedContainer({
     }
   }, [dispatch, feedType, sortBy, userId, user?.id, isUserLoading])
 
+  // Load more posts
+  const handleLoadMore = async () => {
+    try {
+      await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
+    } catch (error) {
+      console.error("Error loading more posts:", error)
+      toast.error("Error loading more posts")
+    }
+  }
+
   // Optimized scroll handling for infinite scroll with throttling
   useEffect(() => {
     let ticking = false;
@@ -170,18 +180,20 @@ export default function AddictiveFeedContainer({
   // Pull to refresh implementation
   const handleTouchStart = (e: React.TouchEvent) => {
     if (!isMounted.current || loading || refreshing) return
+    if (!scrollRef.current) return
     
-    const scrollTop = scrollRef.current?.scrollTop || 0
-    if (scrollTop === 0) {
+    const scrollTop = scrollRef.current.scrollTop || 0
+    if (scrollTop === 0 && e.touches?.[0]) {
       touchStartY.current = e.touches[0].clientY
     }
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isMounted.current || loading || refreshing) return
+    if (!scrollRef.current) return
     
-    const scrollTop = scrollRef.current?.scrollTop || 0
-    if (scrollTop === 0 && touchStartY.current > 0) {
+    const scrollTop = scrollRef.current.scrollTop || 0
+    if (scrollTop === 0 && touchStartY.current > 0 && e.touches?.[0]) {
       const currentY = e.touches[0].clientY
       const delta = currentY - touchStartY.current
       
@@ -224,16 +236,6 @@ export default function AddictiveFeedContainer({
     } catch (error) {
       console.error("Error refreshing posts:", error)
       toast.error("Error refreshing posts")
-    }
-  }
-
-  // Load more posts
-  const handleLoadMore = async () => {
-    try {
-      await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
-    } catch (error) {
-      console.error("Error loading more posts:", error)
-      toast.error("Error loading more posts")
     }
   }
 

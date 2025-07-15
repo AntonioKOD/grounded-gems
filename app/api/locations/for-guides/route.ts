@@ -50,14 +50,19 @@ export async function GET(request: NextRequest) {
 
     // Format locations for the guide form
     const formattedLocations = result.docs.map(location => {
+      const address = (location.address && typeof location.address === 'object') ? location.address as Record<string, any> : {};
       const addressParts = [
-        location.address?.city,
-        location.address?.state,
-        location.address?.country,
+        address.city,
+        address.state,
+        address.country,
       ].filter(Boolean)
-      
       const displayAddress = addressParts.join(', ')
-      
+
+      let imageUrl = null;
+      if (location.featuredImage && typeof location.featuredImage === 'object' && 'url' in location.featuredImage) {
+        imageUrl = (location.featuredImage as any).url;
+      }
+
       return {
         id: location.id,
         name: location.name,
@@ -68,7 +73,7 @@ export async function GET(request: NextRequest) {
         averageRating: location.averageRating || 0,
         reviewCount: location.reviewCount || 0,
         categories: location.categories || [],
-        imageUrl: location.featuredImage?.url || null,
+        imageUrl,
         isVerified: location.isVerified || false,
       }
     })

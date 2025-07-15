@@ -118,11 +118,11 @@ function recordHydrationError(error: HydrationError): void {
 function extractElementFromError(message: string): string {
   // Try to extract element tag from error message
   const tagMatch = message.match(/<(\w+)[^>]*>/i)
-  if (tagMatch) return tagMatch[1]
+  if (tagMatch) return tagMatch[1] || 'unknown'
 
   // Try to extract component name
   const componentMatch = message.match(/in (\w+)/i)
-  if (componentMatch) return componentMatch[1]
+  if (componentMatch) return componentMatch[1] || 'unknown'
 
   return 'unknown'
 }
@@ -132,7 +132,7 @@ function extractElementFromError(message: string): string {
  */
 function extractExpectedFromError(message: string): string {
   const expectedMatch = message.match(/expected[^"]*"([^"]+)"/i)
-  return expectedMatch ? expectedMatch[1] : 'unknown'
+  return expectedMatch ? expectedMatch[1] || 'unknown' : 'unknown'
 }
 
 /**
@@ -140,7 +140,7 @@ function extractExpectedFromError(message: string): string {
  */
 function extractActualFromError(message: string): string {
   const actualMatch = message.match(/but received[^"]*"([^"]+)"/i)
-  return actualMatch ? actualMatch[1] : 'unknown'
+  return actualMatch ? actualMatch[1] || 'unknown' : 'unknown'
 }
 
 /**

@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
     })
 
     // Check for locations at the same address
-    const addressParts = address.split(',').map(part => part.trim())
-    let addressMatches = { docs: [] }
+    const addressParts = address.split(',').map((part: string) => part.trim())
+    let addressMatches = { docs: [] as any[] }
     
     if (addressParts.length >= 2) {
       // Try to match against street and city

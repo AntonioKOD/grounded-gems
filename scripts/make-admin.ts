@@ -21,15 +21,15 @@ async function makeAdmin() {
     }
     
     const user = users.docs[0]
-    console.log('👤 Found user:', user.email)
-    console.log('🔐 Current role:', user.role)
+    console.log('👤 Found user:', user?.email)
+    console.log('🔐 Current role:', user?.role)
     
-    if (user.role !== 'admin') {
+    if (user?.role !== 'admin') {
       console.log('🔧 Updating user role to admin...')
       
       const updatedUser = await payload.update({
         collection: 'users',
-        id: user.id,
+        id: user?.id || '',
         data: {
           role: 'admin'
         }

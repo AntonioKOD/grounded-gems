@@ -114,7 +114,7 @@ export default function PeopleSuggestionCard({
                       {user.mutualConnections} mutual
                     </Badge>
                   )}
-                  {user._verified && (
+                  {user.verified && (
                     <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700 flex-shrink-0">
                       ✓
                     </Badge>

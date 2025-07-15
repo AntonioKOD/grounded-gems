@@ -31,6 +31,9 @@ export interface LocationAddress {
       parking?: boolean
       other?: string
     }
+    categories?: string[]
+    featuredImage?: string
+    createdBy?: string
   }
   
   export interface Location {

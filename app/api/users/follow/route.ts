@@ -147,7 +147,7 @@ export async function DELETE(request: NextRequest) {
 
     await payload.delete({
       collection: 'user-follows',
-      id: existingFollow.docs[0].id
+      id: existingFollow.docs[0]?.id as string
     })
 
     // Update follower/following counts (if you have these fields)

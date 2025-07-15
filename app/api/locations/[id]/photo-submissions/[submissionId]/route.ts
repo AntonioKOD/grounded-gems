@@ -67,7 +67,7 @@ export async function PATCH(
         // Any authenticated user can review (admin access already validated by middleware)
         true ||
         // Users can update their own pending/needs_improvement submissions
-        (submission.submittedBy === user.id && 
+        (submission.submittedBy === user?.id && 
          ['pending', 'needs_improvement'].includes(submission.status))
       );
 
@@ -247,7 +247,7 @@ export async function GET(
         // Any authenticated user can view (admin access validated)
         true ||
         // Users can view their own submissions
-        submission.submittedBy === user.id ||
+        submission.submittedBy === user?.id ||
         // Approved submissions can be viewed by anyone
         submission.status === 'approved'
       );
@@ -313,7 +313,7 @@ export async function DELETE(
         // Any authenticated user can delete (admin access validated)
         true ||
         // Users can delete their own pending submissions
-        (submission.submittedBy === user.id && submission.status === 'pending')
+        (submission.submittedBy === user?.id && submission.status === 'pending')
       );
 
     if (!canDelete) {

@@ -32,12 +32,12 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       sort: '-createdAt',
-      populate: [
-        'author',
-        'location',
-        'event',
-        'special'
-      ]
+      populate: {
+        author: {},
+        location: {},
+        event: {},
+        special: {}
+      }
     })
     
     // Get summary statistics

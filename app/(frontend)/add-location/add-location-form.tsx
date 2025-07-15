@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import type React from "react"
@@ -69,6 +67,7 @@ import { Separator } from "@/components/ui/separator"
 import { createLocation, type LocationFormData, type DayOfWeek } from "@/app/actions"
 import { getCategories } from "@/app/actions"
 import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
+import PrivateAccessSelector from "@/components/location/private-access-selector"
 
 interface UserData {
   id: string
@@ -198,6 +197,10 @@ export default function AddLocationForm() {
     details: "",
   })
 
+  // Privacy settings
+  const [privacy, setPrivacy] = useState<'public' | 'private'>('public')
+  const [privateAccess, setPrivateAccess] = useState<string[]>([])
+
   // SEO
   const [meta, setMeta] = useState({
     title: "",
@@ -224,7 +227,6 @@ export default function AddLocationForm() {
 
   // Add these state variables near the other state declarations
   const [isUploading, setIsUploading] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [uploadProgress, setUploadProgress] = useState<number>(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -246,7 +248,7 @@ export default function AddLocationForm() {
           source: doc.source || 'manual',
           foursquareIcon: doc.foursquareIcon,
           parent: doc.parent?.id || doc.parent,
-          subcategories: []
+          subcategories: [] as any[]
         }))
 
         // Build hierarchical structure
@@ -458,6 +460,10 @@ export default function AddLocationForm() {
       description: "",
       keywords: "",
     })
+
+    // Privacy settings
+    setPrivacy('public')
+    setPrivateAccess([])
 
     // Reset form state
     setFormErrors({})
@@ -717,8 +723,10 @@ export default function AddLocationForm() {
 
   const updateGalleryCaption = (index: number, caption: string) => {
     const updatedGallery = [...gallery]
-    updatedGallery[index].caption = caption
-    setGallery(updatedGallery)
+    if (updatedGallery[index]) {
+      updatedGallery[index].caption = caption
+      setGallery(updatedGallery)
+    }
   }
 
   // Tag handling
@@ -748,6 +756,7 @@ export default function AddLocationForm() {
   // Business hours handling
   const updateBusinessHour = (index: number, field: "open" | "close" | "closed", value: string | boolean) => {
     const updatedHours = [...businessHours]
+    if (!updatedHours[index]) return
     if (field === "closed") {
       updatedHours[index].closed = value as boolean
       if (value === true) {
@@ -942,6 +951,11 @@ export default function AddLocationForm() {
           description: meta.description || undefined,
           keywords: meta.keywords || undefined,
         },
+        
+        // Privacy settings
+        privacy: privacy,
+        privateAccess: privacy === 'private' && privateAccess.length > 0 ? privateAccess : undefined,
+        
         createdBy: user?.id,
       }
 
@@ -1040,7 +1054,7 @@ export default function AddLocationForm() {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             {/* Mobile-optimized sticky tab navigation */}
             <div className="sticky top-0 z-10 bg-white px-4 md:px-6 pt-4 md:pt-6 border-b overflow-x-auto">
-              <TabsList className="grid grid-cols-6 md:grid-cols-6 w-full min-w-[600px] md:min-w-0 h-auto p-1 mb-4">
+              <TabsList className="grid grid-cols-7 md:grid-cols-7 w-full min-w-[700px] md:min-w-0 h-auto p-1 mb-4">
                 <TabsTrigger value="basic" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
                   <Building className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Basic</span>
@@ -1060,6 +1074,10 @@ export default function AddLocationForm() {
                 <TabsTrigger value="details" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
                   <Tag className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">Details</span>
+                </TabsTrigger>
+                <TabsTrigger value="privacy" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
+                  <Globe className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">Privacy</span>
                 </TabsTrigger>
                 <TabsTrigger value="settings" className="flex flex-col md:flex-row items-center gap-1 md:gap-2 h-12 md:h-10 text-xs md:text-sm px-2">
                   <Settings className="h-4 w-4 flex-shrink-0" />
@@ -1561,26 +1579,26 @@ export default function AddLocationForm() {
                       <Label htmlFor="location-city" className="text-base font-medium flex items-center">
                         City <span className="text-red-500 ml-1">*</span>
                       </Label>
-                                              <Input
-                          id="location-city"
-                          value={address.city}
-                          onChange={(e) => setAddress({ ...address, city: e.target.value })}
-                          placeholder="City"
-                          className={`h-14 md:h-12 text-base ${formErrors.city ? "border-red-500" : ""}`}
-                        />
+                      <Input
+                        id="location-city"
+                        value={address.city}
+                        onChange={(e) => setAddress({ ...address, city: e.target.value })}
+                        placeholder="City"
+                        className={`h-14 md:h-12 text-base ${formErrors.city ? "border-red-500" : ""}`}
+                      />
                       {formErrors.city && <p className="text-red-500 text-sm">{formErrors.city}</p>}
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="location-state" className="text-base font-medium flex items-center">
                         State/Province <span className="text-red-500 ml-1">*</span>
                       </Label>
-                                              <Input
-                          id="location-state"
-                          value={address.state}
-                          onChange={(e) => setAddress({ ...address, state: e.target.value })}
-                          placeholder="State"
-                          className={`h-14 md:h-12 text-base ${formErrors.state ? "border-red-500" : ""}`}
-                        />
+                      <Input
+                        id="location-state"
+                        value={address.state}
+                        onChange={(e) => setAddress({ ...address, state: e.target.value })}
+                        placeholder="State"
+                        className={`h-14 md:h-12 text-base ${formErrors.state ? "border-red-500" : ""}`}
+                      />
                       {formErrors.state && <p className="text-red-500 text-sm">{formErrors.state}</p>}
                     </div>
                     <div className="space-y-2">
@@ -1608,22 +1626,6 @@ export default function AddLocationForm() {
                         className={`h-14 md:h-12 text-base ${formErrors.country ? "border-red-500" : ""}`}
                       />
                       {formErrors.country && <p className="text-red-500 text-sm">{formErrors.country}</p>}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 bg-muted/10 p-4 rounded-lg border border-dashed">
-                    <div className="flex items-center mb-3">
-                      <Compass className="h-5 w-5 text-[#FF6B6B] mr-2" />
-                      <Label className="text-base font-medium">Map Preview</Label>
-                    </div>
-                    <div className="h-[300px] rounded-lg overflow-hidden bg-muted/20 flex items-center justify-center">
-                      <div className="text-center">
-                        <MapPin className="h-8 w-8 text-[#FF6B6B]/50 mx-auto mb-2" />
-                        <p className="text-muted-foreground">Map will be displayed after address is geocoded</p>
-                        <p className="text-sm text-muted-foreground mt-2">
-                          The exact location will be determined automatically using geocoding.
-                        </p>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -1939,6 +1941,106 @@ export default function AddLocationForm() {
               </CardContent>
             </TabsContent>
 
+            {/* Privacy Tab */}
+            <TabsContent value="privacy" className="p-0">
+              <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
+                <div className="space-y-5">
+                  <div className="flex items-center mb-2">
+                    <Globe className="h-5 w-5 text-[#FF6B6B] mr-2" />
+                    <h3 className="text-lg font-medium">Privacy Settings</h3>
+                  </div>
+
+                  <Alert className="border-blue-200 bg-blue-50">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800">
+                      Control who can see this location. Private locations are only visible to selected friends.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      <Label className="text-base font-medium">Location Visibility</Label>
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                          <input
+                            type="radio"
+                            id="privacy-public"
+                            name="privacy"
+                            value="public"
+                            checked={privacy === 'public'}
+                            onChange={(e) => setPrivacy(e.target.value as 'public' | 'private')}
+                            className="h-4 w-4 text-[#FF6B6B] border-gray-300 focus:ring-[#FF6B6B]"
+                          />
+                          <div className="flex items-center gap-3">
+                            <Globe className="h-5 w-5 text-green-600" />
+                            <div>
+                              <Label htmlFor="privacy-public" className="text-base font-medium cursor-pointer">
+                                Public Location
+                              </Label>
+                              <p className="text-sm text-gray-600">
+                                Visible to everyone on the platform
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                          <input
+                            type="radio"
+                            id="privacy-private"
+                            name="privacy"
+                            value="private"
+                            checked={privacy === 'private'}
+                            onChange={(e) => setPrivacy(e.target.value as 'public' | 'private')}
+                            className="h-4 w-4 text-[#FF6B6B] border-gray-300 focus:ring-[#FF6B6B]"
+                          />
+                          <div className="flex items-center gap-3">
+                            <Users className="h-5 w-5 text-blue-600" />
+                            <div>
+                              <Label htmlFor="privacy-private" className="text-base font-medium cursor-pointer">
+                                Private Location
+                              </Label>
+                              <p className="text-sm text-gray-600">
+                                Only visible to selected friends
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {privacy === 'private' && user && (
+                      <div className="space-y-4">
+                        <div className="border-t pt-4">
+                          <Label className="text-base font-medium">
+                            Select Friends for Access
+                          </Label>
+                          <p className="text-sm text-gray-600 mb-4">
+                            Choose which friends can see this private location
+                          </p>
+                          <PrivateAccessSelector
+                            currentAccess={privateAccess}
+                            onAccessChange={setPrivateAccess}
+                            userId={user.id}
+                            className="w-full"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {privacy === 'private' && !user && (
+                      <Alert className="border-orange-200 bg-orange-50">
+                        <AlertTriangle className="h-4 w-4 text-orange-600" />
+                        <AlertDescription className="text-orange-800">
+                          You need to be logged in to set up private access. Please log in to continue.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </TabsContent>
+
             {/* Settings Tab */}
             <TabsContent value="settings" className="p-0">
               <CardContent className="p-4 md:p-6 space-y-6 md:space-y-6">
@@ -2158,7 +2260,10 @@ export default function AddLocationForm() {
                   const tabs = ["basic", "media", "location", "contact", "details", "settings"]
                   const currentIndex = tabs.indexOf(activeTab)
                   if (currentIndex > 0) {
-                    setActiveTab(tabs[currentIndex - 1])
+                    const prevTab = tabs[currentIndex - 1]
+                    if (prevTab) {
+                      setActiveTab(prevTab)
+                    }
                   }
                 }}
                 disabled={activeTab === "basic"}
@@ -2175,7 +2280,10 @@ export default function AddLocationForm() {
                   const tabs = ["basic", "media", "location", "contact", "details", "settings"]
                   const currentIndex = tabs.indexOf(activeTab)
                   if (currentIndex < tabs.length - 1) {
-                    setActiveTab(tabs[currentIndex + 1])
+                    const nextTab = tabs[currentIndex + 1]
+                    if (nextTab) {
+                      setActiveTab(nextTab)
+                    }
                   }
                 }}
                 disabled={activeTab === "settings"}

@@ -137,7 +137,16 @@ export function PhotoSubmissionModal({
       // Convert HEIC to JPEG if needed
       let processedFile = file
       if (file.type === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-        processedFile = await convertHEICFile(file)
+        const heicResult = await convertHEICFile(file)
+        let blob: Blob
+        if (heicResult instanceof Blob) {
+          blob = heicResult
+        } else if (heicResult instanceof ArrayBuffer) {
+          blob = new Blob([new Uint8Array(heicResult)], { type: 'image/jpeg' })
+        } else {
+          blob = new Blob([(heicResult as unknown) as BlobPart], { type: 'image/jpeg' })
+        }
+        processedFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg'), { type: 'image/jpeg' })
       }
 
       setSelectedFile(processedFile)
@@ -171,9 +180,13 @@ export function PhotoSubmissionModal({
       // Simple blur detection (variance of pixel differences)
       let totalVariance = 0
       for (let i = 0; i < data.length; i += 4) {
-        if (i + 4 < data.length) {
-          const currentPixel = (data[i] + data[i + 1] + data[i + 2]) / 3
-          const nextPixel = (data[i + 4] + data[i + 5] + data[i + 6]) / 3
+        if (
+          i + 6 < data.length &&
+          data[i] !== undefined && data[i + 1] !== undefined && data[i + 2] !== undefined &&
+          data[i + 4] !== undefined && data[i + 5] !== undefined && data[i + 6] !== undefined
+        ) {
+          const currentPixel = (data[i]! + data[i + 1]! + data[i + 2]!) / 3
+          const nextPixel = (data[i + 4]! + data[i + 5]! + data[i + 6]!) / 3
           totalVariance += Math.abs(currentPixel - nextPixel)
         }
       }

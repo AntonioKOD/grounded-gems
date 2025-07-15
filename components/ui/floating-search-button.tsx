@@ -30,6 +30,7 @@ export default function FloatingSearchButton({ className }: FloatingSearchButton
       window.addEventListener('resize', checkMobile)
       return () => window.removeEventListener('resize', checkMobile)
     }
+    return undefined
   }, [])
 
   // Fetch unread notification count
@@ -239,6 +240,7 @@ export function useFloatingButtonVisibility() {
           window.visualViewport?.removeEventListener('resize', handleResize)
         }
       }
+      return undefined
   }, [lastScrollY])
 
   return isVisible

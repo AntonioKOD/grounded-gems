@@ -14,7 +14,8 @@ export async function POST(
     
     // Check admin access
     const { user } = await payload.auth({ headers: req.headers })
-    if (!user || !isAdminOrCreatedBy({ req: { user } })) {
+    // Construct a minimal mock PayloadRequest for access check
+    if (!user || !isAdminOrCreatedBy({ req: { user } } as any)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -23,7 +24,7 @@ export async function POST(
 
     // Parse tipId to get location ID and tip index
     const [locationId, , tipIndexStr] = tipId.split('-')
-    const tipIndex = parseInt(tipIndexStr)
+    const tipIndex = parseInt(tipIndexStr || '')
 
     if (!locationId || isNaN(tipIndex)) {
       return NextResponse.json(

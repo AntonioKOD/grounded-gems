@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { resend } from "./resend"
 
 export async function sendVerificationEmail(

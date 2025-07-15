@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { X, Calendar, Clock, Percent } from 'lucide-react'
+import { X, Calendar, Clock, Percent, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,7 +71,7 @@ export default function CreateSpecialModal({
       amount: 0,
       type: 'percentage'
     },
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: new Date().toISOString().split('T')[0] || '',
     endDate: '',
     isOngoing: false,
     daysAvailable: [],
@@ -210,7 +210,7 @@ export default function CreateSpecialModal({
             amount: 0,
             type: 'percentage'
           },
-          startDate: new Date().toISOString().split('T')[0],
+          startDate: new Date().toISOString().split('T')[0] || '',
           endDate: '',
           isOngoing: false,
           daysAvailable: [],

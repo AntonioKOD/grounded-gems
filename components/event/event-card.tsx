@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import { useState } from "react"
@@ -11,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Event } from "@/types/event"
+import PrivateEventBadge from "@/components/event/private-event-badge"
 
 interface EventCardProps {
   event: Event
@@ -183,20 +183,10 @@ export function EventCard({ event, className, compact = false, userCoordinates }
             </Badge>
           </div>
 
-          {/* Visibility badge */}
-          {event.visibility && event.visibility !== "public" && (
+          {/* Privacy badge */}
+          {event.privacy && event.privacy !== "public" && (
             <div className="absolute bottom-3 left-3">
-              <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200 font-medium">
-                {event.visibility === "private" ? (
-                  <>
-                    <Lock className="h-3 w-3 mr-1" /> Private
-                  </>
-                ) : (
-                  <>
-                    <Mail className="h-3 w-3 mr-1" /> RSVP Only
-                  </>
-                )}
-              </Badge>
+              <PrivateEventBadge privacy={event.privacy} />
             </div>
           )}
         </div>

@@ -59,25 +59,17 @@ export async function GET(request: NextRequest) {
     
     // Generate feed with proper parameters
     const feedItems = await feedAlgorithm.generateFeed({
-      userId: user?.id,
-      page,
-      limit,
-      feedType: feedType as any,
-      sortBy: sortBy as any,
+      userId: user?.id as string,
       location,
       weather,
-      timeOfDay,
+      timeOfDay: timeOfDay as any,
       interests,
       socialCircle,
-      filters: {
-        excludeTypes: excludeTypes as any,
-        includeTypes: includeTypes as any
-      }
     })
 
     // Update user interaction states if user is logged in
     if (user?.id && feedItems.length > 0) {
-      await updateUserInteractionStates(feedItems, user.id, payload)
+      await updateUserInteractionStates(feedItems, user?.id as string, payload)
     }
 
     const itemTypeCounts = feedItems.reduce((acc: Record<string, number>, item) => {

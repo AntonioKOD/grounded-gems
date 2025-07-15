@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client"
 
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"

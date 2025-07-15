@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // components/login/login-form.tsx
 "use client"
 
@@ -315,9 +314,9 @@ const LoginForm = memo(function LoginForm() {
       setError(errorInfo.message)
       setErrorType(errorInfo.type as any)
       setErrorData({
-        suggestSignup: errorInfo.suggestSignup,
-        hint: errorInfo.hint,
-        userEmail: errorInfo.userEmail
+        suggestSignup: false,
+        hint: '',
+        userEmail: ''
       })
       
       // Set verification resend option for email verification errors

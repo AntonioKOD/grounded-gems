@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
-import { User, BucketList } from '@/payload-types'
+import { User} from 'payload'
 
 interface PatchParams {
   params: {

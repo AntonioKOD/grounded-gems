@@ -25,7 +25,12 @@ export async function GET(request: NextRequest) {
     const payload = await getPayload({ config })
     const trimmedQuery = query.trim()
     
-    let results = {
+    let results: {
+      users: any[];
+      locations: any[];
+      categories: any[];
+      total: number;
+    } = {
       users: [],
       locations: [],
       categories: [],
@@ -134,7 +139,7 @@ export async function GET(request: NextRequest) {
           scoredUsers.sort((a, b) => b.relevanceScore - a.relevanceScore)
         }
 
-        results.users = scoredUsers
+        results.users = scoredUsers as any[]
       } catch (error) {
         console.error("Error searching users:", error)
       }

@@ -547,13 +547,13 @@ export class LocationPersonalizationService {
       let filteredLocations = locations;
 
       if (filters.isOpen !== undefined) {
-        filteredLocations = filteredLocations.filter(loc => 
+        filteredLocations = filteredLocations.filter((loc: { isOpen: any; }) => 
           filters.isOpen ? loc.isOpen : true
         );
       }
 
       if (filters.radius && userPreferences?.location?.coordinates) {
-        filteredLocations = filteredLocations.filter(loc => 
+        filteredLocations = filteredLocations.filter((loc: { distance: number; }) => 
           loc.distance ? loc.distance <= filters.radius! : true
         );
       }

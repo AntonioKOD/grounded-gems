@@ -259,8 +259,9 @@ export function LocationEditForm({
       hours: {
         ...prev.hours,
         [day]: {
-          ...prev.hours[day],
-          [field]: value
+          open: field === 'open' ? (value as string) : prev.hours[day]?.open || '',
+          close: field === 'close' ? (value as string) : prev.hours[day]?.close || '',
+          closed: field === 'closed' ? (value as boolean) : prev.hours[day]?.closed || false,
         }
       }
     }))
@@ -737,10 +738,10 @@ export function LocationEditForm({
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-gray-600">
-                Location created: {new Date(location?.createdAt).toLocaleDateString()}
+                Location created: {location?.createdAt ? new Date(location.createdAt).toLocaleDateString() : '-'}
               </p>
               <p className="text-sm text-gray-600">
-                Last updated: {new Date(location?.updatedAt).toLocaleDateString()}
+                Last updated: {location?.updatedAt ? new Date(location.updatedAt).toLocaleDateString() : '-'}
               </p>
               {location?.stats && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">

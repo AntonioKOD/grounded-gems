@@ -44,7 +44,7 @@ export function extractIdFromSlug(slug: string): string | null {
   // Check if slug ends with a pattern like "-12345678" (8 chars)
   const match = slug.match(/-([a-z0-9]{8})$/i)
   if (match) {
-    return match[1]
+    return match[1] || null
   }
   
   // If no ID pattern found, the slug might be the full ID

@@ -139,13 +139,13 @@ function handleRangeRequest(
   contentType: string
 ): NextResponse {
   const parts = range.replace(/bytes=/, "").split("-")
-  const start = parseInt(parts[0], 10)
+  const start = parseInt(parts[0] || '0', 10)
   const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1
   const chunksize = (end - start) + 1
-  
-  const fileStream = fs.createReadStream(filePath, { start, end })
-  const buffer = fs.readFileSync(filePath, { start, end: end + 1 })
-  
+  const fileStream = fs.createReadStream(filePath, { start: start, end: end })
+  const buffer = Buffer.alloc(chunksize)
+  fs.readSync(fs.openSync(filePath, 'r'), buffer, 0, chunksize, start)
+
   return new NextResponse(buffer, {
     status: 206, // Partial Content
     headers: {

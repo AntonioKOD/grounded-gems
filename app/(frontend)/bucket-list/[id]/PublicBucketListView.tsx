@@ -425,7 +425,7 @@ export default function PublicBucketListView({ bucketList }: PublicBucketListVie
               </div>
             </div>
 
-            {typeof navigator !== 'undefined' && navigator.share && (
+            {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
               <Button
                 onClick={handleNativeShare}
                 className="w-full bg-[#4ecdc4] hover:bg-[#3dbdb4] text-white"

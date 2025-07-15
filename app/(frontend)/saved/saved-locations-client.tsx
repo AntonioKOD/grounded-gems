@@ -349,7 +349,7 @@ export default function SavedLocationsClient() {
               <SelectContent>
                 <SelectItem value="all">All Prices</SelectItem>
                 {uniquePriceRanges.map(price => (
-                  <SelectItem key={price} value={price}>
+                  <SelectItem key={price} value={price || ''}>
                     {getPriceRangeDisplay(price)}
                   </SelectItem>
                 ))}

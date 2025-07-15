@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     // Update user password and clear reset token
     const updatedUser = await payload.update({
       collection: 'users',
-      id: user.id,
+      id: user?.id as string,
       data: {
         password,
         resetPasswordToken: null,
@@ -70,16 +70,15 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Reset password error:', error)
-    
     // Handle specific PayloadCMS errors
-    if (error.message?.includes('token')) {
+    if (error instanceof Error && error.message.includes('token')) {
       return NextResponse.json(
         { error: 'Invalid or expired reset token. Please request a new password reset.' },
         { status: 400 }
       )
     }
     
-    if (error.message?.includes('User not found')) {
+    if (error instanceof Error && error.message.includes('User not found')) {
       return NextResponse.json(
         { error: 'Invalid reset token. Please request a new password reset.' },
         { status: 400 }

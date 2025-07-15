@@ -220,7 +220,7 @@ export function getFileTypeDescription(file: File): string {
   
   const mimeTypeParts = file.type.split('/')
   if (mimeTypeParts[0] === 'image') {
-    return `${mimeTypeParts[1].toUpperCase()} Image`
+    return `${mimeTypeParts[1]?.toUpperCase()} Image`
   }
   
   return 'Unknown'

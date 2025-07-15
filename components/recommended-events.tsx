@@ -80,7 +80,7 @@ export default function RecommendedEvents() {
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setIsInView(entry.isIntersecting)
+        setIsInView(entry?.isIntersecting ?? false)
       },
       { threshold: 0.1 },
     )

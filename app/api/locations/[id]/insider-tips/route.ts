@@ -189,7 +189,7 @@ export async function GET(
     }
 
     // Filter and sort tips
-    const tips = (location.insiderTips || [])
+    const tips = (Array.isArray(location.insiderTips) ? location.insiderTips : [])
       .filter((tip: any) => {
         // Only show approved tips or tips from non-user sources
         if (tip.source === 'user_submitted') {
@@ -201,7 +201,7 @@ export async function GET(
       .sort((a: any, b: any) => {
         // Sort by priority (high -> medium -> low), then by submission date
         const priorityOrder = { high: 0, medium: 1, low: 2 }
-        const priorityDiff = priorityOrder[a.priority] - priorityOrder[b.priority]
+        const priorityDiff = priorityOrder[a.priority as keyof typeof priorityOrder] - priorityOrder[b.priority as keyof typeof priorityOrder]
         if (priorityDiff !== 0) return priorityDiff
         
         // Then by verification status (verified first)

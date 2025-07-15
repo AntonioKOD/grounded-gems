@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getLocations, getCategories } from "@/app/actions"
 
 // --- Interfaces ----------------------------------------------------------------
@@ -99,6 +98,13 @@ export interface Location {
   bestTimeToVisit?: Array<{ season: string }>
   insiderTips?: string
   accessibility?: Accessibility
+
+  // Partnership fields
+  hasBusinessPartnership?: boolean
+  partnershipDetails?: {
+    partnerName?: string
+    details?: string
+  }
 
   // Status / meta
   status?: "draft" | "review" | "published" | "archived"
@@ -271,7 +277,7 @@ export const addedLocations = async (): Promise<Location[]> => {
           return null
         }
       })
-      .filter((loc): loc is Location => loc !== null) // Remove null entries
+      .filter((loc: Location | null): loc is Location => loc !== null) // Remove null entries
 
     console.log(`✅ [MAP-DATA] Successfully processed ${locations.length} valid locations`)
 

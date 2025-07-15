@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type { Location } from "@/app/(frontend)/map/map-data";
 import type mapboxgl from "mapbox-gl";
 import { 

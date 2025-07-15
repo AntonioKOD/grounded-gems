@@ -61,7 +61,7 @@ export default function ActivityFeed({ userId, limit = 5 }: ActivityFeedProps) {
     const names = ["Alex Johnson", "Jamie Smith", "Taylor Wilson", "Jordan Lee", "Casey Brown"]
     
     return Array.from({ length: limit }).map((_, i) => {
-      const type = activityTypes[Math.floor(Math.random() * activityTypes.length)]
+      const type = activityTypes[Math.floor(Math.random() * activityTypes.length)] as ActivityItem['type']
       const isOwnActivity = Math.random() > 0.5
       
       return {
@@ -69,7 +69,7 @@ export default function ActivityFeed({ userId, limit = 5 }: ActivityFeedProps) {
         type,
         actor: {
           id: isOwnActivity && userId ? userId : `user_${i}`,
-          name: isOwnActivity && userId ? "You" : names[Math.floor(Math.random() * names.length)],
+          name: isOwnActivity && userId ? "You" : (names[Math.floor(Math.random() * names.length)] || `User ${i}`),
           avatar: `/diverse-avatars.png`,
         },
         target: type !== "achievement" ? {

@@ -185,7 +185,9 @@ function ExplorePostCard({ post, highlighted = false }: ExplorePostCardProps) {
             {post.location && (
               <div className="flex items-center text-gray-500 text-sm mt-1">
                 <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
-                <span className="truncate">{post.location.name}</span>
+                <span className="truncate">
+                  {typeof post.location === 'string' ? post.location : post.location.name}
+                </span>
               </div>
             )}
 

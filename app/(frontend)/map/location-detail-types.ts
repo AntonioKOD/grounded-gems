@@ -2,6 +2,7 @@ import type { Location, Media } from "./map-data"
 
 // Shared User interface
 export interface User {
+  avatar: string | undefined
   id: string
   name?: string
   email?: string

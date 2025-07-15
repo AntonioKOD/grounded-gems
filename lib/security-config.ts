@@ -115,7 +115,7 @@ export const ValidationSchemas = {
   // File uploads
   imageFile: z.object({
     size: z.number().max(SECURITY_CONFIG.VALIDATION.MAX_FILE_SIZE, 'File too large'),
-    type: z.enum(SECURITY_CONFIG.VALIDATION.ALLOWED_IMAGE_TYPES as [string, ...string[]], {
+    type: z.enum(SECURITY_CONFIG.VALIDATION.ALLOWED_IMAGE_TYPES as unknown as [string, ...string[]], {
       errorMap: () => ({ message: 'Invalid image type' })
     })
   }),
@@ -124,7 +124,7 @@ export const ValidationSchemas = {
   url: z.string()
     .url('Invalid URL format')
     .refine(url => {
-      const protocol = new URL(url).protocol
+      const protocol = new URL(url).protocol as "https:" | "http:" | "mailto:" | "tel:"
       return SECURITY_CONFIG.XSS.ALLOWED_PROTOCOLS.includes(protocol)
     }, 'Invalid URL protocol'),
 
@@ -171,7 +171,7 @@ export function validateAndSanitizeUrl(url: string): string | null {
     const parsedUrl = new URL(url)
     
     // Check protocol
-    if (!SECURITY_CONFIG.XSS.ALLOWED_PROTOCOLS.includes(parsedUrl.protocol)) {
+    if (!SECURITY_CONFIG.XSS.ALLOWED_PROTOCOLS.includes(parsedUrl.protocol as "https:" | "http:" | "mailto:" | "tel:")) {
       return null
     }
 
@@ -216,7 +216,9 @@ export function checkRateLimit(
 // JWT utilities for client-side token handling
 export function isTokenExpired(token: string): boolean {
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
+    const parts = token.split('.')
+    if (!parts[1]) return true
+    const payload = JSON.parse(atob(parts[1]))
     return payload.exp * 1000 < Date.now()
   } catch {
     return true
@@ -225,7 +227,7 @@ export function isTokenExpired(token: string): boolean {
 
 export function getTokenPayload(token: string): any {
   try {
-    return JSON.parse(atob(token.split('.')[1]))
+    return JSON.parse(atob(token.split('.')[1] || ''))
   } catch {
     return null
   }

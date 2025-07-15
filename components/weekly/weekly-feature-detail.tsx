@@ -23,7 +23,6 @@ import {
   Train,
   Bus,
   Bike,
-  Walking,
   Compass,
   Target,
   Zap,
@@ -302,7 +301,7 @@ export default function WeeklyFeatureDetail({ feature }: WeeklyFeatureDetailProp
                     </div>
                     <div className="bg-gradient-to-br from-[#FFE66D]/10 to-[#FF6B6B]/10 p-6 rounded-xl border border-[#FFE66D]/30">
                       <div className="text-4xl mb-3">{themeConfig.emoji}</div>
-                      <p className="text-sm text-gray-700 font-medium">{themeConfig.motto || 'Make this week amazing!'}</p>
+                      <p className="text-sm text-gray-700 font-medium">Make this week amazing!</p>
                     </div>
                   </div>
                 </CardContent>

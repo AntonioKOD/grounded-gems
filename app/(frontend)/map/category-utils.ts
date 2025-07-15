@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Category, Location } from "./map-data"
 
 // Default colors by category type
@@ -17,7 +16,7 @@ export function getCategoryInfo(categories?: Array<Category | string>): { color:
   // If no categories provided, return default
   if (!categories || !Array.isArray(categories) || categories.length === 0) {
     return {
-      color: TYPE_COLORS.default,
+      color: TYPE_COLORS.default || "#6C757D",
       name: "Uncategorized",
       type: "general"
     }
@@ -38,7 +37,7 @@ export function getCategoryInfo(categories?: Array<Category | string>): { color:
  */
 export function getCategoryColor(category: any): string {
   // If category is null or undefined, return default color
-  if (!category) return TYPE_COLORS.default
+  if (!category) return TYPE_COLORS.default || "#6C757D"
 
   // If category has a color property, use it
   if (typeof category === "object" && category.color) {
@@ -47,14 +46,14 @@ export function getCategoryColor(category: any): string {
 
   // If category has a type, use the type color
   if (typeof category === "object" && category.type && TYPE_COLORS[category.type]) {
-    return TYPE_COLORS[category.type]
+    return TYPE_COLORS[category.type] || "#6C757D"
   }
 
   // If category is a string, use it as a key for the color map
   if (typeof category === "string") {
     // Try to match with type colors first
     if (TYPE_COLORS[category.toLowerCase()]) {
-      return TYPE_COLORS[category.toLowerCase()]
+      return TYPE_COLORS[category.toLowerCase()] || "#6C757D"
     }
 
     // Otherwise hash the string for a consistent color
@@ -72,7 +71,7 @@ export function getCategoryColor(category: any): string {
   }
 
   // Fallback to default color
-  return TYPE_COLORS.default
+  return TYPE_COLORS.default || "#6C757D"
 }
 
 /**
@@ -123,7 +122,7 @@ export function getPrimaryCategory(location: Location): Category | string | null
     return null
   }
 
-  return location.categories[0]
+  return location.categories[0] || null
 }
 
 /**

@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import EnhancedFeedWrapper from '@/components/feed/enhanced-feed-wrapper'
 import { TrendingUp, Users, MapPin, Calendar, BookOpen } from 'lucide-react'
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: "Discover Amazing Places | Sacavia",
@@ -114,12 +115,12 @@ export default async function FeedPage() {
                 >
                   Explore Locations
                 </a>
-                <a 
+                <Link 
                   href="/guides" 
                   className="inline-flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all duration-300"
                 >
                   Browse Guides
-                </a>
+                </Link>
               </div>
             </div>
           </div>
@@ -154,12 +155,12 @@ export default async function FeedPage() {
               >
                 Explore Locations
               </a>
-              <a 
+              <Link 
                 href="/guides" 
                 className="inline-flex items-center px-6 py-3 bg-white border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-all duration-300"
               >
                 Browse Guides
-              </a>
+              </Link>
             </div>
           </div>
         </div>

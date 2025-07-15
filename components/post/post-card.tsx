@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -335,8 +335,11 @@ export function PostCard({ post, user, className = "", onPostUpdated }: PostCard
         {currentPost.location && (
           <div className="flex items-center mb-2 text-sm">
             <MapPin className="h-4 w-4 mr-1 text-[#FF6B6B]" />
-            <Link href={`map?locationId=${currentPost.location?.id}`} className="hover:underline">
-              {currentPost.location.name}
+            <Link 
+              href={`map?locationId=${typeof currentPost.location === 'string' ? currentPost.location : currentPost.location?.id}`} 
+              className="hover:underline"
+            >
+              {typeof currentPost.location === 'string' ? currentPost.location : currentPost.location?.name}
             </Link>
 
             {/* Rating (for reviews) */}

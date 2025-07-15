@@ -34,7 +34,7 @@ export default function SearchResultsSimple({ initialQuery = "" }: { initialQuer
     if (initialQuery) {
       performSearch(initialQuery)
     }
-    // eslint-disable-next-line
+
   }, [initialQuery])
 
   async function performSearch(searchQuery: string) {

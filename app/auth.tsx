@@ -1,1 +1,0 @@
-import AuthNavigator from '../components/auth/AuthNavigator'; 

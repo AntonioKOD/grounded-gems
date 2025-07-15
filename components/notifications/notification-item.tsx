@@ -45,7 +45,7 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return <Check className="h-4 w-4 text-green-600" />
       case "journey_invite_declined":
         return <X className="h-4 w-4 text-red-600" />
-      case "invite":
+      case "journey_invite":
         return <Sparkles className="h-4 w-4 text-[#FF6B6B]" />
       default:
         return <Bell className="h-4 w-4" />
@@ -73,7 +73,7 @@ export default function NotificationItem({ notification, onAction }: Notificatio
         return "bg-green-500 text-white"
       case "journey_invite_declined":
         return "bg-red-500 text-white"
-      case "invite":
+      case "journey_invite":
         return "bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white"
       default:
         return "bg-gray-500 text-white"
@@ -126,7 +126,7 @@ export default function NotificationItem({ notification, onAction }: Notificatio
     let journeyId = notification.relatedTo.value || notification.relatedTo.id
     // Fallback: if journeyId is an object, try id/_id
     if (typeof journeyId === 'object' && journeyId !== null) {
-      journeyId = journeyId.id || journeyId._id || ''
+      journeyId = (journeyId as {id?: string; _id?: string}).id || (journeyId as {id?: string; _id?: string})._id || ''
     }
     if (collection !== 'journeys' || typeof journeyId !== 'string' || !journeyId) {
       console.error('Invalid journey ID for invite action:', notification.relatedTo)

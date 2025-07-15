@@ -52,7 +52,7 @@ export default function InviteUsersForm({
 
     try {
       const users = await searchUsers(searchQuery, currentUserId, 10)
-      setSearchResults(users)
+      setSearchResults(users as User[])
     } catch (error) {
       console.error("Error searching users:", error)
       toast.error("Failed to search users")

@@ -263,13 +263,11 @@ export function CommentSystem({ postId, user, initialComments = [], className }:
         if (currentReaction) {
           newReactions[reactionType] = Math.max(0, newReactions[reactionType] - 1)
         }
-        
         // Add new reaction if different
-        const newUserReaction = currentReaction === reactionType ? null : reactionType
+        const newUserReaction = currentReaction > 0 ? null : reactionType
         if (newUserReaction) {
           newReactions[newUserReaction] += 1
         }
-        
         return {
           ...comment,
           reactions: newReactions,

@@ -394,7 +394,7 @@ export default function JourneyDetailsPage() {
                 // Owner sees all invitees
                 plan.invitees.map((inv, idx) => {
                   const userId = getInviteeUserId(inv);
-                  const details = inviteeDetails[userId] || {};
+                  const details: Invitee = inviteeDetails[userId] || { user: userId, status: '', name: undefined, avatar: undefined, email: undefined };
                   console.log(`Displaying invitee ${idx}:`, { userId, inv, details });
                   // Prioritize name from details, then email, then a friendly fallback
                   const displayName = details.name && details.name !== userId 
@@ -452,16 +452,14 @@ export default function JourneyDetailsPage() {
                   return userId === user?.id;
                 }).map((inv, idx) => {
                   const userId = getInviteeUserId(inv);
-                  const details = inviteeDetails[userId] || {};
+                  const details: Invitee = inviteeDetails[userId] || { user: userId, status: '', name: undefined, avatar: undefined, email: undefined };
                   console.log(`Displaying invitee ${idx}:`, { userId, inv, details });
                   // Prioritize name from details, then email, then a friendly fallback
                   const displayName = details.name && details.name !== userId 
                     ? details.name 
                     : details.email && details.email !== userId
                     ? details.email 
-                    : userId?.length > 10 
-                    ? `User ${userId.slice(0, 8)}...` 
-                    : userId || 'Unknown User';
+                    : "Unknown User"
                   console.log(`Final display name for ${userId}:`, displayName);
                   return (
                     <div key={userId || idx} className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl border border-gray-200">

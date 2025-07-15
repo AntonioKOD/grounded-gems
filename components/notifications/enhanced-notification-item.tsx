@@ -226,13 +226,13 @@ export default function EnhancedNotificationItem({
                 {/* Metadata (if available) */}
                 {!compact && notification.metadata && (
                   <div className="mt-2 text-xs text-gray-500">
-                    {notification.metadata.locationName && (
+                    {typeof notification.metadata.locationName === 'string' && (
                       <span>📍 {notification.metadata.locationName}</span>
                     )}
-                    {notification.metadata.eventTitle && (
+                    {typeof notification.metadata.eventTitle === 'string' && (
                       <span>🎉 {notification.metadata.eventTitle}</span>
                     )}
-                    {notification.metadata.visitCount && (
+                    {typeof notification.metadata.visitCount === 'number' && (
                       <span>👥 {notification.metadata.visitCount} total visits</span>
                     )}
                   </div>

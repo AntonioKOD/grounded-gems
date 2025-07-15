@@ -1,5 +1,7 @@
 "use client"
 
+import React from "react"
+
 // Performance Monitoring and Analytics
 // Tracks performance metrics and provides optimization insights
 
@@ -271,7 +273,7 @@ class PerformanceMonitor {
       report.recommendations.push('Memory usage is high. Check for memory leaks and optimize component re-renders.')
     }
 
-    if (report.resources.JavaScript?.avgTime > 1000) {
+    if (report.resources.JavaScript?.avgTime && report.resources.JavaScript.avgTime > 1000) {
       report.recommendations.push('JavaScript resources are loading slowly. Consider code splitting and lazy loading.')
     }
 

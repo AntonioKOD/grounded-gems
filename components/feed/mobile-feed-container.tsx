@@ -5,14 +5,13 @@ import { RefreshCw, Filter, BookmarkIcon, Clock, Flame, Sparkles, LayoutList, Ch
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
-import { Capacitor } from '@capacitor/core'
-import { getActions } from '@/lib/capacitor-utils'
+
 
 import MobileFeedPost from "./mobile-feed-post"
 import { Button } from "@/components/ui/button"
 import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, selectFeedPosts, selectFeedState, setFeedType, setSortBy, setUserId } from "@/lib/features/feed/feedSlice"
+import { fetchFeedPosts, loadMorePosts, setCategory, updatePost, setFeedType, setSortBy, setUserId } from "@/lib/features/feed/feedSlice"
 import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
 import { fetchUser } from "@/lib/features/user/userSlice"
 import MobileFeedSkeleton from "./mobile-feed-skeleton"
@@ -77,10 +76,30 @@ export default function MobileFeedContainer({
   // Memory management
   const { addCleanup } = useMemoryManagement()
 
+  // Load more posts function with optimized dependencies
+  const handleLoadMore = useCallback(() => {
+    if (!loading && !loadingMore && hasMore && isMounted) {
+      dispatch(loadMorePosts({
+        currentUserId: user?.id
+      }))
+    }
+  }, [dispatch, loading, loadingMore, hasMore, isMounted, userId, activeCategory, user?.id])
+
+  // Optimized scroll handling with throttling
+  const handleScroll = useThrottledScroll(
+    useCallback((scrollTop: number, scrollHeight: number, clientHeight: number) => {
+      // Auto-trigger load more when approaching bottom (backup to intersection observer)
+      if (scrollTop + clientHeight >= scrollHeight - 100 && !loadingMore && hasMore && !loading) {
+        // This provides additional load triggering besides intersection observer
+        handleLoadMore()
+      }
+    }, [loadingMore, hasMore, loading, handleLoadMore]),
+    100 // Throttle to every 100ms for better performance
+  )
+
   // Add scroll cleanup on mount
   useEffect(() => {
     const currentFeedRef = feedRef.current
-    
     // Add cleanup for scroll event listeners
     if (currentFeedRef) {
       addCleanup(() => {
@@ -88,7 +107,6 @@ export default function MobileFeedContainer({
         console.log('Cleaning up mobile feed scroll listeners')
       })
     }
-
     return () => {
       // Additional cleanup on unmount
       if (currentFeedRef) {
@@ -130,7 +148,7 @@ export default function MobileFeedContainer({
       
       // Add photos
       if (Array.isArray(post.photos)) {
-        post.photos.forEach((photo, index) => {
+        post.photos.forEach((photo: any, index: number) => {
           const photoUrl = getImageUrl(photo)
           if (photoUrl !== "/placeholder.svg" && photoUrl !== normalizedImage) {
             mediaItems.push({
@@ -149,7 +167,7 @@ export default function MobileFeedContainer({
     const normalizedImage = getImageUrl(post.image || post.featuredImage)
     const normalizedVideo = getVideoUrl(post.video)
     const normalizedPhotos = Array.isArray(post.photos) 
-      ? post.photos.map(photo => {
+      ? post.photos.map((photo: any) => {
           const photoUrl = getImageUrl(photo)
           return photoUrl !== "/placeholder.svg" ? photoUrl : null
         }).filter(Boolean)
@@ -327,42 +345,12 @@ export default function MobileFeedContainer({
     }
   }, [dispatch, userId, activeCategory, user?.id, isUserLoading])
 
-  // Load more posts function with optimized dependencies
-  const handleLoadMore = useCallback(() => {
-    if (!loading && !loadingMore && hasMore && isMounted) {
-      dispatch(loadMorePosts({ 
-        feedType, 
-        sortBy, 
-        userId,
-        category: activeCategory !== "all" ? activeCategory : undefined,
-        currentUserId: user?.id
-      }))
-    }
-  }, [dispatch, loading, loadingMore, hasMore, isMounted, feedType, sortBy, userId, activeCategory, user?.id])
-
   // Optimized infinite scroll with better threshold
   const lastPostElementRef = useInfiniteScroll(
     handleLoadMore,
     hasMore,
     loading || loadingMore,
     300 // Load when 300px from bottom
-  )
-
-  // Optimized scroll handling with throttling
-  const handleScroll = useThrottledScroll(
-    useCallback((scrollTop: number, scrollHeight: number, clientHeight: number) => {
-      // Only handle pull-to-refresh if at the top
-      if (scrollTop === 0 && features.pullToRefresh) {
-        // Handle pull-to-refresh logic here if needed
-      }
-      
-      // Auto-trigger load more when approaching bottom (backup to intersection observer)
-      if (scrollTop + clientHeight >= scrollHeight - 100 && !loadingMore && hasMore && !loading) {
-        // This provides additional load triggering besides intersection observer
-        handleLoadMore()
-      }
-    }, [features.pullToRefresh, loadingMore, hasMore, loading, handleLoadMore]),
-    100 // Throttle to every 100ms for better performance
   )
 
   // Refresh posts function
@@ -462,11 +450,15 @@ export default function MobileFeedContainer({
         </div>
 
         {/* Post form */}
-        {showPostForm && user && (
+        {showPostForm && user && user.name && (
           <div className="px-4 pb-3">
             <CollapsiblePostForm 
-              user={user} 
-              onPostCreated={() => refreshPosts()}
+              user={{
+                id: user.id,
+                name: user.name || '',
+                avatar: user.avatar,
+                profileImage: user.profileImage
+              }}
             />
           </div>
         )}
@@ -501,18 +493,22 @@ export default function MobileFeedContainer({
           className="h-full overflow-y-auto mobile-scroll pb-20"
           onTouchStart={(e) => {
             if (!isMounted || loading || refreshing) return
-            
-            if (feedRef.current?.scrollTop === 0) {
-              touchStartY.current = e.touches[0].clientY
+            if (!e.touches || e.touches.length === 0) return
+            const feed = feedRef.current
+            if (feed && feed.scrollTop === 0) {
+              const touch = e.touches && e.touches.length > 0 ? e.touches[0] : undefined;
+              if (touch) touchStartY.current = touch.clientY;
             }
           }}
           onTouchMove={(e) => {
             if (!isMounted || loading || refreshing) return
-            
-            if (feedRef.current?.scrollTop === 0 && touchStartY.current > 0) {
-              const currentY = e.touches[0].clientY
-              const delta = currentY - touchStartY.current
-              
+            if (!e.touches || e.touches.length === 0) return
+            const feed = feedRef.current
+            if (feed && feed.scrollTop === 0 && touchStartY.current > 0) {
+              const touch = e.touches && e.touches.length > 0 ? e.touches[0] : undefined;
+              if (!touch) return;
+              const currentY = touch.clientY;
+              const delta = currentY - touchStartY.current;
               if (delta > 0 && delta < 150) {
                 setPullToRefreshDelta(delta)
                 setIsPullingToRefresh(true)
@@ -557,7 +553,12 @@ export default function MobileFeedContainer({
                     >
                       <MobileFeedPost
                         post={post}
-                        user={user}
+                        user={user && user.name ? {
+                          id: user.id,
+                          name: user.name || '',
+                          avatar: user.avatar,
+                          profileImage: user.profileImage
+                        } : undefined}
                         onPostUpdated={handlePostUpdate}
                         className="mb-1"
                       />

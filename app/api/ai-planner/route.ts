@@ -7,6 +7,7 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   let user = null
+  let safeContext: string = "error"
   
   try {
     // Enhanced authentication with better error handling
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
   try {
     const requestBody = await req.json()
     const { input, context, coordinates } = requestBody
+    safeContext = context || "error"
     
     console.log('🎯 AI Planner Request:', {
       userId: user.id,
@@ -77,7 +79,7 @@ export async function POST(req: NextRequest) {
         }
         
         // Enhanced location query with better filtering and error handling
-        const { docs: allLocations } = await Promise.race([
+        const locationResult = await Promise.race([
           payload.find({
             collection: 'locations',
             where: {
@@ -94,7 +96,8 @@ export async function POST(req: NextRequest) {
             sort: '-updatedAt' // Prefer recently updated locations
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Location fetch timeout')), 5000))
-        ])
+        ]) as { docs: any[] }
+        const allLocations = locationResult.docs
         
         console.log(`📊 Found ${allLocations.length} total locations in database`)
         
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
           const selectedLocations = selectBestLocationsForContext(
             nearbyLocations, 
             context, 
-            userData?.interests || [],
+            (userData && typeof userData === 'object' && userData !== null && 'interests' in userData && Array.isArray((userData as any).interests)) ? (userData as any).interests : [],
             input // Pass the user input for better matching
           )
           referencedLocationIds = selectedLocations.map(loc => loc.id)
@@ -177,7 +180,7 @@ ${locationDescriptions}
         
       } catch (locationError) {
         console.error('❌ Error fetching nearby locations:', locationError)
-        locationFetchError = locationError.message
+        locationFetchError = locationError instanceof Error ? locationError.message : String(locationError)
         // Continue with general planning if location fetch fails
       }
     }
@@ -462,7 +465,7 @@ CRITICAL RULES:
         title: "Plan Generation Error",
         summary: "We encountered an issue while trying to generate your plan. Our team has been notified.",
         steps: ["Please try rephrasing your request or contact support if the issue persists."],
-        context: context || "error",
+        context: safeContext,
         usedRealLocations: false,
         locationIds: [],
         generatedAt: new Date().toISOString(),

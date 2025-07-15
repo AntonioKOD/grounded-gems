@@ -110,7 +110,7 @@ export default function LocationBottomSheet({
   }
 
   const handleDirections = () => {
-    if (location.address) {
+    if (location?.address) {
       const address = typeof location.address === "string"
         ? location.address
         : Object.values(location.address).filter(Boolean).join(", ")

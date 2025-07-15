@@ -85,8 +85,11 @@ export default function ImageManager({
   const locationForValidation = {
     id: locationId,
     name: 'Current Location',
-    featuredImage: featuredImg,
-    gallery: images
+    featuredImage: featuredImg ? { id: 'featured', ...featuredImg } : undefined,
+    gallery: images.map(img => ({
+      ...img,
+      image: typeof img.image === 'string' ? img.image : { id: img.id, ...img.image }
+    }))
   }
 
   const validation = validateLocationImages(locationForValidation)
@@ -98,7 +101,9 @@ export default function ImageManager({
 
     const newImages = Array.from(images)
     const [reorderedItem] = newImages.splice(result.source.index, 1)
-    newImages.splice(result.destination.index, 0, reorderedItem)
+    if (reorderedItem) {
+      newImages.splice(result.destination.index, 0, reorderedItem)
+    }
 
     // Update order values
     const updatedImages = newImages.map((img, index) => ({
@@ -156,7 +161,7 @@ export default function ImageManager({
     const updatedImages = images.filter(img => img.id !== imageId)
     
     // If deleted image was primary, make first remaining image primary
-    if (imageToDelete?.isPrimary && updatedImages.length > 0) {
+    if (imageToDelete?.isPrimary && updatedImages.length > 0 && updatedImages[0]) {
       updatedImages[0].isPrimary = true
       setFeaturedImg(updatedImages[0].image)
     }
@@ -192,13 +197,13 @@ export default function ImageManager({
       const updatedImages = [...images, ...newImages]
       
       // If this is the first image, set it as featured
-      if (images.length === 0 && newImages.length > 0) {
+      if (images.length === 0 && newImages.length > 0 && newImages[0]) {
         setFeaturedImg(newImages[0].image)
       }
 
       setImages(updatedImages)
       onImageUpdate({
-        featuredImage: images.length === 0 ? newImages[0].image : featuredImg,
+        featuredImage: images.length === 0 && newImages.length > 0 && newImages[0] ? newImages[0].image : featuredImg,
         gallery: updatedImages
       })
     } catch (error) {

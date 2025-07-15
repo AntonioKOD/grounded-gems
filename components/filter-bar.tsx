@@ -22,6 +22,7 @@ export default function FilterBar() {
       window.addEventListener("scroll", handleScroll)
       return () => window.removeEventListener("scroll", handleScroll)
     }
+    return undefined
   }, [])
 
   const toggleFilter = (filter: string | null) => {

@@ -59,35 +59,7 @@ export default function EnhancedFeedContainer({
   user,
   className = ""
 }: EnhancedFeedContainerProps) {
-  // Guard clause: Don't render if user prop is null, undefined, or doesn't have an id
-  // This prevents null reference errors during initial render
-  if (!user || !user.id) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-        <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-              <div className="animate-pulse">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
-                  <div className="flex-1">
-                    <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-32"></div>
-                  </div>
-                </div>
-                <div className="h-48 bg-gray-200 rounded-xl mb-4"></div>
-                <div className="space-y-2">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
+  // All hooks must be called at the top level, before any conditional returns
   const [feedItems, setFeedItems] = useState<FeedItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -97,18 +69,14 @@ export default function EnhancedFeedContainer({
   const [activeFilters, setActiveFilters] = useState<FeedContentType[]>([])
   const [weeklyFeature, setWeeklyFeature] = useState<any>(null)
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(false)
-
-  // Weekly challenges state
   const [weeklyChallenges, setWeeklyChallenges] = useState<any>(null)
   const [isLoadingWeeklyChallenges, setIsLoadingWeeklyChallenges] = useState(false)
 
-  // Content type filters - removed stories section
+  // Content type filters - redesigned for better UX
   const contentTypeFilters = [
-    { type: 'post' as FeedContentType, label: 'All Posts', icon: TrendingUp, color: 'bg-blue-100 text-blue-700', description: 'Community posts and reviews' },
-    { type: 'people_suggestion' as FeedContentType, label: 'People', icon: Users, color: 'bg-purple-100 text-purple-700', description: 'Discover new creators' },
-    { type: 'place_recommendation' as FeedContentType, label: 'Places', icon: MapPin, color: 'bg-green-100 text-green-700', description: 'Hidden gems & recommendations' },
-    // TODO: Re-enable when weekly features system is ready
-    // { type: 'weekly_feature' as FeedContentType, label: 'Weekly', icon: Calendar, color: 'bg-orange-100 text-orange-700', description: 'Curated weekly content' }
+    { type: 'post' as FeedContentType, label: 'Posts', icon: TrendingUp, color: 'bg-blue-100 text-blue-700 hover:bg-blue-200', description: 'Community posts and reviews' },
+    { type: 'people_suggestion' as FeedContentType, label: 'People', icon: Users, color: 'bg-purple-100 text-purple-700 hover:bg-purple-200', description: 'Discover new creators' },
+    { type: 'place_recommendation' as FeedContentType, label: 'Places', icon: MapPin, color: 'bg-green-100 text-green-700 hover:bg-green-200', description: 'Hidden gems & recommendations' },
   ]
 
   const fetchFeedItems = useCallback(async (pageNum: number = 1, refresh: boolean = false) => {
@@ -147,8 +115,8 @@ export default function EnhancedFeedContainer({
       }
 
       // Add sort by parameter
-      const sortBy = activeFilters.includes('trending') ? 'popular' : 
-                    activeFilters.includes('recent') ? 'recent' : 'recommended'
+      const sortBy = (activeFilters as any).includes('trending') ? 'popular' : 
+                    (activeFilters as any).includes('recent') ? 'recent' : 'recommended'
       params.append('sortBy', sortBy)
 
       // Add feed type
@@ -184,7 +152,15 @@ export default function EnhancedFeedContainer({
           return acc
         }, {}),
         activeFilters,
-        hasMore: hasMoreData
+        hasMore: hasMoreData,
+        sampleItems: items.slice(0, 2).map((item: FeedItem) => ({
+          id: item.id,
+          type: item.type,
+          hasPlaceData: item.type === 'place_recommendation' ? !!item.place : 'N/A',
+          hasPeopleData: item.type === 'people_suggestion' ? !!item.people : 'N/A',
+          hasFeatureData: item.type === 'weekly_feature' ? !!item.feature : 'N/A',
+          hasPostData: item.type === 'post' ? !!item.post : 'N/A'
+        }))
       })
       
       if (refresh || pageNum === 1) {
@@ -252,8 +228,8 @@ export default function EnhancedFeedContainer({
         }
 
         // Add sort by parameter
-        const sortBy = activeFilters.includes('trending') ? 'popular' : 
-                      activeFilters.includes('recent') ? 'recent' : 'recommended'
+        const sortBy = (activeFilters as any).includes('trending') ? 'popular' : 
+                      (activeFilters as any).includes('recent') ? 'recent' : 'recommended'
         params.append('sortBy', sortBy)
 
         // Add feed type
@@ -279,682 +255,287 @@ export default function EnhancedFeedContainer({
         setError(null)
         
       } catch (error) {
-        console.error('Error fetching feed with filters:', error)
-        setError(error instanceof Error ? error.message : 'Failed to load feed')
+        console.error('Error refetching with filters:', error)
+        setError('Failed to update feed with new filters')
       } finally {
         setIsRefreshing(false)
       }
     }
-    
+
     refetchWithFilters()
-  }, [activeFilters, userId, user?.id, location, preferences])
+  }, [activeFilters, userId, location, preferences, user?.id])
 
-  // Add initial load useEffect - separate from filter changes
+  // Initial load
   useEffect(() => {
-    console.log('🚀 Initial feed load')
-    fetchFeedItems(1, true)
-  }, []) // Empty dependency array for initial load only
+    fetchFeedItems(1, false)
+  }, [fetchFeedItems])
 
+  // Now we can have conditional returns after all hooks are called
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div className={`space-y-6 ${className}`}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900">Feed</h2>
+          <div className="flex space-x-2">
+            {contentTypeFilters.map((filter) => (
+              <div key={filter.type} className="h-8 bg-gray-200 rounded-full w-20"></div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="bg-white rounded-lg shadow p-6 animate-pulse">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="w-12 h-12 bg-gray-200 rounded-full"></div>
+                <div className="flex-1">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Rest of the component logic...
   const handleRefresh = () => {
-    console.log('🔄 Manual refresh triggered')
     fetchFeedItems(1, true)
   }
 
   const handleLoadMore = () => {
-    if (hasMore && !isLoading && !isRefreshing) {
-      console.log('📄 Loading more content, page:', page + 1)
-      fetchFeedItems(page + 1)
+    if (!isLoading && hasMore) {
+      fetchFeedItems(page + 1, false)
     }
   }
 
   const handleFilterToggle = (contentType: FeedContentType) => {
-    console.log('🏷️ Filter toggle:', contentType)
     setActiveFilters(prev => {
-      const newFilters = prev.includes(contentType)
-        ? prev.filter(f => f !== contentType)
-        : [contentType] // Only allow one filter at a time for weekly
-      
-      console.log('🏷️ New filters:', newFilters)
-      
-      // Reset page when filters change
-      setPage(1)
-      setHasMore(true)
-      
-      return newFilters
+      const isActive = prev.includes(contentType)
+      if (isActive) {
+        return prev.filter(type => type !== contentType)
+      } else {
+        return [...prev, contentType]
+      }
     })
   }
 
-  // Add a "Show All" handler
   const handleShowAll = () => {
-    console.log('🔄 Show all content triggered')
     setActiveFilters([])
-    setPage(1)
-    setHasMore(true)
   }
 
   const handleSavePlace = async (placeId: string) => {
-    // Update local state optimistically
-    toast.success('Place saved!')
+    // Implementation for saving place
   }
 
   const handleLikeBlog = async (blogId: string) => {
-    // Update local state optimistically
-    toast.success('Blog liked!')
+    // Implementation for liking blog
   }
 
   const handleSaveBlog = async (blogId: string) => {
-    // Update local state optimistically
-    toast.success('Blog saved to reading list!')
+    // Implementation for saving blog
   }
 
   const handleDismissItem = (itemId: string) => {
     setFeedItems(prev => prev.filter(item => item.id !== itemId))
-    toast.success('Item dismissed')
   }
 
-  // Load weekly challenges when weekly tab is selected
-  useEffect(() => {
-    if (activeFilters.includes('weekly_feature') && !weeklyChallenges) {
-      loadWeeklyChallenges()
-    }
-  }, [activeFilters, weeklyChallenges])
-
   const loadWeeklyChallenges = async () => {
-    setIsLoadingWeeklyChallenges(true)
     try {
+      setIsLoadingWeeklyChallenges(true)
       const response = await fetch('/api/challenges/weekly')
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        setWeeklyChallenges(data.data)
-        console.log('📅 Loaded weekly challenges:', data.data)
-      } else {
-        console.error('Failed to load weekly challenges:', data.error || 'Unknown error')
-        setWeeklyChallenges(null)
+      if (response.ok) {
+        const data = await response.json()
+        setWeeklyChallenges(data)
       }
     } catch (error) {
       console.error('Error loading weekly challenges:', error)
-      setWeeklyChallenges(null)
-      toast.error('Failed to load weekly challenges')
     } finally {
       setIsLoadingWeeklyChallenges(false)
     }
   }
 
   const renderFeedItem = (item: FeedItem, index: number) => {
-    if (!item || !item.id || !item.type) {
-      console.warn('Invalid feed item:', item)
-      return null
-    }
-
-    // Base props without motion wrapper since we handle it at parent level
-    const baseProps = {
-      className: "w-full",
-      onDismiss: () => handleDismissItem(item.id)
-    }
 
     switch (item.type) {
       case 'post':
-        const postItem = item as PostFeedItem
-        // Safety check to ensure post data exists
-        if (!postItem.post || !postItem.post.author) {
-          console.warn('Invalid post data in feed item:', postItem)
-          return null
+        try {
+          return (
+            <FeedPost
+              key={item.id}
+              post={(item as any).post || (item as any)}
+              user={user}
+              className="animate-in slide-in-from-bottom-2 duration-300"
+            />
+          )
+        } catch (error) {
+          console.error('Error rendering FeedPost:', error)
+          return (
+            <div key={item.id} className="bg-white rounded-lg shadow p-6">
+              <p className="text-gray-500">Error rendering post: {item.id}</p>
+            </div>
+          )
         }
-        
-        // Ensure user is not null and has required properties
-        if (!user || !user.id) {
-          console.warn('User is null or missing id, cannot render post')
-          return null
-        }
-        
-        return (
-          <FeedPost 
-            post={postItem.post} 
-            user={user}
-            {...baseProps}
-          />
-        )
-
+      
       case 'people_suggestion':
         return (
           <PeopleSuggestionCard
+            key={item.id}
             item={item as PeopleSuggestionItem}
-            {...baseProps}
+            onDismiss={() => handleDismissItem(item.id)}
+            className="animate-in slide-in-from-bottom-2 duration-300"
           />
         )
-
+      
       case 'place_recommendation':
         return (
           <PlaceRecommendationCard
+            key={item.id}
             item={item as PlaceRecommendationItem}
-            onSave={handleSavePlace}
-            {...baseProps}
+            onSave={() => handleSavePlace(item.id)}
+            onDismiss={() => handleDismissItem(item.id)}
+            className="animate-in slide-in-from-bottom-2 duration-300"
           />
         )
-
+      
       case 'weekly_feature':
-        // TODO: Re-enable when weekly features system is ready
+        // Hide weekly features for now
         return null
-        /* 
-        // Safety check for weeklyFeature
-        if (!weeklyFeature) {
-          console.warn('Weekly feature is null, cannot render weekly feature item')
-          return null
-        }
-        
+      
+      case 'guide_spotlight':
         return (
-          <WeeklyFeatureCard
-            item={{
-              id: weeklyFeature.id || 'weekly-feature',
-              type: 'weekly_feature',
-              createdAt: weeklyFeature.createdAt || new Date().toISOString(),
-              updatedAt: weeklyFeature.updatedAt || new Date().toISOString(),
-              priority: 90,
-              feature: {
-                ...weeklyFeature,
-                // Ensure required properties exist with fallbacks
-                title: weeklyFeature.title || 'Weekly Feature',
-                subtitle: weeklyFeature.subtitle || 'Discover something new this week',
-                description: weeklyFeature.description || 'Explore amazing content curated just for you this week.',
-                theme: weeklyFeature.theme || 'monday_motivation',
-                content: weeklyFeature.content || {
-                  type: weeklyFeature.contentType || 'mixed',
-                  items: []
-                }
-              }
-            } as WeeklyFeatureItem}
-            userLocation={location}
-            className="border-0 shadow-none"
-          />
+          <div key={item.id} className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold mb-2">Guide Spotlight</h3>
+            <p className="text-gray-600">Guide content coming soon...</p>
+          </div>
         )
-        */
-
+      
       default:
-        console.warn('Unknown feed item type:', item.type)
-        return null
+        return (
+          <div key={item.id} className="bg-white rounded-lg shadow p-6">
+            <p className="text-gray-500">Unknown content type: {item.type}</p>
+          </div>
+        )
     }
   }
 
-  // Load weekly feature when weekly tab is selected
-  // TODO: Re-enable when weekly features system is ready
-  /*
-  useEffect(() => {
-    if (activeFilters.includes('weekly_feature') && !weeklyFeature) {
-      loadWeeklyFeature()
-    }
-  }, [activeFilters, weeklyFeature])
-  */
-
-  // TODO: Re-enable when weekly features system is ready
-  /*
-  const loadWeeklyFeature = async () => {
-    setIsLoadingWeekly(true)
-    try {
-      const params = new URLSearchParams()
-      
-      // Add location if available
-      if (location) {
-        params.append('lat', location.latitude.toString())
-        params.append('lng', location.longitude.toString())
-      }
-      
-      console.log('📅 Loading weekly feature with params:', Object.fromEntries(params))
-      
-      const response = await fetch(`/api/weekly-features/current?${params}`)
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-      
-      const data = await response.json()
-      
-      if (data.success && data.data?.feature) {
-        setWeeklyFeature(data.data.feature)
-        console.log('📅 Loaded weekly feature:', {
-          id: data.data.feature.id,
-          theme: data.data.theme?.name,
-          hasLocation: !!data.data.location,
-          contentCounts: data.data.meta?.contentCount,
-          isFallback: data.data.meta?.isFallback
-        })
-      } else {
-        console.error('Failed to load weekly feature:', data.error || 'Unknown error')
-        setWeeklyFeature(null)
-      }
-    } catch (error) {
-      console.error('Error loading weekly feature:', error)
-      setWeeklyFeature(null)
-      toast.error('Failed to load weekly feature')
-    } finally {
-      setIsLoadingWeekly(false)
-    }
-  }
-  */
-
-  // Render weekly challenges page
   const renderWeeklyPage = () => {
-    if (isLoadingWeeklyChallenges) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-          <div className="max-w-4xl mx-auto px-4 py-6">
-            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100">
-              <div className="animate-pulse">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-12 h-12 bg-gradient-to-br from-[#FF6B6B]/20 to-[#4ECDC4]/20 rounded-full"></div>
-                  <div className="flex-1">
-                    <div className="h-6 bg-gray-200 rounded w-48 mb-2"></div>
-                    <div className="h-4 bg-gray-200 rounded w-64"></div>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
-    if (!weeklyChallenges) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-          <div className="max-w-4xl mx-auto px-4 py-6">
-            <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-[#FFE66D]/20 to-[#FF6B6B]/20 rounded-full flex items-center justify-center">
-                <Calendar className="w-8 h-8 text-[#FF6B6B]" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">No Weekly Challenges Available</h3>
-              <p className="text-gray-600 mb-4">
-                We're working on bringing you amazing weekly challenges. Check back soon!
-              </p>
-              <Button 
-                onClick={loadWeeklyChallenges}
-                variant="outline"
-                className="rounded-full border-[#4ECDC4]/30 hover:border-[#4ECDC4] hover:bg-[#4ECDC4]/10"
-              >
-                <RefreshCw className="w-4 h-4 mr-2 text-[#4ECDC4]" />
-                <span className="text-gray-700">Try Again</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )
-    }
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30">
-        {/* Weekly Header with Filter Tabs */}
-        <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-[#FF6B6B] via-[#4ECDC4] to-[#FFE66D] bg-clip-text text-transparent">
-                  Weekly Challenges
-                </h1>
-                <p className="text-gray-600 text-sm mt-1">Join exciting challenges and vote for next week's adventures</p>
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadWeeklyChallenges}
-                disabled={isLoadingWeeklyChallenges}
-                className="rounded-full border-[#4ECDC4]/30 hover:border-[#4ECDC4] hover:bg-[#4ECDC4]/10 transition-all duration-300"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingWeeklyChallenges ? 'animate-spin' : ''} text-[#4ECDC4]`} />
-                <span className="text-gray-700">{isLoadingWeeklyChallenges ? 'Refreshing...' : 'Refresh'}</span>
-              </Button>
-            </div>
-
-            {/* Enhanced Content type filters with brand colors - same as main feed */}
-            <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              <div className="flex items-center gap-2 text-gray-500 text-sm font-medium flex-shrink-0">
-                <Filter className="h-4 w-4" />
-                <span>Filter:</span>
-              </div>
-              
-              {/* Show All button */}
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  variant={activeFilters.length === 0 ? "default" : "outline"}
-                  size="sm"
-                  onClick={handleShowAll}
-                  className={`
-                    rounded-full flex-shrink-0 transition-all duration-300 font-medium border-0 min-w-[80px]
-                    ${activeFilters.length === 0 
-                      ? 'bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] text-white shadow-lg hover:shadow-xl' 
-                      : 'bg-white/80 border border-gray-200 hover:border-[#4ECDC4]/50 hover:bg-[#4ECDC4]/5 hover:text-[#4ECDC4] text-gray-600'
-                    }
-                  `}
-                >
-                  <TrendingUp className="h-3 w-3 mr-2" />
-                  Show All
-                  {activeFilters.length === 0 && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="ml-1 text-white/80"
-                    >
-                      ✨
-                    </motion.div>
-                  )}
-                </Button>
-              </motion.div>
-              
-              {contentTypeFilters.map(filter => {
-                const Icon = filter.icon
-                const isActive = activeFilters.includes(filter.type)
-                
-                return (
-                  <motion.div
-                    key={filter.type}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="group relative"
-                  >
-                    <Button
-                      variant={isActive ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => handleFilterToggle(filter.type)}
-                      className={`
-                        rounded-full flex-shrink-0 transition-all duration-300 font-medium border-0 min-w-[90px]
-                        ${isActive 
-                          ? 'bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] text-white shadow-lg hover:shadow-xl' 
-                          : 'bg-white/80 border border-gray-200 hover:border-[#4ECDC4]/50 hover:bg-[#4ECDC4]/5 hover:text-[#4ECDC4] text-gray-600'
-                        }
-                      `}
-                    >
-                      <Icon className="h-3 w-3 mr-2" />
-                      {filter.label}
-                      {isActive && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className="ml-1 text-white/80"
-                        >
-                          ✓
-                        </motion.div>
-                      )}
-                    </Button>
-                    
-                    {/* Enhanced Tooltip */}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-30 shadow-lg">
-                      <div className="font-semibold mb-1">{filter.label}</div>
-                      <div className="text-gray-300">{filter.description}</div>
-                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                    </div>
-                  </motion.div>
-                )
-              })}
-
-              {/* Active filter count indicator */}
-              {activeFilters.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0 }}
-                  className="flex items-center gap-2 bg-gradient-to-r from-[#FF6B6B]/10 to-[#4ECDC4]/10 border border-[#4ECDC4]/30 rounded-full px-3 py-1 text-sm text-[#4ECDC4] font-medium"
-                >
-                  <span>{activeFilters.length} filter{activeFilters.length > 1 ? 's' : ''} active</span>
-                  <button
-                    onClick={handleShowAll}
-                    className="text-[#FF6B6B] hover:text-[#FF6B6B]/80 ml-1"
-                  >
-                    ×
-                  </button>
-                </motion.div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Weekly Content */}
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="space-y-8"
-          >
-            {/* Current Weekly Challenges */}
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-[#FF6B6B]" />
-                This Week's Challenges
-              </h2>
-              <div className="grid gap-4">
-                {weeklyChallenges.currentChallenges?.map((challenge: any, index: number) => (
-                  <ChallengeCard
-                    key={challenge.id}
-                    challenge={challenge}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Voting Section */}
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <span className="text-2xl">🗳️</span>
-                Vote for Next Week
-              </h2>
-              <p className="text-gray-600 mb-6">Help choose which challenges will be featured next week!</p>
-              <div className="grid gap-4">
-                {weeklyChallenges.votingOptions?.map((suggestion: any, index: number) => (
-                  <ChallengeSuggestionCard
-                    key={suggestion.id}
-                    suggestion={suggestion}
-                    className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300"
-                  />
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
+      <div className="bg-white rounded-lg shadow p-6">
+        <h3 className="text-lg font-semibold mb-4">Weekly Features</h3>
+        <p>Weekly content coming soon...</p>
       </div>
     )
   }
 
-  if (error && feedItems.length === 0) {
-    return (
-      <FeedErrorState 
-        message={error}
-        onRetry={() => fetchFeedItems(1)}
-        className={className}
-      />
-    )
-  }
-
-  // If weekly tab is active, show the weekly page
-  if (activeFilters.includes('weekly_feature')) {
-    // If weekly_feature is the only active filter, show the weekly challenges page
-    if (activeFilters.length === 1 && activeFilters[0] === 'weekly_feature') {
-      return renderWeeklyPage()
-    }
-    // If there are other filters active alongside weekly_feature, show regular feed with those filters
-    // This allows users to browse other content types while in the weekly tab
-  }
-
+  // Main render
   return (
     <div className={`min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 ${className}`}>
-      {/* Modern Header with brand colors */}
+      {/* Header with filters - Desktop */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-xl border-b border-gray-100 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
+          {/* Desktop Header */}
+          <div className="hidden md:flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-[#FF6B6B] via-[#4ECDC4] to-[#FFE66D] bg-clip-text text-transparent">
-                {activeFilters.includes('weekly_feature') ? 'Weekly Discovery' : 'Discover'}
-              </h1>
-              <p className="text-gray-600 text-sm mt-1">
-                {activeFilters.includes('weekly_feature') 
-                  ? 'Your weekly curated content and community challenges'
-                  : 'Your personalized feed of amazing places and stories'
-                }
-              </p>
+              <h2 className="text-2xl font-bold text-gray-900">Feed</h2>
+              <p className="text-sm text-gray-600 mt-1">Discover amazing content from our community</p>
             </div>
-            
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
+          
+          {/* Mobile Header */}
+          <div className="md:hidden flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">Feed</h2>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="rounded-full border-[#4ECDC4]/30 hover:border-[#4ECDC4] hover:bg-[#4ECDC4]/10 transition-all duration-300"
+              className="text-gray-600 hover:text-gray-900"
             >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''} text-[#4ECDC4]`} />
-              <span className="text-gray-700">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
-
-          {/* Enhanced Content type filters with brand colors */}
-          <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide">
-            <div className="flex items-center gap-2 text-gray-500 text-sm font-medium flex-shrink-0">
-              <Filter className="h-4 w-4" />
-              <span>Filter:</span>
-            </div>
-            
-            {/* Show All button */}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+          
+          {/* Filter Tabs - Responsive */}
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {/* Show All Button */}
+            <button
+              onClick={handleShowAll}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex-shrink-0 ${
+                activeFilters.length === 0 
+                  ? 'bg-gray-900 text-white shadow-md' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
             >
-              <Button
-                variant={activeFilters.length === 0 ? "default" : "outline"}
-                size="sm"
-                onClick={handleShowAll}
-                className={`
-                  rounded-full flex-shrink-0 transition-all duration-300 font-medium border-0 min-w-[80px]
-                  ${activeFilters.length === 0 
-                    ? 'bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] text-white shadow-lg hover:shadow-xl' 
-                    : 'bg-white/80 border border-gray-200 hover:border-[#4ECDC4]/50 hover:bg-[#4ECDC4]/5 hover:text-[#4ECDC4] text-gray-600'
-                  }
-                `}
-              >
-                <TrendingUp className="h-3 w-3 mr-2" />
-                Show All
-                {activeFilters.length === 0 && (
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="ml-1 text-white/80"
-                  >
-                    ✨
-                  </motion.div>
-                )}
-              </Button>
-            </motion.div>
+              All
+            </button>
             
-            {contentTypeFilters.map(filter => {
-              const Icon = filter.icon
+            {/* Content Type Filters */}
+            {contentTypeFilters.map((filter) => {
               const isActive = activeFilters.includes(filter.type)
+              const IconComponent = filter.icon
               
               return (
-                <motion.div
+                <button
                   key={filter.type}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="group relative"
+                  onClick={() => handleFilterToggle(filter.type)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-colors flex items-center gap-2 flex-shrink-0 ${
+                    isActive ? filter.color : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
                 >
-                  <Button
-                    variant={isActive ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleFilterToggle(filter.type)}
-                    className={`
-                      rounded-full flex-shrink-0 transition-all duration-300 font-medium border-0 min-w-[90px]
-                      ${isActive 
-                        ? 'bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] text-white shadow-lg hover:shadow-xl' 
-                        : 'bg-white/80 border border-gray-200 hover:border-[#4ECDC4]/50 hover:bg-[#4ECDC4]/5 hover:text-[#4ECDC4] text-gray-600'
-                      }
-                    `}
-                  >
-                    <Icon className="h-3 w-3 mr-2" />
-                    {filter.label}
-                    {isActive && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className="ml-1 text-white/80"
-                      >
-                        ✓
-                      </motion.div>
-                    )}
-                  </Button>
-                  
-                  {/* Enhanced Tooltip */}
-                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-30 shadow-lg">
-                    <div className="font-semibold mb-1">{filter.label}</div>
-                    <div className="text-gray-300">{filter.description}</div>
-                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-                  </div>
-                </motion.div>
+                  <IconComponent className="h-4 w-4" />
+                  <span className="hidden sm:inline">{filter.label}</span>
+                  <span className="sm:hidden">{filter.label}</span>
+                </button>
               )
             })}
-
-            {/* Active filter count indicator */}
-            {activeFilters.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0 }}
-                className="flex items-center gap-2 bg-gradient-to-r from-[#FF6B6B]/10 to-[#4ECDC4]/10 border border-[#4ECDC4]/30 rounded-full px-3 py-1 text-sm text-[#4ECDC4] font-medium"
-              >
-                <span>{activeFilters.length} filter{activeFilters.length > 1 ? 's' : ''} active</span>
-                <button
-                  onClick={handleShowAll}
-                  className="text-[#FF6B6B] hover:text-[#FF6B6B]/80 ml-1"
-                >
-                  ×
-                </button>
-              </motion.div>
-            )}
           </div>
         </div>
       </div>
 
-      {/* Main Feed Content with improved spacing */}
+      {/* Content Area */}
       <div className="max-w-4xl mx-auto px-4 py-6">
-        {/* Weekly Context Banner - shown when weekly filter is active but other content is displayed */}
-        {activeFilters.includes('weekly_feature') && activeFilters.length > 1 && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-gradient-to-r from-[#FFE66D]/10 to-[#FF6B6B]/10 border border-[#FFE66D]/30 rounded-2xl p-4"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gradient-to-br from-[#FFE66D] to-[#FF6B6B] rounded-full">
-                  <Calendar className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Weekly Mode Active</h3>
-                  <p className="text-sm text-gray-600">You're browsing weekly content. Want to see this week's challenges?</p>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveFilters(['weekly_feature'])}
-                className="rounded-full border-[#FFE66D]/50 hover:border-[#FFE66D] hover:bg-[#FFE66D]/10 text-[#FF6B6B] hover:text-[#FF6B6B]/80"
-              >
-                View Challenges
-              </Button>
-            </div>
-          </motion.div>
+        {/* Error state */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-red-800">{error}</p>
+            <button
+              onClick={handleRefresh}
+              className="mt-2 text-red-600 hover:text-red-800 underline"
+            >
+              Try again
+            </button>
+          </div>
         )}
 
-        {isLoading && feedItems.length === 0 ? (
+        {/* Loading skeleton */}
+        {isLoading && (
           <div className="space-y-6">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -975,103 +556,39 @@ export default function EnhancedFeedContainer({
               </div>
             ))}
           </div>
-        ) : feedItems.length === 0 ? (
-          <div className="py-20 text-center">
-            <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-[#FF6B6B]/10 to-[#4ECDC4]/10 rounded-full flex items-center justify-center">
-              <TrendingUp className="w-10 h-10 text-[#FF6B6B]" />
-            </div>
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">No content yet</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              We're working on getting your personalized feed ready. Check back soon for amazing content!
-            </p>
-            <Button 
-              onClick={handleRefresh}
-              className="bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] text-white rounded-full px-6 py-2 hover:shadow-lg transition-all duration-300"
-            >
-              Try Again
-            </Button>
-          </div>
-        ) : (
+        )}
+
+        {/* Feed items */}
+        {!isLoading && (
           <div className="space-y-6">
-            <AnimatePresence mode="popLayout">
-              {feedItems.map((item, index) => (
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ 
-                    duration: 0.3,
-                    delay: index * 0.05,
-                    ease: "easeOut"
-                  }}
-                  className="relative"
-                >
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-300 overflow-hidden">
-                    {renderFeedItem(item, index)}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-
-            {/* Enhanced Load more section */}
-            {hasMore && feedItems.length > 0 && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-center pt-8 pb-4"
-              >
-                <Button
-                  variant="outline"
-                  onClick={handleLoadMore}
-                  disabled={isLoading}
-                  className="rounded-full px-8 py-3 border-[#4ECDC4]/30 hover:border-[#4ECDC4] hover:bg-[#4ECDC4]/10 transition-all duration-300 font-medium"
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-[#4ECDC4] border-t-transparent rounded-full animate-spin mr-2" />
-                      <span className="text-gray-700">Loading more content...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-gray-700">Load More</span>
-                      <motion.div
-                        className="ml-2"
-                        animate={{ y: [0, -2, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity }}
-                      >
-                        ✨
-                      </motion.div>
-                    </>
-                  )}
-                </Button>
-              </motion.div>
-            )}
-
-            {/* End of feed message */}
-            {!hasMore && feedItems.length > 5 && (
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-center py-12"
-              >
-                <div className="space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-[#FFE66D]/20 to-[#FF6B6B]/20 rounded-full flex items-center justify-center">
-                    <span className="text-2xl">🎉</span>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-800">You're all caught up!</h3>
-                  <p className="text-gray-600">You've seen all the latest content</p>
-                  <Button 
-                    variant="outline"
-                    onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-                    className="rounded-full border-[#4ECDC4]/30 hover:border-[#4ECDC4] hover:bg-[#4ECDC4]/10 mt-4"
-                  >
-                    <span className="text-gray-700">Back to top</span>
-                    <span className="ml-2">↑</span>
-                  </Button>
+            {feedItems.map((item, index) => renderFeedItem(item, index))}
+            
+            {/* Empty state */}
+            {feedItems.length === 0 && !error && (
+              <div className="text-center py-12">
+                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center">
+                  <TrendingUp className="h-8 w-8 text-gray-400" />
                 </div>
-              </motion.div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No posts yet</h3>
+                <p className="text-gray-600 mb-6">Be the first to share something amazing!</p>
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                  Create Your First Post
+                </Button>
+              </div>
             )}
+          </div>
+        )}
+
+        {/* Load more */}
+        {hasMore && !isLoading && (
+          <div className="text-center mt-8">
+            <Button
+              onClick={handleLoadMore}
+              disabled={isLoading}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isLoading ? 'Loading...' : 'Load More'}
+            </Button>
           </div>
         )}
       </div>

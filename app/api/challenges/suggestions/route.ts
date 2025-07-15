@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     
     // Update user interaction states if user is logged in
     if (user?.id && suggestions.docs.length > 0) {
-      await updateUserInteractionStates(suggestions.docs, user.id, payload)
+      await updateUserInteractionStates(suggestions.docs, user?.id as string, payload)
     }
     
     // Transform suggestions for frontend

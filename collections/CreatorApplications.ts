@@ -53,7 +53,6 @@ export const CreatorApplications: CollectionConfig = {
   admin: {
     useAsTitle: 'applicantName',
     defaultColumns: ['applicantName', 'applicantEmail', 'status', 'experienceLevel', 'specialties', 'createdAt'],
-    defaultSort: 'createdAt',
     group: 'Creator Management',
     description: 'Review and manage creator applications. When you approve an application, the user will automatically become a creator and receive a notification.',
     pagination: {
@@ -196,7 +195,7 @@ export const CreatorApplications: CollectionConfig = {
       admin: {
         description: 'Internal notes for admin review (not visible to applicant)',
         condition: (data, siblingData, { user }) => {
-          return user?.role === 'admin' || (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email));
+          return Boolean(user && (user.role === 'admin' || (user.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email))));
         },
       },
     },
@@ -207,7 +206,7 @@ export const CreatorApplications: CollectionConfig = {
       admin: {
         description: 'Admin who reviewed this application',
         condition: (data, siblingData, { user }) => {
-          return user?.role === 'admin' || (user?.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email));
+          return Boolean(user && (user.role === 'admin' || (user.email && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(user.email))));
         },
         readOnly: true,
       },
@@ -254,7 +253,15 @@ export const CreatorApplications: CollectionConfig = {
           if (!data.reviewedAt) {
             data.reviewedAt = new Date().toISOString();
           }
-          if (!data.reviewedBy && req.user && (req.user.role === 'admin' || ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(req.user.email))) {
+          if (
+            !data.reviewedBy &&
+            req.user &&
+            req.user.id &&
+            (
+              req.user.role === 'admin' ||
+              (typeof req.user.email === 'string' && ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com'].includes(req.user.email))
+            )
+          ) {
             data.reviewedBy = req.user.id;
           }
         }

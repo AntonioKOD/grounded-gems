@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -136,12 +136,12 @@ export function LocationFormModal({
           }))
 
           // Build hierarchical structure
-          const categoryMap = new Map(transformedCategories.map((cat: Category) => [cat.id, cat]))
+          const categoryMap = new Map<string, Category>(transformedCategories.map((cat: Category) => [cat.id, cat]))
           const rootCategories: Category[] = []
 
           transformedCategories.forEach((category: Category) => {
             if (category.parent) {
-              const parent = categoryMap.get(category.parent)
+              const parent = categoryMap.get(category.parent) as Category | undefined
               if (parent) {
                 if (!parent.subcategories) parent.subcategories = []
                 parent.subcategories.push(category)

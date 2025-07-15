@@ -72,6 +72,15 @@ export default async function CreatorDashboardPage({
 }) {
   const { id } = await params
 
+  // Extend UserProfile inline to include creatorProfile and username
+  type UserProfileWithCreator = UserProfile & {
+    creatorProfile?: {
+      creatorLevel?: string
+      verification?: { isVerified?: boolean }
+    }
+    username?: string
+  }
+
   // Validate ID format
   if (!id || id.trim() === '' || id.length < 12) {
     console.error(`Invalid user ID format: ${id}`)
@@ -80,7 +89,7 @@ export default async function CreatorDashboardPage({
 
   try {
     // Get user data
-    const userData = await getUserbyId(id) as UserProfile | null
+    const userData = await getUserbyId(id) as UserProfileWithCreator | null
     
     if (!userData) {
       console.log(`User not found for ID: ${id}`)

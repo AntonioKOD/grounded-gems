@@ -46,15 +46,12 @@ import Link from "next/link"
 import Image from "next/image"
 import ProtectedRoute from '@/components/auth/protected-route'
 import BucketListCreateModal from '@/components/bucket-list/bucket-list-create-modal'
-import ViewListModal from '@/components/bucket-list/view-list-modal'
-import EditListModal from '@/components/bucket-list/edit-list-modal'
-import ShareListModal from '@/components/bucket-list/share-list-modal'
 import ItemCompletionModal from '@/components/bucket-list/item-completion-modal'
 import AddItemModal from '@/components/bucket-list/add-item-modal'
 import { cn } from "@/lib/utils"
 import { getImageUrl } from "@/lib/image-utils"
 
-interface BucketListItem {
+export interface BucketListItem {
   id: string
   location?: {
     id: string
@@ -78,7 +75,7 @@ interface BucketListItem {
   notes?: string
 }
 
-interface BucketList {
+export interface BucketList {
   id: string
   name: string
   description?: string
@@ -570,7 +567,7 @@ function ShareListModal({ list, isOpen, onClose, shareUrl, onCopyUrl, copied }: 
             </div>
           </div>
 
-          {typeof window !== 'undefined' && navigator.share && (
+          {typeof window !== 'undefined' && typeof navigator.share === 'function' && (
             <Button
               onClick={handleNativeShare}
               className="w-full bg-gradient-to-r from-[#FFD93D] to-[#FF8E53] hover:from-[#FFEB3B] hover:to-[#FF7043] text-gray-800"

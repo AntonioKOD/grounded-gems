@@ -1,4 +1,4 @@
-import { CollectionConfig } from 'payload/types'
+import { CollectionConfig } from 'payload'
 
 const ChallengeVotes: CollectionConfig = {
   slug: 'challenge-votes',
@@ -56,7 +56,6 @@ const ChallengeVotes: CollectionConfig = {
   timestamps: true,
   indexes: [
     {
-      name: 'user_suggestion_unique',
       fields: ['user', 'suggestion'],
       unique: true,
     },

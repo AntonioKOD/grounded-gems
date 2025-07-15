@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { getPayload } from 'payload'
-import config from '@/payload.config'
+import payloadConfig from '@/payload.config'
 
 const ALLOWED_MIME_TYPES = [
   'image/jpeg',
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     console.log('📁 UploadMedia: Creating media document in Payload CMS...')
     
     // Use direct Payload API instead of HTTP request
-    const payload = await getPayload({ config })
+    const payload = await getPayload({ config: payloadConfig })
     
     const mediaDoc = await payload.create({
       collection: 'media',
@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 }
 
 // Required for streaming uploads
-export const config = {
+export const apiConfig = {
   api: {
     bodyParser: false,
   },

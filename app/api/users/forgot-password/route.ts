@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // Update user with reset token without triggering username validation
     await payload.update({
       collection: 'users',
-      id: user.id,
+      id: user?.id as string,
       data: {
         resetPasswordToken: resetToken,
         resetPasswordExpiration: resetTokenExpiry,

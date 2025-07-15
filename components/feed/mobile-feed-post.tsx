@@ -81,9 +81,9 @@ const MobileFeedPost = memo(function MobileFeedPost({
   // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
     // If post has a media array from API, use it directly (this is the correct approach for videos)
-    if (Array.isArray(post.media) && post.media.length > 0) {
-      console.log(`📱 MobileFeedPost ${post.id} using API media array:`, post.media)
-      return post.media.map((item: any) => ({
+    if (Array.isArray((post as any).media) && (post as any).media.length > 0) {
+      console.log(`📱 MobileFeedPost ${post.id} using API media array:`, (post as any).media)
+      return (post as any).media.map((item: any) => ({
         type: item.type,
         url: item.url,
         thumbnail: item.thumbnail,
@@ -99,7 +99,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
       items.push({ 
         type: 'video', 
         url: post.video,
-        thumbnail: (post.image && typeof post.image === 'string') ? post.image : post.videoThumbnail,
+        thumbnail: (post.image && typeof post.image === 'string') ? post.image : (post as any).videoThumbnail,
         alt: "Post video"
       })
     }
@@ -128,14 +128,14 @@ const MobileFeedPost = memo(function MobileFeedPost({
     
     console.log(`📱 MobileFeedPost ${post.id} using fallback media construction:`, items)
     return items
-  }, [post.media, post.image, post.video, post.photos, post.videoThumbnail, post.id])
+  }, [(post as any).media, post.image, post.video, post.photos, (post as any).videoThumbnail, post.id])
 
   const hasMedia = mediaItems.length > 0
 
   // Process media URLs with better error handling using proper image utils
   const processedImageUrl = useMemo(() => {
-    return getImageUrl(post.image || post.featuredImage)
-  }, [post.image, post.featuredImage])
+    return getImageUrl(post.image || (post as any).featuredImage)
+  }, [post.image, (post as any).featuredImage])
 
   const processedVideoUrl = useMemo(() => {
     return getVideoUrl(post.video)
@@ -143,9 +143,9 @@ const MobileFeedPost = memo(function MobileFeedPost({
 
   // Check if we have any valid media
   useEffect(() => {
-    const hasImage = processedImageUrl && processedImageUrl !== "/placeholder.svg" && !imageError
-    const hasVideo = processedVideoUrl && !videoError
-    setHasValidMedia(hasImage || hasVideo)
+    const hasImage = !!processedImageUrl && processedImageUrl !== "/placeholder.svg" && !imageError
+    const hasVideo = !!processedVideoUrl && !videoError
+    setHasValidMedia(Boolean(hasImage || hasVideo))
   }, [processedImageUrl, processedVideoUrl, imageError, videoError])
 
   console.log(`📱 MobileFeedPost ${post.id} media check:`, {
@@ -189,12 +189,12 @@ const MobileFeedPost = memo(function MobileFeedPost({
     const profileImageUrl = getImageUrl(
       post.author.profileImage?.url || 
       post.author.avatar || 
-      post.author.profilePicture?.url || 
-      post.author.profilePicture
+      (post.author as any).profilePicture?.url || 
+      (post.author as any).profilePicture
     )
     // Fallback to placeholder if getImageUrl returns placeholder
     return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
-  }, [post.author.profileImage?.url, post.author.avatar, post.author.profilePicture])
+  }, [post.author.profileImage?.url, post.author.avatar, (post.author as any).profilePicture])
   
   // Auto-hide actions after 4 seconds, longer than before for better UX
   useEffect(() => {
@@ -221,7 +221,9 @@ const MobileFeedPost = memo(function MobileFeedPost({
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
-        setIsViewing(entry.isIntersecting && entry.intersectionRatio > 0.7)
+        if (entry) {
+          setIsViewing(entry.isIntersecting && entry.intersectionRatio > 0.7)
+        }
       },
       { threshold: [0.7] }
     )
@@ -496,6 +498,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
+    return undefined
   }, [hasMedia])
 
   return (
@@ -513,14 +516,14 @@ const MobileFeedPost = memo(function MobileFeedPost({
           position: 'relative',
           minHeight: '400px'
         }}
-        onTap={handlePostTap}
+        onTap={handlePostTap as any}
       >
         {/* Main Media with Enhanced Visual Effects */}
         <div className="absolute inset-0 w-full h-full">
           {processedVideoUrl && !videoError ? (
             <VideoPlayer
               src={processedVideoUrl}
-              thumbnail={post.videoThumbnail || processedImageUrl}
+              thumbnail={(post as any).videoThumbnail || processedImageUrl}
               aspectRatio="9/16"
               className="w-full h-full object-cover"
               onViewStart={() => {
@@ -1064,7 +1067,7 @@ const MobileFeedPost = memo(function MobileFeedPost({
                 {/* Navigation dots for multiple images */}
                 {mediaItems.length > 1 && (
                   <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1">
-                    {mediaItems.map((_, index) => (
+                    {mediaItems.map((_: any, index: number) => (
                       <button
                         key={index}
                         onClick={() => setCurrentVideoIndex(index)}

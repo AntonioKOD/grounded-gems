@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import React, { useState, useEffect, useMemo, useRef } from "react"
@@ -1027,13 +1025,13 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     if (userBucketLists.length === 0) {
       console.log('🔴 DESKTOP: No bucket lists - showing create option')
       // Show a helpful message and open create bucket list modal instead
-      toast((t) => (
+      toast(() => (
         <div className="flex flex-col gap-2">
           <p>You don't have any bucket lists yet!</p>
           <Button
             size="sm"
             onClick={() => {
-              toast.dismiss(t.id)
+              toast.dismiss()
               // Use safer navigation method instead of window.open
               try {
                 // Try to use router if available, fallback to window.open

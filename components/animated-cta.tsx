@@ -32,11 +32,12 @@ export default function AnimatedCTA() {
         rotate: function() {
           return Math.random() * 20 - 10 // Random rotation between -10 and 10
         },
-        delay: anime.stagger(150),
+        delay: function(el: any, i: number) {
+          return i * 150
+        },
         duration: 1000,
         easing: 'easeOutElastic(1, .5)',
       })
-      
       // Animate content
       anime({
         targets: contentRef.current,
@@ -52,7 +53,9 @@ export default function AnimatedCTA() {
         targets: buttonsRef.current?.children,
         opacity: [0, 1],
         translateY: [20, 0],
-        delay: anime.stagger(150, {start: 500}),
+        delay: function(el: any, i: number) {
+          return 500 + (i * 150)
+        },
         duration: 800,
         easing: 'easeOutExpo',
       })

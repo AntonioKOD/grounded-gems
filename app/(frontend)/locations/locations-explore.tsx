@@ -71,13 +71,48 @@ function LocationsExplore() {
           getCategories()
         ])
 
-        // Filter to only show published locations
-        const publishedLocations = locationsResult.docs.filter(
-          (location: Location) => location.status === 'published'
-        )
+        // Type guard to ensure the object has a 'status', 'name', and 'id' property and is published
+        function isPublishedLocation(location: any): location is Location {
+          return (
+            typeof location.status === 'string' &&
+            location.status === 'published' &&
+            typeof location.name === 'string' &&
+            typeof location.id === 'string'
+          );
+        }
 
+        // Filter to only show published locations with string id, and map to ensure all required Location properties
+        const publishedLocations = locationsResult
+          .filter(isPublishedLocation)
+          .map((location) => {
+            const loc = location as Partial<Location>;
+            return {
+              ...loc,
+              id: String(loc.id),
+              name: String(loc.name),
+              status: String(loc.status),
+              description: loc.description ?? '',
+              shortDescription: loc.shortDescription ?? '',
+              featuredImage: loc.featuredImage ?? '',
+              categories: Array.isArray(loc.categories) ? loc.categories : [],
+              tags: Array.isArray(loc.tags) ? loc.tags : [],
+              address: loc.address ?? {},
+              coordinates: loc.coordinates ?? { latitude: 0, longitude: 0 },
+              priceRange: loc.priceRange ?? '',
+              averageRating: loc.averageRating ?? 0,
+              reviewCount: loc.reviewCount ?? 0,
+              isVerified: !!loc.isVerified,
+              isFeatured: !!loc.isFeatured,
+            };
+          });
         setLocations(publishedLocations)
-        setCategories(categoriesResult.docs)
+
+        // Transform categories to ensure they have required properties and correct types
+        const validCategories = categoriesResult.docs.filter(
+          (category: any): category is Category =>
+            typeof category.id === 'string' && typeof category.name === 'string'
+        );
+        setCategories(validCategories)
       } catch (error) {
         console.error('Error fetching data:', error)
       } finally {

@@ -1,4 +1,4 @@
-import * as isUrl from 'is-url'
+import isUrl from 'is-url'
 
 interface ScrapedContent {
   title?: string
@@ -56,11 +56,11 @@ export async function scrapeWebsiteContent(url: string): Promise<string | null> 
 function extractStructuredContent(html: string): ScrapedContent {
   // Extract title
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
-  const title = titleMatch ? titleMatch[1].trim() : undefined
+  const title = titleMatch ? titleMatch[1]?.trim() : undefined
 
   // Extract meta description
   const metaDescMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["'][^>]*>/i)
-  const description = metaDescMatch ? metaDescMatch[1].trim() : undefined
+  const description = metaDescMatch ? metaDescMatch[1]?.trim() : undefined
 
   // Extract headings (h1, h2, h3)
   const headingMatches = html.match(/<h[1-3][^>]*>([^<]+)<\/h[1-3]>/gi) || []
@@ -81,9 +81,9 @@ function extractStructuredContent(html: string): ScrapedContent {
   const addressMatch = html.match(/(?:address|location)[^>]*>?\s*([^<]{20,100})/i)
 
   const contactInfo = {
-    phone: phoneMatch ? phoneMatch[1].trim() : undefined,
-    email: emailMatch ? emailMatch[1].trim() : undefined,
-    address: addressMatch ? addressMatch[1].trim() : undefined
+    phone: phoneMatch ? phoneMatch[1]?.trim() : undefined,
+    email: emailMatch ? emailMatch[1]?.trim() : undefined,
+    address: addressMatch ? addressMatch[1]?.trim() : undefined
   }
 
   // Clean main content

@@ -9,8 +9,7 @@ const AUTHORIZED_ADMIN_EMAILS = [
 async function grantAdminAccess() {
   try {
     const payload = await getPayload({ 
-      config,
-      secret: process.env.PAYLOAD_SECRET || 'your-super-secret-key-here-make-it-long-and-random-123456789'
+      config
     })
     
     console.log('🔧 Granting admin access to authorized emails...')
@@ -32,22 +31,21 @@ async function grantAdminAccess() {
       }
       
       const user = users.docs[0]
-      console.log(`👤 Found user: ${user.email} (Current role: ${user.role})`)
-      
-      if (user.role !== 'admin') {
-        console.log('🔧 Updating user role to admin...')
-        
-        const updatedUser = await payload.update({
-          collection: 'users',
-          id: user.id,
-          data: {
-            role: 'admin'
-          }
-        })
-        
-        console.log(`✅ User ${updatedUser.email} role updated to: ${updatedUser.role}`)
-      } else {
-        console.log(`✅ User ${user.email} already has admin role`)
+      if (user) {
+        console.log(`👤 Found user: ${user.email} (Current role: ${user.role})`)
+        if (user.role !== 'admin') {
+          console.log('🔧 Updating user role to admin...')
+          const updatedUser = await payload.update({
+            collection: 'users',
+            id: user.id,
+            data: {
+              role: 'admin'
+            }
+          })
+          console.log(`✅ User ${updatedUser.email} role updated to: ${updatedUser.role}`)
+        } else {
+          console.log(`✅ User ${user.email} already has admin role`)
+        }
       }
     }
     

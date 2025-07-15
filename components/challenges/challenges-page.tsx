@@ -384,9 +384,25 @@ export default function ChallengesPage() {
                         transition={{ delay: index * 0.1 }}
                       >
                         <ChallengeCard
-                          challenge={challenge}
+                          challenge={{
+                            shortDescription: challenge.shortDescription || '',
+                            rewardPoints: challenge.rewardPoints || 0,
+                            requirements: challenge.requirements || [],
+                            startsAt: challenge.startsAt || '',
+                            expiresAt: challenge.expiresAt || '',
+                            locationBased: challenge.locationBased ?? false,
+                            weatherDependent: challenge.weatherDependent ?? false,
+                            estimatedDuration: challenge.estimatedDuration || '',
+                            cost: challenge.cost || '',
+                            socialSharing: challenge.socialSharing ?? false,
+                            featured: challenge.featured ?? false,
+                            isJoined: challenge.isJoined ?? false,
+                            isCompleted: challenge.isCompleted ?? false,
+                            canJoin: challenge.canJoin ?? false,
+                            canComplete: challenge.canComplete ?? false,
+                            ...challenge
+                          }}
                           onJoin={handleChallengeJoin}
-                          className="h-full"
                         />
                       </motion.div>
                     ))}

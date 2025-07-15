@@ -44,14 +44,14 @@ export async function POST(request: NextRequest) {
     }
     
     const user = users.docs[0]
-    console.log('👤 Found user:', user.email, 'Current role:', user.role)
+    console.log('👤 Found user:', user?.email, 'Current role:', user?.role)
     
-    if (user.role !== 'admin') {
+    if (user?.role !== 'admin') {
       console.log('🔧 Updating user role to admin...')
       
       const updatedUser = await payload.update({
         collection: 'users',
-        id: user.id,
+        id: user?.id || '',
         data: {
           role: 'admin'
         }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: 'Failed to update user role',
-      details: error.message
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 }
@@ -110,9 +110,9 @@ export async function GET(request: NextRequest) {
       if (users.docs.length > 0) {
         const user = users.docs[0]
         adminStatuses.push({
-          email: user.email,
-          role: user.role,
-          isAdmin: user.role === 'admin',
+          email: user?.email || '',
+          role: user?.role || '',
+          isAdmin: user?.role === 'admin',
           exists: true
         })
       } else {
@@ -136,7 +136,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: 'Failed to check admin status',
-      details: error.message
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 })
   }
 } 

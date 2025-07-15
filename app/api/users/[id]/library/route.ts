@@ -31,13 +31,13 @@ export async function GET(
           { status: { equals: 'completed' } }
         ]
       },
-      populate: [
-        'guide',
-        'guide.creator',
-        'guide.creator.profileImage',
-        'guide.primaryLocation',
-        'guide.featuredImage'
-      ],
+      populate: {
+        guide: {},
+        'guide.creator': {},
+        'guide.creator.profileImage': {},
+        'guide.primaryLocation': {},
+        'guide.featuredImage': {}
+      },
       sort,
       page,
       limit
@@ -139,10 +139,16 @@ export async function PATCH(
     }
     
     const purchaseRecord = purchase.docs[0]
-    
+    if (!purchaseRecord) {
+      return NextResponse.json(
+        { success: false, error: 'Purchase record not found' },
+        { status: 404 }
+      )
+    }
+
     // Update based on action
     let updateData: any = {}
-    
+
     if (action === 'access') {
       updateData = {
         downloadCount: (purchaseRecord.downloadCount || 0) + 1,
@@ -153,14 +159,14 @@ export async function PATCH(
         hasReviewed: true
       }
     }
-    
+
     // Update the purchase record
     const updatedPurchase = await payload.update({
       collection: 'guide-purchases',
       id: purchaseRecord.id,
       data: updateData
     })
-    
+
     return NextResponse.json({
       success: true,
       purchase: updatedPurchase

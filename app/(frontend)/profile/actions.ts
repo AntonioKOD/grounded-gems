@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
 import { getPayload } from "payload"
@@ -208,7 +207,7 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
 
     // Handle interests as an array field
     if (data.interests) {
-      updateData.interests = data.interests.map((interest) => 
+      updateData.interests = (data.interests as (string | { interest: string })[]).map((interest) => 
         typeof interest === 'string' ? interest : interest.interest
       )
     }

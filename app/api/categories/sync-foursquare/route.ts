@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const syncResults = {
+    const syncResults: { created: number; updated: number; errors: string[] } = {
       created: 0,
       updated: 0,
       errors: []
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
           // Update existing category
           await payload.update({
             collection: 'categories',
-            id: existingCategory.docs[0].id,
+            id: existingCategory.docs[0]?.id ?? '',
             data: categoryData
           })
           syncResults.updated++
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
                 suffix: subcategory.icon.suffix
               },
               description: subcategory.pluralName || subcategory.name,
-              parent: parentCategory.docs.length > 0 ? parentCategory.docs[0].id : undefined,
+              parent: parentCategory.docs.length > 0 ? parentCategory.docs[0]?.id : undefined,
               isActive: true,
               showInFilter: true,
               lastSyncDate: new Date()
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
               // Update existing subcategory
               await payload.update({
                 collection: 'categories',
-                id: existingSubcategory.docs[0].id,
+                id: existingSubcategory.docs[0]?.id ?? '',
                 data: subcategoryData
               })
               syncResults.updated++

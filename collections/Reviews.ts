@@ -50,7 +50,6 @@ export const Reviews: CollectionConfig = {
       defaultLimit: 25,
     },
     listSearchableFields: ['title', 'content'],
-    defaultSort: '-createdAt',
   },
   fields: [
     // Basic Information

@@ -288,7 +288,7 @@ export const UserSubscriptions: CollectionConfig = {
             },
           };
           
-          data.features = { ...data.features, ...tierFeatures[data.subscriptionTier] };
+          data.features = { ...data.features, ...tierFeatures[data.subscriptionTier as keyof typeof tierFeatures] };
         }
         
         return data;

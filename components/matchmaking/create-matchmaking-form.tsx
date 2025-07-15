@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useState } from "react"
@@ -26,7 +26,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Custom components
-import { LocationSearch } from "@/components/event/location-search"
+import  LocationSearch  from "@/components/event/location-search"
 
 // Types
 import type { MatchmakingSession } from "@/types/matchmaking"
@@ -101,6 +101,21 @@ interface MatchmakingFormProps {
   initialData?: Partial<MatchmakingSession>
   userId: string
   isAdmin?: boolean
+}
+
+// Helper to map initialData.location to LocationSearch Location type
+function mapLocationToSearchLocation(loc: any): any {
+  if (!loc) return null
+  return {
+    id: loc.id,
+    name: loc.name,
+    description: loc.description,
+    address: typeof loc.address === 'string' ? undefined : loc.address,
+    featuredImage: loc.featuredImage?.url ? { url: loc.featuredImage.url } : undefined,
+    categories: Array.isArray(loc.categories)
+      ? loc.categories.map((c: any) => (typeof c === 'string' ? { name: c } : c))
+      : undefined,
+  }
 }
 
 export default function MatchmakingForm({ initialData, userId, isAdmin = false }: MatchmakingFormProps) {
@@ -206,7 +221,11 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
   // Update availability item
   const updateAvailabilityItem = (index: number, field: "day" | "timeSlot", value: string) => {
     const newItems = [...availabilityItems]
-    newItems[index] = { ...newItems[index], [field]: value }
+    const prev = newItems[index] || { day: '', timeSlot: '' }
+    newItems[index] = {
+      day: field === 'day' ? value : prev.day || '',
+      timeSlot: field === 'timeSlot' ? value : prev.timeSlot || ''
+    }
     setAvailabilityItems(newItems)
   }
 
@@ -376,9 +395,10 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                       <FormLabel>Location *</FormLabel>
                       <FormControl>
                         <LocationSearch
-                          value={field.value}
-                          onChange={field.onChange}
-                          onLocationSelect={handleLocationSelect}
+                          selectedLocation={mapLocationToSearchLocation(initialData?.location) || null}
+                          onLocationSelect={(location) => {
+                            field.onChange(location?.id || "")
+                          }}
                         />
                       </FormControl>
                       <FormDescription>Search for and select a location for your matchmaking session</FormDescription>
@@ -429,7 +449,10 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                                   type="time"
                                   value={field.value ? format(field.value, "HH:mm") : ""}
                                   onChange={(e) => {
-                                    const [hours, minutes] = e.target.value.split(":")
+                                    const timeValue = e.target.value || "00:00"
+                                    const [hoursStr, minutesStr] = timeValue.split(":")
+                                    const hours = hoursStr || "0"
+                                    const minutes = minutesStr || "0"
                                     const newDate = new Date(field.value || new Date())
                                     newDate.setHours(Number.parseInt(hours, 10))
                                     newDate.setMinutes(Number.parseInt(minutes, 10))
@@ -473,7 +496,10 @@ export default function MatchmakingForm({ initialData, userId, isAdmin = false }
                                   type="time"
                                   value={field.value ? format(field.value, "HH:mm") : ""}
                                   onChange={(e) => {
-                                    const [hours, minutes] = e.target.value.split(":")
+                                    const timeValue = e.target.value || "00:00"
+                                    const [hoursStr, minutesStr] = timeValue.split(":")
+                                    const hours = hoursStr || "0"
+                                    const minutes = minutesStr || "0"
                                     const newDate = new Date(field.value || new Date())
                                     newDate.setHours(Number.parseInt(hours, 10))
                                     newDate.setMinutes(Number.parseInt(minutes, 10))

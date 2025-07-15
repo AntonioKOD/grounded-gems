@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import type { Location } from "@/app/(frontend)/map/map-data"
 import mapboxgl from "mapbox-gl";
 
@@ -132,7 +131,7 @@ export function extractMarkerState(locations: Location[]): MarkerState[] {
       const primaryCategory = location.categories[0];
       category = typeof primaryCategory === "string" ? 
         primaryCategory : 
-        (primaryCategory.name || primaryCategory.id || "");
+        (primaryCategory?.name || primaryCategory?.id || "");
     }
     
     return {

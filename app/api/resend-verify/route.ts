@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
     if (rateLimitData.docs.length > 0) {
       const user = rateLimitData.docs[0]
-      const lastResendTime = user.lastResendVerificationTime
+      const lastResendTime = user?.lastResendVerificationTime
       
       if (lastResendTime) {
         const timeSinceLastResend = Date.now() - new Date(lastResendTime).getTime()
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const user = users.docs[0]
 
     // Check if user is already verified
-    if (user._verified) {
+    if (user?._verified) {
       return NextResponse.json(
         { message: 'Email is already verified' },
         { status: 200 }
@@ -81,16 +81,16 @@ export async function POST(request: NextRequest) {
       : 'http://localhost:3000'
     
     // Generate a new verification token if one doesn't exist or has expired
-    let verificationToken = user._verificationToken
+    let verificationToken = user?._verificationToken
     
     // Check if token exists and hasn't expired
-    const tokenExpired = user._verificationTokenExpiry && new Date(user._verificationTokenExpiry) < new Date()
+    const tokenExpired = user?._verificationTokenExpiry && new Date(user._verificationTokenExpiry) < new Date()
     
     console.log('Resend verification debug:', {
-      email: user.email,
+      email: user?.email,
       hasToken: !!verificationToken,
       tokenExpired,
-      expiryDate: user._verificationTokenExpiry
+      expiryDate: user?._verificationTokenExpiry
     })
     
     if (!verificationToken || tokenExpired) {
@@ -102,20 +102,20 @@ export async function POST(request: NextRequest) {
       try {
         await payload.update({
           collection: 'users',
-          id: user.id,
+          id: user?.id as string,
           data: {
             _verificationToken: verificationToken,
             _verificationTokenExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
           },
         })
-        console.log('Generated new verification token for user:', user.email, 'Token:', verificationToken.substring(0, 10) + '...')
+        console.log('Generated new verification token for user:', user?.email, 'Token:', verificationToken.substring(0, 10) + '...')
       } catch (updateError) {
         console.error('Failed to generate new verification token:', updateError)
         
         // Try to use the existing token if available, even if expired
-        if (user._verificationToken) {
-          console.log('Falling back to existing token for user:', user.email)
-          verificationToken = user._verificationToken
+        if (user?._verificationToken) {
+          console.log('Falling back to existing token for user:', user?.email)
+          verificationToken = user?._verificationToken
         } else {
           return NextResponse.json(
             { 
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
     
     // Final check to ensure we have a valid token
     if (!verificationToken) {
-      console.error('No verification token available for user:', user.email)
+      console.error('No verification token available for user:', user?.email)
       return NextResponse.json(
         { 
           error: 'Unable to generate verification token. Please contact support.',
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    console.log('Sending verification email to:', user.email, 'with token:', verificationToken.substring(0, 10) + '...')
+    console.log('Sending verification email to:', user?.email, 'with token:', verificationToken.substring(0, 10) + '...')
     
     await payload.sendEmail({
       to: email,
@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #FF6B6B; margin-bottom: 20px;">Verify Your Sacavia Account</h2>
-          <p>Hi ${user.name || 'there'},</p>
+          <p>Hi ${user?.name || 'there'},</p>
           <p>Please verify your email address by clicking the link below:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${baseUrl}/verify?token=${verificationToken}" 
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
     try {
       await payload.update({
         collection: 'users',
-        id: user.id,
+        id: user?.id as string,
         data: {
           lastResendVerificationTime: new Date(),
         },

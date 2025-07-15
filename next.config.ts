@@ -3,12 +3,12 @@ import { withPayload } from '@payloadcms/next/withPayload';
 
 const nextConfig: NextConfig = {
   eslint: {
-    // Don't run eslint during build for faster builds
-    ignoreDuringBuilds: true,
+    // Enable ESLint during build for better code quality
+    ignoreDuringBuilds: false,
   },
   typescript: {
-    // Don't run TypeScript checking during build for faster builds 
-    ignoreBuildErrors: true,
+    // Enable TypeScript checking during build for better type safety
+    ignoreBuildErrors: false,
   },
   
   // Enable output standalone for better performance

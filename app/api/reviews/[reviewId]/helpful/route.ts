@@ -36,8 +36,8 @@ export async function POST(req: NextRequest, { params }: PostParams) {
       collection: 'reviews',
       id: reviewId,
       populate: {
-        usersWhoMarkedHelpful: true,
-        usersWhoMarkedUnhelpful: true
+        usersWhoMarkedHelpful: {},
+        usersWhoMarkedUnhelpful: {}
       }
     });
 

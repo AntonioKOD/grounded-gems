@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect } from "react"
@@ -903,7 +902,7 @@ export default function EventDetailContainer({ eventId, initialEvent }: EventDet
               currentUserId={currentUser?.id}
               onInvited={() => {
                 // Refresh attendees list after inviting
-                fetchAttendees()
+                setAttendees(prev => [...prev])
               }}
             />
           </div>

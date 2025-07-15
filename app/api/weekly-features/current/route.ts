@@ -271,7 +271,7 @@ async function getLocationBasedContent(
               return null
             }
           })
-          .filter(loc => loc !== null && loc.distance !== null && loc.distance <= 25) // Only show locations within 25 miles
+          .filter((loc: any) => loc !== null && loc.distance !== null && loc.distance <= 25) // Only show locations within 25 miles
           .slice(0, 5) // Limit to top 5
       } catch (error) {
         console.error('Error fetching nearby locations:', error)
@@ -314,7 +314,7 @@ async function getLocationBasedContent(
             return null
           }
         })
-        .filter(post => post !== null)
+        .filter((post: any) => post !== null)
         .slice(0, 5) // Limit to top 5
     } catch (error) {
       console.error('Error fetching recent posts:', error)
@@ -342,7 +342,8 @@ async function getLocationBasedContent(
  */
 function generateFallbackContent(theme: any, userLocation?: { latitude: number; longitude: number } | null) {
   try {
-    const fallback = theme.fallbackContent || DEFAULT_THEME.fallbackContent
+    const fallbackTheme = theme ?? DEFAULT_THEME ?? { fallbackContent: { locations: [], activities: [], mood: '' } };
+    const fallback = fallbackTheme.fallbackContent || { locations: [], activities: [], mood: '' };
     
     return {
       locations: [
@@ -426,11 +427,11 @@ export async function GET(request: NextRequest) {
 
     // Get current date and theme with error handling
     const weekInfo = getCurrentWeekInfo()
-    const currentTheme = getCurrentTheme()
+    const currentTheme = getCurrentTheme() ?? DEFAULT_THEME
     
     console.log('🗓️ Weekly Feature API called:', {
       dayOfWeek: weekInfo.dayOfWeek,
-      themeName: currentTheme.name,
+      themeName: currentTheme?.name ?? 'Unknown',
       weekNumber: weekInfo.number,
       hasUserLocation: !!userLocation,
       userLocation: userLocation ? `${userLocation.latitude}, ${userLocation.longitude}` : 'none'
@@ -452,7 +453,7 @@ export async function GET(request: NextRequest) {
             and: [
               { weekNumber: { equals: weekInfo.number } },
               { year: { equals: weekInfo.year } },
-              { theme: { equals: currentTheme.id } },
+              { theme: { equals: currentTheme?.id ?? '' } },
               { isActive: { equals: true } }
             ]
           },
@@ -462,7 +463,9 @@ export async function GET(request: NextRequest) {
 
         if (existingFeature.docs.length > 0) {
           feature = existingFeature.docs[0]
-          console.log('📋 Using existing weekly feature:', feature.id)
+          if (feature) {
+            console.log('📋 Using existing weekly feature:', feature.id)
+          }
         }
       } catch (dbError) {
         console.warn('Error finding existing feature:', dbError)
@@ -478,10 +481,10 @@ export async function GET(request: NextRequest) {
           feature = await payload.create({
             collection: 'weekly-features',
             data: {
-              title: currentTheme.name,
-              subtitle: `${currentTheme.description} - Week ${weekInfo.number}`,
-              description: `This week, we're focusing on ${currentTheme.description.toLowerCase()}. Discover amazing ${currentTheme.keywords.slice(0, 3).join(', ')} experiences ${userLocation ? 'near you' : 'around the world'}.`,
-              theme: currentTheme.id,
+              title: currentTheme?.name ?? 'Weekly Feature',
+              subtitle: `${currentTheme?.description ?? ''} - Week ${weekInfo.number}`,
+              description: `This week, we're focusing on ${(currentTheme?.description ?? '').toLowerCase()}. Discover amazing ${(currentTheme?.keywords ?? []).slice(0, 3).join(', ')} experiences ${userLocation ? 'near you' : 'around the world'}.`,
+              theme: currentTheme?.id ?? '',
               weekNumber: weekInfo.number,
               year: weekInfo.year,
               contentType: 'mixed',
@@ -496,9 +499,9 @@ export async function GET(request: NextRequest) {
                   activeExplorers: Math.floor(Math.random() * 200) + 100,
                   newDiscoveries: Math.floor(Math.random() * 50) + 20,
                   trending: [
-                    `${currentTheme.keywords[0]} spots with great vibes`,
-                    `Hidden ${currentTheme.keywords[1]} locations`,
-                    `Local ${currentTheme.keywords[2] || 'community'} favorites`
+                    `${(currentTheme?.keywords ?? [''])[0]} spots with great vibes`,
+                    `Hidden ${(currentTheme?.keywords ?? [''])[1]} locations`,
+                    `Local ${(currentTheme?.keywords ?? [''])[2] || 'community'} favorites`
                   ]
                 }
               },
@@ -527,11 +530,11 @@ export async function GET(request: NextRequest) {
       const fallbackContent = generateFallbackContent(currentTheme, userLocation)
       
       feature = {
-        id: `fallback-${currentTheme.id}-${weekInfo.number}`,
-        title: currentTheme.name,
-        subtitle: `${currentTheme.description} - Week ${weekInfo.number}`,
-        description: `This week, we're focusing on ${currentTheme.description.toLowerCase()}. Discover amazing ${currentTheme.keywords.slice(0, 3).join(', ')} experiences ${userLocation ? 'near you' : 'around the world'}.`,
-        theme: currentTheme.id,
+        id: `fallback-${currentTheme?.id ?? 'unknown'}-${weekInfo.number}`,
+        title: currentTheme?.name ?? 'Weekly Feature',
+        subtitle: `${currentTheme?.description ?? ''} - Week ${weekInfo.number}`,
+        description: `This week, we're focusing on ${(currentTheme?.description ?? '').toLowerCase()}. Discover amazing ${(currentTheme?.keywords ?? []).slice(0, 3).join(', ')} experiences ${userLocation ? 'near you' : 'around the world'}.`,
+        theme: currentTheme?.id ?? '',
         weekNumber: weekInfo.number,
         year: weekInfo.year,
         contentType: 'mixed',
@@ -543,9 +546,9 @@ export async function GET(request: NextRequest) {
             activeExplorers: Math.floor(Math.random() * 200) + 100,
             newDiscoveries: Math.floor(Math.random() * 50) + 20,
             trending: [
-              `${currentTheme.keywords[0]} spots with great vibes`,
-              `Hidden ${currentTheme.keywords[1]} locations`,
-              `Local ${currentTheme.keywords[2] || 'community'} favorites`
+              `${(currentTheme?.keywords ?? [''])[0]} spots with great vibes`,
+              `Hidden ${(currentTheme?.keywords ?? [''])[1]} locations`,
+              `Local ${(currentTheme?.keywords ?? [''])[2] || 'community'} favorites`
             ]
           }
         },
@@ -590,9 +593,9 @@ export async function GET(request: NextRequest) {
               activeExplorers: Math.floor(Math.random() * 200) + 100,
               newDiscoveries: Math.floor(Math.random() * 50) + 20,
               trending: [
-                `${currentTheme.keywords[0]} spots with great vibes`,
-                `Hidden ${currentTheme.keywords[1]} locations`,
-                `Local ${currentTheme.keywords[2] || 'community'} favorites`
+                `${(currentTheme?.keywords?.[0] ?? 'local')} spots with great vibes`,
+                `Hidden ${(currentTheme?.keywords?.[1] ?? 'hidden')} locations`,
+                `Local ${(currentTheme?.keywords?.[2] ?? 'community')} favorites`
               ]
             }
           }
@@ -619,7 +622,7 @@ export async function GET(request: NextRequest) {
     console.error('❌ Weekly Features API error:', error)
     
     // Return a minimal fallback response
-    const fallbackTheme = DEFAULT_THEME
+    const fallbackTheme = DEFAULT_THEME ?? { name: 'Weekly Feature', id: 'default' }
     const fallbackContent = generateFallbackContent(fallbackTheme, null)
     
     return NextResponse.json({
@@ -627,10 +630,10 @@ export async function GET(request: NextRequest) {
       data: {
         feature: {
           id: 'error-fallback',
-          title: fallbackTheme.name,
+          title: fallbackTheme?.name ?? 'Weekly Feature',
           subtitle: 'Discover amazing content',
           description: 'Explore amazing experiences and discoveries.',
-          theme: fallbackTheme.id,
+          theme: fallbackTheme?.id ?? 'default',
           weekNumber: 1,
           year: new Date().getFullYear(),
           contentType: 'mixed',

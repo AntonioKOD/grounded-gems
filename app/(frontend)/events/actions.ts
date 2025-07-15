@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server"
 
 import { getPayload } from "payload"
@@ -13,7 +11,7 @@ import type { Where } from "payload"
 import {cookies } from "next/headers"
 import { getServerSideUser } from '@/lib/auth-server'
 
-export async function createEvent(formData: EventFormData, userId: string, userName: string, userAvatar?: string) {
+export async function createEvent(formData: EventFormData) {
   try {
     const payload = await getPayload({ config })
 
@@ -60,7 +58,6 @@ export async function createEvent(formData: EventFormData, userId: string, userN
       // Taxonomy
       category: formData.category,
       eventType: formData.eventType,
-      sportType: formData.category === "sports" ? formData.sportType : undefined,
 
       // Location
       location: formData.location, // This is the ID from the locations collection
@@ -68,38 +65,18 @@ export async function createEvent(formData: EventFormData, userId: string, userN
       // Capacity
       capacity: formData.capacity,
 
-      // Pricing
-      pricing: formData.pricing ? {
-        isFree: formData.pricing.isFree,
-        price: formData.pricing.price,
-        currency: formData.pricing.currency,
-      } : undefined,
-
-      // Registration
-      registration: formData.registration ? {
-        requiresRegistration: formData.registration.requiresRegistration,
-        registrationDeadline: formData.registration.registrationDeadline,
-        allowWaitlist: formData.registration.allowWaitlist,
-      } : undefined,
+      // Privacy
+      privacy: formData.privacy || "public",
+      privateAccess: formData.privateAccess || [],
 
       // Organizer - this should be the user ID
-      organizer: userId,
+      organizer: formData.organizer,
 
       // Status
       status: formData.status || "draft",
 
       // Tags
-      tags: formData.tags,
-
-      // Requirements
-      requirements: formData.requirements,
-
-      // Contact Info
-      contactInfo: formData.contactInfo ? {
-        email: formData.contactInfo.email,
-        phone: formData.contactInfo.phone,
-        website: formData.contactInfo.website,
-      } : undefined,
+      tags: formData.tags?.map(tag => ({ tag })) || [],
 
       // Meta
       meta: formData.meta ? {
@@ -122,7 +99,7 @@ export async function createEvent(formData: EventFormData, userId: string, userN
         // Get the user's followers
         const user = await payload.findByID({
           collection: "users",
-          id: userId,
+          id: formData.organizer,
           depth: 0,
         })
 
@@ -136,7 +113,7 @@ export async function createEvent(formData: EventFormData, userId: string, userN
                   recipient: followerId,
                   type: "new_event",
                   title: `New Event: ${formData.name}`,
-                  message: `${userName} created a new event: ${formData.name}`,
+                  message: `${user.name || user.email} created a new event: ${formData.name}`,
                   relatedTo: {
                     relationTo: "events",
                     value: event.id,
@@ -158,11 +135,11 @@ export async function createEvent(formData: EventFormData, userId: string, userN
     revalidatePath("/events")
     revalidatePath(`/events/${event.id}`)
     revalidatePath(`/events/${event.slug}`)
-    revalidatePath(`/profile/${userId}`)
+    revalidatePath(`/profile/${formData.organizer}`)
 
     return {
       success: true,
-      eventId: event.id,
+      event: event,
     }
   } catch (error) {
     console.error("Error creating event:", error)
@@ -356,7 +333,7 @@ export async function getEvents(filters: EventFilterOptions = {
     
     if (filters.sort) {
       const [field, direction] = filters.sort.split(":")
-      sort = field
+      sort = field || "startDate"
       if (direction) {
         sortDirection = direction
       }
@@ -616,11 +593,13 @@ export async function updateEventParticipation({ eventId, userId, status }: Upda
   if (docs.length > 0) {
     // Update existing
     const [existing] = docs;
-    rsvp = await payload.update({
-      collection: "eventRSVPs",
-      id: existing.id,
-      data: { status },
-    });
+    if (existing && existing.id) {
+      rsvp = await payload.update({
+        collection: "eventRSVPs",
+        id: existing.id,
+        data: { status },
+      });
+    }
   } else {
     // Create new
     rsvp = await payload.create({
@@ -752,11 +731,11 @@ export async function addEventParticipant({
 
     let rsvp
 
-    if (existingRSVPs.length > 0) {
+    if (existingRSVPs[0] && existingRSVPs[0].id) {
       // Update existing RSVP
       rsvp = await payload.update({
         collection: "eventRSVPs",
-        id: existingRSVPs[0].id,
+        id: existingRSVPs[0]?.id,
         data: {
           status,
         },
@@ -857,11 +836,12 @@ export async function removeEventParticipant({
       }
     }
 
-    // Delete the RSVP
-    await payload.delete({
-      collection: "eventRSVPs",
-      id: existingRSVPs[0].id,
-    })
+    if (existingRSVPs[0] && existingRSVPs[0].id) {
+      await payload.delete({
+        collection: "eventRSVPs",
+        id: existingRSVPs[0].id,
+      })
+    }
 
     // Revalidate relevant paths
     revalidatePath(`/events/${eventId}`)
@@ -1456,16 +1436,16 @@ export async function inviteUserToEvent(eventId: string, inviteeId: string) {
     let rsvp;
     if (existingRSVPs.docs.length > 0) {
       const existing = existingRSVPs.docs[0];
-      console.log('Existing RSVP status:', existing.status)
+      console.log('Existing RSVP status:', existing?.status)
       
       // If user is already going or interested, they can't be invited again
-      if (existing.status === "going") {
+      if (existing?.status === "going") {
         return { success: false, error: 'User is already attending this event' }
-      } else if (existing.status === "interested") {
+      } else if (existing?.status === "interested") {
         return { success: false, error: 'User is already interested in this event' }
-      } else if (existing.status === "invited") {
+      } else if (existing?.status === "invited") {
         return { success: false, error: 'User has already been invited to this event' }
-      } else if (existing.status === "not_going") {
+      } else if (existing?.status === "not_going") {
         // Update RSVP to invited
         console.log('Updating existing RSVP from not_going to invited')
         rsvp = await payload.update({
@@ -1480,9 +1460,10 @@ export async function inviteUserToEvent(eventId: string, inviteeId: string) {
       } else {
         // For any other status, update to invited
         console.log('Updating existing RSVP to invited')
+        if (existing && existing.id) {
         rsvp = await payload.update({
           collection: 'eventRSVPs',
-          id: existing.id,
+          id: existing?.id,
           data: {
             status: 'invited',
             invitedBy: user.id,
@@ -1490,6 +1471,7 @@ export async function inviteUserToEvent(eventId: string, inviteeId: string) {
           }
         })
       }
+    }
     } else {
       // Create RSVP with 'invited' status
       console.log('Creating new RSVP with invited status')

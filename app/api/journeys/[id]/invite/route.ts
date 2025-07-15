@@ -71,7 +71,10 @@ export async function POST(req: NextRequest, context: any) {
           journeyUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/events/journey/${journey.id}`,
         }
         console.log('Sending invite email to:', invitee.email, emailData)
-        await sendEmail(journeyInviteEmailTemplate(emailData))
+        await sendEmail({
+          to: invitee.email,
+          ...journeyInviteEmailTemplate(emailData)
+        })
       }
     } catch (err) {
       console.error('Error sending invite email:', err)

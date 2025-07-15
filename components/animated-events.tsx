@@ -94,7 +94,7 @@ export default function AnimatedEvents({
         opacity: [0, 1],
         translateY: [30, 0],
         scale: [0.95, 1],
-        delay: anime.stagger(100, { start: 200 }),
+        delay: 200,
         duration: 800,
         easing: 'easeOutExpo',
       })

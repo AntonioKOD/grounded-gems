@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -61,8 +61,8 @@ export function MatchmakingContainer() {
           id: `session-${page}-${i}`,
           title: `${sportType || "Sports"} Matchmaking Session ${page}-${i + 1}`,
           description: "Join this session to find partners for your favorite sport!",
-          sportType: sportType || ["tennis", "soccer", "basketball"][i % 3],
-          skillLevel: skillLevel || ["beginner", "intermediate", "advanced"][i % 3],
+          sportType: sportType ? sportType : (["tennis", "soccer", "basketball"][i % 3] || "tennis"),
+          skillLevel: skillLevel ? skillLevel : (["beginner", "intermediate", "advanced"][i % 3] || "beginner"),
           location: {
             id: `loc-${i}`,
             name: `Sports Center ${i + 1}`

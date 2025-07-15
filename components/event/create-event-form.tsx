@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client"
 
 import type React from "react"
@@ -23,16 +23,29 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { createEvent } from "@/app/(frontend)/events/actions"
 import type { EventFormData } from "@/types/event"
-// Import the LocationSearch component
-import { LocationSearch } from "@/components/event/location-search"
+import LocationSearch from "@/components/event/location-search"
+import PrivacySelector from "@/components/event/privacy-selector"
 
-interface LocationWithCategories {
+interface Location {
   id: string
   name: string
-  categories?: Array<string | { name: string }>
+  description?: string
+  address?: {
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+    country?: string
+  }
+  featuredImage?: {
+    url: string
+  }
+  categories?: Array<{
+    name: string
+  }>
 }
 
-// Define the form schema with Zod
+// Define the simplified form schema with Zod
 const eventFormSchema = z
   .object({
     name: z.string().min(5, { message: "Title must be at least 5 characters" }).max(100),
@@ -40,20 +53,14 @@ const eventFormSchema = z
     description: z.string().min(20, { message: "Description must be at least 20 characters" }),
 
     // Taxonomy
-    category: z.enum(["entertainment", "education", "social", "business", "sports", "other"]),
+    category: z.enum(["entertainment", "education", "social", "business", "other"]),
     eventType: z.enum([
       "workshop",
       "concert",
       "meetup",
-      "webinar",
-      "sports_matchmaking",
-      "sports_tournament",
       "social_event",
       "other_event",
     ]),
-    sportType: z
-      .enum(["tennis", "soccer", "basketball", "volleyball", "running", "cycling", "swimming", "golf", "other_sport"])
-      .optional(),
 
     // Timing
     startDate: z.date({ required_error: "Start date is required" }),
@@ -68,29 +75,15 @@ const eventFormSchema = z
     // Capacity
     capacity: z.number().int().positive().optional(),
 
-    // Pricing
-    isFree: z.boolean().default(true),
-    price: z.number().min(0).optional(),
-    currency: z.string().default("USD"),
-
-    // Registration
-    requiresRegistration: z.boolean().default(false),
-    registrationDeadline: z.date().optional(),
-    allowWaitlist: z.boolean().default(true),
+    // Privacy
+    privacy: z.enum(["public", "private"]),
+    privateAccess: z.array(z.string()).default([]),
 
     // Status
     status: z.enum(["draft", "published", "cancelled", "postponed"]),
 
     // Tags
-    tags: z.array(z.string()).optional(),
-
-    // Requirements
-    requirements: z.string().optional(),
-
-    // Contact Info
-    contactEmail: z.string().email().optional(),
-    contactPhone: z.string().optional(),
-    contactWebsite: z.string().url().optional(),
+    tags: z.array(z.string()).default([]),
 
     // Meta
     meta: z
@@ -115,488 +108,169 @@ const eventFormSchema = z
       path: ["endDate"],
     },
   )
-  .refine(
-    (data) => {
-      // If not free, price is required
-      if (!data.isFree && !data.price) {
-        return false
-      }
-      return true
-    },
-    {
-      message: "Price is required for paid events",
-      path: ["price"],
-    },
-  )
-  .refine(
-    (data) => {
-      // If registration required and has deadline, deadline must be before event
-      if (data.requiresRegistration && data.registrationDeadline) {
-        return data.registrationDeadline <= data.startDate
-      }
-      return true
-    },
-    {
-      message: "Registration deadline must be before event start date",
-      path: ["registrationDeadline"],
-    },
-  )
 
 type EventFormValues = z.infer<typeof eventFormSchema>
 
-// Helper function to map event request types to form values
-const mapEventTypeToFormValue = (eventType: string): "workshop" | "concert" | "meetup" | "webinar" | "sports_matchmaking" | "sports_tournament" | "social_event" | "other_event" | undefined => {
-  const mapping: { [key: string]: "workshop" | "concert" | "meetup" | "webinar" | "sports_matchmaking" | "sports_tournament" | "social_event" | "other_event" } = {
-    'private_party': 'social_event',
-    'corporate_event': 'meetup',
-    'birthday_party': 'social_event',
-    'wedding_reception': 'social_event',
-    'business_meeting': 'meetup',
-    'product_launch': 'meetup',
-    'community_event': 'social_event',
-    'fundraiser': 'social_event',
-    'workshop': 'workshop',
-    'other': 'other_event'
-  }
-  return mapping[eventType]
-}
-
-// Helper function to map form event types to event request types
-const mapFormEventTypeToRequestType = (formEventType: string): string => {
-  const mapping: { [key: string]: string } = {
-    'workshop': 'workshop',
-    'concert': 'other',
-    'meetup': 'business_meeting',
-    'webinar': 'other',
-    'sports_matchmaking': 'other',
-    'sports_tournament': 'other',
-    'social_event': 'private_party',
-    'other_event': 'other'
-  }
-  return mapping[formEventType] || 'other'
-}
-
-// Helper function to check if location requires reservations
-const locationRequiresReservation = (location: LocationWithCategories | undefined): boolean => {
-  if (!location || !location.categories) return false
-  
-  // Categories that typically require reservations/permission
-  const reservationRequiredCategories = [
-    'Restaurant', 'Bar', 'Cafe', 'Hotel', 'Theater', 'Museum', 
-    'Gallery', 'Venue', 'Event Space', 'Conference Center',
-    'Wedding Venue', 'Banquet Hall', 'Club', 'Lounge'
-  ]
-  
-  const locationCategories = Array.isArray(location.categories) 
-    ? location.categories.map((cat: string | { name: string }) => typeof cat === 'string' ? cat : cat.name)
-    : []
-  
-  return locationCategories.some((category: string) => 
-    reservationRequiredCategories.some(reqCat => 
-      category.toLowerCase().includes(reqCat.toLowerCase())
-    )
-  )
-}
-
 // Helper function to combine date and time
 const combineDateTime = (date: Date, time: string): string => {
-  const [timeStr, period] = time.split(' ')
-  const [hours, minutes] = timeStr.split(':').map(Number)
-  
-  let adjustedHours = hours
-  if (period === 'PM' && hours !== 12) {
-    adjustedHours += 12
-  } else if (period === 'AM' && hours === 12) {
-    adjustedHours = 0
-  }
-  
-  const combined = new Date(date)
-  combined.setHours(adjustedHours, minutes, 0, 0)
-  return combined.toISOString()
+  const dateStr = format(date, "yyyy-MM-dd")
+  return `${dateStr}T${time}`
 }
 
 export default function CreateEventForm() {
   const router = useRouter()
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // State
-  const [currentUser, setCurrentUser] = useState<{
-    id: string
-    name: string
-    email: string
-    avatar?: string
-  } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState("basic")
-  const [eventImage, setEventImage] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [locations, setLocations] = useState<LocationWithCategories[]>([])
-  const [isLoadingLocations, setIsLoadingLocations] = useState(true)
-  const [selectedLocation, setSelectedLocation] = useState<{
-    id: string
-    name: string
-    address: string
-  } | null>(null)
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [currentTag, setCurrentTag] = useState("")
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Default form values
-  const defaultValues: Partial<EventFormValues> = {
-    name: "",
-    slug: "",
-    description: "",
-    category: "social",
-    eventType: "meetup",
-    startDate: new Date(),
-    startTime: format(new Date().setMinutes(Math.ceil(new Date().getMinutes() / 15) * 15), "h:mm a"),
-    location: "",
-    capacity: 10,
-    isFree: true,
-    currency: "USD",
-    requiresRegistration: false,
-    allowWaitlist: true,
-    status: "draft",
-    tags: [],
-  }
-
-  // Initialize form
+  // Form setup
   const form = useForm<EventFormValues>({
-    resolver: zodResolver(eventFormSchema),
-    defaultValues,
-    mode: "onChange",
+    resolver: zodResolver(eventFormSchema) as any,
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      category: "social",
+      eventType: "social_event",
+      startDate: new Date(),
+      startTime: "18:00",
+      endDate: undefined,
+      endTime: "",
+      durationMinutes: 120,
+      location: "",
+      capacity: undefined,
+      privacy: "public",
+      privateAccess: [],
+      status: "draft",
+      tags: [],
+      meta: {
+        title: "",
+        description: "",
+      },
+    },
   })
 
-  // Watch form values for conditional rendering
   const watchCategory = form.watch("category")
-  const watchEventType = form.watch("eventType")
-  const watchIsFree = form.watch("isFree")
-  const watchRequiresRegistration = form.watch("requiresRegistration")
+  const watchPrivacy = form.watch("privacy")
 
-  // Watch location to show reservation notice
-  const watchLocation = form.watch("location")
-  const selectedLocationData = locations?.find(loc => loc.id === watchLocation)
-  const requiresReservation = locationRequiresReservation(selectedLocationData)
-
-  // Fetch current user and handle URL parameters from approved event requests or public space redirects
+  // Fetch current user
   useEffect(() => {
     const fetchCurrentUser = async () => {
       try {
+        console.log("Fetching current user...")
         const response = await fetch("/api/users/me")
+        console.log("User API response status:", response.status)
+        
         if (response.ok) {
-          const data = await response.json()
-          setCurrentUser(data.user)
+          const userData = await response.json()
+          console.log("User data:", userData)
+          setCurrentUser(userData.user)
         } else {
-          // Redirect to login if not authenticated
-          toast.error("Please log in to create an event")
-          router.push("/login")
+          console.error("Failed to fetch current user:", response.status)
+          const errorData = await response.json().catch(() => ({}))
+          console.error("Error details:", errorData)
         }
       } catch (error) {
         console.error("Error fetching current user:", error)
-        toast.error("Please log in to create an event")
-        router.push("/login")
       }
     }
 
     fetchCurrentUser()
-
-    // Handle URL parameters from approved event requests or public space redirects
-    let urlParams: URLSearchParams
-    try {
-      urlParams = new URLSearchParams(window.location.search)
-    } catch (error) {
-      console.error('Failed to parse URL search params:', error)
-      urlParams = new URLSearchParams() // Empty params as fallback
-    }
-    const locationId = urlParams.get('locationId')
-    const locationName = urlParams.get('locationName')
-    const requestId = urlParams.get('requestId')
-    const eventTitle = urlParams.get('eventTitle')
-    const eventType = urlParams.get('eventType')
-    const date = urlParams.get('date')
-    const time = urlParams.get('time')
-    const attendees = urlParams.get('attendees')
-
-    if (locationId) {
-      // Set location ID (works for both approved requests and public space redirects)
-      form.setValue('location', locationId)
-      
-      if (requestId) {
-        // Pre-fill form with data from approved event request
-        if (eventTitle) {
-          form.setValue('name', decodeURIComponent(eventTitle))
-        }
-        if (eventType) {
-          const mappedEventType = mapEventTypeToFormValue(eventType)
-          if (mappedEventType) {
-            form.setValue('eventType', mappedEventType)
-          }
-        }
-        if (date) {
-          form.setValue('startDate', new Date(date))
-        }
-        if (time) {
-          form.setValue('startTime', time)
-        }
-        if (attendees) {
-          form.setValue('capacity', parseInt(attendees, 10))
-        }
-        
-        // Show success notification about the approved request
-        toast.success('Event request approved!', {
-          description: 'Your event request has been approved. Please complete the event details below.',
-          duration: 5000
-        })
-      } else if (locationName) {
-        // Handle public space redirect
-        toast.info('Public Space Event', {
-          description: `You can create events directly at ${decodeURIComponent(locationName)}. No approval needed!`,
-          duration: 5000
-        })
-      }
-    }
-  }, [router, form])
-
-  // Fetch locations
-  useEffect(() => {
-    const fetchLocations = async () => {
-      setIsLoadingLocations(true)
-      try {
-        const response = await fetch("/api/locations/all")
-        if (response.ok) {
-          const data = await response.json()
-          // Ensure locations is always an array, fallback to empty array if data.locations is undefined
-          setLocations(Array.isArray(data.locations) ? data.locations : [])
-        } else {
-          toast.error("Failed to load locations")
-          // Set to empty array on error to maintain array type
-          setLocations([])
-        }
-      } catch (error) {
-        console.error("Error fetching locations:", error)
-        toast.error("Failed to load locations")
-        // Set to empty array on error to maintain array type
-        setLocations([])
-      } finally {
-        setIsLoadingLocations(false)
-      }
-    }
-
-    fetchLocations()
   }, [])
 
-  // Generate slug from name
+  // Auto-generate slug from title
   useEffect(() => {
-    const name = form.watch("name")
-    if (name && !form.getValues("slug")) {
-      const slug = name
+    const title = form.watch("name")
+    if (title) {
+      const slug = title
         .toLowerCase()
-        .replace(/[^\w\s]/gi, "")
-        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "")
       form.setValue("slug", slug)
     }
-  }, [form.watch("name"), form])
+  }, [form.watch("name")])
 
-  // Trigger file input click programmatically
-  const triggerFileInput = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click()
+  // Auto-generate meta title from event name
+  useEffect(() => {
+    const name = form.watch("name")
+    if (name && !form.watch("meta.title")) {
+      form.setValue("meta.title", name)
     }
+  }, [form.watch("name")])
+
+  // Auto-generate meta description from description
+  useEffect(() => {
+    const description = form.watch("description")
+    if (description && !form.watch("meta.description")) {
+      const metaDesc = description.length > 160 ? description.substring(0, 157) + "..." : description
+      form.setValue("meta.description", metaDesc)
+    }
+  }, [form.watch("description")])
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click()
   }
 
-  // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const file = e.target.files?.[0]
-    if (!file) return
-
-    // Size validation (5MB max)
-    const MAX_SIZE = 5 * 1024 * 1024
-    if (file.size > MAX_SIZE) {
-      toast.error("Image must be less than 5MB")
-      return
-    }
-
-    // Set local preview
-    const reader = new FileReader()
-    reader.onload = () => {
-      setImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
-
-    // Store file for later upload
-    setEventImage(file)
-
-    // Simulate upload progress for better UX
-    setIsUploading(true)
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += 10
-      setUploadProgress(progress)
-      if (progress >= 100) {
-        clearInterval(interval)
-        setIsUploading(false)
-        toast.success("Image ready for upload")
+    if (file) {
+      setImageFile(file)
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string)
       }
-    }, 100)
+      reader.readAsDataURL(file)
+    }
   }
 
-  // Handle form submission
   const onSubmit = async (data: EventFormValues) => {
     if (!currentUser) {
-      toast.error("Please log in to create an event")
-      return
-    }
-
-    // More robust check for locations array
-    if (isLoadingLocations) {
-      toast.error("Location data is still loading. Please wait a moment and try again.")
-      return
-    }
-
-    if (!Array.isArray(locations)) {
-      console.error('Locations data is not an array. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
-      toast.error("Location data is corrupted. Please refresh the page or try again later.")
-      return
-    }
-
-    if (locations.length === 0) {
-      console.error('No locations available. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
-      toast.error("No locations are available. Please create a location first or contact an administrator.")
+      toast.error("You must be logged in to create an event")
       return
     }
 
     setIsSubmitting(true)
 
     try {
-      // Get the selected location details
-      console.log('Attempting to find location. isLoadingLocations:', isLoadingLocations, 'locations:', locations);
-      const selectedLocationData = locations?.find(loc => loc.id === data.location)
-      
-      // Check if this location requires reservations
-      const requiresReservation = locationRequiresReservation(selectedLocationData)
-      
-      if (requiresReservation) {
-        // Create an event request instead of a direct event
-        const eventRequestData = {
-          eventTitle: data.name,
-          eventDescription: data.description || '',
-          eventType: mapFormEventTypeToRequestType(data.eventType || 'other_event'),
-          locationId: data.location,
-          requestedDate: format(data.startDate, "yyyy-MM-dd"),
-          requestedTime: data.startTime || '09:00',
-          expectedAttendees: data.capacity || 10,
-          specialRequests: `Category: ${data.category || 'other'}\n` +
-                          `End Date: ${data.endDate ? format(data.endDate, "yyyy-MM-dd") : 'Same day'}\n` +
-                          `End Time: ${data.endTime || 'TBD'}\n` +
-                          `Status: ${data.status || 'published'}`
-        }
+      // Prepare event data
+      const eventData: EventFormData = {
+        ...data,
+        organizer: currentUser.id,
+        startDate: combineDateTime(data.startDate, data.startTime),
+        endDate: data.endDate && data.endTime ? combineDateTime(data.endDate, data.endTime) : undefined,
+        // Remove form-specific fields
+        startTime: undefined,
+        endTime: undefined,
+      }
 
-        // Create event request using the existing action
-        const { createEventRequest } = await import('@/app/actions')
-        const result = await createEventRequest(eventRequestData)
-
-        if (result.success) {
-          toast.success("Event request submitted successfully! The location owner will review your request.")
-          router.push("/events/requests")
-        } else {
-          throw new Error(result.message || "Failed to submit event request")
-        }
-      } else {
-        // Create event directly for locations that don't require reservations
+      // Handle image upload if present
+      if (imageFile) {
+        const formData = new FormData()
+        formData.append("file", imageFile)
         
-        // Combine date and time for proper datetime fields
-        const startDateTime = combineDateTime(data.startDate, data.startTime)
-        const endDateTime = data.endDate && data.endTime 
-          ? combineDateTime(data.endDate, data.endTime)
-          : undefined
-
-        // Calculate duration if not provided
-        let durationMinutes = data.durationMinutes
-        if (!durationMinutes && data.endDate && data.endTime) {
-          const start = new Date(startDateTime)
-          const end = new Date(endDateTime!)
-          durationMinutes = Math.round((end.getTime() - start.getTime()) / (1000 * 60))
+        const uploadResponse = await fetch("/api/upload-media", {
+          method: "POST",
+          body: formData,
+        })
+        
+        if (uploadResponse.ok) {
+          const uploadResult = await uploadResponse.json()
+          eventData.image = uploadResult.id
         }
+      }
 
-        const eventData = {
-          name: data.name,
-          slug: data.slug,
-          description: data.description,
-          
-          // Media
-          image: eventImage,
+      const result = await createEvent(eventData)
 
-          // Timing - send as ISO strings for the Events collection
-          startDate: startDateTime,
-          endDate: endDateTime,
-          durationMinutes,
-
-          // Taxonomy
-          category: data.category,
-          eventType: data.eventType,
-          sportType: data.category === "sports" ? data.sportType : undefined,
-
-          // Location
-          location: data.location,
-
-          // Capacity
-          capacity: data.capacity,
-
-          // Pricing
-          pricing: {
-            isFree: data.isFree,
-            price: data.isFree ? undefined : data.price,
-            currency: data.isFree ? undefined : data.currency,
-          },
-
-          // Registration
-          registration: {
-            requiresRegistration: data.requiresRegistration,
-            registrationDeadline: data.registrationDeadline?.toISOString(),
-            allowWaitlist: data.allowWaitlist,
-          },
-
-          // Organizer - this should be the user ID
-          organizer: currentUser.id,
-
-          // Status
-          status: data.status || "draft",
-
-          // Tags
-          tags: data.tags?.map(tag => ({ tag })) || [],
-
-          // Requirements
-          requirements: data.requirements,
-
-          // Contact Info
-          contactInfo: {
-            email: data.contactEmail,
-            phone: data.contactPhone,
-            website: data.contactWebsite,
-          },
-
-          // Meta
-          meta: data.meta ? {
-            title: data.meta.title,
-            description: data.meta.description,
-          } : undefined,
-        }
-
-        // Create event directly using the action
-        const result = await createEvent(eventData, currentUser.id, currentUser.name, currentUser.avatar)
-
-        if (result.success) {
-          toast.success("Event created successfully!")
-
-          // Redirect to event page
-          if (result.eventId) {
-            router.push(`/events/${result.eventId}`)
-          } else {
-            router.push("/events")
-          }
-        } else {
-          throw new Error(result.error || "Failed to create event")
-        }
+      if (result.success) {
+        toast.success("Event created successfully!")
+        router.push(`/events/${result.event?.id}`)
+      } else {
+        toast.error(result.error || "Failed to create event")
       }
     } catch (error) {
       console.error("Error creating event:", error)
@@ -613,7 +287,7 @@ export default function CreateEventForm() {
       for (let minute = 0; minute < 60; minute += 15) {
         const date = new Date()
         date.setHours(hour, minute, 0, 0)
-        const timeString = format(date, "h:mm a")
+        const timeString = format(date, "HH:mm")
         options.push(timeString)
       }
     }
@@ -625,9 +299,6 @@ export default function CreateEventForm() {
     { label: "Workshop", value: "workshop" },
     { label: "Concert", value: "concert" },
     { label: "Meetup", value: "meetup" },
-    { label: "Webinar", value: "webinar" },
-    { label: "Sports Matchmaking", value: "sports_matchmaking" },
-    { label: "Sports Tournament", value: "sports_tournament" },
     { label: "Social Event", value: "social_event" },
     { label: "Other", value: "other_event" },
   ]
@@ -638,54 +309,25 @@ export default function CreateEventForm() {
     { label: "Education", value: "education" },
     { label: "Social", value: "social" },
     { label: "Business", value: "business" },
-    { label: "Sports", value: "sports" },
     { label: "Other", value: "other" },
-  ]
-
-  // Sport type options
-  const sportTypeOptions = [
-    { label: "Tennis", value: "tennis" },
-    { label: "Soccer", value: "soccer" },
-    { label: "Basketball", value: "basketball" },
-    { label: "Volleyball", value: "volleyball" },
-    { label: "Running", value: "running" },
-    { label: "Cycling", value: "cycling" },
-    { label: "Swimming", value: "swimming" },
-    { label: "Golf", value: "golf" },
-    { label: "Other", value: "other_sport" },
   ]
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-8">
         <Card>
           <CardHeader>
             <CardTitle>Create a New Event</CardTitle>
             <CardDescription>Fill out the form below to create your event</CardDescription>
-            {/* Show notice if location requires reservation */}
-            {selectedLocationData && requiresReservation && (
-              <div className="mt-2 p-3 bg-orange-50 border border-orange-200 rounded-md">
-                <div className="flex items-start gap-2">
-                  <Calendar className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm">
-                    <p className="text-orange-800 font-medium">
-                      Event Request Required
-                    </p>
-                    <p className="text-orange-700">
-                      This location requires permission for events. Your request will be sent to the location owner for approval.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </CardHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <div className="px-6">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="location">Location</TabsTrigger>
+                <TabsTrigger value="privacy">Privacy</TabsTrigger>
               </TabsList>
             </div>
 
@@ -793,219 +435,105 @@ export default function CreateEventForm() {
                     </FormItem>
                   )}
                 />
-
-                {/* Sport Type - Only show if category is sports */}
-                {watchCategory === "sports" && (
-                  <FormField
-                    control={form.control}
-                    name="sportType"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sport Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select sport type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {sportTypeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>Select the specific sport for this event.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {/* Event Image */}
-                <div className="space-y-2">
-                  <FormLabel>Event Image</FormLabel>
-
-                  {!imagePreview ? (
-                    <div
-                      className="border-2 border-dashed border-muted-foreground/20 rounded-lg p-8 flex flex-col items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors cursor-pointer"
-                      onClick={triggerFileInput}
-                    >
-                      <div className="bg-[#FF6B6B]/10 rounded-full p-3 mb-3">
-                        <Upload className="h-6 w-6 text-[#FF6B6B]" />
-                      </div>
-                      <p className="text-base text-muted-foreground text-center mb-2">
-                        Drag and drop an image, or click to browse
-                      </p>
-                      <p className="text-sm text-muted-foreground text-center mb-4">
-                        Recommended size: 1200 x 800 pixels (Max: 5MB)
-                      </p>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        ref={fileInputRef}
-                        onChange={handleImageUpload}
-                        disabled={isUploading}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="cursor-pointer"
-                        type="button"
-                        disabled={isUploading}
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Uploading... {uploadProgress.toFixed(0)}%
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Upload Image
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="relative rounded-lg overflow-hidden h-[200px] border">
-                      <Image
-                        src={imagePreview || "/placeholder.svg"}
-                        alt="Event preview"
-                        className="w-full h-full object-cover"
-                        fill
-                      />
-                      <div className="absolute top-2 right-2 flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 bg-white/90 hover:bg-white rounded-full"
-                          onClick={() => {
-                            setEventImage(null)
-                            setImagePreview(null)
-                          }}
-                          type="button"
-                          disabled={isUploading}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {isUploading && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-2">
-                          <div className="h-1 bg-gray-700 mt-1">
-                            <div className="h-1 bg-white w-full" style={{ width: `${uploadProgress}%` }}></div>
-                          </div>
-                          Uploading... {uploadProgress.toFixed(0)}%
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </TabsContent>
 
             {/* Details Tab */}
             <TabsContent value="details">
               <CardContent className="space-y-6">
-                {/* Start Date and Time */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="startDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Start Date</FormLabel>
+                {/* Start Date */}
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start Date</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
+                          onChange={(e) => field.onChange(new Date(e.target.value))}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Start Time */}
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Start Time</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            value={field.value instanceof Date ? format(field.value, "yyyy-MM-dd") : field.value}
-                            onChange={(e) => field.onChange(new Date(e.target.value))}
-                          />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select start time" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormDescription>The date your event starts.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                        <SelectContent>
+                          {generateTimeOptions().map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {format(new Date(`2000-01-01T${time}`), "h:mm a")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                  <FormField
-                    control={form.control}
-                    name="startTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Start Time</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select start time" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="max-h-[200px] overflow-auto">
-                            {generateTimeOptions().map((time) => (
-                              <SelectItem key={time} value={time}>
-                                {time}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>The time your event starts.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                {/* End Date */}
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Date (Optional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          value={field.value ? format(field.value, "yyyy-MM-dd") : ""}
+                          onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
+                        />
+                      </FormControl>
+                      <FormDescription>Leave empty if event ends on the same day.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {/* End Date and Time */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="endDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End Date (Optional)</FormLabel>
+                {/* End Time */}
+                <FormField
+                  control={form.control}
+                  name="endTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>End Time (Optional)</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            value={field.value instanceof Date ? format(field.value, "yyyy-MM-dd") : ""}
-                            onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                          />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select end time" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormDescription>The date your event ends.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="endTime"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>End Time (Optional)</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select end time" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent className="max-h-[200px] overflow-auto">
-                            {generateTimeOptions().map((time) => (
-                              <SelectItem key={time} value={time}>
-                                {time}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>The time your event ends.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                        <SelectContent>
+                          {generateTimeOptions().map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {format(new Date(`2000-01-01T${time}`), "h:mm a")}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Leave empty if using duration instead.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/* Duration */}
                 <FormField
@@ -1013,19 +541,16 @@ export default function CreateEventForm() {
                   name="durationMinutes"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Duration</FormLabel>
+                      <FormLabel>Duration (minutes)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          min="15"
-                          max="1440"
-                          placeholder="Enter duration in minutes"
+                          placeholder="120"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                          value={field.value}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                         />
                       </FormControl>
-                      <FormDescription>The duration of the event in minutes.</FormDescription>
+                      <FormDescription>Event duration in minutes (used if end time is not specified).</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -1037,166 +562,56 @@ export default function CreateEventForm() {
                   name="capacity"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Maximum Participants</FormLabel>
+                      <FormLabel>Capacity (Optional)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          min="1"
-                          placeholder="Enter maximum participants"
+                          placeholder="50"
                           {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value))}
-                          value={field.value}
+                          onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
                         />
                       </FormControl>
-                      <FormDescription>The maximum number of participants allowed for this event.</FormDescription>
+                      <FormDescription>Maximum number of attendees.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                                 {/* Pricing */}
-                 <FormField
-                   control={form.control}
-                   name="isFree"
-                   render={({ field }) => (
-                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                       <FormControl>
-                         <Checkbox
-                           checked={field.value}
-                           onCheckedChange={field.onChange}
-                         />
-                       </FormControl>
-                       <div className="space-y-1 leading-none">
-                         <FormLabel>Is Event Free?</FormLabel>
-                         <FormDescription>Check if the event is free.</FormDescription>
-                       </div>
-                       <FormMessage />
-                     </FormItem>
-                   )}
-                 />
-
-                {/* Price */}
-                {!watchIsFree && (
-                  <FormField
-                    control={form.control}
-                    name="price"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Price</FormLabel>
+                {/* Status */}
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Event Status</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <Input
-                            type="number"
-                            min="0"
-                            placeholder="Enter price"
-                            {...field}
-                            onChange={(e) => field.onChange(Number(e.target.value))}
-                            value={field.value}
-                          />
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
                         </FormControl>
-                        <FormDescription>The price for the event.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                {/* Currency */}
-                {!watchIsFree && (
-                  <FormField
-                    control={form.control}
-                    name="currency"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Currency</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="Enter currency"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormDescription>The currency for the event price.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                                 {/* Registration */}
-                 <FormField
-                   control={form.control}
-                   name="requiresRegistration"
-                   render={({ field }) => (
-                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                       <FormControl>
-                         <Checkbox
-                           checked={field.value}
-                           onCheckedChange={field.onChange}
-                         />
-                       </FormControl>
-                       <div className="space-y-1 leading-none">
-                         <FormLabel>Requires Registration?</FormLabel>
-                         <FormDescription>Check if registration is required for this event.</FormDescription>
-                       </div>
-                       <FormMessage />
-                     </FormItem>
-                   )}
-                 />
-
-                {/* Registration Deadline */}
-                {watchRequiresRegistration && (
-                  <FormField
-                    control={form.control}
-                    name="registrationDeadline"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Registration Deadline</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="date"
-                            {...field}
-                            value={field.value instanceof Date ? format(field.value, "yyyy-MM-dd") : ""}
-                            onChange={(e) => field.onChange(e.target.value ? new Date(e.target.value) : undefined)}
-                          />
-                        </FormControl>
-                        <FormDescription>The deadline for registering for this event.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                                 {/* Allow Waitlist */}
-                 {watchRequiresRegistration && (
-                   <FormField
-                     control={form.control}
-                     name="allowWaitlist"
-                     render={({ field }) => (
-                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                         <FormControl>
-                           <Checkbox
-                             checked={field.value}
-                             onCheckedChange={field.onChange}
-                           />
-                         </FormControl>
-                         <div className="space-y-1 leading-none">
-                           <FormLabel>Allow Waitlist?</FormLabel>
-                           <FormDescription>Allow users to join a waitlist if the event is full.</FormDescription>
-                         </div>
-                         <FormMessage />
-                       </FormItem>
-                     )}
-                   />
-                 )}
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="published">Published</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                          <SelectItem value="postponed">Postponed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Current status of the event.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 {/* Tags */}
                 <div className="space-y-2">
-                  <FormLabel>Event Tags</FormLabel>
+                  <FormLabel>Tags</FormLabel>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="Add a tag"
+                      placeholder="Add a tag..."
                       value={currentTag}
                       onChange={(e) => setCurrentTag(e.target.value)}
-                      onKeyPress={(e) => {
+                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
                           if (currentTag.trim()) {
@@ -1247,58 +662,13 @@ export default function CreateEventForm() {
                   </div>
                   <FormDescription>Add tags to help users find your event.</FormDescription>
                 </div>
-
-                {/* Requirements */}
-                <FormField
-                  control={form.control}
-                  name="requirements"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Special Requirements</FormLabel>
-                      <FormControl>
-                        <Textarea 
-                          placeholder="Any special requirements, equipment needed, age restrictions, etc." 
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormDescription>Any special requirements for attendees.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {/* Status */}
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Event Status</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="draft">Draft</SelectItem>
-                          <SelectItem value="published">Published</SelectItem>
-                          <SelectItem value="cancelled">Cancelled</SelectItem>
-                          <SelectItem value="postponed">Postponed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Current status of the event.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </CardContent>
             </TabsContent>
 
             {/* Location Tab */}
             <TabsContent value="location">
               <CardContent className="space-y-6">
-                {/* Location (from locations collection) */}
+                {/* Location Search */}
                 <FormField
                   control={form.control}
                   name="location"
@@ -1307,35 +677,20 @@ export default function CreateEventForm() {
                       <FormLabel>Location</FormLabel>
                       <FormControl>
                         <LocationSearch
-                          value={field.value}
-                          onChange={field.onChange}
                           onLocationSelect={(location) => {
                             field.onChange(location.id)
-                            // Optionally store the location name and address for display
-                            setSelectedLocation({
-                              id: location.id,
-                              name: location.name,
-                              address: location.address,
-                            })
+                            setSelectedLocation(location)
                           }}
+                          selectedLocation={selectedLocation}
                         />
                       </FormControl>
                       <FormDescription>
-                        Select from existing locations or add a new one. The location includes details like address,
-                        business hours, and accessibility information.
+                        Search for a location where your event will take place.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
-                {/* Optionally, display the selected location details: */}
-                {selectedLocation && (
-                  <div className="mt-2 text-sm">
-                    <p className="font-medium">{selectedLocation.name}</p>
-                    <p className="text-muted-foreground">{selectedLocation.address}</p>
-                  </div>
-                )}
 
                 {/* Meta Information */}
                 <div className="space-y-4 border rounded-lg p-4">
@@ -1371,56 +726,31 @@ export default function CreateEventForm() {
                     )}
                   />
                 </div>
+              </CardContent>
+            </TabsContent>
 
-                {/* Contact Information */}
-                <div className="space-y-4 border rounded-lg p-4">
-                  <h3 className="text-lg font-medium">Contact Information</h3>
-
-                  <FormField
-                    control={form.control}
-                    name="contactEmail"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contact Email</FormLabel>
-                        <FormControl>
-                          <Input type="email" placeholder="Enter contact email" {...field} />
-                        </FormControl>
-                        <FormDescription>Email for event inquiries.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="contactPhone"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contact Phone</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Enter contact phone" {...field} />
-                        </FormControl>
-                        <FormDescription>Phone number for event inquiries.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="contactWebsite"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Contact Website</FormLabel>
-                        <FormControl>
-                          <Input type="url" placeholder="Enter website URL" {...field} />
-                        </FormControl>
-                        <FormDescription>Website for more event information.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            {/* Privacy Tab */}
+            <TabsContent value="privacy">
+              <CardContent>
+                <PrivacySelector
+                  privacy={watchPrivacy}
+                  onPrivacyChange={(privacy) => form.setValue("privacy", privacy)}
+                  privateAccess={form.watch("privateAccess") || []}
+                  onPrivateAccessChange={(userIds) => form.setValue("privateAccess", userIds)}
+                  currentUserId={currentUser?.id || ""}
+                />
+                
+                {/* Debug info */}
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="mt-4 p-3 bg-gray-100 rounded text-xs">
+                    <p><strong>Debug Info:</strong></p>
+                    <p>Current User: {currentUser ? `${currentUser.name} (${currentUser.id})` : 'Not loaded'}</p>
+                    <p>Current User ID: {currentUser?.id || 'Not set'}</p>
+                    <p>Privacy: {watchPrivacy}</p>
+                    <p>Private Access Count: {(form.watch("privateAccess") || []).length}</p>
+                    <p>User Loading: {currentUser ? 'Loaded' : 'Loading...'}</p>
+                  </div>
+                )}
               </CardContent>
             </TabsContent>
           </Tabs>
@@ -1430,19 +760,10 @@ export default function CreateEventForm() {
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  {requiresReservation ? 'Submitting Request...' : 'Creating Event...'}
+                  Creating Event...
                 </>
               ) : (
-                <>
-                  {requiresReservation ? (
-                    <>
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Submit Event Request
-                    </>
-                  ) : (
-                    "Create Event"
-                  )}
-                </>
+                "Create Event"
               )}
             </Button>
           </CardContent>

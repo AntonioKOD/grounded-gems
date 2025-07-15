@@ -56,6 +56,7 @@
     "@capacitor/splash-screen": "^7.0.1",
     "@capacitor/status-bar": "^7.0.1",
     "@capacitor/toast": "^7.0.1",
+    "@hello-pangea/dnd": "^18.0.1",
     "@hookform/resolvers": "^5.0.1",
     "@next/third-parties": "^15.3.2",
     "@payloadcms/db-mongodb": "^3.37.0",

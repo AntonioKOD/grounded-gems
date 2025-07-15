@@ -76,7 +76,7 @@ export default function SimpleMapComponent({
       Entertainment: "#FF66E3",
       Default: "#FF6B6B",
     }
-    return colors[category] || colors.Default
+    return colors[category] || colors.Default || "#6C757D"
   }, [])
 
   // Check for WebGL support
@@ -162,8 +162,6 @@ export default function SimpleMapComponent({
         mapRef.current = null
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Only initialize once - don't include dependencies that would cause re-initialization
   }, [isWebGLSupported])
 
   // Replace the style change useEffect with this:

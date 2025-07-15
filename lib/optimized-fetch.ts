@@ -126,7 +126,7 @@ class OptimizedFetch {
       abortController.abort()
     }, timeout)
 
-    let lastError: Error
+    let lastError: Error | undefined
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -227,6 +227,9 @@ class OptimizedFetch {
 
     clearTimeout(timeoutId)
     this.abortControllers.delete(cacheKey)
+    if (!lastError) {
+      lastError = new Error('Unknown error occurred during fetch')
+    }
 
     log.error('All fetch attempts failed', { url, method, error: lastError.message })
     throw lastError
@@ -237,7 +240,7 @@ class OptimizedFetch {
     if (cacheControl) {
       const maxAgeMatch = cacheControl.match(/max-age=(\d+)/)
       if (maxAgeMatch) {
-        return parseInt(maxAgeMatch[1]) * 1000 // Convert to milliseconds
+        return parseInt(maxAgeMatch[1]!) * 1000 // Convert to milliseconds
       }
     }
     
@@ -342,7 +345,8 @@ class OptimizedFetch {
 const optimizedFetch = new OptimizedFetch()
 
 // Export the instance and convenience function
-export { optimizedFetch, FetchOptions, FetchResponse }
+export { optimizedFetch }
+export type { FetchOptions, FetchResponse }
 export default optimizedFetch.fetch.bind(optimizedFetch)
 
 // Export convenience methods

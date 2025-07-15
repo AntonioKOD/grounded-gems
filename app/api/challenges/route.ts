@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     
     // Update user interaction states if user is logged in
     if (user?.id && challenges.docs.length > 0) {
-      await updateUserInteractionStates(challenges.docs, user.id, payload)
+      await updateUserInteractionStates(challenges.docs, user?.id as string, payload)
     }
     
     // Transform challenges for frontend

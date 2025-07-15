@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import type React from "react"
@@ -11,7 +10,7 @@ import { Separator } from "@/components/ui/separator"
 import { Calendar, Filter, Plus, Loader2, UserCircle, MapPin, Clock, ChevronDown, Search, SlidersHorizontal, X, Bookmark, Sparkles } from 'lucide-react'
 import { EventCard } from "@/components/event/event-card"
 import EventsFilter from "@/components/event/events-filter"
-import { getNearbyEventsAction, getUserEventsByCategory, getNotifications, getSavedGemJourneys, unsaveGemJourney } from "@/app/(frontend)/events/actions"
+import { getNearbyEventsAction, getUserEventsByCategory, getSavedGemJourneys, unsaveGemJourney } from "@/app/(frontend)/events/actions"
 import type { Event } from "@/types/event"
 import { toast } from "sonner"
 import Link from "next/link"
@@ -40,7 +39,7 @@ export default function EventsContainer({
     typeof initialSearchParams === "string"
       ? initialSearchParams
       : Object.entries(initialSearchParams)
-          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+          .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value as string)}`)
           .join("&")
   )
   const [isPending, startTransition] = useTransition()
@@ -64,7 +63,6 @@ export default function EventsContainer({
   })
   const [searchQuery, setSearchQuery] = useState("")
   const [sortOption, setSortOption] = useState("distance")
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [viewMode, setViewMode] = useState("grid") // grid or list
   const [isFilterApplied, setIsFilterApplied] = useState(false)
 
@@ -626,6 +624,7 @@ export default function EventsContainer({
               className="border-[#FF6B6B] text-[#FF6B6B]"
               disabled={isPending}
             >
+              <X className="h-4 w-4 mr-1" />
               Clear Filters
             </Button>
           )}

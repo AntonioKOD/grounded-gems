@@ -148,11 +148,11 @@ export async function POST(req: NextRequest) {
     ];
 
     const isPrivateVenue = privateVenueCategories.some(category => 
-      locationCategories.some(locCat => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
+      locationCategories.some((locCat: string) => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
     );
 
     const isPublicSpace = publicSpaceCategories.some(category => 
-      locationCategories.some(locCat => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
+      locationCategories.some((locCat: string) => locCat.toLowerCase().includes(category.toLowerCase()) || category.toLowerCase().includes(locCat.toLowerCase()))
     );
 
     console.log('Venue type analysis:', { isPrivateVenue, isPublicSpace, categories: locationCategories });
@@ -320,8 +320,10 @@ export async function POST(req: NextRequest) {
           if (locationOwner?.email) {
             const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/profile/${locationOwnerId}/location-dashboard`;
             
+            const ownerName = typeof locationOwner.name === 'string' ? locationOwner.name : 'Location Owner';
+            const ownerEmail = typeof locationOwner.email === 'string' ? locationOwner.email : '';
             const emailTemplate = eventRequestEmailTemplate.toOwner({
-              ownerName: locationOwner.name || 'Location Owner',
+              ownerName,
               requesterName: user.name || 'Someone',
               eventTitle,
               locationName: location.name,
@@ -330,11 +332,13 @@ export async function POST(req: NextRequest) {
               dashboardUrl,
             });
 
-            await sendEmail({
-              to: locationOwner.email,
-              subject: emailTemplate.subject,
-              html: emailTemplate.html,
-            });
+            if (ownerEmail) {
+              await sendEmail({
+                to: ownerEmail,
+                subject: emailTemplate.subject,
+                html: emailTemplate.html,
+              });
+            }
 
             console.log('Email notification sent to location owner:', locationOwner.email);
           }
@@ -358,12 +362,14 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('Error creating event request:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      data: error.data || 'No additional data'
-    });
+    if (error && typeof error === 'object') {
+      console.error('Error details:', {
+        message: (error as any).message,
+        stack: (error as any).stack,
+        name: (error as any).name,
+        data: (error as any).data || 'No additional data'
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to create event request' },
       { status: 500 }
@@ -664,32 +670,37 @@ export async function PUT(req: NextRequest) {
               if (status === 'approved') {
                 const createEventUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/events/create?locationId=${eventRequest.location.id}&approved=true&requestId=${requestId}`;
                 
+                const ownerEmail2 = typeof locationOwner.email === 'string' ? locationOwner.email : '';
+                const requesterName = typeof requester.name === 'string' ? requester.name : 'User';
                 emailTemplate = eventRequestEmailTemplate.approvalNotification({
-                  requesterName: requester.name || 'User',
+                  requesterName,
                   eventTitle: eventRequest.eventTitle,
                   locationName: eventRequest.location.name,
-                  ownerEmail: locationOwner.email,
+                  ownerEmail: ownerEmail2,
                   createEventUrl,
                   approvalNotes,
                 });
               } else if (status === 'denied') {
+                const ownerEmail3 = typeof locationOwner.email === 'string' ? locationOwner.email : '';
+                const requesterName2 = typeof requester.name === 'string' ? requester.name : 'User';
                 emailTemplate = eventRequestEmailTemplate.denialNotification({
-                  requesterName: requester.name || 'User',
+                  requesterName: requesterName2,
                   eventTitle: eventRequest.eventTitle,
                   locationName: eventRequest.location.name,
-                  ownerEmail: locationOwner.email,
+                  ownerEmail: ownerEmail3,
                   denialReason,
                 });
               }
 
               if (emailTemplate) {
-                await sendEmail({
-                  to: requester.email,
-                  subject: emailTemplate.subject,
-                  html: emailTemplate.html,
-                });
-
-                console.log('Email notification sent to requester:', requester.email);
+                const requesterEmail = typeof requester.email === 'string' ? requester.email : '';
+                if (requesterEmail) {
+                  await sendEmail({
+                    to: requesterEmail,
+                    subject: emailTemplate.subject,
+                    html: emailTemplate.html,
+                  });
+                }
               }
             }
           } catch (emailError) {

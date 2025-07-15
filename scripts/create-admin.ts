@@ -4,8 +4,7 @@ import config from '../payload.config'
 const createAdminUser = async () => {
   try {
     const payload = await getPayload({ 
-      config,
-      secret: 'your-super-secret-key-here-make-it-long-and-random-123456789'
+      config
     })
 
     console.log('Creating admin user...')
@@ -26,13 +25,14 @@ const createAdminUser = async () => {
     console.log('\nYou can now log into PayloadCMS at: http://localhost:3000/admin')
     
   } catch (error) {
-    if (error.message.includes('already registered')) {
+    if (typeof error === 'object' && error && 'message' in error && typeof (error as any).message === 'string' && (error as any).message.includes('already registered')) {
       console.log('⚠️ Admin user already exists')
       console.log('Email: admin@sacavia.com')
       console.log('Password: admin123')
       console.log('\nYou can log into PayloadCMS at: http://localhost:3000/admin')
     } else {
-      console.error('❌ Error creating admin user:', error.message)
+      const msg = typeof error === 'object' && error && 'message' in error ? (error as any).message : String(error)
+      console.error('❌ Error creating admin user:', msg)
     }
   }
 

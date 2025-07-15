@@ -1,463 +1,246 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
-import type React from "react"
+import { useState, useEffect, useRef } from 'react'
+import { Search, MapPin, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { toast } from 'sonner'
 
-import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Search, Loader2, Check, MapPin, Plus } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { z } from "zod"
-import { Input } from "@/components/ui/input"
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form"
-import { toast } from "sonner"
-import { createLocation } from "@/app/(frontend)/events/actions"
-import { cn } from "@/lib/utils"
-import { Card, CardContent } from "@/components/ui/card"
-
-const newLocSchema = z.object({
-  name: z.string().min(3, { message: "Name must be at least 3 characters" }),
-  address: z.object({
-    street: z.string().min(3, { message: "Street address is required" }),
-    city: z.string().min(2, { message: "City is required" }),
-    state: z.string().min(2, { message: "State is required" }),
-    zip: z.string().min(2, { message: "ZIP code is required" }),
-    country: z.string().min(2, { message: "Country is required" }),
-  }),
-})
-type NewLoc = z.infer<typeof newLocSchema>
-
-interface Loc {
+interface Location {
   id: string
   name: string
-  address: string
+  description?: string
+  address?: {
+    street?: string
+    city?: string
+    state?: string
+    zip?: string
+    country?: string
+  }
+  featuredImage?: {
+    url: string
+  }
+  categories?: Array<{
+    name: string
+  }>
 }
 
-interface Props {
-  value: string
-  onChange: (id: string) => void
-  onLocationSelect: (loc: Loc) => void
+interface LocationSearchProps {
+  onLocationSelect: (location: Location) => void
+  selectedLocation?: Location | null
+  className?: string
 }
 
-export function LocationSearch({ value, onChange, onLocationSelect }: Props) {
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
+export default function LocationSearch({
+  onLocationSelect,
+  selectedLocation,
+  className = ""
+}: LocationSearchProps) {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [locations, setLocations] = useState<Loc[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [selected, setSelected] = useState<Loc | null>(null)
-  const [hasSearched, setHasSearched] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
+  const [showResults, setShowResults] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
 
-  // Debug counter
-  const renderCount = useRef(0)
   useEffect(() => {
-    renderCount.current += 1
-    console.log(`[LocationSearch] Render #${renderCount.current}`, {
-      value,
-      selected,
-      locations,
-      searchQuery,
-      loading,
-      error,
-      hasSearched,
-    })
-  })
-
-  // Sync incoming value → selected
-  useEffect(() => {
-    if (!value) {
-      setSelected(null)
-      return
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowResults(false)
+      }
     }
 
-    // If in current locations list
-    const found = locations.find((l) => l.id === value)
-    if (found) {
-      setSelected(found)
-      return
-    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
-    // Otherwise fetch it by ID
-    console.log(`[LocationSearch] Fetching location by ID: ${value}`)
-    fetch(`/api/locations/${value}`)
-      .then((r) => r.json())
-      .then((json) => {
-        console.log(`[LocationSearch] Location by ID response:`, json)
-        if (json.success && json.locations?.[0]) {
-          const loc = json.locations[0]
-          setSelected({ id: loc.id, name: loc.name, address: loc.address })
-        }
-      })
-      .catch((err) => {
-        console.error(`[LocationSearch] Error fetching location by ID:`, err)
-      })
-  }, [value, locations])
-
-  // Handle search submission
-  const handleSearch = async () => {
-    if (searchQuery.length < 2) {
-      toast.error("Please enter at least 2 characters to search")
+  const searchLocations = async (query: string) => {
+    if (!query.trim()) {
+      setLocations([])
       return
     }
 
     setLoading(true)
-    setError(null)
-    setHasSearched(true)
-
     try {
-      console.log(`[LocationSearch] Searching for: "${searchQuery}"`)
-      const res = await fetch("/api/locations/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: searchQuery }),
-      })
-
-      if (!res.ok) throw new Error(res.statusText)
-
-      const json = await res.json()
-      console.log(`[LocationSearch] Search response:`, json)
-
-      if (json.success) {
-        setLocations(json.locations)
+      const response = await fetch(`/api/locations/search?q=${encodeURIComponent(query)}&limit=10`)
+      if (response.ok) {
+        const data = await response.json()
+        setLocations(data.locations || [])
       } else {
-        throw new Error(json.error || "Unexpected response format")
+        console.error('Failed to search locations')
+        toast.error('Failed to search locations')
       }
-    } catch (e: any) {
-      console.error(`[LocationSearch] Search error:`, e)
-      setError(e.message)
-      setLocations([])
+    } catch (error) {
+      console.error('Error searching locations:', error)
+      toast.error('Failed to search locations')
     } finally {
       setLoading(false)
     }
   }
 
-  // Handle key press in search input
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      handleSearch()
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setSearchTerm(value)
+    
+    if (value.trim()) {
+      setShowResults(true)
+      // Debounce the search
+      const timeoutId = setTimeout(() => {
+        searchLocations(value)
+      }, 300)
+      
+      return () => clearTimeout(timeoutId)
+    } else {
+      setShowResults(false)
+      setLocations([])
     }
+    return undefined
   }
 
-  // select handler
-  const handleSelect = (loc: Loc) => {
-    console.log(`[LocationSearch] Selected location:`, loc)
-    setSelected(loc)
-    onChange(loc.id)
-    onLocationSelect(loc)
-    // Keep the search results visible
+  const handleLocationSelect = (location: Location) => {
+    onLocationSelect(location)
+    setSearchTerm(location.name)
+    setShowResults(false)
+    setLocations([])
   }
 
-  // new-location form
-  const form = useForm<NewLoc>({
-    resolver: zodResolver(newLocSchema),
-    defaultValues: {
-      name: "",
-      address: {
-        street: "",
-        city: "",
-        state: "",
-        zip: "",
-        country: "United States",
-      },
-    },
-  })
+  const clearSelection = () => {
+    onLocationSelect(null as any)
+    setSearchTerm('')
+  }
 
-  const onSubmit = form.handleSubmit(async (data) => {
-    console.log(`[LocationSearch] Submitting new location:`, data)
-    setIsSubmitting(true)
-    try {
-      const res = await createLocation(data)
-      console.log(`[LocationSearch] Create location result:`, res)
-      if (res.success && res.location) {
-        const loc: Loc = {
-          id: res.location.id as string,
-          name: res.location.name,
-          address: `${data.address.street}, ${data.address.city}`,
-        }
-        handleSelect(loc)
-        toast.success("Location created successfully!")
-        setDialogOpen(false)
-        form.reset()
-      } else throw new Error(res.error || "Failed to create location")
-    } catch (e: any) {
-      console.error(`[LocationSearch] Create location error:`, e)
-      toast.error(e.message || "Failed to create location")
-    } finally {
-      setIsSubmitting(false)
-    }
-  })
+  const getAddressString = (location: Location) => {
+    if (!location.address) return ''
+    const { street, city, state, zip, country } = location.address
+    const parts = [street, city, state, zip, country].filter(Boolean)
+    return parts.join(', ')
+  }
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase()
+      .substring(0, 2)
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Search Bar with Submit Button */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Input
-            ref={searchInputRef}
-            id="location-search"
-            name="locationSearch"
-            type="text"
-            placeholder="Search locations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={handleKeyPress}
-            className="pr-10"
-          />
-          {loading && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            </div>
-          )}
-        </div>
-        <Button onClick={handleSearch} disabled={loading || searchQuery.length < 2}>
-          <Search className="h-4 w-4 mr-2" />
-          Search
-        </Button>
+    <div className={`relative ${className}`} ref={searchRef}>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Input
+          placeholder="Search for a location..."
+          value={searchTerm}
+          onChange={handleSearchChange}
+          className="pl-10 pr-10"
+          disabled={!!selectedLocation}
+        />
+        {selectedLocation && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearSelection}
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
-      {/* Selected Location Display */}
-      {selected && (
-        <Card className="bg-muted/50">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="font-medium text-lg">{selected.name}</div>
-                <div className="text-sm text-muted-foreground flex items-center mt-1">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  {selected.address}
-                </div>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelected(null)
-                  onChange("")
-                }}
-              >
-                Change
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Search Results */}
-      {hasSearched && !loading && (
-        <Card>
+      {showResults && (
+        <Card className="absolute top-full left-0 right-0 z-50 mt-1 shadow-lg border">
           <CardContent className="p-0">
-            {/* Error State */}
-            {error && (
-              <div className="p-4 text-center">
-                <p className="text-sm text-destructive mb-2">Error: {error}</p>
-                <Button variant="outline" size="sm" onClick={handleSearch}>
-                  Try Again
-                </Button>
+            {loading ? (
+              <div className="p-4 text-center text-gray-500">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                Searching locations...
               </div>
-            )}
-
-            {/* No Results */}
-            {!error && locations.length === 0 && (
-              <div className="p-6 text-center">
-                <p className="text-sm text-muted-foreground mb-3">No locations found for &quot;{searchQuery}&quot;</p>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDialogOpen(true)
-                    form.setValue("name", searchQuery)
-                  }}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add New Location
-                </Button>
+            ) : locations.length === 0 && searchTerm.trim() ? (
+              <div className="p-4 text-center text-gray-500">
+                <MapPin className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                <p>No locations found</p>
+                <p className="text-sm">Try a different search term</p>
               </div>
-            )}
-
-            {/* Results List */}
-            {!error && locations.length > 0 && (
-              <div>
-                <div className="px-4 py-2 border-b">
-                  <p className="text-sm text-muted-foreground">
-                    {locations.length} location{locations.length !== 1 ? "s" : ""} found
-                  </p>
-                </div>
-                <ul className="divide-y">
-                  {locations.map((loc) => (
-                    <li
-                      key={loc.id}
-                      className={cn(
-                        "p-3 hover:bg-muted/50 cursor-pointer flex items-start",
-                        selected?.id === loc.id ? "bg-muted" : "",
-                      )}
-                      onClick={() => handleSelect(loc)}
-                    >
-                      <div className="mr-3 mt-1">
-                        <Check
-                          className={cn("h-4 w-4", selected?.id === loc.id ? "text-primary" : "text-transparent")}
-                        />
-                      </div>
-                      <div>
-                        <div className="font-medium">{loc.name}</div>
-                        <div className="text-xs text-muted-foreground flex items-center mt-1">
-                          <MapPin className="h-3 w-3 mr-1" />
-                          {loc.address}
-                        </div>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="p-3 border-t">
-                  <Button
-                    variant="link"
-                    className="w-full justify-center"
-                    onClick={() => {
-                      setDialogOpen(true)
-                    }}
+            ) : (
+              <div className="max-h-60 overflow-y-auto">
+                {locations.map((location) => (
+                  <div
+                    key={location.id}
+                    className="p-3 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 transition-colors"
+                    onClick={() => handleLocationSelect(location)}
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add New Location
-                  </Button>
-                </div>
+                    <div className="flex items-start gap-3">
+                      <Avatar className="h-10 w-10 flex-shrink-0">
+                        <AvatarImage 
+                          src={location.featuredImage?.url} 
+                          alt={location.name} 
+                        />
+                        <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm">
+                          {getInitials(location.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium text-gray-900 truncate">
+                            {location.name}
+                          </h4>
+                          {location.categories && location.categories.length > 0 && location.categories[0] && (
+                            <Badge variant="outline" className="text-xs">
+                              {location.categories[0].name}
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {location.description && (
+                          <p className="text-sm text-gray-600 line-clamp-2 mb-1">
+                            {location.description}
+                          </p>
+                        )}
+                        
+                        {getAddressString(location) && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {getAddressString(location)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
         </Card>
       )}
 
-      {/* Add New Location Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add New Location</DialogTitle>
-            <DialogDescription>
-              Enter the details for the new location. Fields marked with * are required.
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={onSubmit} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Name *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Location name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+      {selectedLocation && (
+        <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8">
+              <AvatarImage 
+                src={selectedLocation.featuredImage?.url} 
+                alt={selectedLocation.name} 
               />
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium">Address</h3>
-
-                <FormField
-                  control={form.control}
-                  name="address.street"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Street *</FormLabel>
-                      <FormControl>
-                        <Input placeholder="123 Main St" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="address.city"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>City *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="City" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="address.state"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>State *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="State" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="address.zip"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>ZIP Code *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="ZIP code" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="address.country"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Country *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Country" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={isSubmitting}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Creating...
-                    </>
-                  ) : (
-                    <>Create</>
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+              <AvatarFallback className="bg-green-600 text-white text-xs">
+                {getInitials(selectedLocation.name)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <h4 className="font-medium text-green-900">{selectedLocation.name}</h4>
+              {getAddressString(selectedLocation) && (
+                <p className="text-xs text-green-700">{getAddressString(selectedLocation)}</p>
+              )}
+            </div>
+            <Badge variant="outline" className="text-green-700 border-green-300">
+              Selected
+            </Badge>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

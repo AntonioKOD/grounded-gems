@@ -65,7 +65,7 @@ const RATING_DISTRIBUTION = {
 }
 
 export default function EventReviews({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  
   eventId,
   rating,
   reviewCount,

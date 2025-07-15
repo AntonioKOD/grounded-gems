@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
   try {
     const parts = token.split('.')
     if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1]))
+      // Add type check to ensure token is defined
+      const payload = parts[1] ? JSON.parse(Buffer.from(parts[1], 'base64').toString()) : {};
       // Check if token is expired
       if (payload.exp && payload.exp * 1000 < Date.now()) {
         return new NextResponse(

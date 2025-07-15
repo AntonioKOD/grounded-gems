@@ -16,9 +16,9 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     const weekNumber = Math.ceil(((now.getTime() - new Date(now.getFullYear(), 0, 1).getTime()) / 86400000 + 1) / 7)
     
-    let currentChallenges = []
-    let votingOptions = []
-    let userVotes = []
+    let currentChallenges: any[] = []
+    let votingOptions: any[] = []
+    let userVotes: any[] = []
 
     try {
       // First, let's check what collections exist

@@ -1,4 +1,6 @@
 import { CollectionConfig } from 'payload'
+import { getPayload } from 'payload'
+import config from '@/payload.config'
 
 export const Payouts: CollectionConfig = {
   slug: 'payouts',

@@ -12,9 +12,8 @@ const rateLimitStore = new Map<string, { count: number; timestamp: number; attem
 const loginAttemptsStore = new Map<string, { count: number; timestamp: number }>()
 
 // Helper to get client IP
-export function getClientIP(request: NextRequest): string {
+export async function getClientIP(request: NextRequest): Promise<string> {
   return (
-    request.ip ||
     request.headers.get('x-forwarded-for')?.split(',')[0] ||
     request.headers.get('x-real-ip') ||
     request.headers.get('cf-connecting-ip') ||
@@ -23,7 +22,7 @@ export function getClientIP(request: NextRequest): string {
 }
 
 // Rate limiting middleware
-export function withRateLimit(
+export async function withRateLimit(
   endpoint: keyof typeof SECURITY_CONFIG.RATE_LIMIT.MAX_REQUESTS,
   customLimit?: number
 ) {
@@ -68,7 +67,7 @@ export function withRateLimit(
 }
 
 // Authentication middleware
-export function withAuth(requireAuth: boolean = true) {
+export async function withAuth(requireAuth: boolean = true) {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       if (!requireAuth) {
@@ -109,7 +108,7 @@ export function withAuth(requireAuth: boolean = true) {
 }
 
 // Input validation middleware
-export function withValidation(schema: any) {
+export async function withValidation(schema: any) {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       try {
@@ -158,7 +157,7 @@ export function withValidation(schema: any) {
 }
 
 // CORS middleware
-export function withCORS(allowedOrigins?: string[]) {
+export async function withCORS(allowedOrigins?: string[]) {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       const origin = request.headers.get('origin')
@@ -198,7 +197,7 @@ export function withCORS(allowedOrigins?: string[]) {
 }
 
 // Security headers middleware
-export function withSecurityHeaders() {
+export async function withSecurityHeaders() {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       const response = await handler(request, ...args)
@@ -217,7 +216,7 @@ export function withSecurityHeaders() {
 }
 
 // Login attempt tracking
-export function trackLoginAttempt(ip: string, success: boolean) {
+export async function trackLoginAttempt(ip: string, success: boolean) {
   const now = Date.now()
   const record = loginAttemptsStore.get(ip)
 
@@ -230,7 +229,8 @@ export function trackLoginAttempt(ip: string, success: boolean) {
   }
 
   // Reset if window expired
-  if ((now - record.timestamp) > SECURITY_CONFIG.AUTH.LOCKOUT_DURATION) {
+  const lockoutDuration = (SECURITY_CONFIG.AUTH as any).LOCKOUT_DURATION ?? 0
+  if ((now - record.timestamp) > lockoutDuration) {
     record.count = success ? 0 : 1
     record.timestamp = now
     return true
@@ -243,7 +243,8 @@ export function trackLoginAttempt(ip: string, success: boolean) {
 
   record.count++
   
-  if (record.count >= SECURITY_CONFIG.AUTH.MAX_LOGIN_ATTEMPTS) {
+  const maxLoginAttempts = (SECURITY_CONFIG.AUTH as any).MAX_LOGIN_ATTEMPTS ?? 5
+  if (record.count >= maxLoginAttempts) {
     console.warn(`Login attempts exceeded for IP: ${ip}`)
     return false
   }
@@ -252,20 +253,22 @@ export function trackLoginAttempt(ip: string, success: boolean) {
 }
 
 // Check if IP is locked out
-export function isIPLockedOut(ip: string): boolean {
+export async function isIPLockedOut(ip: string): Promise<boolean> {
   const record = loginAttemptsStore.get(ip)
   if (!record) return false
 
   const now = Date.now()
-  if ((now - record.timestamp) > SECURITY_CONFIG.AUTH.LOCKOUT_DURATION) {
+  const lockoutDuration2 = (SECURITY_CONFIG.AUTH as any).LOCKOUT_DURATION ?? 0
+  if ((now - record.timestamp) > lockoutDuration2) {
     return false
   }
 
-  return record.count >= SECURITY_CONFIG.AUTH.MAX_LOGIN_ATTEMPTS
+  const maxLoginAttempts2 = (SECURITY_CONFIG.AUTH as any).MAX_LOGIN_ATTEMPTS ?? 5
+  return record.count >= maxLoginAttempts2
 }
 
 // Admin access middleware - restricts access to specific email
-export function withAdminAccess() {
+export async function withAdminAccess() {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       try {
@@ -283,9 +286,9 @@ export function withAdminAccess() {
           )
         }
 
-        // Check if user email matches the allowed admin email
-        const allowedAdminEmail = SECURITY_CONFIG.AUTH.ADMIN_EMAIL
-        if (result.user.email !== allowedAdminEmail) {
+        // Check if user email matches the allowed admin emails
+        const allowedAdminEmails = Array.from(SECURITY_CONFIG.AUTH.ADMIN_EMAILS).map(String)
+        if (!result.user.email || !allowedAdminEmails.includes(result.user.email)) {
           console.warn(`Unauthorized admin API access attempt from: ${result.user.email}`)
           return NextResponse.json(
             { 
@@ -316,14 +319,14 @@ export function withAdminAccess() {
 }
 
 // Compose multiple middlewares
-export function createSecureHandler(...middlewares: any[]) {
+export async function createSecureHandler(...middlewares: any[]) {
   return function (handler: Function) {
     return middlewares.reduceRight((acc, middleware) => middleware(acc), handler)
   }
 }
 
 // Error handling wrapper
-export function withErrorHandling() {
+export async function withErrorHandling() {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
       try {
@@ -350,7 +353,7 @@ export function withErrorHandling() {
 }
 
 // Content validation for user-generated content
-export function validateContent(content: string): { isValid: boolean; sanitized: string; warnings: string[] } {
+export async function validateContent(content: string): Promise<{ isValid: boolean; sanitized: string; warnings: string[] }> {
   const warnings: string[] = []
   let sanitized = sanitizeInput(content)
 

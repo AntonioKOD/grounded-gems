@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { getServerSideUser } from '@/lib/auth-server'
 import { redirect } from 'next/navigation'
 import CreatorApplicationForm from '@/components/creator/creator-application-form'

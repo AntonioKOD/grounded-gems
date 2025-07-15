@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -90,57 +89,49 @@ export default function MapExplorer() {
   }, [])
 
   // Load locations - simplified
-  useEffect(() => {
-    let isMounted = true
+  const loadLocations = async () => {
+    let isMounted = true;
+    try {
+      console.log("🔄 Loading locations...")
+      setIsLoading(true)
+      setError(null)
 
-    const loadLocations = async () => {
-      try {
-        console.log("🔄 Loading locations...")
-        setIsLoading(true)
-        setError(null)
+      const locations = await addedLocations()
 
-        const locations = await addedLocations()
+      if (!isMounted) return
 
-        if (!isMounted) return
+      console.log(`✅ Loaded ${locations.length} locations`)
+      setAllLocations(locations)
+      setFilteredLocations(locations)
 
-        console.log(`✅ Loaded ${locations.length} locations`)
-        setAllLocations(locations)
-        setFilteredLocations(locations)
-
-        // Extract categories
-        const uniqueCategories: Map<string, any> = new Map()
-        locations.forEach((loc) => {
-          if (loc.categories && Array.isArray(loc.categories)) {
-            loc.categories.forEach((cat: string | { id: string; name?: string }) => {
-              if (typeof cat === "string") {
-                uniqueCategories.set(cat, { id: cat, name: cat })
-              } else if (cat && cat.id) {
-                uniqueCategories.set(cat.id, cat)
-              }
-            })
-          }
-        })
-
-        if (isMounted) {
-          setCategories(Array.from(uniqueCategories.values()))
+      // Extract categories
+      const uniqueCategories: Map<string, any> = new Map()
+      locations.forEach((loc) => {
+        if (loc.categories && Array.isArray(loc.categories)) {
+          loc.categories.forEach((cat: string | { id: string; name?: string }) => {
+            if (typeof cat === "string") {
+              uniqueCategories.set(cat, { id: cat, name: cat })
+            } else if (cat && cat.id) {
+              uniqueCategories.set(cat.id, cat)
+            }
+          })
         }
-      } catch (err) {
-        console.error("Error loading locations:", err)
-        if (isMounted) {
-          setError("Failed to load locations. Please try again.")
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false)
-        }
-      }
+      })
+
+      setCategories(Array.from(uniqueCategories.values()))
+    } catch (err) {
+      console.error("Error loading locations:", err)
+      setError("Failed to load locations. Please try again.")
+    } finally {
+      setIsLoading(false)
     }
-
-    loadLocations()
-    
     return () => {
-      isMounted = false
+      isMounted = false;
     }
+  }
+
+  useEffect(() => {
+    loadLocations();
   }, [])
 
   // Handle URL category parameter
@@ -672,7 +663,6 @@ export default function MapExplorer() {
                             <Checkbox
                               id={`category-${category.id}`}
                               checked={selectedCategories.includes(category.id)}
-                              readOnly
                             />
                             <span>{category.name || category.id}</span>
                           </DropdownMenuItem>
@@ -726,7 +716,6 @@ export default function MapExplorer() {
                         <Checkbox
                           id={`category-${category.id}`}
                           checked={selectedCategories.includes(category.id)}
-                          readOnly
                         />
                         <span>{category.name || category.id}</span>
                       </DropdownMenuItem>
@@ -803,9 +792,8 @@ export default function MapExplorer() {
                   locations={filteredLocations}
                   selectedLocation={selectedLocation}
                   onLocationSelect={handleLocationSelect}
-                  searchQuery={searchQuery}
                   isLoading={isLoading}
-                  currentUser={currentUser}
+                  currentUser={currentUser || undefined}
                   onViewDetail={handleViewDetailsFromPreview}
                 />
               )}
@@ -830,9 +818,8 @@ export default function MapExplorer() {
                 locations={filteredLocations}
                 selectedLocation={selectedLocation}
                 onLocationSelect={handleLocationSelect}
-                searchQuery={searchQuery}
                 isLoading={isLoading}
-                currentUser={currentUser}
+                currentUser={currentUser || undefined}
                 onViewDetail={handleViewDetailsFromPreview}
               />
             </div>
@@ -873,7 +860,7 @@ export default function MapExplorer() {
       {/* Render LocationBottomSheet for CLUSTER preview on mobile */}
       {isMobile && showClusterBottomSheet && clusterPreviewData && (
         <LocationBottomSheet
-          location={clusterPreviewData.isCluster ? null : clusterPreviewData.locations[0]} // Pass single location if not a cluster
+          location={clusterPreviewData.isCluster ? null : (clusterPreviewData.locations[0] ?? null)} // Pass single location if not a cluster
           isOpen={showClusterBottomSheet}
           onClose={closeClusterBottomSheet}
           onViewDetails={handleViewDetailsFromPreview} // This opens LocationDetailMobile

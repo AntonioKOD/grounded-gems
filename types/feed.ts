@@ -7,6 +7,7 @@ export interface User {
     followingCount?: number
     isFollowing?: boolean
     status?: string
+    profileImage?: { url: string }
   }
   
   export interface Location {
@@ -72,6 +73,7 @@ export interface User {
     | 'story_highlight'
     | 'event_suggestion'
     | 'challenge_card'
+    | 'mini_blog_card'
   
   export interface BaseFeedItem {
     id: string
@@ -88,7 +90,7 @@ export interface User {
     post: Post
   }
   
-  export interface PeopleSuggestionItem extends FeedItem {
+  export interface PeopleSuggestionItem extends BaseFeedItem {
     type: 'people_suggestion'
     people: {
       id: string
@@ -107,7 +109,7 @@ export interface User {
     }
   }
   
-  export interface PlaceRecommendationItem extends FeedItem {
+  export interface PlaceRecommendationItem extends BaseFeedItem {
     type: 'place_recommendation'
     place: {
       id: string
@@ -158,7 +160,7 @@ export interface User {
     promotionType?: 'featured' | 'new_release' | 'bestseller' | 'trending'
   }
   
-  export interface WeeklyFeatureItem extends FeedItem {
+  export interface WeeklyFeatureItem extends BaseFeedItem {
     type: 'weekly_feature'
     feature: {
       id: string
@@ -269,7 +271,7 @@ export interface User {
     }
   }
   
-  export interface MiniBlogCardItem extends FeedItem {
+  export interface MiniBlogCardItem extends BaseFeedItem {
     type: 'mini_blog_card'
     blog: {
       id: string

@@ -178,9 +178,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
 
   const handleLocationDenied = () => {
     setShowLocationEnforcer(false)
-    // You can choose to block signup or allow it without location
-    // For now, we'll allow signup but show a warning
-    setError("Location is required for the best experience. You can still sign up, but some features may be limited.")
+    // Location is optional, so we just close the enforcer without showing an error
   }
 
   const toggleInterest = (interestId: string) => {
@@ -257,7 +255,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username && userData.usernameValid && locationPermissionGranted
+      case 1: return userData.email && userData.password && passwordStrength >= 2 && userData.name && userData.username && userData.usernameValid
       case 2: return userData.interests.length > 0
       case 3: return userData.primaryUseCase && userData.travelRadius && userData.budgetPreference
       default: return false
@@ -269,13 +267,6 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
     setStatus("loading")
 
     try {
-      // Ensure we have coordinates
-      if (!userData.location?.coordinates?.latitude || !userData.location?.coordinates?.longitude) {
-        setShowLocationEnforcer(true)
-        setStatus("idle")
-        return
-      }
-
       // Validate username before sending
       if (!userData.username || userData.username.length < 3) {
         throw new Error("Username must be at least 3 characters long.")
@@ -299,10 +290,10 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         email: userData.email,
         password: userData.password,
         name: userData.name,
-        coords: {
+        coords: userData.location?.coordinates ? {
           latitude: userData.location.coordinates.latitude,
           longitude: userData.location.coordinates.longitude,
-        },
+        } : undefined,
         // Additional data will be saved via a separate API call after user creation
         additionalData: {
           username: userData.username,
@@ -322,7 +313,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         email: signupData.email,
         name: signupData.name,
         username: signupData.additionalData.username,
-        hasCoords: !!signupData.coords.latitude
+        hasCoords: !!signupData.coords?.latitude
       })
 
       await signupUser(signupData)
@@ -430,9 +421,9 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
               <LocationPermissionEnforcer
                 onLocationGranted={handleLocationGranted}
                 onLocationDenied={handleLocationDenied}
-                required={true}
-                title="Location Required for Signup"
-                description="We need your location to provide personalized recommendations and show you nearby places. This is required to create your account."
+                required={false}
+                title="Enable Location (Optional)"
+                description="Sharing your location helps us provide personalized recommendations and show you nearby places. You can skip this and add it later."
               />
             </div>
           )}
@@ -556,7 +547,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+                <Label htmlFor="location">Location (Optional)</Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -577,7 +568,7 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
                     <span>Location enabled - GPS coordinates captured</span>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-500">Location permission required for signup</p>
+                  <p className="text-xs text-gray-500">Location is optional but helps personalize your experience</p>
                 )}
               </div>
 

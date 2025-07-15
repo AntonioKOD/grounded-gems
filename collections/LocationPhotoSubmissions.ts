@@ -36,8 +36,9 @@ export const LocationPhotoSubmissions: CollectionConfig = {
       defaultLimit: 50,
     },
     preview: (doc) => {
-      if (doc?.location?.name && doc?.category) {
-        return `${doc.location.name} - ${doc.category}`;
+      const locationName = (doc?.location && (doc.location as any).name) ? (doc.location as any).name : null;
+      if (locationName && doc?.category) {
+        return `${locationName} - ${doc.category}`;
       }
       return `Photo Submission ${doc.id}`;
     },

@@ -87,9 +87,9 @@ export default function NavigationWrapper({ initialUser }: NavigationWrapperProp
         
         const [navBarModule, mobileNavModule, mobileTopNavModule] = await Promise.all(componentPromises);
         
-        setNavBar(() => navBarModule.default);
-        setMobileNavigation(() => mobileNavModule.default);
-        setMobileTopNavbar(() => mobileTopNavModule.default);
+        setNavBar(() => navBarModule?.default || null);
+        setMobileNavigation(() => mobileNavModule?.default || null);
+        setMobileTopNavbar(() => mobileTopNavModule?.default || null);
         setComponentsLoaded(true);
       } catch (error) {
         console.error('Error loading navigation components:', error);

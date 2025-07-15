@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     const user = users.docs[0]
 
     // Check if user is already verified
-    if (user._verified) {
+    if (user?._verified) {
       return NextResponse.json(
         { error: 'Email is already verified' },
         { status: 400 }
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     // Verify the user
     const updatedUser = await payload.update({
       collection: 'users',
-      id: user.id,
+      id: user?.id as string,
       data: {
         _verified: true,
         _verificationToken: null, // Clear the token

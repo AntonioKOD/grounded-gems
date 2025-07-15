@@ -108,13 +108,13 @@ export async function GET(request: NextRequest) {
       page,
       limit,
       sort,
-      populate: [
-        'creator',
-        'creator.profileImage',
-        'primaryLocation',
-        'locations.location',
-        'featuredImage'
-      ]
+      populate: {
+        creator: {},
+        'creator.profileImage': {},
+        primaryLocation: {},
+        'locations.location': {},
+        featuredImage: {}
+      }
     })
     
     console.log(`✅ Found ${result.docs.length} guides`)
@@ -172,8 +172,8 @@ export async function POST(request: NextRequest) {
     console.log('🔍 Creating guide with status:', data.status)
     
     // Create a proper request object with headers for authentication
-    const req = {
-      headers: Object.fromEntries(request.headers.entries()),
+    const req: any = {
+      headers: request.headers,
       user: null
     }
     
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
           format: '',
           indent: 0,
           version: 1,
-          children: data.content.split('\n\n').map(paragraph => ({
+          children: data.content.split('\n\n').map((paragraph: string) => ({
             type: 'paragraph',
             format: '',
             indent: 0,
@@ -217,7 +217,7 @@ export async function POST(request: NextRequest) {
                 version: 1
               }
             ]
-          })).filter(p => p.children[0].text.length > 0)
+          })).filter((p: any) => p.children[0].text.length > 0)
         }
       } : {
         root: {
@@ -259,7 +259,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating guide:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to create guide', details: error.message },
+      { success: false, error: 'Failed to create guide', details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }

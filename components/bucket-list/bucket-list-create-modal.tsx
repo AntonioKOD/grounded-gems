@@ -135,7 +135,7 @@ export default function BucketListCreateModal({
           status: 'not_started',
           addedAt: new Date().toISOString()
         }))
-        items = [...items, ...manualItems]
+        items = [...items, ...manualItems] as any
       }
 
       const response = await fetch('/api/bucket-lists', {

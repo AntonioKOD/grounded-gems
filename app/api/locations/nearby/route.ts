@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       .slice(0, limit)
 
     // Format locations for frontend
-    const formattedLocations = nearbyLocations.map(loc => {
+    const formattedLocations = nearbyLocations.map((loc: any) => {
       if (!loc) return null
 
       const addressParts = [

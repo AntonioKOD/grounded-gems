@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 
 import { useEffect, useRef, useState, useCallback, memo } from "react"
@@ -519,7 +518,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     initializeMap()
     
     return () => {
-      console.log('🗺️ Cleaning up map...')
+      console.log('🧹 Cleaning up map...')
       if (mapRef.current) {
         try {
           mapRef.current.remove()
@@ -924,7 +923,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         e.stopPropagation()
         touchStartTime = Date.now()
         const touch = e.touches[0]
-        touchStartPos = { x: touch.clientX, y: touch.clientY }
+        touchStartPos = { x: touch?.clientX || 0, y: touch?.clientY || 0 }
         hasMoved = false
         
         // Visual feedback for touch - minimal changes to avoid positioning issues
@@ -940,8 +939,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       if (currentIsMobile) {
         const touch = e.touches[0]
         const moveDistance = Math.sqrt(
-          Math.pow(touch.clientX - touchStartPos.x, 2) + 
-          Math.pow(touch.clientY - touchStartPos.y, 2)
+          Math.pow(touch?.clientX || 0 - touchStartPos.x, 2) + 
+          Math.pow(touch?.clientY || 0 - touchStartPos.y, 2)
         )
         
         // Consider it a move if finger moved more than 10px
@@ -1238,18 +1237,18 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
       if (cluster.locations.length === 1) {
         // Single location - create normal marker
         const location = cluster.locations[0]
-        const lng = location.longitude
-        const lat = location.latitude
+        const lng = location?.longitude || 0
+        const lat = location?.latitude || 0
         
         if (!isValidCoordinate(lat, lng)) {
-          console.warn(`Invalid coordinates for location ${location.name}:`, { lat, lng })
+          console.warn(`Invalid coordinates for location ${location?.name}:`, { lat, lng })
           return
         }
         
-        console.log(`Creating single marker for ${location.name} at [${lng}, ${lat}]`)
+        console.log(`Creating single marker for ${location?.name} at [${lng}, ${lat}]`)
         
-        const isSelected = selectedLocation?.id === location.id
-        const markerEl = createMarkerElement(location, isSelected)
+        const isSelected = selectedLocation?.id === location?.id
+        const markerEl = createMarkerElement(location || {} as Location, isSelected)
         
         if (isSelected) {
           markerEl.classList.add('selected')
@@ -1266,7 +1265,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           .setLngLat([lng, lat])
           .addTo(mapRef.current)
         
-        markersRef.current.set(location.id, {
+        markersRef.current.set(location?.id || '', {
           marker,
           element: markerEl,
           location,
@@ -1286,7 +1285,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         
         console.log(`Creating cluster marker for ${cluster.locations.length} locations at [${cluster.center[0]}, ${cluster.center[1]}]`)
         
-        const markerEl = createMarkerElement(primaryLocation, isSelected, cluster, true)
+        const markerEl = createMarkerElement(primaryLocation || {} as Location, isSelected, cluster, true)
         
         const marker = new window.mapboxgl.Marker({
           element: markerEl,
@@ -1487,11 +1486,11 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
     setMapLoaded(false)
     setMapReady(false)
     mapInitializedRef.current = false
-    
     // Re-initialize map with a delay
     setTimeout(() => {
       if (isMountedRef.current) {
-        initializeMap()
+        // The map initialization logic is handled by the main useEffect, so just update state and refs
+        // The useEffect will re-run due to state changes
       }
     }, 500)
   }, [])

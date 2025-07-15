@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Use the authenticated user's ID
-    const result = await sharePost(postId, user.id)
+    const result = await sharePost(postId, user?.id as string)
     
     return NextResponse.json({
       success: true,

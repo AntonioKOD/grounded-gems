@@ -67,7 +67,7 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
     
     // Decode payload to check expiration (basic validation)
     try {
-      const payload = JSON.parse(atob(parts[1]))
+      const payload = JSON.parse(atob(parts[1] || ''))
       
       // Check token expiration
       if (payload.exp && payload.exp * 1000 < Date.now()) {
@@ -93,7 +93,7 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const userAgent = request.headers.get('user-agent') || ''
-  const ip = request.ip || request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown'
   const url = request.nextUrl.clone()
   
   console.log(`🔍 [Middleware] Processing: ${pathname}`)
@@ -198,6 +198,7 @@ export async function middleware(request: NextRequest) {
 
       let payload
       try {
+        if (!parts[1]) throw new Error('Invalid token payload')
         payload = JSON.parse(atob(parts[1]))
       } catch {
         console.log(`🚫 [Middleware] Invalid token payload for admin access`)

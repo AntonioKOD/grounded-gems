@@ -60,7 +60,7 @@ export async function POST(
           // Remove save
           await payload.delete({
             collection: 'user-saved-locations',
-            id: existingSave.docs[0].id
+            id: existingSave.docs[0]?.id as string
           })
           
           return NextResponse.json({ 
@@ -109,6 +109,11 @@ export async function POST(
       }
     }
 
+    // Fallback: if type is not handled, return error
+    return NextResponse.json(
+      { error: 'Invalid interaction type' },
+      { status: 400 }
+    );
   } catch (error) {
     console.error('Error in location interactions:', error)
     return NextResponse.json(

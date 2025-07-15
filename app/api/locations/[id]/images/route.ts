@@ -25,7 +25,7 @@ export async function GET(
 
     // Validate and return image data
     const validation = validateLocationImages({
-      id: location.id,
+      id: location?.id as string,
       name: location.name,
       featuredImage: location.featuredImage,
       gallery: location.gallery
@@ -188,7 +188,7 @@ export async function PATCH(
 
     // Validate the updated images
     const validation = validateLocationImages({
-      id: updatedLocation.id,
+      id: updatedLocation?.id as string,
       name: updatedLocation.name,
       featuredImage: updatedLocation.featuredImage,
       gallery: updatedLocation.gallery
@@ -250,7 +250,7 @@ export async function POST(
         data: {
           alt: `${location.name} - ${file.name}`
         },
-        file
+        file: file as any
       })
       
       uploadedImages.push({
@@ -306,7 +306,7 @@ export async function POST(
 
     // Validate the updated images
     const validation = validateLocationImages({
-      id: updatedLocation.id,
+      id: updatedLocation?.id as string,
       name: updatedLocation.name,
       featuredImage: updatedLocation.featuredImage,
       gallery: updatedLocation.gallery

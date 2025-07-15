@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client"
 
 import Link from "next/link"
@@ -68,7 +66,6 @@ export default function NavBar({ initialUser }: NavBarProps) {
         avatar: user.avatar,
         hasProfileImageUrl: !!user.profileImage?.url,
         profileImageStructure: user.profileImage ? {
-          id: user.profileImage.id,
           url: user.profileImage.url,
           filename: user.profileImage.filename,
           sizes: user.profileImage.sizes ? Object.keys(user.profileImage.sizes) : null

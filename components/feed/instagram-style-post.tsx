@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge"
 import { CommentSystemDark } from "../post/comment-system-dark"
 import { getImageUrl, getVideoUrl } from '@/lib/image-utils'
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 
 // Define a type for the Media object based on the provided JSON
 interface PayloadMediaObject {
@@ -137,9 +137,9 @@ const SocialMediaPost = memo(function SocialMediaPost({
   // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
     // If post has a media array from API, use it directly (this is the correct approach for videos)
-    if (Array.isArray(post.media) && post.media.length > 0) {
-      console.log(`📱 InstagramStylePost ${post.id} using API media array:`, post.media)
-      return post.media.map((item: any) => ({
+    if (Array.isArray((post as any).media) && (post as any).media.length > 0) {
+      console.log(`📱 InstagramStylePost ${post.id} using API media array:`, (post as any).media)
+      return (post as any).media.map((item: any) => ({
         type: item.type,
         url: item.url,
         thumbnail: item.thumbnail,
@@ -150,7 +150,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
     // Fallback: reconstruct from individual fields (legacy support)
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
     
-    const imageUrl = getImageUrl(post.image || post.featuredImage)
+    const imageUrl = getImageUrl(post.image || (post as any).featuredImage)
     const videoUrl = getVideoUrl(post.video)
     const photos = Array.isArray(post.photos) 
       ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
@@ -188,13 +188,13 @@ const SocialMediaPost = memo(function SocialMediaPost({
     
     console.log(`📱 InstagramStylePost ${post.id} using fallback media construction:`, items)
     return items
-  }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.id])
+  }, [(post as any).media, post.image, (post as any).featuredImage, post.video, post.photos, post.id])
 
   // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {
-    const url = getImageUrl(post.image || post.featuredImage)
+    const url = getImageUrl(post.image || (post as any).featuredImage)
     return url !== "/placeholder.svg" ? url : null
-  }, [post.image, post.featuredImage])
+  }, [post.image, (post as any).featuredImage])
 
   const videoUrl = useMemo(() => {
     return getVideoUrl(post.video)
@@ -444,7 +444,7 @@ const SocialMediaPost = memo(function SocialMediaPost({
       {/* Media Navigation Indicators */}
       {mediaItems.length > 1 && (
         <div className="absolute top-4 md:top-6 left-1/2 -translate-x-1/2 z-20 flex gap-1">
-          {mediaItems.map((_, index) => (
+          {mediaItems.map((_: any, index: number) => (
             <button
               key={index}
               onClick={() => setCurrentMediaIndex(index)}

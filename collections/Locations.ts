@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload';
+// import type { Access, AccessResult } from 'payload/config';
 
 export const Locations: CollectionConfig = {
   slug: 'locations',
@@ -7,10 +8,49 @@ export const Locations: CollectionConfig = {
     plural: 'Locations',
   },
   access: {
-    read: () => true,
-    create: () => true,
-    update: () => true,
-    delete: () => true,
+    read: ({ req }) => {
+      // If no user is logged in, only show public locations
+      if (!req.user) {
+        // Only show public, published locations to unauthenticated users
+        return {
+          privacy: { equals: 'public' },
+          status: { equals: 'published' }
+        } as any;
+      }
+
+      // If user is logged in, show public locations and private locations they have access to, or their own
+      return {
+        or: [
+          { privacy: { equals: 'public' }, status: { equals: 'published' } },
+          { privacy: { equals: 'private' }, privateAccess: { in: [req.user.id] } },
+          { createdBy: { equals: req.user.id } }
+        ]
+      } as any;
+    },
+    create: ({ req }) => {
+      // Any authenticated user can create locations
+      return !!req.user;
+    },
+    update: async ({ req }) => {
+      // Users can update their own locations, admins can update any
+      if (!req.user) return false;
+      
+      if (req.user.role === 'admin') return true;
+      
+      return {
+        createdBy: { equals: req.user.id }
+      };
+    },
+    delete: async ({ req }) => {
+      // Users can delete their own locations, admins can delete any
+      if (!req.user) return false;
+      
+      if (req.user.role === 'admin') return true;
+      
+      return {
+        createdBy: { equals: req.user.id }
+      };
+    },
   },
   hooks: {
     beforeChange: [
@@ -508,6 +548,28 @@ export const Locations: CollectionConfig = {
       ],
     },
     { name: 'createdBy', type: 'relationship', relationTo: 'users' },
+    {
+      name: 'privacy',
+      type: 'select',
+      defaultValue: 'public',
+      options: [
+        { label: '🌍 Public', value: 'public' },
+        { label: '🔒 Private', value: 'private' },
+      ],
+      admin: {
+        description: 'Control who can see this location'
+      }
+    },
+    {
+      name: 'privateAccess',
+      type: 'relationship',
+      relationTo: 'users',
+      hasMany: true,
+      admin: {
+        description: 'Friends who can access this private location',
+        condition: (data) => data.privacy === 'private'
+      }
+    },
     {
       name: 'status',
       type: 'select',

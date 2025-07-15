@@ -33,7 +33,7 @@ export async function POST(
     }
 
     // Use the authenticated user's ID
-    const result = await savePost(postId, user.id, shouldSave)
+    const result = await savePost(postId, user?.id as string, shouldSave)
     
     return NextResponse.json(result)
   } catch (error) {

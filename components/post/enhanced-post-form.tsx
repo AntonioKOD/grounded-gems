@@ -20,7 +20,7 @@ import { createPost } from "@/app/actions"
 import { useLocationSearch, type LocationResult } from "@/hooks/useLocationSearch"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
-import { isValidUrl } from "@/lib/validation"
+
 import { getImageUrl } from "@/lib/image-utils"
 
 interface EnhancedPostFormProps {
@@ -320,13 +320,13 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     if (type === 'image') {
       setSelectedFiles(prev => prev.filter((_, i) => i !== index))
       setPreviewUrls(prev => {
-        URL.revokeObjectURL(prev[index])
+        URL.revokeObjectURL(prev[index] || '')
         return prev.filter((_, i) => i !== index)
       })
     } else {
       setSelectedVideos(prev => prev.filter((_, i) => i !== index))
       setVideoPreviewUrls(prev => {
-        URL.revokeObjectURL(prev[index])
+        URL.revokeObjectURL(prev[index] || '')
         return prev.filter((_, i) => i !== index)
       })
     }

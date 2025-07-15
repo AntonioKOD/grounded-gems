@@ -43,7 +43,7 @@ export function LocationSearch({
   const [locations, setLocations] = useState<LocationOption[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const debounceRef = useRef<NodeJS.Timeout>()
+  const debounceRef = useRef<NodeJS.Timeout>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Fetch locations with debounced search

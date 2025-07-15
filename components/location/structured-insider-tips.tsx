@@ -202,8 +202,11 @@ export default function StructuredInsiderTips({
 
   // Group tips by category for compact view
   const groupedTips = compact ? sortedTips.reduce((groups, tip) => {
-    if (!groups[tip.category]) groups[tip.category] = []
-    groups[tip.category].push(tip)
+    const category = tip.category
+    if (!groups[category]) {
+      groups[category] = []
+    }
+    groups[category]!.push(tip)
     return groups
   }, {} as Record<string, StructuredTip[]>) : null
 

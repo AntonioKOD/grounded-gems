@@ -75,7 +75,7 @@ const InteractiveMap = memo(function InteractiveMap(props: InteractiveMapProps) 
   // Wrap in a div to ensure proper container handling with navigation key
   return (
     <div className="w-full h-full relative" key={`map-${mapKey}`}>
-      <MapComponent {...props} onMarkerClick={handleMarkerClick} mapPadding={props.mapPadding} isDetailModalOpen={props.isDetailModalOpen} />
+      <MapComponent {...props} onMarkerClick={handleMarkerClick} mapPadding={props.mapPadding} />
     </div>
   )
 })

@@ -9,23 +9,32 @@ export const isAdminOrCreatedBy: Access = async ({ req, req: { user }, data, id 
   
   // For guides, we need to check the creator field
   // For events, we need to check the createdBy field
-  // We can determine this from the collection context
+  // Since we can't determine collection from req context, we'll try both
   if (id) {
-    // Try to get collection from request context
-    const collection = req.collection?.config?.slug
-    
-    if (collection === 'guides') {
-      const doc = await req.payload.findByID({
+    try {
+      // Try guides first
+      const guideDoc = await req.payload.findByID({
         collection: 'guides',
         id,
       })
-      return doc.creator?.id === user.id || doc.creator === user.id
-    } else if (collection === 'events') {
-      const doc = await req.payload.findByID({
+      if (guideDoc && (guideDoc.creator?.id === user.id || guideDoc.creator === user.id)) {
+        return true
+      }
+    } catch (error) {
+      // Document not found in guides, try events
+    }
+    
+    try {
+      // Try events
+      const eventDoc = await req.payload.findByID({
         collection: 'events',
         id,
       })
-      return doc.createdBy === user.id
+      if (eventDoc && eventDoc.createdBy === user.id) {
+        return true
+      }
+    } catch (error) {
+      // Document not found in events
     }
   }
   

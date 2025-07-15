@@ -168,7 +168,7 @@ export default function WeeklyFeatureCard({
       const weeklySync = getWeeklyFeedSync()
       weeklySync.broadcastInteraction('content_shared', {
         featureId: item.feature.id,
-        method: navigator.share ? 'native' : 'clipboard',
+        method: typeof navigator.share === 'function' ? 'native' : 'clipboard',
         timestamp: new Date().toISOString()
       })
     } catch (error) {
@@ -253,11 +253,10 @@ export default function WeeklyFeatureCard({
   const getRealContent = () => {
     try {
       const content = item.feature.content || {}
-      
       return {
-        locations: Array.isArray(content.locations) ? content.locations : [],
-        posts: Array.isArray(content.posts) ? content.posts : [],
-        challenges: Array.isArray(content.challenges) ? content.challenges : []
+        locations: Array.isArray((content as any).locations) ? (content as any).locations : [],
+        posts: Array.isArray((content as any).posts) ? (content as any).posts : [],
+        challenges: Array.isArray((content as any).challenges) ? (content as any).challenges : []
       }
     } catch (error) {
       console.error('Error getting real content:', error)
@@ -369,7 +368,7 @@ export default function WeeklyFeatureCard({
   const renderLocationContent = () => (
     <div className="space-y-4">
       {realContent.locations.length > 0 ? (
-        realContent.locations.map((location, index) => {
+        realContent.locations.map((location: any, index: number) => {
           // Validate location data
           if (!location || !location.id || !location.name) {
             console.warn('Invalid location data:', location)
@@ -472,7 +471,7 @@ export default function WeeklyFeatureCard({
   const renderPostContent = () => (
     <div className="space-y-4">
       {realContent.posts.length > 0 ? (
-        realContent.posts.map((post, index) => {
+        realContent.posts.map((post: any, index: number) => {
           // Validate post data
           if (!post || !post.id) {
             console.warn('Invalid post data:', post)
@@ -490,7 +489,7 @@ export default function WeeklyFeatureCard({
               <Avatar className="w-12 h-12">
                 <AvatarImage src={post.author?.avatar} alt={post.author?.name} />
                 <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#4ECDC4] text-white">
-                  {post.author?.name?.split(' ').map(n => n[0]).join('') || 'U'}
+                  {post.author?.name?.split(' ').map((n: string) => n[0]).join('') || 'U'}
                 </AvatarFallback>
               </Avatar>
               
@@ -554,7 +553,7 @@ export default function WeeklyFeatureCard({
   const renderChallengeContent = () => (
     <div className="space-y-4">
       {realContent.challenges.length > 0 ? (
-        realContent.challenges.map((challenge, index) => {
+        realContent.challenges.map((challenge: any, index: number) => {
           // Validate challenge data
           if (!challenge || !challenge.id || !challenge.title) {
             console.warn('Invalid challenge data:', challenge)
@@ -705,11 +704,11 @@ export default function WeeklyFeatureCard({
                 {/* Sync status indicator */}
                 <div className="flex items-center gap-1 ml-2">
                   {syncStatus === 'connected' ? (
-                    <Wifi className="h-3 w-3 text-green-300" title="Synced across tabs" />
+                    <Wifi className="h-3 w-3 text-green-300" />
                   ) : syncStatus === 'connecting' ? (
                     <div className="h-3 w-3 border border-white/50 border-t-transparent rounded-full animate-spin" title="Connecting..." />
                   ) : (
-                    <WifiOff className="h-3 w-3 text-red-300" title="Not synced" />
+                    <WifiOff className="h-3 w-3 text-red-300" />
                   )}
                   {isSynced && lastUpdateTime && (
                     <span className="text-xs opacity-75" title={`Last updated: ${lastUpdateTime}`}>
@@ -855,14 +854,14 @@ export default function WeeklyFeatureCard({
                   <div className="p-3 bg-gray-50 rounded-xl text-center">
                     <div className="text-2xl font-bold text-[#FF6B6B] flex items-center justify-center gap-2">
                       <Users className="w-5 h-5" />
-                      {weeklyInsights?.activeExplorers || item.feature.content?.insights?.activeExplorers || 0}
+                      {weeklyInsights?.activeExplorers || ((item.feature.content as any)?.insights?.activeExplorers) || 0}
                     </div>
                     <div className="text-xs text-gray-600">Active explorers</div>
                   </div>
                   <div className="p-3 bg-gray-50 rounded-xl text-center">
                     <div className="text-2xl font-bold text-[#4ECDC4] flex items-center justify-center gap-2">
                       <Eye className="w-5 h-5" />
-                      {weeklyInsights?.newDiscoveries || item.feature.content?.insights?.newDiscoveries || 0}
+                      {weeklyInsights?.newDiscoveries || ((item.feature.content as any)?.insights?.newDiscoveries) || 0}
                     </div>
                     <div className="text-xs text-gray-600">New discoveries</div>
                   </div>
@@ -873,8 +872,10 @@ export default function WeeklyFeatureCard({
                     <TrendingUp className="w-4 h-4 text-[#FF6B6B]" />
                     Trending This Week
                   </h5>
-                  {(weeklyInsights?.trending || item.feature.content?.insights?.trending || []).length > 0 ? (
-                    (weeklyInsights?.trending || item.feature.content?.insights?.trending || []).map((trend, index) => (
+                  {(
+                    (weeklyInsights?.trending || ((item.feature.content as any)?.insights?.trending) || []) as any[]
+                  ).length > 0 ? (
+                    ((weeklyInsights?.trending || ((item.feature.content as any)?.insights?.trending) || []) as any[]).map((trend: any, index: number) => (
                       <div key={index} className="flex items-center gap-2 text-sm text-gray-600">
                         <div className="w-1.5 h-1.5 bg-[#FF6B6B] rounded-full" />
                         <span>{trend}</span>
@@ -888,7 +889,7 @@ export default function WeeklyFeatureCard({
                 </div>
 
                 {/* Additional real insights */}
-                {weeklyInsights && weeklyInsights.goals && weeklyInsights.goals.length > 0 && (
+                {weeklyInsights && Array.isArray(weeklyInsights.goals) && weeklyInsights.goals.length > 0 && (
                   <div className="mt-6 space-y-3">
                     <h5 className="font-medium text-gray-800 flex items-center gap-2">
                       <Target className="w-4 h-4 text-[#4ECDC4]" />
@@ -914,7 +915,7 @@ export default function WeeklyFeatureCard({
                 )}
 
                 {/* Show message when no insights are available */}
-                {!weeklyInsights && !item.feature.content?.insights && (
+                {!weeklyInsights && !(item.feature.content as any)?.insights && (
                   <div className="mt-6 text-center py-8 text-gray-500">
                     <Target className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p className="text-sm">Weekly insights coming soon!</p>

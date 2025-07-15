@@ -22,9 +22,9 @@ import {
   Crown,
   Zap,
   Bell,
+  Camera,
   Plus,
   Edit,
-  Photo,
   Clock,
   Phone,
   Mail,
@@ -275,7 +275,7 @@ export default function BusinessDashboard({ businessClaim, currentUser }: Busine
                   <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                        <Photo className="h-4 w-4 text-purple-600" />
+                        <Camera className="h-4 w-4 text-purple-600" />
                       </div>
                       <div>
                         <p className="text-sm font-medium">New photos uploaded</p>
@@ -373,7 +373,7 @@ export default function BusinessDashboard({ businessClaim, currentUser }: Busine
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Photo className="h-5 w-5" />
+                  <Camera className="h-5 w-5" />
                   Photo Management
                 </CardTitle>
               </CardHeader>
@@ -387,7 +387,7 @@ export default function BusinessDashboard({ businessClaim, currentUser }: Busine
                   <div className="grid grid-cols-2 gap-2">
                     {[1, 2, 3, 4].map((i) => (
                       <div key={i} className="aspect-square bg-gray-200 rounded-lg flex items-center justify-center">
-                        <Photo className="h-8 w-8 text-gray-400" />
+                        <Camera className="h-8 w-8 text-gray-400" />
                       </div>
                     ))}
                   </div>

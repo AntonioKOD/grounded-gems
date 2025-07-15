@@ -82,14 +82,13 @@ export default function OptimizedImage({
       console.warn('OptimizedImage: Known broken URL detected, using fallback:', src)
       setHasError(true)
       setIsLoading(false)
-      setActualSrc('/placeholder-image.svg')
       return
     }
     
     // Reset states when src changes to a potentially valid URL
     setHasError(false)
     setIsLoading(true)
-    setActualSrc(src)
+  
     
     // Debug logging for blob storage URLs
     if (src.includes('.blob.vercel-storage.com') || src.includes('/api/media/')) {
@@ -106,7 +105,7 @@ export default function OptimizedImage({
       console.warn('💡 Development hint: If using PayloadCMS with Vercel Blob Storage, ensure BLOB_READ_WRITE_TOKEN is set in .env.local')
       setHasError(true)
       setIsLoading(false)
-      setActualSrc('/placeholder-image.svg')
+    
       onError?.()
     }, 3000) // Reduced timeout for faster fallback
 
@@ -152,7 +151,6 @@ export default function OptimizedImage({
     // If this isn't already the fallback, try switching to fallback
     if (actualSrc !== '/placeholder-image.svg') {
       console.log('OptimizedImage: Switching to fallback image')
-      setActualSrc('/placeholder-image.svg')
     }
     
     onError?.()

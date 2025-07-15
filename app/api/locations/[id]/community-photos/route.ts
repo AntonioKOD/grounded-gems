@@ -16,11 +16,9 @@ export async function GET(
     const payload = await getPayload({ config });
 
     // Build query for approved photos only
-    const where = { 
-      and: [
-        { location: { equals: locationId } },
-        { status: { equals: 'approved' } }
-      ]
+    const where = {
+      location: { equals: locationId },
+      status: { equals: 'approved' }
     };
 
     const submissions = await payload.find({

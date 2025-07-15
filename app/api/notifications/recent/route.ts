@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // app/api/notifications/recent/route.ts
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';

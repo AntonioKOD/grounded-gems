@@ -46,11 +46,8 @@ const __dirname = path.dirname(__filename)
 export default buildConfig({
   admin: {
     user: Users.slug,
-    buildPath: path.resolve(__dirname, './build'),
     meta: {
       titleSuffix: '- Sacavia',
-      favicon: '/favicon.ico',
-      ogImage: '/logo.png',
     },
   },
 

@@ -20,20 +20,21 @@ export const Guides: CollectionConfig = {
       // Admin can read all guides
       const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
       if (user?.role === 'admin' || adminEmails.includes(user?.email || '')) return true
-      
-      // Public can read published guides, creators can read their own guides
+
+      // Public can read published guides
       if (!user) {
         return {
           status: { equals: 'published' }
-        }
+        } as any
       }
-      
+
+      // Creators can read their own guides and published guides
       return {
         or: [
           { status: { equals: 'published' } },
           { creator: { equals: user.id } }
         ]
-      }
+      } as any
     },
     create: ({ req: { user } }) => {
       const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
@@ -465,7 +466,7 @@ export const Guides: CollectionConfig = {
       type: 'select',
       required: true,
       defaultValue: 'draft',
-      validate: (value) => {
+      validate: (value: any) => {
         if (!value) {
           return 'Status is required'
         }

@@ -105,7 +105,7 @@ function PostModal({ post, isOpen, onClose, onLike, onSave }: PostModalProps) {
                   <p className="font-bold text-base hover:text-[#FF6B6B] cursor-pointer transition-colors">
                     {post.author?.name || "Unknown User"}
                   </p>
-                  {post.location && (
+                  {post.location && typeof post.location === 'object' && post.location !== null && (
                     <p className="text-sm text-gray-500 flex items-center hover:text-gray-700 cursor-pointer transition-colors">
                       <MapPin className="h-4 w-4 mr-1" />
                       {post.location.name}
@@ -399,7 +399,7 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
               )}
 
               {/* Enhanced location badge */}
-              {post.location && (
+              {post.location && typeof post.location === 'object' && post.location !== null && (
                 <div className="absolute bottom-3 left-3 z-10 transform group-hover:scale-105 transition-transform duration-300">
                   <Badge className="bg-black/80 backdrop-blur-sm text-white text-xs px-3 py-2 border-0 shadow-lg rounded-full">
                     <MapPin className="h-3 w-3 mr-1" />

@@ -7,10 +7,62 @@ export const Events: CollectionConfig = {
     plural: 'Events',
   },
   access: {
-    read: () => true,
-    create: () => true,
-    update: () => true,
-    delete: () => true,
+    read: ({ req }) => {
+      // If no user is logged in, only show public events
+      if (!req.user) {
+        return {
+          privacy: { equals: 'public' },
+          status: { equals: 'published' }
+        } as any;
+      }
+
+      // If user is logged in, show public events and private events they have access to
+      return {
+        or: [
+          {
+            privacy: { equals: 'public' },
+            status: { equals: 'published' }
+          },
+          {
+            privacy: { equals: 'private' },
+            privateAccess: { in: [req.user.id] }
+          },
+          {
+            organizer: { equals: req.user.id }
+          },
+          {
+            coOrganizers: { in: [req.user.id] }
+          }
+        ]
+      } as any;
+    },
+    create: ({ req }) => {
+      // Any authenticated user can create events
+      return !!req.user;
+    },
+    update: ({ req }) => {
+      // Users can update their own events, admins can update any
+      if (!req.user) return false;
+      
+      if (req.user.role === 'admin') return true;
+      
+      return {
+        or: [
+          { organizer: { equals: req.user.id } },
+          { coOrganizers: { in: [req.user.id] } }
+        ]
+      } as any;
+    },
+    delete: async ({ req }) => {
+      // Users can delete their own events, admins can delete any
+      if (!req.user) return false;
+      
+      if (req.user.role === 'admin') return true;
+      
+      return {
+        organizer: { equals: req.user.id }
+      };
+    },
   },
   admin: {
     useAsTitle: 'name',
@@ -31,9 +83,8 @@ export const Events: CollectionConfig = {
         // Skip conflict check if this is triggered by an RSVP update
         // Check multiple indicators that this is an RSVP operation
         const isFromRSVP = (
-          // Check if the request has specific headers or body indicating RSVP operation
-          req.headers?.['x-operation-source'] === 'rsvp-update' ||
-          req.body?.['__rsvpOperation'] === true ||
+          // Check if the request has specific headers indicating RSVP operation
+          req.headers && typeof req.headers.get === 'function' && req.headers.get('x-operation-source') === 'rsvp-update' ||
           // Check if this is an update operation that only modifies count fields
           (operation === 'update' && 
            data && 
@@ -179,15 +230,16 @@ export const Events: CollectionConfig = {
             )
 
             if (conflictingEvents.length > 0) {
-              const conflictEvent = conflictingEvents[0]
-              const conflictStart = new Date(conflictEvent.startDate).toLocaleString()
-              const conflictEnd = conflictEvent.endDate 
-                ? new Date(conflictEvent.endDate).toLocaleString()
-                : 'TBD'
-
-              throw new Error(
-                `Event time conflict detected. Another event "${conflictEvent.name}" is already scheduled at this location from ${conflictStart} to ${conflictEnd}. Please choose a different time slot.`
-              )
+              const conflictEvent = conflictingEvents[0];
+              if (conflictEvent) {
+                const conflictStart = new Date(conflictEvent.startDate).toLocaleString();
+                const conflictEnd = conflictEvent.endDate 
+                  ? new Date(conflictEvent.endDate).toLocaleString()
+                  : 'TBD';
+                throw new Error(
+                  `Event time conflict detected. Another event "${conflictEvent.name}" is already scheduled at this location from ${conflictStart} to ${conflictEnd}. Please choose a different time slot.`
+                );
+              }
             }
           } catch (error: unknown) {
             console.error('Error checking event conflicts:', error)
@@ -383,13 +435,11 @@ export const Events: CollectionConfig = {
         { label: 'Education',      value: 'education'      },
         { label: 'Social',         value: 'social'         },
         { label: 'Business',       value: 'business'       },
-        { label: 'Sports',         value: 'sports'         },
         { label: 'Other',          value: 'other'          },
       ],
-  
     },
 
-    // Event type (e.g., workshop, meetup, sports matchmaking)
+    // Event type
     {
       name: 'eventType',
       type: 'select',
@@ -397,35 +447,9 @@ export const Events: CollectionConfig = {
         { label: 'Workshop',             value: 'workshop'             },
         { label: 'Concert',              value: 'concert'              },
         { label: 'Meetup',               value: 'meetup'               },
-        { label: 'Webinar',              value: 'webinar'              },
-        { label: 'Sports Matchmaking',   value: 'sports_matchmaking'   },
-        { label: 'Sports Tournament',    value: 'sports_tournament'    },
         { label: 'Social Event',         value: 'social_event'         },
         { label: 'Other',                value: 'other_event'          },
       ],
-      
-    },
-
-    // If category is Sports, suggest specific sports types
-    {
-      name: 'sportType',
-      type: 'select',
-      options: [
-        { label: 'Tennis',      value: 'tennis'      },
-        { label: 'Soccer',      value: 'soccer'      },
-        { label: 'Basketball',  value: 'basketball'  },
-        { label: 'Volleyball',  value: 'volleyball'  },
-        { label: 'Running',     value: 'running'     },
-        { label: 'Cycling',     value: 'cycling'     },
-        { label: 'Swimming',    value: 'swimming'    },
-        { label: 'Golf',        value: 'golf'        },
-        { label: 'Other',       value: 'other_sport' },
-      ],
-      required: false,
-      admin: {
-        condition: data => data.category === 'sports',
-        description: 'Select the specific sport for sports events',
-      },
     },
 
     // Linked location
@@ -500,6 +524,30 @@ export const Events: CollectionConfig = {
       required: true,
     },
 
+    // Privacy settings
+    {
+      name: 'privacy',
+      type: 'select',
+      defaultValue: 'public',
+      options: [
+        { label: '🌍 Public', value: 'public' },
+        { label: '🔒 Private', value: 'private' },
+      ],
+      admin: {
+        description: 'Control who can see this event'
+      }
+    },
+    {
+      name: 'privateAccess',
+      type: 'relationship',
+      relationTo: 'users',
+      hasMany: true,
+      admin: {
+        description: 'Friends who can access this private event',
+        condition: (data) => data.privacy === 'private'
+      }
+    },
+
     // Co-organizers
     {
       name: 'coOrganizers',
@@ -511,62 +559,7 @@ export const Events: CollectionConfig = {
       },
     },
 
-    // Pricing
-    {
-      name: 'pricing',
-      type: 'group',
-      fields: [
-        {
-          name: 'isFree',
-          type: 'checkbox',
-          defaultValue: true,
-        },
-        {
-          name: 'price',
-          type: 'number',
-          admin: {
-            condition: (data) => !data.pricing?.isFree,
-            description: 'Price in USD',
-          },
-        },
-        {
-          name: 'currency',
-          type: 'text',
-          defaultValue: 'USD',
-          admin: {
-            condition: (data) => !data.pricing?.isFree,
-          },
-        },
-      ],
-    },
 
-    // Registration settings
-    {
-      name: 'registration',
-      type: 'group',
-      fields: [
-        {
-          name: 'requiresRegistration',
-          type: 'checkbox',
-          defaultValue: false,
-        },
-        {
-          name: 'registrationDeadline',
-          type: 'date',
-          admin: {
-            condition: (data) => data.registration?.requiresRegistration,
-          },
-        },
-        {
-          name: 'allowWaitlist',
-          type: 'checkbox',
-          defaultValue: true,
-          admin: {
-            condition: (data) => data.registration?.requiresRegistration,
-          },
-        },
-      ],
-    },
 
     // Status & visibility
     {
@@ -594,25 +587,7 @@ export const Events: CollectionConfig = {
       ],
     },
 
-    // Special requirements or notes
-    {
-      name: 'requirements',
-      type: 'textarea',
-      admin: {
-        description: 'Any special requirements, equipment needed, age restrictions, etc.',
-      },
-    },
 
-    // Contact information for the event
-    {
-      name: 'contactInfo',
-      type: 'group',
-      fields: [
-        { name: 'email', type: 'email' },
-        { name: 'phone', type: 'text' },
-        { name: 'website', type: 'text' },
-      ],
-    },
 
     // SEO metadata
     {

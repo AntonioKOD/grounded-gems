@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client"
 
 import { useState, memo, useCallback, useEffect, useRef, useMemo } from "react"
@@ -76,8 +75,15 @@ export const FeedPost = memo(function FeedPost({
   onPostUpdated 
 }: FeedPostProps) {
   // Early return if post or author is invalid
-  if (!post || !post.id || !post.author || !post.author.name) {
-    console.warn('Invalid post data:', post)
+  // Handle both direct post structure and nested post structure from feed API
+  // Use type assertion to allow for post.post (from feed API) or direct post (from detail page)
+  const postData = (post as any).post || post
+  const author = postData.author
+  
+
+  
+  if (!post || !post.id || !author || !author.name) {
+    console.warn('Invalid post data:', { post, postData, author })
     return null
   }
 
@@ -91,27 +97,27 @@ export const FeedPost = memo(function FeedPost({
   const [showCommentsModal, setShowCommentsModal] = useState(false)
 
   // Get current state from Redux
-  const isLiked = likedPosts.includes(post.id)
-  const isSaved = savedPosts.includes(post.id)
-  const isLiking = loadingLikes.includes(post.id)
-  const isSaving = loadingSaves.includes(post.id)
-  const isSharing = loadingShares.includes(post.id)
+  const isLiked = likedPosts.includes(postData.id)
+  const isSaved = savedPosts.includes(postData.id)
+  const isLiking = loadingLikes.includes(postData.id)
+  const isSaving = loadingSaves.includes(postData.id)
+  const isSharing = loadingShares.includes(postData.id)
 
   // Local state for counts (will be updated optimistically)
-  const [likeCount, setLikeCount] = useState(post.likeCount || 0)
-  const [saveCount, setSaveCount] = useState(post.saveCount || 0)
-  const [shareCount, setShareCount] = useState(post.shareCount || 0)
+  const [likeCount, setLikeCount] = useState(postData.likeCount || 0)
+  const [saveCount, setSaveCount] = useState(postData.saveCount || 0)
+  const [shareCount, setShareCount] = useState(postData.shareCount || 0)
 
   // Initialize states correctly on load
   useEffect(() => {
-    setLikeCount(post.likeCount || 0)
-    setSaveCount(post.saveCount || 0)
-    setShareCount(post.shareCount || 0)
-  }, [post.likeCount, post.saveCount, post.shareCount])
+    setLikeCount(postData.likeCount || 0)
+    setSaveCount(postData.saveCount || 0)
+    setShareCount(postData.shareCount || 0)
+  }, [postData.likeCount, postData.saveCount, postData.shareCount])
 
   // Determine if content should be truncated
-  const isLongContent = post.content && post.content.length > 280
-  const displayContent = isLongContent && !expanded ? `${post.content.substring(0, 280)}...` : (post.content || '')
+  const isLongContent = postData.content && postData.content.length > 280
+  const displayContent = isLongContent && !expanded ? `${postData.content.substring(0, 280)}...` : (postData.content || '')
 
   // Video player state
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
@@ -129,76 +135,89 @@ export const FeedPost = memo(function FeedPost({
   // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
     // If post has a media array from API, use it directly (this is the correct approach for videos)
-    if (Array.isArray(post.media) && post.media.length > 0) {
-      return post.media.map((item: any) => ({
-        type: item.type,
-        url: item.url,
-        thumbnail: item.thumbnail,
-        alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
-      }))
+    if (Array.isArray(postData.media) && postData.media.length > 0) {
+      // Deduplicate media items by URL
+      const uniqueMedia = postData.media.reduce((acc: any[], item: any) => {
+        const existingItem = acc.find(existing => existing.url === item.url)
+        if (!existingItem) {
+          acc.push({
+            type: item.type,
+            url: item.url,
+            thumbnail: item.thumbnail,
+            alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
+          })
+        }
+        return acc
+      }, [])
+      
+      return uniqueMedia
     }
 
     // Fallback: reconstruct from individual fields (legacy support)
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
+    const processedUrls = new Set<string>()
     
-    const imageUrl = getImageUrl(post.image || post.featuredImage)
-    const videoUrl = getVideoUrl(post.video)
-    const photos = Array.isArray(post.photos) 
-      ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
+    const imageUrl = getImageUrl(postData.image || postData.featuredImage)
+    const videoUrl = getVideoUrl(postData.video)
+    const photos = Array.isArray(postData.photos) 
+      ? postData.photos.map((photo: any) => getImageUrl(photo)).filter((url: string) => url !== "/placeholder.svg")
       : []
 
     // Prioritize video if available
-    if (videoUrl) {
+    if (videoUrl && !processedUrls.has(videoUrl)) {
       items.push({ 
         type: 'video', 
         url: videoUrl,
-        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : post.videoThumbnail,
+        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : postData.videoThumbnail,
         alt: "Post video"
       })
+      processedUrls.add(videoUrl)
     }
     
-    // Add main image only if no video
-    if (imageUrl !== "/placeholder.svg" && !videoUrl) {
+    // Add main image only if no video and not already processed
+    if (imageUrl !== "/placeholder.svg" && !videoUrl && !processedUrls.has(imageUrl)) {
       items.push({ 
         type: 'image', 
         url: imageUrl, 
-        alt: post.content || "Post image" 
+        alt: postData.content || "Post image" 
       })
+      processedUrls.add(imageUrl)
     }
     
     // Add photos, avoiding duplicates
-    photos.forEach((photoUrl, index) => {
-      if (photoUrl && photoUrl !== imageUrl) {
+    photos.forEach((photoUrl: string, index: number) => {
+      if (photoUrl && !processedUrls.has(photoUrl)) {
         items.push({ 
           type: 'image', 
           url: photoUrl, 
           alt: `Photo ${index + 1}` 
         })
+        processedUrls.add(photoUrl)
       }
     })
     
     return items
-  }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.videoThumbnail, post.content, post.id])
+  }, [postData.media, postData.image, postData.featuredImage, postData.video, postData.photos, postData.videoThumbnail, postData.content, postData.id])
 
   const hasMedia = mediaItems.length > 0
 
   // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {
-    const url = getImageUrl(post.image || post.featuredImage)
+    const url = getImageUrl(postData.image || postData.featuredImage)
     return url !== "/placeholder.svg" ? url : null
-  }, [post.image, post.featuredImage])
+  }, [postData.image, postData.featuredImage])
 
   const videoUrl = useMemo(() => {
-    return getVideoUrl(post.video)
-  }, [post.video])
+    return getVideoUrl(postData.video)
+  }, [postData.video])
 
   const photos = useMemo(() => {
-    if (!Array.isArray(post.photos)) return []
-    return post.photos.map(photo => {
+    if (!Array.isArray(postData.photos)) return []
+    return postData.photos.map((photo: any) => {
       const url = getImageUrl(photo)
       return url !== "/placeholder.svg" ? url : null
     }).filter(Boolean)
-  }, [post.photos])
+  }, [postData.photos])
 
 
 
@@ -208,11 +227,11 @@ export const FeedPost = memo(function FeedPost({
 
     try {
       // Optimistic update
-      setLikeCount(prev => isLiked ? prev - 1 : prev + 1)
+      setLikeCount((prev: number) => isLiked ? prev - 1 : prev + 1)
 
       // Dispatch Redux action
       await dispatch(likePostAsync({
-        postId: post.id,
+        postId: postData.id,
         shouldLike: !isLiked,
         userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
@@ -220,7 +239,7 @@ export const FeedPost = memo(function FeedPost({
       // Update parent component if callback provided
       if (onPostUpdated) {
         onPostUpdated({
-          ...post,
+          ...postData,
           likeCount: isLiked ? likeCount - 1 : likeCount + 1,
           isLiked: !isLiked
         })
@@ -235,7 +254,7 @@ export const FeedPost = memo(function FeedPost({
         toast.error("Failed to like post")
       }
       // Revert optimistic update
-      setLikeCount(prev => isLiked ? prev + 1 : prev - 1)
+      setLikeCount((prev: number) => isLiked ? prev + 1 : prev - 1)
     }
   }, [isLiked, post, user, dispatch, likeCount, onPostUpdated])
 
@@ -245,16 +264,16 @@ export const FeedPost = memo(function FeedPost({
     
     try {
       // Copy link to clipboard
-      const postUrl = `${window.location.origin}/post/${post.id}`
+      const postUrl = `${window.location.origin}/post/${postData.id}`
       await navigator.clipboard.writeText(postUrl)
 
       // Update local state optimistically
-      setShareCount(prev => prev + 1)
+      setShareCount((prev: number) => prev + 1)
 
       // Call server action if user is logged in
       if (user) {
         await dispatch(sharePostAsync({
-          postId: post.id,
+          postId: postData.id,
           userId: user.id
         })).unwrap()
       }
@@ -264,7 +283,7 @@ export const FeedPost = memo(function FeedPost({
       console.error("Error sharing post:", error)
       toast.error("Failed to share post")
       // Revert optimistic update
-      setShareCount(post.shareCount || 0)
+      setShareCount((prev: number) => post.shareCount || 0)
     }
   }, [post.id, user, dispatch, post.shareCount])
 
@@ -274,11 +293,11 @@ export const FeedPost = memo(function FeedPost({
 
     try {
       // Optimistic update
-      setSaveCount(prev => isSaved ? prev - 1 : prev + 1)
+      setSaveCount((prev: number) => isSaved ? prev - 1 : prev + 1)
 
       // Dispatch Redux action
       await dispatch(savePostAsync({
-        postId: post.id,
+        postId: postData.id,
         shouldSave: !isSaved,
         userId: user?.id || '' // Keep for Redux state management, but API will use authenticated user
       })).unwrap()
@@ -286,7 +305,7 @@ export const FeedPost = memo(function FeedPost({
       // Update parent component if callback provided
       if (onPostUpdated) {
         onPostUpdated({
-          ...post,
+          ...postData,
           saveCount: isSaved ? saveCount - 1 : saveCount + 1,
           isSaved: !isSaved
         })
@@ -302,7 +321,7 @@ export const FeedPost = memo(function FeedPost({
         toast.error("Failed to save post")
       }
       // Revert optimistic update
-      setSaveCount(prev => isSaved ? prev + 1 : prev - 1)
+      setSaveCount((prev: number) => isSaved ? prev + 1 : prev - 1)
     }
   }, [isSaved, post, user, dispatch, saveCount, onPostUpdated])
 
@@ -331,23 +350,23 @@ export const FeedPost = memo(function FeedPost({
     // Try to get profile image from the author object
     let imageSource = null
     
-    if (post.author.profileImage?.url || post.author.profileImage) {
-      imageSource = post.author.profileImage
-    } else if (post.author.avatar) {
-      imageSource = post.author.avatar
+    if (author.profileImage?.url || author.profileImage) {
+      imageSource = author.profileImage
+    } else if (author.avatar) {
+      imageSource = author.avatar
     }
     
     const profileImageUrl = getImageUrl(imageSource)
     
     if (process.env.NODE_ENV === 'development') {
       console.log('🖼️ [FeedPost] Author profile image processing:', {
-        postId: post.id,
-        authorId: post.author.id,
-        authorName: post.author.name,
-        hasProfileImage: !!post.author.profileImage,
-        hasAvatar: !!post.author.avatar,
-        profileImageStructure: post.author.profileImage,
-        avatar: post.author.avatar,
+        postId: postData.id,
+        authorId: author.id,
+        authorName: author.name,
+        hasProfileImage: !!author.profileImage,
+        hasAvatar: !!author.avatar,
+        profileImageStructure: author.profileImage,
+        avatar: author.avatar,
         imageSource,
         processedUrl: profileImageUrl,
         isPlaceholder: profileImageUrl === "/placeholder.svg"
@@ -355,7 +374,7 @@ export const FeedPost = memo(function FeedPost({
     }
     
     return profileImageUrl !== "/placeholder.svg" ? profileImageUrl : "/placeholder.svg"
-  }, [post.author.profileImage, post.author.avatar, post.id, post.author.id, post.author.name])
+  }, [author.profileImage, author.avatar, postData.id, author.id, author.name])
 
   // Video player controls
   const handleVideoPlay = useCallback(() => {
@@ -407,6 +426,7 @@ export const FeedPost = memo(function FeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
+    return undefined
   }, [videoUrl])
 
   return (
@@ -416,7 +436,7 @@ export const FeedPost = memo(function FeedPost({
         <CardHeader className="p-6 pb-4 flex flex-row items-center justify-between space-y-0">
           <div className="flex items-center gap-4 flex-1 min-w-0">
             <Link 
-              href={`/profile/${post.author.id}`}
+              href={`/profile/${author.id}`}
               className="group flex items-center gap-4 hover:opacity-90 transition-opacity flex-shrink-0"
               onClick={(e) => e.stopPropagation()}
             >
@@ -428,11 +448,11 @@ export const FeedPost = memo(function FeedPost({
                     <Avatar className="h-full w-full border-0 shadow-xl">
                       <AvatarImage 
                         src={getAuthorProfileImageUrl()} 
-                        alt={post.author.name} 
+                        alt={author.name} 
                         className="object-cover rounded-full" 
                       />
                       <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] via-purple-500 to-pink-500 text-white font-bold text-sm rounded-full">
-                        {getInitials(post.author.name)}
+                        {getInitials(author.name)}
                       </AvatarFallback>
                     </Avatar>
                   </div>
@@ -451,16 +471,16 @@ export const FeedPost = memo(function FeedPost({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors text-lg truncate">
-                    {post.author.name}
+                    {author.name}
                   </span>
-                  {post.type !== "post" && (
+                  {postData.type !== "post" && (
                     <Badge variant="outline" className="text-xs px-2 py-1 text-[#FF6B6B] border-[#FF6B6B]/30 bg-[#FF6B6B]/5 flex-shrink-0">
-                      {post.type === "review" ? "Review" : "Tip"}
+                      {postData.type === "review" ? "Review" : "Tip"}
                     </Badge>
                   )}
                 </div>
                 <p className="text-sm text-gray-500 font-medium">
-                  {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
+                  {formatDistanceToNow(new Date(postData.createdAt), { addSuffix: true })}
                 </p>
               </div>
             </Link>
@@ -491,19 +511,19 @@ export const FeedPost = memo(function FeedPost({
         {/* Post Content */}
         <CardContent className="px-6 pb-4">
           {/* Location Tag */}
-          {post.location && (
+          {postData.location && (
             <Link 
-              href={typeof post.location === 'string' 
-                ? `/locations/${post.location}` 
-                : post.location.slug 
-                  ? `/locations/${post.location.slug}` 
-                  : `/locations/${post.location.id}`
+              href={typeof postData.location === 'string' 
+                ? `/locations/${postData.location}` 
+                : postData.location.slug 
+                  ? `/locations/${postData.location.slug}` 
+                  : `/locations/${postData.location.id}`
               }
               className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#FF6B6B] mb-4 transition-colors bg-gray-50 px-3 py-1.5 rounded-full"
               onClick={(e) => e.stopPropagation()}
             >
               <MapPin className="h-4 w-4" />
-              {typeof post.location === 'string' ? post.location : post.location.name}
+              {typeof postData.location === 'string' ? postData.location : postData.location.name}
             </Link>
           )}
 
@@ -542,15 +562,26 @@ export const FeedPost = memo(function FeedPost({
           {/* Enhanced Media Display with Carousel */}
           {hasMedia && (
             <div className="mb-4">
-              <MediaCarousel
-                media={mediaItems}
-                aspectRatio="video"
-                showControls={true}
-                showDots={true}
-                enableVideoPreview={true}
-                videoPreviewMode="hover"
-                className="rounded-2xl overflow-hidden bg-gray-50"
-              />
+              {mediaItems.length > 1 || mediaItems.some((item: any) => item.type === 'video') ? (
+                <MediaCarousel
+                  media={mediaItems}
+                  aspectRatio="video"
+                  showControls={true}
+                  showDots={true}
+                  enableVideoPreview={true}
+                  videoPreviewMode="hover"
+                  className="rounded-2xl overflow-hidden bg-gray-50"
+                />
+              ) : (
+                // Single image - display without carousel
+                <div className="rounded-2xl overflow-hidden bg-gray-50">
+                  <img
+                    src={mediaItems[0].url}
+                    alt={mediaItems[0].alt || "Post image"}
+                    className="w-full h-auto object-cover"
+                  />
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -592,7 +623,7 @@ export const FeedPost = memo(function FeedPost({
                 className="flex items-center gap-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-full px-4 py-2 font-medium"
               >
                 <MessageCircle className="h-5 w-5" />
-                <span>{post.commentCount || 0}</span>
+                <span>{postData.commentCount || 0}</span>
               </Button>
 
               {/* Share Button */}
@@ -652,7 +683,7 @@ export const FeedPost = memo(function FeedPost({
             <div className="flex items-center justify-between">
               <DialogTitle className="text-xl font-semibold text-gray-900 flex items-center gap-3">
                 <MessageCircle className="h-5 w-5 text-[#FF6B6B]" />
-                Comments ({post.commentCount || 0})
+                Comments ({postData.commentCount || 0})
               </DialogTitle>
               <Button
                 variant="ghost"
@@ -666,7 +697,7 @@ export const FeedPost = memo(function FeedPost({
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto bg-white">
             <CommentSystemLight 
-              postId={post.id}
+              postId={postData.id}
               user={user}
               className="bg-transparent"
               autoShow={true}
@@ -679,9 +710,9 @@ export const FeedPost = memo(function FeedPost({
       <CommentsModal
         isOpen={showCommentsModal}
         onClose={() => setShowCommentsModal(false)}
-        postId={post.id}
+        postId={postData.id}
         user={user}
-        commentCount={post.commentCount}
+        commentCount={postData.commentCount}
       />
     </>
   )

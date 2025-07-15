@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useState } from "react"
@@ -62,7 +62,7 @@ export default function EventsFilter({ filters, radius, onRadiusChange, onFilter
   }
 
   const handleRadiusChange = (value: number[]) => {
-    setLocalRadius(value[0])
+    setLocalRadius(value[0] ?? 25)
   }
 
   const handleApplyFilters = () => {

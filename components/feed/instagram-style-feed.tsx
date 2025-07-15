@@ -113,7 +113,7 @@ export default function ModernDiscoveryFeed({
       
       // Add photos
       if (Array.isArray(post.photos)) {
-        post.photos.forEach((photo, index) => {
+        post.photos.forEach((photo: any, index: number) => {
           const photoUrl = getImageUrl(photo)
           if (photoUrl !== "/placeholder.svg" && photoUrl !== normalizedImage) {
             mediaItems.push({
@@ -263,7 +263,7 @@ export default function ModernDiscoveryFeed({
           // Proper deduplication: only add posts that don't already exist
           setPosts(prev => {
             const existingIds = new Set(prev.map(p => p.id))
-            const uniqueNewPosts = newPosts.filter(post => !existingIds.has(post.id))
+            const uniqueNewPosts = newPosts.filter((post: Post) => !existingIds.has(post.id))
             return [...prev, ...uniqueNewPosts]
           })
           setPage(pageNum + 1)
@@ -426,6 +426,7 @@ export default function ModernDiscoveryFeed({
       container.addEventListener('scroll', throttledHandleScroll)
       return () => container.removeEventListener('scroll', throttledHandleScroll)
     }
+    return undefined
   }, [throttledHandleScroll])
 
   // Simple throttle utility
@@ -513,9 +514,9 @@ export default function ModernDiscoveryFeed({
                   className="w-full h-screen snap-start snap-always flex-shrink-0"
                 >
                   <SocialMediaPost
-                    post={post}
-                    user={currentUser}
-                    onPostUpdated={handlePostUpdate}
+                    post={post as any}
+                    user={currentUser ?? undefined}
+                    onPostUpdated={handlePostUpdate as any}
                     variant="mobile"
                     className="h-full w-full"
                     isActive={index === 0} // Only first post is active by default
@@ -540,7 +541,7 @@ export default function ModernDiscoveryFeed({
           </div>
         ) : (
           <div className="flex items-center justify-center h-full">
-            <EmptyFeed type={feedType} />
+            <EmptyFeed type={feedType as any} />
           </div>
         )}
       </div>

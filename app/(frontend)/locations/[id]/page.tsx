@@ -151,7 +151,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       description,
       keywords: [
         locationName,
-        ...(location.categories?.map(cat => cat.name) || []),
+        ...(location.categories?.map((cat: { name: any }) => cat.name) || []),
         location.address?.city || '',
         location.address?.state || '',
         'restaurant',
@@ -196,14 +196,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
         canonical: canonicalUrl,
       },
       other: {
-        'geo.region': location.address?.state || undefined,
+        'geo.region': location.address?.state,
         'geo.placename': locationName,
-        'geo.position': location.latitude && location.longitude 
-          ? `${location.latitude};${location.longitude}` 
-          : undefined,
-        'ICBM': location.latitude && location.longitude 
-          ? `${location.latitude}, ${location.longitude}` 
-          : undefined,
+        ...(location.latitude && location.longitude
+          ? { 'geo.position': `${location.latitude};${location.longitude}` }
+          : {}),
+        ...(location.latitude && location.longitude
+          ? { 'ICBM': `${location.latitude}, ${location.longitude}` }
+          : {}),
       }
     }
   } catch (error) {
@@ -267,11 +267,11 @@ export default async function LocationPage({ params }: PageProps) {
       let [hours, minutes = '0'] = time.split(':')
       
       // Remove any am/pm suffixes that might already exist
-      hours = hours.replace(/[ap]m/, '')
+      hours = hours?.replace(/[ap]m/, '')
       minutes = minutes.replace(/[ap]m/, '')
       
-      const hourNum = parseInt(hours)
-      const minuteNum = parseInt(minutes)
+      const hourNum = parseInt(hours || '0')
+      const minuteNum = parseInt(minutes || '0')
       
       if (isNaN(hourNum) || isNaN(minuteNum)) return timeStr
       
@@ -327,8 +327,8 @@ export default async function LocationPage({ params }: PageProps) {
         
         // Split by colon or just get the number
         const timeParts = cleanTime.split(':')
-        hours = parseInt(timeParts[0]) || 0
-        minutes = parseInt(timeParts[1]) || 0
+        hours = parseInt(timeParts[0] || '0') || 0
+        minutes = parseInt(timeParts[1] || '0') || 0
         
         // Validate hours and minutes
         if (hours < 0 || hours > 24 || minutes < 0 || minutes >= 60) {
@@ -521,7 +521,7 @@ export default async function LocationPage({ params }: PageProps) {
                     )}
                     {categories.length > 0 && (
                       <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-                        {categories[0].name}
+                        {categories[0]?.name}
                       </Badge>
                     )}
                   </div>

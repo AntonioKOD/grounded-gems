@@ -69,6 +69,7 @@ export default function CommentsModal({
       document.addEventListener('keydown', handleEscape)
       return () => document.removeEventListener('keydown', handleEscape)
     }
+    return undefined
   }, [isOpen])
 
   // Prepare user data for comment system

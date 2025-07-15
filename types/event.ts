@@ -196,8 +196,9 @@ export interface Event {
     keywords: string
   }
 
-  // Invitation & visibility
-  visibility: EventVisibility
+  // Privacy
+  privacy?: "public" | "private"
+  privateAccess?: string[]
   invitedUsers?: string[]
 
   // RSVPs & participation
@@ -209,7 +210,6 @@ export interface EventFormData {
   name: string
   slug: string
   description: string
-  shortDescription?: string
 
   // Media
   image?: File | null
@@ -217,13 +217,13 @@ export interface EventFormData {
   // Taxonomy
   category: string
   eventType: string
-  sportType?: string
-  skillLevel?: string
 
   // Timing
   startDate: string
   endDate?: string
   durationMinutes?: number
+  startTime?: string
+  endTime?: string
 
   // Location
   location: string
@@ -231,53 +231,24 @@ export interface EventFormData {
   // Capacity
   capacity?: number
 
-  // Pricing
-  pricing?: {
-    isFree: boolean
-    price?: number
-    currency?: string
-  }
-
-  // Registration
-  registration?: {
-    requiresRegistration: boolean
-    registrationDeadline?: string
-    allowWaitlist: boolean
-  }
+  // Privacy
+  privacy?: "public" | "private"
+  privateAccess?: string[]
 
   // Organizer
-  organizer?: string
+  organizer: string
 
   // Status
   status?: string
-  isFeatured?: boolean
 
   // Tags
-  tags?: Array<{ tag: string }>
-
-  // Requirements
-  requirements?: string
-
-  // Contact Info
-  contactInfo?: {
-    email?: string
-    phone?: string
-    website?: string
-  }
+  tags?: string[]
 
   // Meta
   meta?: {
     title?: string
     description?: string
-    keywords?: string
   }
-
-  // Legacy fields for backward compatibility
-  locationType?: "physical" | "virtual" | "hybrid"
-  visibility?: EventVisibility
-  invitedUsers?: string[]
-  isMatchmaking?: boolean
-  matchmakingPreferences?: MatchmakingPreferences
 }
 
 

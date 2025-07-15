@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useEffect, useState, useCallback, useTransition, JSXElementConstructor, Key, ReactElement, ReactNode, ReactPortal, Suspense, useRef, useMemo } from "react"
@@ -298,6 +297,10 @@ export default function ProfileContent({
                   }
                 : undefined,
               likes: post.likes?.length || 0,
+              tags: post.tags || [],
+              shareCount: post.shareCount || 0,
+              saveCount: post.saveCount || 0,
+              isSaved: post.isSaved || false,
             }
           })
 

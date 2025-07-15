@@ -71,6 +71,15 @@ interface UserPhotosSectionProps {
   className?: string
 }
 
+// Format date utility
+function formatDate(dateString: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(dateString))
+}
+
 export function UserPhotosSection({ locationId, locationName, className }: UserPhotosSectionProps) {
   console.log('🎯 UserPhotosSection component rendered with props:', {
     locationId,
@@ -145,15 +154,6 @@ export function UserPhotosSection({ locationId, locationName, className }: UserP
     if (hasMore && !isLoading) {
       fetchPhotos(page + 1, false)
     }
-  }
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    }).format(new Date(dateString))
   }
 
   // Get category color

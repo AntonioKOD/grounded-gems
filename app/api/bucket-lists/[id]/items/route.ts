@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
-import { User, BucketList } from '@/payload-types'
 
 interface PostParams {
   params: {
@@ -115,7 +114,7 @@ export async function POST(req: NextRequest, { params }: PostParams) {
           lastActivity: new Date().toISOString(),
         },
       },
-      user: user as User, 
+      user: user as any, 
     })
 
     return NextResponse.json({ 

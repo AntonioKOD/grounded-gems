@@ -57,7 +57,7 @@ export default function PlannerPage() {
   const [input, setInput] = useState("")
   const [context, setContext] = useState("solo")
   const [loading, setLoading] = useState(false)
-  const [plan, setPlan] = useState<string | null>(null)
+  const [plan, setPlan] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>("idle")
   const [shareStatus, setShareStatus] = useState<'idle' | 'copying' | 'copied'>('idle')
@@ -185,14 +185,14 @@ export default function PlannerPage() {
     if (!plan) return
     setSaveStatus('saving')
     try {
-      const steps = (plan.steps || []).map((step: string) => ({ step }))
+      const steps = (typeof plan === 'string' ? [] : (plan && plan.steps ? plan.steps.map((step: string) => ({ step })) : []))
       
-      // Enhanced journey data with location and AI metadata
+      // Enhanced journey data with location and AI metadata  
       const journeyData = {
-        title: plan.title,
-        summary: plan.summary,
+        title: typeof plan === 'string' ? '' : (plan && plan.title ? plan.title : ''),
+        summary: typeof plan !== 'string' && plan && plan.summary ? plan.summary : '',
         steps,
-        context: plan.context,
+        context: typeof plan !== 'string' && plan && plan.context ? plan.context : '',
         date: new Date().toISOString().slice(0, 10),
         type: context,
         // New location data
@@ -200,13 +200,13 @@ export default function PlannerPage() {
           latitude: coordinates.latitude,
           longitude: coordinates.longitude
         } : undefined,
-        usedRealLocations: plan.usedRealLocations || false,
-        referencedLocations: plan.locationIds || [],
+        usedRealLocations: typeof plan !== 'string' && plan && plan.usedRealLocations ? plan.usedRealLocations : false,
+        referencedLocations: typeof plan !== 'string' && plan && plan.locationIds ? plan.locationIds : [],
         // AI metadata
         aiMetadata: {
           nearbyLocationsCount,
           userLocation: userLocationName,
-          generatedAt: plan.generatedAt || new Date().toISOString(),
+          generatedAt: typeof plan !== 'string' && plan && plan.generatedAt ? plan.generatedAt : new Date().toISOString(),
           model: 'gpt-4'
         }
       }
@@ -253,12 +253,12 @@ export default function PlannerPage() {
     
     try {
       // Create a more detailed and attractive share text
-      const planTitle = plan.title || 'My Perfect Hangout Plan'
-      const planSteps = plan.steps ? plan.steps.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n') : ''
+      const planTitle = typeof plan !== 'string' && plan && plan.title ? plan.title : 'My Perfect Hangout Plan'
+      const planSteps = typeof plan !== 'string' && plan && plan.steps ? plan.steps.map((step: string, i: number) => `${i + 1}. ${step}`).join('\n') : ''
       
       const shareText = `🎉 ${planTitle}
 
-${plan.summary ? `✨ ${plan.summary}\n` : ''}
+${typeof plan !== 'string' && plan && plan.summary ? `✨ ${plan.summary}\n` : ''}
 📋 Your Hangout Timeline:
 ${planSteps}
 
@@ -463,14 +463,14 @@ ${planSteps}
                       <CheckCircle2 className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">{plan.title || 'Your Perfect Hangout Plan'}</h2>
+                      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 leading-tight">{typeof plan !== 'string' && plan && plan.title ? plan.title : 'Your Perfect Hangout Plan'}</h2>
                       <div className="flex items-center gap-2 mt-1 sm:mt-2">
                         <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500" />
                         <span className="text-sm sm:text-base text-gray-600">Created just for you</span>
                       </div>
                     </div>
                   </div>
-                  {plan.summary && (
+                  {typeof plan !== 'string' && plan && plan.summary && (
                     <p className="text-base sm:text-lg text-gray-700 leading-relaxed bg-white/50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-white">
                       {plan.summary}
                     </p>
@@ -492,13 +492,13 @@ ${planSteps}
                         {nearbyLocationsCount > 0 && (
                           <p>🎯 Found {nearbyLocationsCount} nearby verified locations</p>
                         )}
-                        {plan.usedRealLocations && plan.verifiedLocationsUsed && (
+                        {typeof plan !== 'string' && plan && plan.usedRealLocations && plan.verifiedLocationsUsed && (
                           <p>✨ This plan includes {plan.verifiedLocationsUsed} real places from our database</p>
                         )}
-                        {plan.usedRealLocations && !plan.verifiedLocationsUsed && (
+                        {typeof plan !== 'string' && plan && plan.usedRealLocations && !plan.verifiedLocationsUsed && (
                           <p>✨ This plan includes real places from our database</p>
                         )}
-                        {plan.parseError && (
+                        {typeof plan !== 'string' && plan && plan.parseError && (
                           <p>⚠️ Plan was generated with database locations despite parsing issues</p>
                         )}
                       </div>
@@ -513,7 +513,7 @@ ${planSteps}
                     Your Hangout Timeline
                   </h3>
                   <div className="space-y-3 sm:space-y-4">
-                    {plan.steps && plan.steps.map((step: string, i: number) => {
+                    {typeof plan !== 'string' && plan && plan.steps && plan.steps.map((step: string, i: number) => {
                       const { Icon: StepIcon, label, color } = getStepIcon(step)
                       return (
                         <div key={i} className="group relative">
@@ -534,7 +534,7 @@ ${planSteps}
                               </div>
                             </div>
                           </div>
-                          {i < plan.steps.length - 1 && (
+                          {typeof plan !== 'string' && plan && i < plan.steps.length - 1 && (
                             <div className="flex justify-center py-1 sm:py-2">
                               <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-gray-300 rotate-90" />
                             </div>

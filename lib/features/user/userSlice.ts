@@ -20,6 +20,7 @@ export interface UserData {
   role?: string
   savedPosts?: string[]
   likedPosts?: string[]
+  isCreator?: boolean
 }
 
 interface UserState {
@@ -44,7 +45,7 @@ let currentFetchPromise: Promise<any> | null = null
 // Async thunk for fetching user data
 export const fetchUser = createAsyncThunk(
   'user/fetchUser',
-  async (options?: { force?: boolean }, { rejectWithValue, getState }) => {
+  async (options: { force?: boolean } = {}, { rejectWithValue, getState }) => {
     try {
       const state = getState() as { user: UserState }
       const now = Date.now()

@@ -23,11 +23,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import type { MiniBlogItem } from '@/types/feed'
+import type { MiniBlogCardItem } from '@/types/feed'
 import { getImageUrl } from '@/lib/image-utils'
 
 interface MiniBlogCardProps {
-  item: MiniBlogItem
+  item: MiniBlogCardItem
   onLike?: (blogId: string) => void
   onSave?: (blogId: string) => void
   onDismiss?: () => void
@@ -154,11 +154,6 @@ export default function MiniBlogCard({
   const getFeaturedImageUrl = () => {
     // Try multiple possible image sources
     const imageUrl = getImageUrl(
-      item.blog?.coverImage?.url || 
-      item.blog?.featuredImage?.url ||
-      item.blog?.image?.url ||
-      item.blog?.coverImage ||
-      item.blog?.featuredImage ||
       item.blog?.image
     )
     return imageUrl !== "/placeholder.svg" ? imageUrl : null
@@ -229,14 +224,14 @@ export default function MiniBlogCard({
                 <div className="absolute top-3 left-3">
                   <Badge className="bg-black/50 text-white backdrop-blur-sm border-0">
                     <Clock className="h-3 w-3 mr-1" />
-                    {item.blog?.estimatedReadTime || 5} min read
+                    {item.blog?.readTime || 5} min read
                   </Badge>
                 </div>
                 
                 {/* Category badge */}
                 <div className="absolute top-3 right-3">
                   <Badge className="bg-[#FFE66D]/90 text-gray-800 backdrop-blur-sm border-0">
-                    {item.blog?.categories?.[0] || 'Blog'}
+                    {item.blog?.category || 'Blog'}
                   </Badge>
                 </div>
                 
@@ -283,14 +278,14 @@ export default function MiniBlogCard({
                 <div className="absolute top-3 left-3">
                   <Badge className="bg-[#FFE66D]/20 text-[#FF6B6B] backdrop-blur-sm border border-[#FFE66D]/30">
                     <Clock className="h-3 w-3 mr-1" />
-                    {item.blog?.estimatedReadTime || 5} min read
+                    {item.blog?.readTime || 5} min read
                   </Badge>
                 </div>
                 
                 {/* Category badge for non-image posts */}
                 <div className="absolute top-3 right-3">
                   <Badge className="bg-[#FFE66D] text-gray-800 backdrop-blur-sm border-0">
-                    {item.blog?.categories?.[0] || 'Blog'}
+                    {item.blog?.category || 'Blog'}
                   </Badge>
                 </div>
               </div>
@@ -317,15 +312,7 @@ export default function MiniBlogCard({
                   </h4>
                   <div className="flex items-center gap-2 text-sm text-gray-500">
                     <Calendar className="h-3 w-3" />
-                    <span>{formatDate(item.blog?.publishedAt || item.createdAt)}</span>
-                    {/* Only show views if real data exists */}
-                    {item.blog?.viewCount && item.blog.viewCount > 0 && (
-                      <>
-                        <span>•</span>
-                        <Eye className="h-3 w-3" />
-                        <span>{item.blog.viewCount} views</span>
-                      </>
-                    )}
+                    <span>{formatDate(item.blog?.createdAt)}</span>
                   </div>
                 </div>
                 

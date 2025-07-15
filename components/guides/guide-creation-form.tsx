@@ -366,7 +366,9 @@ export default function GuideCreationForm() {
 
     const updatedLocations = [...formData.locations]
     const [movedLocation] = updatedLocations.splice(currentIndex, 1)
-    updatedLocations.splice(newIndex, 0, movedLocation)
+    if (movedLocation) {
+      updatedLocations.splice(newIndex, 0, movedLocation)
+    }
 
     // Update order numbers
     const reorderedLocations = updatedLocations.map((loc, index) => ({
@@ -417,7 +419,12 @@ export default function GuideCreationForm() {
 
   const updateInsiderTip = (index: number, field: string, value: string) => {
     const newTips = [...formData.insiderTips]
-    newTips[index] = { ...newTips[index], [field]: value }
+    const prev = newTips[index] || { category: '', tip: '', priority: 'medium' }
+    newTips[index] = {
+      category: field === 'category' ? value : prev.category || '',
+      tip: field === 'tip' ? value : prev.tip || '',
+      priority: field === 'priority' ? (value as 'high' | 'medium' | 'low') : (prev.priority || 'medium'),
+    }
     updateFormData({ insiderTips: newTips })
   }
 
@@ -465,7 +472,14 @@ export default function GuideCreationForm() {
 
   const updateItineraryItem = (index: number, field: string, value: string) => {
     const updatedItinerary = [...formData.itinerary]
-    updatedItinerary[index] = { ...updatedItinerary[index], [field]: value }
+    const prev = updatedItinerary[index] || { time: '', activity: '', description: '' }
+    updatedItinerary[index] = {
+      time: field === 'time' ? value : prev.time || '',
+      activity: field === 'activity' ? value : prev.activity || '',
+      description: field === 'description' ? value : prev.description || '',
+      location: field === 'location' ? value : prev.location,
+      tips: field === 'tips' ? value : prev.tips,
+    }
     updateFormData({ itinerary: updatedItinerary })
   }
 

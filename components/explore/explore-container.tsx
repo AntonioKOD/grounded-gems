@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { SlidersHorizontal, Search, MapPin, ChevronDown } from "lucide-react"
+// getFeedPosts must return: Promise<{ posts: Post[]; totalCount: number }>
 import { getFeedPosts } from "@/app/actions"
 import ExploreFiltersComponent from "@/components/explore/explore-filters"
 import type { ExploreFilters } from "@/components/explore/explore-filters"
@@ -31,41 +32,34 @@ export default function ExploreContainer() {
   const [totalCount, setTotalCount] = useState(0)
   const [showMobileFilters, setShowMobileFilters] = useState(false)
 
-  // Load posts based on search, sort, and filters
+  // Only use the new getFeedPosts signature
+  // (No legacy destructuring or calls)
   const loadPosts = useCallback(
     async (page = 1, append = false) => {
       setIsLoading(true)
       try {
-        // Get posts from api/actions
+        // If getFeedPosts expects positional arguments, use them here:
+        // Example: getFeedPosts("all", sortBy, page)
         const newPosts = await getFeedPosts("all", sortBy, page)
+        const newTotal = newPosts.length
 
-        // Apply client-side filtering based on filters and search
-        const filteredPosts = filterPosts(newPosts, filters, searchQuery)
+        if (append) {
+          setPosts((prev) => [...prev, ...newPosts])
+        } else {
+          setPosts(newPosts)
+        }
 
-        // Set highlighted posts (newest in your area)
+        setCurrentPage(page)
+        setHasMore(newPosts.length === 10)
+        setTotalCount(newTotal)
+
+        // Highlighted posts (optional)
         if (page === 1 && !append) {
           const nearbyPosts = newPosts
-            .filter(
-              (post) => post.createdAt && new Date(post.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            )
+            .filter((post: Post) => post.createdAt && new Date(post.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
             .slice(0, 3)
           setHighlightedPosts(nearbyPosts)
         }
-
-        // Update posts state
-        if (append) {
-          setPosts((prev) => [...prev, ...filteredPosts])
-        } else {
-          setPosts(filteredPosts)
-        }
-
-        // Update pagination state
-        setCurrentPage(page)
-        setHasMore(filteredPosts.length === 10) // Assuming 10 posts per page
-
-        // Set total count for display
-        // In a real app, you'd get this from an API that supports counting
-        setTotalCount(page === 1 ? filteredPosts.length * 3 : posts.length + filteredPosts.length)
       } catch (error) {
         console.error("Error loading posts:", error)
         toast.error("Failed to load posts")
@@ -73,45 +67,10 @@ export default function ExploreContainer() {
         setIsLoading(false)
       }
     },
-    [sortBy, filters, searchQuery, posts.length],
+    [searchQuery, filters, sortBy]
   )
 
-  // Filter posts client-side based on selected filters
-  const filterPosts = (allPosts: Post[], filters: ExploreFilters, search: string) => {
-    return allPosts.filter((post) => {
-      // Filter by search query
-      if (
-        search &&
-        !(
-          post.content?.toLowerCase().includes(search.toLowerCase()) ||
-          post.title?.toLowerCase().includes(search.toLowerCase()) ||
-          post.location?.name.toLowerCase().includes(search.toLowerCase())
-        )
-      ) {
-        return false
-      }
-
-      // Filter by category
-      if (filters.category && post.location?.name) {
-        // This is a simplification. In a real app, you'd have a proper category field
-        const postCategory = post.location.name.toLowerCase()
-        if (!postCategory.includes(filters.category.toLowerCase())) {
-          return false
-        }
-      }
-
-      // Filter by rating
-      if (filters.rating && post.rating) {
-        if (post.rating < Number.parseInt(filters.rating)) {
-          return false
-        }
-      }
-
-      // Add more filters as needed
-
-      return true
-    })
-  }
+  // Remove client-side filterPosts
 
   // Handle load more posts
   const handleLoadMore = () => {
@@ -123,11 +82,7 @@ export default function ExploreContainer() {
     setFilters(newFilters)
   }
 
-  // Handle search submit
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    loadPosts(1, false)
-  }
+  // Remove handleSearch, use debounced effect below
 
   // Handle sort change
   const handleSortChange = (value: string, label: string) => {
@@ -143,10 +98,13 @@ export default function ExploreContainer() {
     else setActiveSortLabel("Most Recent")
   }, [sortBy])
 
-  // Load posts initially or when dependencies change
+  // Debounce search/filter/sort changes
   useEffect(() => {
-    loadPosts(1, false)
-  }, [loadPosts])
+    const timeout = setTimeout(() => {
+      loadPosts(1, false)
+    }, 400)
+    return () => clearTimeout(timeout)
+  }, [searchQuery, filters, sortBy])
 
   return (
     <div className="grid grid-cols-12 gap-6">
@@ -164,7 +122,7 @@ export default function ExploreContainer() {
       <div className="col-span-12 md:col-span-9 lg:col-span-10">
         {/* Search and sort controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <form onSubmit={handleSearch} className="flex-1">
+          <div className="flex-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -175,7 +133,7 @@ export default function ExploreContainer() {
                 className="pl-9 pr-4 h-10"
               />
             </div>
-          </form>
+          </div>
 
           <div className="flex items-center gap-2">
             <DropdownMenu>

@@ -129,10 +129,10 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Error creating special:', error);
     console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      data: error.data || 'No additional data'
+      message: error instanceof Error ? error.message : 'No message',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined,
+      data: error instanceof Error && 'data' in error ? (error as any).data : 'No additional data'
     });
     return NextResponse.json(
       { error: 'Failed to create special' },

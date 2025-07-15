@@ -20,4 +20,5 @@ export interface Notification {
   inviteStatus?: 'pending' | 'accepted' | 'declined'
   journeyTitle?: string
   journeyOwner?: string
+  actionBy?: User
 }

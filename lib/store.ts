@@ -28,7 +28,7 @@ const createPersistedReducer = () => {
 
 export const makeStore = () => {
   const store = configureStore({
-    reducer: createPersistedReducer(),
+    reducer: rootReducer,
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware({
         serializableCheck: {

@@ -98,7 +98,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
-        setIsVisible(entry.isIntersecting && entry.intersectionRatio > 0.5)
+        setIsVisible(Boolean(entry?.isIntersecting && entry.intersectionRatio > 0.5))
       },
       { threshold: [0.5] }
     )
@@ -126,9 +126,9 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
   // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
     // If post has a media array from API, use it directly (this is the correct approach for videos)
-    if (Array.isArray(post.media) && post.media.length > 0) {
-      console.log(`📱 EnhancedFeedPost ${post.id} using API media array:`, post.media)
-      return post.media.map((item: any) => ({
+    if (Array.isArray((post as any).media) && (post as any).media.length > 0) {
+      console.log(`📱 EnhancedFeedPost ${post.id} using API media array:`, (post as any).media)
+      return (post as any).media.map((item: any) => ({
         type: item.type,
         url: item.url,
         thumbnail: item.thumbnail,
@@ -139,7 +139,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     // Fallback: reconstruct from individual fields (legacy support)
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
     
-    const imageUrl = getImageUrl(post.image || post.featuredImage)
+    const imageUrl = getImageUrl(post.image || (post as any).featuredImage)
     const videoUrl = getVideoUrl(post.video)
     const photos = Array.isArray(post.photos) 
       ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
@@ -150,7 +150,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       items.push({ 
         type: 'video', 
         url: videoUrl,
-        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : post.videoThumbnail,
+        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : (post as any).videoThumbnail,
         alt: "Post video"
       })
     }
@@ -177,13 +177,13 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     
     console.log(`📱 EnhancedFeedPost ${post.id} using fallback media construction:`, items)
     return items
-  }, [post.media, post.image, post.featuredImage, post.video, post.photos, post.videoThumbnail, post.title, post.id])
+  }, [(post as any).media, post.image, (post as any).featuredImage, post.video, post.photos, (post as any).videoThumbnail, post.title, post.id])
 
   // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {
-    const url = getImageUrl(post.image || post.featuredImage)
+    const url = getImageUrl(post.image || (post as any).featuredImage)
     return url !== "/placeholder.svg" ? url : null
-  }, [post.image, post.featuredImage])
+  }, [post.image, (post as any).featuredImage])
 
   const videoUrl = useMemo(() => {
     return getVideoUrl(post.video)
@@ -207,10 +207,10 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     photos,
     mediaItems: mediaItems.length,
     hasMedia,
-    postMediaArray: post.media,
+    postMediaArray: (post as any).media,
     firstMediaItem: mediaItems[0],
-    mediaTypes: mediaItems.map(m => m.type),
-    mediaUrls: mediaItems.map(m => m.url)
+    mediaTypes: mediaItems.map((m: any) => m.type),
+    mediaUrls: mediaItems.map((m: any) => m.url)
   })
 
   // Handle like action with haptics and animations
@@ -378,6 +378,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       observer.observe(video)
       return () => observer.disconnect()
     }
+    return undefined
   }, [videoUrl])
 
   // Get initials for avatar fallback

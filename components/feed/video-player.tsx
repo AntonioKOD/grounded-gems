@@ -50,7 +50,7 @@ export default function VideoPlayer({
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const progressTimeoutRef = useRef<NodeJS.Timeout>()
+  const progressTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
   
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(muted)
@@ -72,9 +72,9 @@ export default function VideoPlayer({
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
-        setIsInView(entry.isIntersecting)
+        setIsInView(entry?.isIntersecting ?? false)
         
-        if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+        if (entry?.isIntersecting && entry.intersectionRatio > 0.5) {
           if (autoPlay && !hasStartedPlaying) {
             video.play().catch(console.error)
           }

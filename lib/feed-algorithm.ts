@@ -3,18 +3,24 @@ import config from '@/payload.config'
 import type { 
   FeedItem, 
   FeedMixConfig, 
-  FeedAlgorithmParams, 
-  WeeklyTheme, 
+  FeedAlgorithmParams as OriginalFeedAlgorithmParams,
   PostFeedItem,
   PeopleSuggestionItem,
   PlaceRecommendationItem,
   GuideSpotlightItem,
-  MiniBlogItem,
   WeeklyFeatureItem,
   ChallengeCardItem,
   MiniBlogCardItem
 } from '@/types/feed'
 import { WEEKLY_THEMES } from '@/types/feed'
+
+type FeedAlgorithmParams = OriginalFeedAlgorithmParams & {
+  page?: number
+  limit?: number
+  feedType?: string
+  sortBy?: string
+  filters?: any
+}
 
 // Default feed mix configuration
 const DEFAULT_FEED_MIX: FeedMixConfig = {
@@ -297,25 +303,27 @@ export class FeedAlgorithm {
         const isLiked = userLikedPosts.includes(post.id)
         const isSaved = userSavedPosts.includes(post.id)
         
-        // Enhanced media handling with better URL processing
+        // Enhanced media handling with better URL processing and deduplication
         let media: any[] = []
+        const processedUrls = new Set<string>()
         
         // Add main image
         if (post.image) {
           const imageUrl = this.processMediaUrl(post.image)
-          if (imageUrl) {
+          if (imageUrl && !processedUrls.has(imageUrl)) {
             media.push({
               type: 'image',
               url: imageUrl,
               alt: typeof post.image === 'object' ? post.image.alt : undefined
             })
+            processedUrls.add(imageUrl)
           }
         }
 
         // Add video if exists - reels-style (no thumbnail)
         if (post.video) {
           const videoUrl = this.processMediaUrl(post.video)
-          if (videoUrl) {
+          if (videoUrl && !processedUrls.has(videoUrl)) {
             const videoItem = {
               type: 'video',
               url: videoUrl,
@@ -324,23 +332,30 @@ export class FeedAlgorithm {
               alt: 'Post video'
             }
             media.push(videoItem)
+            processedUrls.add(videoUrl)
           }
         }
 
-        // Add photos array if exists
+        // Add photos array if exists, avoiding duplicates
         if (post.photos && Array.isArray(post.photos)) {
           const validPhotos = post.photos
-            .map((photo: any) => {
+            .map((photo: any): { type: string; url: string; alt?: string } | null => {
               const photoUrl = this.processMediaUrl(photo)
-              return photoUrl ? {
+              return photoUrl && !processedUrls.has(photoUrl) ? {
                 type: 'image',
                 url: photoUrl,
                 alt: typeof photo === 'object' ? photo.alt : undefined
               } : null
             })
-            .filter(photo => photo !== null) // Only include photos with valid URLs
+            .filter((photo: { type: string; url: string; alt?: string } | null): photo is { type: string; url: string; alt?: string } => photo !== null) // Only include photos with valid URLs
 
-          media = media.concat(validPhotos)
+          // Add unique photos and track their URLs
+          validPhotos.forEach((photo: { url: string }) => {
+            if (photo && !processedUrls.has(photo.url)) {
+              media.push(photo)
+              processedUrls.add(photo.url)
+            }
+          })
         }
         
         return {
@@ -546,14 +561,14 @@ export class FeedAlgorithm {
           id: guide.id,
           title: guide.title,
           description: guide.description,
-          coverImage: this.processMediaUrl(guide.coverImage),
+          coverImage: this.processMediaUrl(guide.coverImage) ? { url: this.processMediaUrl(guide.coverImage)! } : undefined,
           author: {
             id: guide.creator?.id || '',
             name: guide.creator?.name || 'Anonymous',
-            avatar: this.processMediaUrl(guide.creator?.avatar || guide.creator?.profileImage),
-            profileImage: guide.creator?.profileImage ? {
-              url: this.processMediaUrl(guide.creator.profileImage)
-            } : null
+            avatar: this.processMediaUrl(guide.creator?.avatar || guide.creator?.profileImage) || undefined,
+            profileImage: guide.creator?.profileImage && this.processMediaUrl(guide.creator.profileImage)
+              ? { url: this.processMediaUrl(guide.creator.profileImage)! }
+              : undefined
           },
           price: guide.price || 0,
           rating: guide.averageRating || 0,
@@ -587,7 +602,7 @@ export class FeedAlgorithm {
       const currentTheme = WEEKLY_THEMES[today.getDay()]
 
       // Try to get the weekly feature for this exact week and theme
-      let weeklyFeature = await this.payload.find({
+      let weeklyFeature = currentTheme ? await this.payload.find({
         collection: 'weekly-features',
         where: {
           and: [
@@ -601,11 +616,11 @@ export class FeedAlgorithm {
         limit: 1,
         depth: 3,
         sort: '-publishedAt'
-      })
+      }) : { docs: [] }
 
       // If no exact match, get the most recent active weekly feature for this theme
       if (!weeklyFeature.docs || weeklyFeature.docs.length === 0) {
-        weeklyFeature = await this.payload.find({
+        weeklyFeature = currentTheme ? await this.payload.find({
           collection: 'weekly-features',
           where: {
             and: [
@@ -617,7 +632,7 @@ export class FeedAlgorithm {
           limit: 1,
           depth: 3,
           sort: '-publishedAt'
-        })
+        }) : { docs: [] }
       }
 
       // If still no match, get any recent active weekly feature
@@ -662,15 +677,6 @@ export class FeedAlgorithm {
           isActive: feature.isActive,
           status: feature.status,
           publishedAt: feature.publishedAt,
-          coverImage: feature.coverImage ? {
-            url: this.processMediaUrl(feature.coverImage),
-            alt: typeof feature.coverImage === 'object' ? feature.coverImage.alt : undefined
-          } : null,
-          gallery: feature.gallery?.map((item: any) => ({
-            url: this.processMediaUrl(item.image),
-            caption: item.caption,
-            alt: typeof item.image === 'object' ? item.image.alt : undefined
-          })).filter((item: any) => item.url) || [],
           featuredLocations: feature.featuredLocations?.map((location: any) => ({
             id: location.id,
             name: location.name,
@@ -707,24 +713,18 @@ export class FeedAlgorithm {
             rating: guide.averageRating,
             reviewCount: guide.reviewCount
           })) || [],
-          challenge: feature.challenge ? {
-            title: feature.challenge.title,
-            description: feature.challenge.description,
-            difficulty: feature.challenge.difficulty,
-            duration: feature.challenge.duration,
-            reward: feature.challenge.reward,
-            targetCount: feature.challenge.targetCount,
-            expiresAt: feature.challenge.expiresAt
-          } : null,
-          analytics: feature.analytics || {
-            viewCount: 0,
-            engagementCount: 0,
-            participantCount: 0,
-            shareCount: 0
-          },
-          themeConfig: currentTheme,
-          createdAt: feature.createdAt,
-          updatedAt: feature.updatedAt
+          challenge: feature.challenge && feature.challenge.title && feature.challenge.description && feature.challenge.difficulty && feature.challenge.duration
+            ? {
+                title: feature.challenge.title,
+                description: feature.challenge.description,
+                difficulty: feature.challenge.difficulty,
+                duration: feature.challenge.duration,
+                reward: feature.challenge.reward,
+                targetCount: feature.challenge.targetCount,
+                expiresAt: feature.challenge.expiresAt
+              }
+            : undefined,
+          // analytics property removed to match expected type
         }
       }]
     } catch (error) {
@@ -813,7 +813,7 @@ export class FeedAlgorithm {
    */
   private intelligentShuffle(items: FeedItem[]): FeedItem[] {
     // Sort by priority first
-    items.sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    items.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
 
     // Then apply intelligent distribution
     const result: FeedItem[] = []
@@ -827,11 +827,14 @@ export class FeedAlgorithm {
     for (let i = 0; i < items.length; i++) {
       if (i % 4 === 0 && nonPostIndex < nonPosts.length) {
         // Every 4th item is non-post content
-        result.push(nonPosts[nonPostIndex++])
+        const item = nonPosts[nonPostIndex++]
+        if (item) result.push(item)
       } else if (postIndex < posts.length) {
-        result.push(posts[postIndex++])
+        const item = posts[postIndex++]
+        if (item) result.push(item)
       } else if (nonPostIndex < nonPosts.length) {
-        result.push(nonPosts[nonPostIndex++])
+        const item = nonPosts[nonPostIndex++]
+        if (item) result.push(item)
       }
     }
 
@@ -902,7 +905,7 @@ export class FeedAlgorithm {
       'Best time to visit is early morning',
       'Popular with locals'
     ]
-    return tips[Math.floor(Math.random() * tips.length)]
+    return tips[Math.floor(Math.random() * tips.length)] || ''
   }
 
   private getPeopleSuggestionTitle(count: number): string {
@@ -912,7 +915,7 @@ export class FeedAlgorithm {
       'Meet Amazing People',
       'Expand Your Network'
     ]
-    return titles[Math.floor(Math.random() * titles.length)]
+    return titles[Math.floor(Math.random() * titles.length)] || ''
   }
 
   private getPlaceRecommendationTitle(timeOfDay?: string, weather?: string): string {
@@ -1006,8 +1009,8 @@ export class FeedAlgorithm {
     
     return items.sort((a, b) => {
       // Primary sort: priority (higher is better)
-      if (a.priority !== b.priority) {
-        return b.priority - a.priority
+      if ((a.priority ?? 0) !== (b.priority ?? 0)) {
+        return (b.priority ?? 0) - (a.priority ?? 0)
       }
       
       // Secondary sort based on sortBy parameter

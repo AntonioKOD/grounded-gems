@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use server"
 
 import { getPayload } from "payload"
@@ -372,7 +370,7 @@ export async function getPublicLocations(
       console.log(`Found ${locationsWithDistance.length} locations within 25 miles of user:`, userCoordinates)
       if (locationsWithDistance.length > 0) {
         console.log('Distance range:', 
-          `${locationsWithDistance[0].distance.toFixed(1)} - ${locationsWithDistance[locationsWithDistance.length - 1]?.distance.toFixed(1)} miles`
+          `${locationsWithDistance[0]?.distance.toFixed(1)} - ${locationsWithDistance[locationsWithDistance.length - 1]?.distance.toFixed(1)} miles`
         )
       }
       

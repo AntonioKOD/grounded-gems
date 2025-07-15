@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+
 "use client"
 
 import type React from "react"
@@ -468,7 +468,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                       placeholder="your_username" 
                       {...field} 
                       value={field.value || ""}
-                      disabled={isCheckingCooldown || (usernameCooldown && !usernameCooldown.canChange)}
+                      disabled={isCheckingCooldown || (usernameCooldown?.canChange === false)}
                       onChange={(e) => {
                         const value = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
                         field.onChange(value)

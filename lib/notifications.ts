@@ -216,12 +216,11 @@ export const initializeNotifications = async (): Promise<boolean> => {
     if (permission === 'granted') {
       // Show welcome notification
               await showNotification({
-          title: '🎉 Welcome to Sacavia!',
-          body: 'Your journey of guided discovery begins now. Explore authentic places and connect with your community.',
-        tag: 'welcome',
-        requireInteraction: false,
-      })
-      
+                title: '🎉 Welcome to Sacavia!',
+                message: 'Your journey of guided discovery begins now. Explore authentic places and connect with your community.',
+                tag: 'welcome',
+                requireInteraction: false
+              })
       return true
     }
     

@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       pendingRequests.delete(requestKey);
       
       // Handle specific validation errors
-      if (creationError.message?.includes('ValidationError')) {
+      if (typeof creationError === 'object' && creationError !== null && 'message' in creationError && typeof (creationError as any).message === 'string' && (creationError as any).message.includes('ValidationError')) {
         return NextResponse.json(
           { error: 'Invalid data provided for interaction' },
           { status: 400 }
@@ -211,11 +211,13 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('Error creating location interaction:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      data: error.data || 'No additional data'
-    });
+    if (typeof error === 'object' && error !== null) {
+      console.error('Error details:', {
+        message: 'message' in error ? (error as any).message : 'No message',
+        stack: 'stack' in error ? (error as any).stack : 'No stack',
+        data: 'data' in error ? (error as any).data : 'No additional data'
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to record interaction' },
       { status: 500 }
@@ -375,10 +377,12 @@ export async function DELETE(req: NextRequest) {
     // Delete the interaction
     await payload.delete({
       collection: 'locationInteractions',
-      id: existing.docs[0].id,
+      id: existing.docs[0]?.id as string,
     });
 
-    console.log('DELETE - Interaction deleted successfully:', existing.docs[0].id);
+    if (existing.docs[0]) {
+      console.log('DELETE - Interaction deleted successfully:', existing.docs[0].id);
+    }
 
     return NextResponse.json({
       success: true,
@@ -387,11 +391,13 @@ export async function DELETE(req: NextRequest) {
 
   } catch (error) {
     console.error('Error deleting location interaction:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      data: error.data || 'No additional data'
-    });
+    if (typeof error === 'object' && error !== null) {
+      console.error('Error details:', {
+        message: 'message' in error ? (error as any).message : 'No message',
+        stack: 'stack' in error ? (error as any).stack : 'No stack',
+        data: 'data' in error ? (error as any).data : 'No additional data'
+      });
+    }
     return NextResponse.json(
       { error: 'Failed to delete interaction' },
       { status: 500 }
@@ -435,8 +441,8 @@ async function notifyUsersAboutLocationActivity(
     // Get unique user IDs who have saved this location (excluding the current user)
     const savedByUsers = [...new Set(
       savedInteractions.docs
-        .map(interaction => typeof interaction.user === 'string' ? interaction.user : interaction.user?.id)
-        .filter(userId => userId && userId !== interaction.user)
+        .map((interaction: any) => typeof interaction.user === 'string' ? interaction.user : interaction.user?.id)
+        .filter((userId: any, _idx: number, arr: any[]) => userId && userId !== arr[_idx]?.user)
     )];
 
     if (savedByUsers.length === 0) return;
@@ -536,8 +542,8 @@ async function checkAndNotifyMilestones(
       // Get unique user IDs who have saved this location
       const savedByUsers = [...new Set(
         savedInteractions.docs
-          .map(interaction => typeof interaction.user === 'string' ? interaction.user : interaction.user?.id)
-          .filter(userId => userId)
+          .map((interaction: any) => typeof interaction.user === 'string' ? interaction.user : interaction.user?.id)
+          .filter((userId: any) => userId)
       )];
 
       if (savedByUsers.length === 0) return;

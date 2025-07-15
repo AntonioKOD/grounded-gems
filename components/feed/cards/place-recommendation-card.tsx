@@ -39,6 +39,38 @@ export default function PlaceRecommendationCard({
   onDismiss,
   className = ""
 }: PlaceRecommendationCardProps) {
+  // Early validation to prevent undefined errors
+  if (!item) {
+    console.warn('PlaceRecommendationCard: No item provided')
+    return (
+      <Card className={`overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 rounded-2xl ${className}`}>
+        <CardContent className="p-6 text-center">
+          <div className="text-gray-400 mb-4">
+            <MapPin className="h-12 w-12 mx-auto" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Place Recommendation Unavailable</h3>
+          <p className="text-gray-600">Unable to load this recommendation.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // If no place data, don't render
+  if (!item.place) {
+    console.warn('PlaceRecommendationCard: No place data in recommendation item:', item)
+    return (
+      <Card className={`overflow-hidden bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 rounded-2xl ${className}`}>
+        <CardContent className="p-6 text-center">
+          <div className="text-gray-400 mb-4">
+            <MapPin className="h-12 w-12 mx-auto" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Place Data Missing</h3>
+          <p className="text-gray-600">This recommendation is missing place information.</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const [savedStates, setSavedStates] = useState<Record<string, boolean>>({})
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
 
@@ -144,12 +176,6 @@ export default function PlaceRecommendationCard({
       'high': '$$$'
     }
     return symbols[priceRange as keyof typeof symbols] || priceRange
-  }
-
-  // If no place data, don't render
-  if (!item.place) {
-    console.warn('No place data in recommendation item:', item)
-    return null
   }
 
   const place = item.place

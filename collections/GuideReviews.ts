@@ -1,4 +1,4 @@
-import { CollectionConfig } from 'payload/types'
+import { CollectionConfig } from 'payload'
 
 export const GuideReviews: CollectionConfig = {
   slug: 'guide-reviews',
@@ -12,17 +12,17 @@ export const GuideReviews: CollectionConfig = {
       if (!user) {
         return {
           status: { equals: 'approved' }
-        }
+        } as any;
       }
       
-      if (user.role === 'admin') return true
+      if (user.role === 'admin') return true;
       
       return {
         or: [
           { status: { equals: 'approved' } },
           { user: { equals: user.id } }
         ]
-      }
+      } as any;
     },
     create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => {

@@ -178,8 +178,8 @@ export default function GuideMarketplace({
                 const data = await response.json()
                 
                 if (data.features && data.features.length > 0) {
-                  const place = data.features.find(f => f.place_type.includes('place'))
-                  const region = data.features.find(f => f.place_type.includes('region'))
+                  const place = data.features.find((f: any) => f.place_type.includes('place'))
+                  const region = data.features.find((f: any) => f.place_type.includes('region'))
                   
                   setUserLocation({
                     city: place?.text,

@@ -2,6 +2,7 @@ import { Metadata } from "next"
 import { Suspense } from "react"
 import EnhancedSearch from "@/components/search/enhanced-search"
 import { Loader2 } from "lucide-react"
+import Link from 'next/link';
 
 // Force dynamic rendering to prevent SSR issues with search components
 export const dynamic = 'force-dynamic'
@@ -54,18 +55,18 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <a 
+              <Link 
                 href="/guides" 
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white/80 hover:bg-white border border-gray-200 rounded-xl transition-all duration-200 text-center"
               >
                 Browse Guides
-              </a>
-              <a 
+              </Link>
+              <Link 
                 href="/guides/create" 
                 className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4] hover:from-[#FF6B6B]/90 hover:to-[#4ECDC4]/90 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 text-center"
               >
                 Create Guide & Earn
-              </a>
+              </Link>
             </div>
           </div>
         </div>

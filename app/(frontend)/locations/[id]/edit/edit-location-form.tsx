@@ -1,4 +1,3 @@
-/* eslint-disable */
 'use client'
 
 import React, { useEffect, useState, useRef } from "react"
@@ -265,7 +264,7 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
           source: doc.source || 'manual',
           foursquareIcon: doc.foursquareIcon,
           parent: doc.parent?.id || doc.parent,
-          subcategories: []
+          subcategories: [] as any[]
         }))
 
         // Build hierarchical structure

@@ -322,7 +322,7 @@ export default function PostSignupOnboarding({ user, onComplete }: PostSignupOnb
   const renderCurrentPrompt = () => {
     const prompt = onboardingPrompts[currentPrompt]
     
-    switch (prompt.component) {
+    switch (prompt?.component) {
       case "LocationPermission": return renderLocationPermission()
       case "TimePreference": return renderTimePreference()
       case "TravelRadius": return renderTravelRadius()

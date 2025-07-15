@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       const user = userExists.docs[0]
 
       // Check if account is verified
-      if (!user._verified) {
+      if (!user?._verified) {
         return NextResponse.json(
           { 
             error: 'Please verify your email address before logging in. Check your inbox for a verification link.',

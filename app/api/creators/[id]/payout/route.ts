@@ -3,9 +3,7 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import Stripe from 'stripe'
 
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-06-20',
-}) : null
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
 
 // POST /api/creators/[id]/payout - Request a payout
 export async function POST(
@@ -70,15 +68,15 @@ export async function POST(
             creatorId,
             payoutType: 'creator_earnings'
           }
-        })
+        }) as Stripe.Transfer
 
         payoutTransaction = {
-          id: transfer.id,
+          id: (transfer as any).id,
           amount: amount,
           currency: 'usd',
-          status: transfer.status,
+          status: (transfer as any).status,
           method: 'stripe',
-          transferId: transfer.id
+          transferId: (transfer as any).id
         }
 
       } catch (stripeError: any) {

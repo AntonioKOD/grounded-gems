@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-export default async function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://www.sacavia.com'
   
   // Static pages
@@ -141,7 +141,7 @@ export default async function sitemap(): MetadataRoute.Sitemap {
     // Add location pages
     const locationPages: MetadataRoute.Sitemap = locationsResult.docs.map((location) => ({
       url: `${baseUrl}/locations/${location.slug || location.id}`,
-      lastModified: new Date(location.updatedAt),
+      lastModified: new Date(location?.updatedAt as string),
       changeFrequency: 'weekly' as const,
       priority: location.isFeatured ? 0.9 : 0.8,
     }))
@@ -149,15 +149,15 @@ export default async function sitemap(): MetadataRoute.Sitemap {
     // Add event pages
     const eventPages: MetadataRoute.Sitemap = eventsResult.docs.map((event) => ({
       url: `${baseUrl}/events/${event.slug || event.id}`,
-      lastModified: new Date(event.updatedAt),
+      lastModified: new Date(event?.updatedAt as string),
       changeFrequency: 'weekly' as const,
-      priority: new Date(event.startDate) > new Date() ? 0.8 : 0.6, // Higher priority for upcoming events
+      priority: new Date(event?.startDate as string) > new Date() ? 0.8 : 0.6, // Higher priority for upcoming events
     }))
 
     // Add post pages
     const postPages: MetadataRoute.Sitemap = postsResult.docs.map((post) => ({
       url: `${baseUrl}/post/${post.slug || post.id}`,
-      lastModified: new Date(post.updatedAt),
+      lastModified: new Date(post?.updatedAt as string),
       changeFrequency: 'monthly' as const,
       priority: 0.7,
     }))
@@ -165,7 +165,7 @@ export default async function sitemap(): MetadataRoute.Sitemap {
     // Add bucket list pages
     const bucketListPages: MetadataRoute.Sitemap = bucketListsResult.docs.map((bucketList) => ({
       url: `${baseUrl}/bucket-list/${bucketList.slug || bucketList.id}`,
-      lastModified: new Date(bucketList.updatedAt),
+      lastModified: new Date(bucketList?.updatedAt as string),
       changeFrequency: 'monthly' as const,
       priority: 0.6,
     }))

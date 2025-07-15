@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Simplified image utilities for PayloadCMS media
  * Directly uses URLs from PayloadCMS media objects
@@ -14,7 +14,7 @@ const isDevelopment = process.env.NODE_ENV === 'development'
 const isServer = typeof window === 'undefined'
 
 // Safely import Capacitor utilities only on client-side
-let getApiBaseUrlFromCapacitor: (() => string) | null = null
+let getApiBaseUrlFromCapacitor: (() => Promise<string>) | null = null
 
 if (!isServer) {
   // Dynamic import for client-side only
@@ -38,9 +38,8 @@ function getBaseUrlSafely(): string {
   }
 
   // Client-side logic
-  if (getApiBaseUrlFromCapacitor) {
-    return getApiBaseUrlFromCapacitor()
-  }
+  // NOTE: getApiBaseUrlFromCapacitor is async, but getBaseUrlSafely is sync. For now, skip using it here.
+  // If you need to support async, refactor getBaseUrlSafely to be async and handle accordingly.
 
   // Fallback for client-side
   if (typeof window !== 'undefined') {
@@ -227,8 +226,8 @@ export function normalizePostMedia(post: any) {
   let photos: string[] = []
   if (Array.isArray(post.photos)) {
     photos = post.photos
-      .map(photo => getImageUrl(photo))
-      .filter(url => url !== "/placeholder.svg")
+      .map((photo: any) => getImageUrl(photo))
+      .filter((url: string) => url !== "/placeholder.svg")
   }
 
   const result = {
@@ -456,8 +455,8 @@ interface MediaItem {
   height?: number
 }
 
-interface GalleryItem {
-  image: MediaItem | string
+export interface GalleryItem {
+  image: string | MediaItem | ImageSource
   caption?: string
   isPrimary?: boolean
   order?: number
@@ -484,9 +483,8 @@ export interface ImageSource {
   width?: number
   height?: number
 }
-
 export interface GalleryItem {
-  image: ImageSource | string
+  image: string | MediaItem | ImageSource
   caption?: string
   isPrimary?: boolean
   order?: number
@@ -596,9 +594,9 @@ export function getAllLocationImages(location: any): string[] {
 
   // Add gallery images
   if (location.gallery && Array.isArray(location.gallery)) {
-    location.gallery
-      .sort((a, b) => (a.order || 0) - (b.order || 0))
-      .forEach(item => {
+    (location.gallery as GalleryItem[])
+      .sort((a: GalleryItem, b: GalleryItem) => (a.order || 0) - (b.order || 0))
+      .forEach((item: GalleryItem) => {
         const url = extractImageUrl(item.image)
         if (url && !images.includes(url)) {
           images.push(url)
@@ -613,7 +611,7 @@ export function getAllLocationImages(location: any): string[] {
 
   // Add Foursquare photos if available
   if (location.photos && Array.isArray(location.photos)) {
-    location.photos.forEach(photo => {
+    location.photos.forEach((photo: any) => {
       const url = extractImageUrl(photo)
       if (url && !images.includes(url)) {
         images.push(url)

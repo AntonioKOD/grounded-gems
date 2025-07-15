@@ -67,7 +67,7 @@ function SimpleMap({
       Entertainment: "#FF66E3",
       Default: "#FF6B6B",
     };
-    return colors[category] || colors.Default;
+    return colors[category] || colors.Default || '#FF6B6B';
   }, []);
 
   // Initialize map once

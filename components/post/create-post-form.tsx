@@ -250,7 +250,7 @@ export default function CreatePostForm({
       validFiles.forEach((file, index) => {
         if (file.type.startsWith('video/')) {
           const video = document.createElement('video')
-          video.src = newPreviewUrls[index]
+          video.src = newPreviewUrls[index] || ''
           video.onloadedmetadata = () => {
             const duration = video.duration
             const minutes = Math.floor(duration / 60)
@@ -306,7 +306,7 @@ export default function CreatePostForm({
   const removeFile = (index: number) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index))
     setPreviewUrls(prev => {
-      URL.revokeObjectURL(prev[index])
+      URL.revokeObjectURL(prev[index] || '')
       return prev.filter((_, i) => i !== index)
     })
     

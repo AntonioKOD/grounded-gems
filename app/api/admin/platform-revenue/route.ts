@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         ]
       },
       limit: 1000, // Get all purchases for the period
-      populate: ['guide', 'guide.creator']
+      populate: { guide: {}, 'guide.creator': {} }
     })
 
     // Calculate revenue statistics
@@ -68,9 +68,9 @@ export async function GET(request: NextRequest) {
     let totalPurchases = purchases.docs.length
     let uniqueCreators = new Set()
     let uniqueBuyers = new Set()
-    let revenueByMonth = {}
-    let topSellingGuides = {}
-    let topEarningCreators = {}
+    let revenueByMonth: { [key: string]: number } = {}
+    let topSellingGuides: { [key: string]: any } = {}
+    let topEarningCreators: { [key: string]: any } = {}
 
     purchases.docs.forEach(purchase => {
       const amount = purchase.amount || 0

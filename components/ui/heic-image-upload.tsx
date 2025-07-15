@@ -108,10 +108,10 @@ export function HEICImageUpload({
         setUploadState(prev => ({ 
           ...prev, 
           progress, 
-          message: `Processing ${file.name}${isHEICFile(file) ? ' (converting HEIC)' : ''}...` 
+          message: `Processing ${file?.name}${isHEICFile(file || new File([], '')) ? ' (converting HEIC)' : ''}...` 
         }))
 
-        const result = await processImageFile(file, conversionOptions)
+        const result = await processImageFile(file || new File([], ''), conversionOptions)
         processedFiles.push(result.file)
         
         // Create preview URL
@@ -169,12 +169,12 @@ export function HEICImageUpload({
         setUploadState(prev => ({ 
           ...prev, 
           progress, 
-          message: `Uploading ${file.name}...` 
+          message: `Uploading ${file?.name}...` 
         }))
 
         const formData = new FormData()
-        formData.append('file', file)
-        formData.append('alt', file.name)
+        formData.append('file', file || new File([], ''))
+        formData.append('alt', file?.name || '')
 
         const response = await fetch(uploadEndpoint, {
           method: 'POST',
@@ -183,7 +183,7 @@ export function HEICImageUpload({
 
         if (!response.ok) {
           const error = await response.json()
-          throw new Error(error.error || `Upload failed for ${file.name}`)
+          throw new Error(error.error || `Upload failed for ${file?.name}`)
         }
 
         const result = await response.json()
@@ -391,20 +391,13 @@ export function HEICImageUpload({
           {!autoUpload && selectedFiles.length > 0 && uploadState.status === 'success' && (
             <Button 
               onClick={() => uploadFiles(selectedFiles)} 
-              disabled={uploadState.status === 'uploading'}
+              disabled={uploadState.status !== 'success'}
               className="w-full"
             >
-              {uploadState.status === 'uploading' ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload {selectedFiles.length} File(s)
-                </>
-              )}
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload {selectedFiles.length} File(s)
+              </>
             </Button>
           )}
         </div>

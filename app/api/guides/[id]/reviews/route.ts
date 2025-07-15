@@ -28,7 +28,7 @@ export async function GET(
       page,
       limit,
       sort,
-      populate: ['user']
+      populate: { user: {} }
     })
     
     return NextResponse.json({

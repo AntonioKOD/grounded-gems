@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     
     // Check admin access
     const { user } = await payload.auth({ headers: req.headers })
-    if (!user || !isAdminOrCreatedBy({ req: { user } })) {
+    if (!user || !isAdminOrCreatedBy({ req: { user } } as any)) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

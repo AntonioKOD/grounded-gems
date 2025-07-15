@@ -227,9 +227,9 @@ export function useMobile() {
         ])
         
         setFeatures({
-          camera,
-          geolocation,
-          haptics,
+          camera: camera ?? false,
+          geolocation: geolocation ?? false,
+          haptics: haptics ?? false,
         })
         
         setIsReady(true)

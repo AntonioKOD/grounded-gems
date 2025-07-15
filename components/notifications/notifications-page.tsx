@@ -87,19 +87,19 @@ export default function NotificationsPage() {
       const notificationDate = new Date(notification.createdAt)
       
       if (notificationDate >= today) {
-        groups["Today"].push(notification)
+        groups["Today"]!.push(notification)
       } else if (notificationDate >= yesterday) {
-        groups["Yesterday"].push(notification)
+        groups["Yesterday"]!.push(notification)
       } else if (notificationDate >= thisWeek) {
-        groups["This Week"].push(notification)
+        groups["This Week"]!.push(notification)
       } else {
-        groups["Earlier"].push(notification)
+        groups["Earlier"]!.push(notification)
       }
     })
 
     // Remove empty groups
     Object.keys(groups).forEach(key => {
-      if (groups[key].length === 0) {
+      if (groups[key] && groups[key].length === 0) {
         delete groups[key]
       }
     })

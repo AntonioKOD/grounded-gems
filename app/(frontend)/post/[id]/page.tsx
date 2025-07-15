@@ -63,7 +63,7 @@ export async function generateMetadata({ params }: PostPageProps) {
     }
 
     const postImage = getPostImageUrl(post)
-    const locationName = post.location?.name || null
+    const locationName = (post.location && typeof post.location === 'object' && 'name' in post.location) ? post.location.name : null
     
     const keywords = [
       postTitle,
@@ -176,9 +176,9 @@ export default async function PostPage({ params }: PostPageProps) {
           author: post.author,
           createdAt: post.createdAt,
           updatedAt: post.updatedAt,
-          media: post.media,
+          media: ('media' in post ? post.media : []) as any[],
           location: post.location,
-          slug: post.slug
+          slug: ('slug' in post ? post.slug : '') as string
         }} />
         
         {/* Back button */}

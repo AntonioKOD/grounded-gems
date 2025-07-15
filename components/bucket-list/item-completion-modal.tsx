@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Star, Loader2, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
-import type { BucketListItem, BucketList } from '@/app/(frontend)/bucket-list/BucketListClient' // Adjust path as needed
+import type { BucketListItem, BucketList } from '@/app/(frontend)/bucket-list/BucketListClient'
 
 interface ItemCompletionModalProps {
   isOpen: boolean
@@ -127,7 +127,7 @@ export default function ItemCompletionModal({
             Share Your Experience
           </DialogTitle>
           <DialogDescription className="text-gray-600">
-            Add details about completing "{item.goal || item.location?.name || item.aiLocationText || 'this item'}".
+            Add details about completing "{item.goal || item.location?.name || 'this item'}".
           </DialogDescription>
         </DialogHeader>
         

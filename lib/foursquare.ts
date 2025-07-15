@@ -295,7 +295,7 @@ class FoursquareAPI {
       hours.regular.forEach(hour => {
         if (hour.day >= 0 && hour.day < 7) {
           defaultHours[hour.day] = {
-            day: dayNames[hour.day],
+            day: dayNames[hour.day] || '',
             open: hour.open,
             close: hour.close,
             closed: false

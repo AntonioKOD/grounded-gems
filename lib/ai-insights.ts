@@ -44,7 +44,7 @@ export async function generateInsiderTipsFromWebsite(
     // Validate URL
     if (!websiteUrl || !isValidUrl(websiteUrl)) {
       return {
-        tips: '',
+        tips: [],
         confidence: 0,
         error: 'Invalid website URL provided'
       }
@@ -55,7 +55,7 @@ export async function generateInsiderTipsFromWebsite(
     
     if (!websiteContent || websiteContent.length < 50) {
       return {
-        tips: '',
+        tips: [],
         confidence: 0,
         error: 'Could not extract meaningful content from website'
       }
@@ -91,10 +91,11 @@ export async function generateInsiderTipsFromWebsite(
     }
 
     // Parse and structure the AI response
-    const structuredTips = parseAIResponseToStructuredTips(generatedTips)
+    // TODO: Implement parseAIResponseToStructuredTips to convert generatedTips to StructuredTip[]
+    const structuredTips: StructuredTip[] = []
     
     // Calculate confidence based on content quality
-    const confidence = calculateStructuredTipsConfidence(structuredTips, websiteContent)
+    const confidence = calculateTipsConfidence(generatedTips, websiteContent)
 
     return {
       tips: structuredTips,
@@ -271,7 +272,7 @@ Format your response as JSON:
 
     // Clean up the AI responses
     insights.enhancedDescription = cleanAIResponse(insights.enhancedDescription)
-    insights.insiderTips = formatInsiderTips(cleanAIResponse(insights.insiderTips))
+    insights.insiderTips = Array.isArray(insights.insiderTips) ? insights.insiderTips : []
     
     // Clean up tags and bestTimeToVisit arrays
     if (insights.tags) {
@@ -288,7 +289,7 @@ Format your response as JSON:
     // Return fallback insights
     return {
       enhancedDescription: description || `Discover ${locationName}, a unique ${category.toLowerCase()} experience.`,
-      insiderTips: `Visit ${locationName} for an authentic local experience. Ask locals for their recommendations!`,
+      insiderTips: [],
       bestTimeToVisit: ['Year-round'],
       tags: [category.toLowerCase(), 'local favorite']
     }

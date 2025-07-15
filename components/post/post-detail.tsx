@@ -42,7 +42,7 @@ export default function PostDetail({ postId }: PostDetailProps) {
         const fetchedPost = await getPostById(postId)
         if (fetchedPost) {
           setPost(fetchedPost)
-          setLikeCount(fetchedPost.likes || fetchedPost.likeCount || 0)
+          setLikeCount(fetchedPost.likeCount || 0)
           // Set liked state from post data (will be updated when user is fetched)
           setLiked(fetchedPost.isLiked || false)
         }
@@ -168,9 +168,11 @@ export default function PostDetail({ postId }: PostDetailProps) {
           <div className="mt-4 bg-gray-50 p-4 rounded-md">
             <div className="flex items-center gap-2 mb-3">
               <MapPin className="h-5 w-5 text-gray-500" />
-              <Link href={`/location/${post.location?.id}`} className="text-base font-medium hover:underline">
-                {post.location?.name}
-              </Link>
+              {typeof post.location === 'object' && post.location !== null ? (
+                <Link href={`/location/${post.location.id}`} className="text-base font-medium hover:underline">
+                  {post.location.name}
+                </Link>
+              ) : null}
               <div className="flex items-center ml-auto">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Star
@@ -185,7 +187,7 @@ export default function PostDetail({ postId }: PostDetailProps) {
             </div>
             <p className="text-gray-700">{post.content}</p>
             
-            {post.location && (
+            {typeof post.location === 'object' && post.location !== null && (
               <Link
                 href={`/location/${post.location.id}`}
                 className="mt-4 inline-flex items-center text-sm text-[#FF6B6B] hover:underline"
@@ -206,7 +208,7 @@ export default function PostDetail({ postId }: PostDetailProps) {
               </Badge>
             </div>
             <p className="text-gray-700">{post.content}</p>
-            {post.location && (
+            {typeof post.location === 'object' && post.location !== null && (
               <Link
                 href={`/location/${post.location.id}`}
                 className="mt-4 flex items-center text-[#FF6B6B] hover:underline"

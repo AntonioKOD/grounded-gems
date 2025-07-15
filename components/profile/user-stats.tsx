@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 "use client"
 
 import { useState } from "react"
@@ -23,7 +23,6 @@ interface UserStatsProps {
 }
 
 export function UserStats({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
   followers,
   following,

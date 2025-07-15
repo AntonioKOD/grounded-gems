@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
-import { User } from '@/payload-types'
 
 // GET individual bucket list
 export async function GET(
@@ -80,7 +79,7 @@ export async function PATCH(
       collection: 'bucketLists',
       id: params.id,
       data: body,
-      user: user as User
+      user: user
     })
 
     return NextResponse.json({
@@ -137,7 +136,7 @@ export async function DELETE(
     await payload.delete({
       collection: 'bucketLists',
       id: params.id,
-      user: user as User
+      user: user
     })
 
     return NextResponse.json({

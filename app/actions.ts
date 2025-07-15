@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use server'
 import { getPayload } from "payload";
 import config from '@payload-config';
@@ -18,12 +16,15 @@ import { getServerSideUser } from "@/lib/auth-server";
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
   interface Post {
-    shareCount?: number;
+    shareCount: number;
   }
 }
 
-
-
+declare global {
+  // Add a type for the follow cache
+  // eslint-disable-next-line no-var
+  var _followCache: Map<string, { data: any; timestamp: number }> | undefined;
+}
 
 export async function getReviewsbyId(id: string) {
   const payload = await getPayload({ config: config })
@@ -102,9 +103,15 @@ export async function getLocations() {
       }
     })
 
-    // Filter out locations without valid coordinates
+    // Filter out locations without valid coordinates and required fields
     const validLocations = processedLocations.filter(
-      (loc) => loc.latitude !== null && loc.longitude !== null && !isNaN(loc.latitude) && !isNaN(loc.longitude),
+      (loc: any) =>
+        loc.latitude !== null &&
+        loc.longitude !== null &&
+        !isNaN(loc.latitude) &&
+        !isNaN(loc.longitude) &&
+        !!loc.name &&
+        !!loc.status
     )
 
     console.log(`Returning ${validLocations.length} valid locations`)
@@ -230,6 +237,10 @@ export interface LocationFormData {
     description?: string;
     keywords?: string;
   };
+
+  // Privacy settings
+  privacy?: 'public' | 'private';
+  privateAccess?: string[]; // Array of user IDs who can access private locations
 }
 
 /**
@@ -413,7 +424,7 @@ interface SignupInput {
   email: string;
   password: string;
   name: string;
-  coords: {
+  coords?: {
     latitude: number;
     longitude: number;
   };
@@ -447,13 +458,17 @@ export async function signupUser(data: SignupInput){
       email: data.email,
       password: data.password,
       name: data.name,
-      location: {
+    };
+
+    // Add location if provided
+    if (data.coords?.latitude && data.coords?.longitude) {
+      userData.location = {
         coordinates: {
           latitude: data.coords.latitude,
           longitude: data.coords.longitude,
         }
       }
-    };
+    }
 
     // Add additional data if provided
     if (data.additionalData) {
@@ -478,7 +493,7 @@ export async function signupUser(data: SignupInput){
       email: userData.email,
       name: userData.name,
       username: userData.username,
-      hasLocation: !!userData.location
+      hasLocation: !!userData.location?.coordinates
     });
 
     const user = await payload.create({
@@ -1316,7 +1331,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
     const user = await payload.findByID({ collection: "users", id: currentUserId, depth: 0 })
     if (!user) {
       console.error("User not found:", currentUserId)
-     
+      return []
     }
 
     console.log(`User found: ${user.id}, following: ${user.following?.length || 0} users`)
@@ -1325,7 +1340,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
     // If user doesn't follow anyone, return mock data
     if (followees.length === 0) {
       console.log("User doesn't follow anyone, returning mock data")
-      
+      return []
     }
 
     // 2. Fetch candidate posts
@@ -1344,7 +1359,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
     // If no posts found, return mock data
     if (posts.length === 0) {
       console.log("No posts found from followed users, returning mock data")
-     
+      return []
     }
 
     // 3. Score each post
@@ -1396,6 +1411,7 @@ export async function getPersonalizedFeed(currentUserId: string, pageSize = 20, 
     return feed
   } catch (error) {
     console.error('Error fetching personalized feed:', error)
+    return []
   }
 }
 
@@ -1499,7 +1515,7 @@ export async function getPostById(postId: string, currentUserId?: string): Promi
     // Use the centralized formatting function
     const formattedPosts = await formatPostsForFrontend([post], currentUserId);
     
-    return formattedPosts.length > 0 ? formattedPosts[0] : null;
+    return (formattedPosts.length > 0 && formattedPosts[0] ? formattedPosts[0] : null) as Post | null;
   } catch (error) {
     console.error("Error fetching post by ID:", error);
     return null;
@@ -1625,11 +1641,11 @@ export async function likeComment(commentId: string, isLiking: boolean, userId: 
     const post = posts[0]
 
     // Find the comment in the post's comments array
-    const comments = post.comments || []
+    const comments = post?.comments || []
     const commentIndex = comments.findIndex((c: any) => c.id === commentId)
 
     if (commentIndex === -1) {
-      throw new Error(`Comment with ID ${commentId} not found in post ${post.id}`)
+      throw new Error(`Comment with ID ${commentId} not found in post ${post?.id ?? 'unknown'}`)
     }
 
     // Update the comment's like count
@@ -1645,13 +1661,15 @@ export async function likeComment(commentId: string, isLiking: boolean, userId: 
     updatedComments[commentIndex] = updatedComment
 
     // Update the post with the modified comments array
-    await payload.update({
-      collection: "posts",
-      id: post.id,
-      data: {
-        comments: updatedComments,
-      },
-    })
+    if (post && post.id) {
+      await payload.update({
+        collection: "posts",
+        id: post.id,
+        data: {
+          comments: updatedComments,
+        },
+      })
+    }
 
     return { success: true, likeCount: updatedComment.likeCount }
   } catch (error) {
@@ -2126,10 +2144,10 @@ export async function createPost(formData: FormData) {
               console.log(`📝 CreatePost: Image uploaded successfully - ID: ${mediaDoc.id}`)
               if (!imageId) {
                 // Set first image as main image
-                imageId = mediaDoc.id
+                imageId = String(mediaDoc.id)
               }
               // Add all images to photos array
-              photoIds.push(mediaDoc.id)
+              photoIds.push(String(mediaDoc.id))
             } else {
               console.error('📝 CreatePost: Media document creation failed - no ID returned')
               return {
@@ -2199,7 +2217,7 @@ export async function createPost(formData: FormData) {
             if (videoDoc?.id && !videoId) {
               console.log(`📝 CreatePost: Video uploaded successfully - ID: ${videoDoc.id}`)
               // Set first video as main video
-              videoId = videoDoc.id
+              videoId = String(videoDoc.id)
               
               // For video posts, also set the first image as thumbnail if available
               if (imageId) {
@@ -2235,7 +2253,10 @@ export async function createPost(formData: FormData) {
         })
         
         if (existingLocation) {
-          locationRelationId = locationId
+          locationRelationId = String(existingLocation.id)
+          console.log('📝 CreatePost: Found existing location:', locationRelationId)
+        } else {
+          console.log('📝 CreatePost: Location not found, continuing without location')
         }
       } catch (error) {
         console.error('Error finding location:', error)
@@ -2254,8 +2275,8 @@ export async function createPost(formData: FormData) {
           limit: 1,
         })
         
-        if (existingLocation.docs.length > 0) {
-          locationRelationId = existingLocation.docs[0].id
+        if (existingLocation.docs.length > 0 && existingLocation.docs[0]?.id) {
+          locationRelationId = String(existingLocation.docs[0].id)
           console.log('📝 CreatePost: Found existing location:', locationRelationId)
         } else {
           console.log('📝 CreatePost: Location not found, continuing without location')
@@ -2401,7 +2422,7 @@ export async function runMatchAlgorithm(
   });
 
   // 3. Sort by weight descending (highest skill first)
-  participants.sort((a, b) => b.weight - a.weight);
+  participants.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
 
   // 4. Determine number of groups needed
   const groupCount = Math.ceil(participants.length / maxPlayers);
@@ -2411,7 +2432,9 @@ export async function runMatchAlgorithm(
   let idx = 0;
   let forward = true;
   for (const p of participants) {
-    groups[idx].push(String(p.id));
+    if (typeof p !== 'undefined' && typeof p.id !== 'undefined') {
+      groups[idx]!.push(String(p.id));
+    }
     if (forward) {
       if (idx === groupCount - 1) {
         forward = false;
@@ -2732,7 +2755,7 @@ export async function subscribeToLocation(userId: string, locationId: string, no
       // Update existing subscription
       await payload.update({
         collection: 'locationSubscriptions',
-        id: existingSubscriptions.docs[0].id,
+        id: existingSubscriptions.docs[0]?.id ?? '',
         data: {
           notificationType,
           isActive: true,
@@ -2783,7 +2806,7 @@ export async function unsubscribeFromLocation(userId: string, locationId: string
       // Update existing subscription to inactive
       await payload.update({
         collection: 'locationSubscriptions',
-        id: existingSubscriptions.docs[0].id,
+        id: existingSubscriptions.docs[0]?.id ?? '',
         data: {
           isActive: false,
           updatedAt: new Date()
@@ -2879,7 +2902,7 @@ export async function unsaveLocation(userId: string, locationId: string): Promis
       // Delete saved location
       await payload.delete({
         collection: 'savedLocations',
-        id: existingSaved.docs[0].id
+        id: existingSaved.docs[0]?.id ?? ''
       });
     }
     
@@ -3349,7 +3372,7 @@ export async function removeLocationInteraction(
 
     await payload.delete({
       collection: 'locationInteractions',
-      id: existing.docs[0].id,
+      id: existing.docs[0]?.id ?? '',
     })
 
     // For unlike, create an unlike interaction
@@ -3361,7 +3384,7 @@ export async function removeLocationInteraction(
           location: locationId,
           type: 'unlike',
           metadata: {
-            originalLikeId: existing.docs[0].id,
+            originalLikeId: existing.docs[0]?.id ?? '',
             timestamp: new Date().toISOString(),
           },
           platform: 'web',
@@ -4616,7 +4639,7 @@ export async function getUserPersonalizationData(userId: string): Promise<{
     const preferencesSummary: string[] = [];
     
     if (interests.length > 0) {
-      const interestLabels = interests.map(interest => {
+      const interestLabels = interests.map((interest: string) => {
         const interestMap: { [key: string]: string } = {
           coffee: 'Coffee Shops',
           restaurants: 'Restaurants', 
@@ -5385,5 +5408,55 @@ export async function searchEventsAction(query: string, limit = 10) {
   } catch (error) {
     console.error('Error searching events:', error)
     return []
+  }
+}
+
+export async function updateLocationPrivacy(
+  locationId: string,
+  privacy: 'public' | 'private',
+  privateAccess: string[]
+): Promise<{ success: boolean; message: string }> {
+  const payload = await getPayload({ config: config })
+  
+  try {
+    // Validate input
+    if (!['public', 'private'].includes(privacy)) {
+      throw new Error('Invalid privacy setting')
+    }
+
+    if (privacy === 'private' && (!Array.isArray(privateAccess) || privateAccess.length === 0)) {
+      throw new Error('Private locations must have at least one friend selected')
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      privacy: privacy
+    }
+
+    if (privacy === 'private') {
+      updateData.privateAccess = privateAccess
+    } else {
+      // Clear private access when switching to public
+      updateData.privateAccess = []
+    }
+
+    // Update the location
+    await payload.update({
+      collection: 'locations',
+      id: locationId,
+      data: updateData
+    })
+
+    return {
+      success: true,
+      message: 'Privacy settings updated successfully'
+    }
+
+  } catch (error) {
+    console.error('Error updating location privacy:', error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to update privacy settings'
+    }
   }
 }

@@ -8,11 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import type { Post } from "@/types/feed"
+
 import MediaCarousel from "@/components/ui/media-carousel"
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
 
 interface Post {
+  isLiked: any
+  author: any
   id: string
   title?: string
   content?: string
@@ -302,10 +304,10 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
     const media = getPostMedia(post)
     if (media.length > 0) {
       // For videos, use thumbnail if available, otherwise use video URL
-      if (media[0].type === 'video') {
-        return media[0].thumbnail || media[0].url
+      if (media[0]?.type === 'video') {
+        return media[0]?.thumbnail || media[0]?.url
       }
-      return media[0].url
+      return media[0]?.url
     }
     
     // Fallback to legacy fields

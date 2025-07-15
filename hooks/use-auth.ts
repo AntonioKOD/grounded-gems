@@ -62,7 +62,7 @@ export function useAuth() {
       console.log('🔐 [useAuth] Attempting to fetch user')
       fetchAttempted.current = true
       
-      dispatch(fetchUser())
+      dispatch(fetchUser({}))
         .unwrap()
         .then(() => {
           console.log('🔐 [useAuth] User fetch successful')
