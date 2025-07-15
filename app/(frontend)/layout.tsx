@@ -15,6 +15,7 @@ import ErrorBoundary from '@/components/ErrorBoundary'
 import { NotificationProvider } from '@/components/notifications/notification-provider'
 import PerformanceMonitor from '@/components/performance/performance-monitor'
 import { Metadata } from "next"
+import NoNavWrapper from '@/components/ui/NoNavWrapper'
 
 export const metadata: Metadata = {
   title: {
@@ -83,18 +84,17 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
           <StoreProvider initialUser={initialUser}>
             <NotificationProvider>
               <PerformanceMonitor />
-              <NavigationWrapper initialUser={initialUser} />
-              <GoogleAnalytics gaId="G-QB3W2CL6T7" />
-              <MainContentWrapper>
-                {children}
-              </MainContentWrapper>
-              {/* Hide footer on mobile, show on desktop */}
-              <div className="hidden md:block">
-                <Footer />
-              </div>
-              <Toaster />
-              {/* Desktop FAB remains in its place */}
-              <ClientFloatingActionButtonMenu />
+              <NoNavWrapper 
+                navigation={<NavigationWrapper initialUser={initialUser} />} 
+                footer={<div className="hidden md:block"><Footer /></div>} 
+                fab={<ClientFloatingActionButtonMenu />} 
+              >
+                <GoogleAnalytics gaId="G-QB3W2CL6T7" />
+                <MainContentWrapper>
+                  {children}
+                </MainContentWrapper>
+                <Toaster />
+              </NoNavWrapper>
             </NotificationProvider>
           </StoreProvider>
         </MobileAppWrapper>
