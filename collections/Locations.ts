@@ -9,16 +9,19 @@ export const Locations: CollectionConfig = {
   },
   access: {
     read: ({ req }) => {
-      // If no user is logged in, only show public locations
       if (!req.user) {
-        // Only show public, published locations to unauthenticated users
         return {
           privacy: { equals: 'public' },
           status: { equals: 'published' }
         } as any;
       }
 
-      // If user is logged in, show public locations and private locations they have access to, or their own
+      // Allow admins to read all locations
+      if (req.user.role === 'admin') {
+        return true;
+      }
+
+      // Normal user logic
       return {
         or: [
           { privacy: { equals: 'public' }, status: { equals: 'published' } },

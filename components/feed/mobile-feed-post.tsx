@@ -137,9 +137,8 @@ const MobileFeedPost = memo(function MobileFeedPost({
     return getImageUrl(post.image || (post as any).featuredImage)
   }, [post.image, (post as any).featuredImage])
 
-  const processedVideoUrl = useMemo(() => {
-    return getVideoUrl(post.video)
-  }, [post.video])
+  const firstVideo = mediaItems.find((item: any) => item.type === 'video');
+  const processedVideoUrl = firstVideo ? firstVideo.url : getVideoUrl(post.video);
 
   // Check if we have any valid media
   useEffect(() => {
@@ -501,6 +500,9 @@ const MobileFeedPost = memo(function MobileFeedPost({
     return undefined
   }, [hasMedia])
 
+  // Add debug logging before rendering VideoPlayer
+  console.log('Rendering VideoPlayer with URL:', processedVideoUrl, 'mediaItems:', mediaItems);
+
   return (
     <>
       <motion.div
@@ -532,7 +534,19 @@ const MobileFeedPost = memo(function MobileFeedPost({
               onViewComplete={() => {
                 // Track video view completion
               }}
-              onError={() => setVideoError(true)}
+              onError={() => {
+                setVideoError(true);
+                console.error('VideoPlayer failed to load:', processedVideoUrl);
+                // Fallback to a known good video URL for testing
+                const fallbackUrl = 'https://www.w3schools.com/html/mov_bbb.mp4';
+                if (processedVideoUrl !== fallbackUrl) {
+                  setTimeout(() => {
+                    setVideoError(false);
+                    // Try to render fallback video
+                    document.querySelectorAll('video').forEach(v => v.src = fallbackUrl);
+                  }, 100);
+                }
+              }}
               controls={false}
               showProgress={false}
               showPlayButton={false}
