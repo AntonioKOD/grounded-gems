@@ -6,7 +6,7 @@ import { z } from 'zod'
 // Input validation schema
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long'),
-  username: z.string().min(2, 'Username must be at least 2 characters').max(50, 'Username too long'),
+  username: z.string().min(3, 'Username must be at least 3 characters').max(30, 'Username too long'),
   email: z.string().email('Invalid email format'),
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
@@ -87,6 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileReg
 
     const { 
       name, 
+      username,
       email, 
       password, 
       location, 
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileReg
     // Create user
     const userData = {
       name,
+      username,
       email,
       password,
       role: 'user',
