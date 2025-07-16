@@ -182,60 +182,21 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileReg
       )
     }
 
-    // Login the user after successful registration
-    const loginResult = await payload.login({
-      collection: 'users',
-      data: { email, password },
-      req: request,
-    })
-
-    if (!loginResult.user || !loginResult.token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Registration successful but auto-login failed',
-          error: 'Please login manually',
-          code: 'AUTO_LOGIN_FAILED'
-        },
-        { status: 201 }
-      )
-    }
-
-    // Prepare mobile-optimized response
-    const response: MobileRegisterResponse = {
-      success: true,
-      message: 'Registration successful',
-      data: {
-        user: {
-          id: result.id as string,
-          name: result.name || '',
-          email: result.email as string,
-          profileImage: result.profileImage ? {
-            url: typeof result.profileImage === 'object' && result.profileImage.url
-              ? result.profileImage.url
-              : typeof result.profileImage === 'string' 
-              ? result.profileImage 
-              : '' // Fallback for unexpected types
-          } : null,
-          location: result.location,
-          role: result.role || 'user',
-          preferences: {
-            categories: result.interests || [],
-            notifications: result.notificationSettings?.enabled || true,
-          },
-        },
-        token: loginResult.token,
-        expiresIn: 24 * 60 * 60, // 1 day in seconds
+    // Do NOT attempt to log in the user after registration
+    // Return a clear message instructing the user to verify their email
+    return NextResponse.json(
+      {
+        success: true,
+        message: 'Registration successful. Please check your email to verify your account before logging in.'
       },
-    }
-
-    return NextResponse.json(response, { 
-      status: 201,
-      headers: {
-        'Cache-Control': 'no-store',
-        'X-Content-Type-Options': 'nosniff',
+      {
+        status: 201,
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        }
       }
-    })
+    )
 
   } catch (error) {
     console.error('Mobile registration error:', error)
