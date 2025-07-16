@@ -380,7 +380,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
     if (typesToFetch.includes('people_suggestion')) {
       const usersResult = await payload.find({
         collection: 'users',
-        where: { _status: { equals: 'active' } },
+        // Removed invalid _status filter
         sort: '-createdAt',
         page,
         limit,
