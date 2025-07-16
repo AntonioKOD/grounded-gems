@@ -44,17 +44,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!title || !content || !rating) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
     }
-    // Save review (assume addReviewToLocation exists)
-    const { addReviewToLocation } = await import('@/app/actions')
-    const review = await addReviewToLocation(locationId, {
-      title,
-      content,
-      rating,
-      visitDate,
-      pros,
-      cons,
-      tips,
-      author: user.id
+    // Create a new review in the reviews collection
+    const { getPayload } = await import('payload')
+    const config = (await import('@payload-config')).default
+    const payload = await getPayload({ config })
+    const review = await payload.create({
+      collection: 'reviews',
+      data: {
+        title,
+        content,
+        rating,
+        visitDate,
+        pros,
+        cons,
+        tips,
+        location: locationId,
+        author: user.id,
+        status: 'published'
+      }
     })
     return NextResponse.json({ success: true, data: { review } })
   } catch (error) {
