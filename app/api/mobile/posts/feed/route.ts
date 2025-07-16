@@ -180,6 +180,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
     let feedItems: any[] = []
 
     // Fetch posts
+    let posts: any[] = []
     if (typesToFetch.includes('post')) {
       const postsResult = await payload.find({
         collection: 'posts',
@@ -189,7 +190,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         limit: sortBy === 'popularity' || sortBy === 'trending' ? Math.min(limit * 2, 50) : limit,
         depth: 2,
       })
-      const formattedPosts = postsResult.docs.map((post: any) => {
+      posts = postsResult.docs.map((post: any) => {
         // Calculate engagement stats
         const likeCount = Array.isArray(post.likes) ? post.likes.length : 0
         const commentCount = Array.isArray(post.comments) ? post.comments.length : 0
@@ -346,10 +347,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
           ...formattedPost
         }
       })
-      feedItems = feedItems.concat(formattedPosts)
     }
 
     // Fetch place recommendations (locations)
+    let places: any[] = []
     if (typesToFetch.includes('place_recommendation')) {
       const locationsResult = await payload.find({
         collection: 'locations',
@@ -359,7 +360,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         limit,
         depth: 1,
       })
-      const formattedPlaces = locationsResult.docs.map((loc: any) => {
+      places = locationsResult.docs.map((loc: any) => {
         // categories: always array of strings
         let categories: string[] = []
         if (Array.isArray(loc.categories)) {
@@ -376,11 +377,20 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
             .filter(Boolean)
             .join(', ')
         }
+        // photo: featuredImage, or first gallery image, or null
+        let photo = null
+        if (loc.featuredImage) {
+          photo = typeof loc.featuredImage === 'object' ? loc.featuredImage.url : loc.featuredImage
+        } else if (Array.isArray(loc.gallery) && loc.gallery.length > 0) {
+          const primary = loc.gallery.find((img: any) => img.isPrimary) || loc.gallery[0]
+          photo = primary?.image?.url || primary?.image || null
+        }
         return {
           type: 'place_recommendation',
           id: loc.id,
           name: loc.name,
           description: loc.description || '',
+          photo, // main photo
           image: loc.image ? (typeof loc.image === 'object' ? loc.image.url : loc.image) : null,
           rating: loc.rating || null,
           categories,
@@ -391,10 +401,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
           isPromoted: loc.isFeatured || false
         }
       })
-      feedItems = feedItems.concat(formattedPlaces)
     }
 
     // Fetch people suggestions (users)
+    let people: any[] = []
     if (typesToFetch.includes('people_suggestion')) {
       const usersResult = await payload.find({
         collection: 'users',
@@ -404,7 +414,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         limit,
         depth: 1,
       })
-      const formattedPeople = usersResult.docs.map((user: any) => ({
+      people = usersResult.docs.map((user: any) => ({
         type: 'people_suggestion',
         id: user.id,
         name: user.name,
@@ -413,7 +423,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
       }))
-      feedItems = feedItems.concat(formattedPeople)
+    }
+
+    // Mixing algorithm: 2 posts, 1 place, 1 person, repeat
+    let i = 0, j = 0, k = 0
+    while (i < posts.length || j < places.length || k < people.length) {
+      if (i < posts.length) feedItems.push(posts[i++])
+      if (i < posts.length) feedItems.push(posts[i++])
+      if (j < places.length) feedItems.push(places[j++])
+      if (k < people.length) feedItems.push(people[k++])
     }
 
     // Sort all feed items by createdAt descending (if available)
@@ -423,7 +441,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       return bDate - aDate
     })
 
-    // Paginate after merging
+    // Paginate after mixing
     const paginatedItems = feedItems.slice(0, limit)
 
     // Build response
@@ -431,7 +449,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       success: true,
       message: 'Feed retrieved successfully',
       data: {
-        posts: paginatedItems, // Now polymorphic
+        posts: paginatedItems, // Now polymorphic and mixed
         pagination: {
           page,
           limit,
