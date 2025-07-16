@@ -359,20 +359,38 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         limit,
         depth: 1,
       })
-      const formattedPlaces = locationsResult.docs.map((loc: any) => ({
-        type: 'place_recommendation',
-        id: loc.id,
-        name: loc.name,
-        description: loc.description || '',
-        image: loc.image ? (typeof loc.image === 'object' ? loc.image.url : loc.image) : null,
-        rating: loc.rating || null,
-        categories: loc.categories || [],
-        location: loc.coordinates ? { latitude: loc.coordinates.latitude, longitude: loc.coordinates.longitude } : null,
-        address: loc.address || '',
-        createdAt: loc.createdAt,
-        updatedAt: loc.updatedAt,
-        isPromoted: loc.isFeatured || false
-      }))
+      const formattedPlaces = locationsResult.docs.map((loc: any) => {
+        // categories: always array of strings
+        let categories: string[] = []
+        if (Array.isArray(loc.categories)) {
+          categories = loc.categories.map((cat: any) =>
+            typeof cat === 'string' ? cat : cat?.name || cat?.slug || ''
+          ).filter(Boolean)
+        }
+        // address: always a single string
+        let address = ''
+        if (typeof loc.address === 'string') {
+          address = loc.address
+        } else if (loc.address && typeof loc.address === 'object') {
+          address = [loc.address.street, loc.address.city, loc.address.state, loc.address.zip, loc.address.country]
+            .filter(Boolean)
+            .join(', ')
+        }
+        return {
+          type: 'place_recommendation',
+          id: loc.id,
+          name: loc.name,
+          description: loc.description || '',
+          image: loc.image ? (typeof loc.image === 'object' ? loc.image.url : loc.image) : null,
+          rating: loc.rating || null,
+          categories,
+          location: loc.coordinates ? { latitude: loc.coordinates.latitude, longitude: loc.coordinates.longitude } : null,
+          address,
+          createdAt: loc.createdAt,
+          updatedAt: loc.updatedAt,
+          isPromoted: loc.isFeatured || false
+        }
+      })
       feedItems = feedItems.concat(formattedPlaces)
     }
 
