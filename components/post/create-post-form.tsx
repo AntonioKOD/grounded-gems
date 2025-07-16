@@ -14,7 +14,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { createPost } from "@/app/actions"
+// Remove the server action import
+// import { createPost } from "@/app/actions"
 
 interface UserData {
   id: string
@@ -452,20 +453,19 @@ export default function CreatePostForm({
 
     try {
       const formData = new FormData()
-      formData.append("userId", user.id)
       formData.append("content", postContent.trim())
-      formData.append("type", "post")
+      formData.append("postType", "general")
 
       if (selectedLocation) {
         formData.append("locationId", selectedLocation.id)
-        formData.append("locationName", selectedLocation.name)
       } else if (locationName.trim()) {
+        // Handle location name if no location selected
         formData.append("locationName", locationName.trim())
       }
       
       selectedFiles.forEach(file => {
         if (file.type.startsWith('image/')) {
-          formData.append("media", file)
+          formData.append("images", file)
         } else if (file.type.startsWith('video/')) {
           formData.append("videos", file)
         }
@@ -480,7 +480,20 @@ export default function CreatePostForm({
         fileSizes: selectedFiles.map(f => `${f.name}: ${(f.size / 1024 / 1024).toFixed(2)}MB`)
       })
 
-      const result = await createPost(formData)
+      // Use API route instead of server action
+      const response = await fetch('/api/posts/create', {
+        method: 'POST',
+        headers: {
+          'x-user-id': user.id,
+        },
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to create post')
+      }
 
       if (result.success) {
         toast.success("Post shared successfully!")
@@ -511,6 +524,8 @@ export default function CreatePostForm({
       setIsSubmitting(false)
     }
   }
+
+
 
   const getInitials = (name: string) => {
     return name

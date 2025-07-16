@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { createPost } from "@/app/actions"
+// import { createPost } from "@/app/actions"
 import { useLocationSearch, type LocationResult } from "@/hooks/useLocationSearch"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
@@ -422,7 +422,20 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
         setMediaUploadProgress(50 + ((index + 1) / selectedVideos.length) * 50)
       })
 
-      const result = await createPost(formData)
+      // Use API route instead of server action
+      const response = await fetch('/api/posts/create', {
+        method: 'POST',
+        headers: {
+          'x-user-id': user.id,
+        },
+        body: formData,
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Failed to create post')
+      }
 
       if (result.success) {
         toast.success("Post shared successfully!")

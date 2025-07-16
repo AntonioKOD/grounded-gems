@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import { signupUser } from "@/app/actions"
+// Remove the server action import
+// import { signupUser } from "@/app/actions"
 import Link from "next/link"
 import { 
   Eye, EyeOff, Loader2, CheckCircle, AlertCircle, ArrowRight, 
@@ -316,8 +317,31 @@ export default function ImprovedSignupForm({ categories }: ImprovedSignupFormPro
         hasCoords: !!signupData.coords?.latitude
       })
 
-      await signupUser(signupData)
-      
+      // Use API route instead of server action
+      const response = await fetch('/api/users/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(signupData),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        // Handle specific error cases
+        if (result.error?.includes('already exists') || result.error?.includes('duplicate')) {
+          throw new Error('An account with this email already exists. Please try logging in instead.')
+        }
+        if (result.error?.includes('validation')) {
+          throw new Error('Please check your information and try again.')
+        }
+        if (result.error?.includes('Failed to find Server Action')) {
+          throw new Error('There was a temporary issue with the signup process. Please refresh the page and try again.')
+        }
+        throw new Error(result.error || 'Signup failed. Please try again.')
+      }
+
       // Clear auth redirect history to prevent future loops
       clearAuthRedirectHistory()
       
