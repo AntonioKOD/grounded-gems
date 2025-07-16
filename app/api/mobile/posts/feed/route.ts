@@ -79,6 +79,8 @@ interface MobileFeedResponse {
   code?: string
 }
 
+const SUPPORTED_FEED_TYPES = ['post', 'place_recommendation', 'people_suggestion']
+
 export async function GET(request: NextRequest): Promise<NextResponse<MobileFeedResponse>> {
   try {
     console.log('🚀 Mobile feed endpoint called - ENHANCED VERSION')
@@ -171,216 +173,255 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
 
     console.log('📡 Starting database query with sort:', compoundSort, 'primary type:', typeof sort)
     
-    // Fetch posts with relationships
-    const postsResult = await payload.find({
-      collection: 'posts',
-      where: whereClause,
-      sort: compoundSort, // Use compound sort to prevent pagination duplicates
-      page,
-      limit: sortBy === 'popularity' || sortBy === 'trending' ? Math.min(limit * 2, 50) : limit, // Cap at 50 to avoid memory issues
-      depth: 2, // Include author and location relationships
-    })
+    const includeTypesParam = searchParams.get('includeTypes')
+    const includeTypes = includeTypesParam ? includeTypesParam.split(',').filter(Boolean) : []
+    const typesToFetch = includeTypes.length > 0 ? includeTypes : SUPPORTED_FEED_TYPES
 
-    console.log(`📝 Database query completed: Found ${postsResult.docs.length} posts out of ${postsResult.totalDocs} total`)
+    let feedItems: any[] = []
 
-    // Enhanced post formatting with relationships
-    console.log('🔧 Starting enhanced post formatting...')
-    const formattedPosts = postsResult.docs.map((post: any, index: number) => {
-      console.log(`🔧 Formatting post ${index + 1}/${postsResult.docs.length}: ${post.id}`)
-      
-      // Calculate engagement stats
-      const likeCount = Array.isArray(post.likes) ? post.likes.length : 0
-      const commentCount = Array.isArray(post.comments) ? post.comments.length : 0
-      const saveCount = Array.isArray(post.savedBy) ? post.savedBy.length : 0
-
-      // Check if current user liked/saved this post
-      let isLiked = false
-      let isSaved = false
-
-      if (currentUser) {
-        // Check likes using the existing relationship
-        isLiked = Array.isArray(post.likes) && 
-                 post.likes.some((like: any) => {
-                   const likeId = typeof like === 'string' ? like : like.id
-                   return likeId === currentUser.id
-                 })
-
-        // Check saves using the existing relationship
-        isSaved = Array.isArray(post.savedBy) && 
-                 post.savedBy.some((save: any) => {
-                   const saveId = typeof save === 'string' ? save : save.id
-                   return saveId === currentUser.id
-                 })
-      }
-
-      // Enhanced media handling with better video support and proper URL processing
-      let media: any[] = []
-      
-      // Helper function to process media URLs
-      const processMediaUrl = (mediaItem: any): string | null => {
-        if (!mediaItem) return null
-        
-        let url: string | null = null
-        
-        if (typeof mediaItem === 'string') {
-          url = mediaItem
-        } else if (typeof mediaItem === 'object') {
-          // Try different URL sources in order of preference
-          url = mediaItem.url || 
-                mediaItem.sizes?.card?.url || 
-                mediaItem.sizes?.thumbnail?.url || 
-                mediaItem.thumbnailURL ||
-                (mediaItem.filename ? `/api/media/file/${mediaItem.filename}` : null)
-        }
-        
-        if (!url) return null
-        
-        // Ensure URL is properly formatted
-        if (url.startsWith('/') && !url.startsWith('http')) {
-          // For relative URLs, ensure they're properly formatted
-          if (!url.startsWith('/api/media/')) {
-            url = `/api/media/file/${url.replace(/^\/+/, '')}`
-          }
-        }
-        
-        return url
-      }
-      
-      // Add main image
-      if (post.image) {
-        const imageUrl = processMediaUrl(post.image)
-        if (imageUrl) {
-          media.push({
-            type: 'image',
-            url: imageUrl,
-            alt: typeof post.image === 'object' ? post.image.alt : undefined
-          })
-          console.log(`📸 Added image to post ${post.id}:`, imageUrl)
-        }
-      }
-
-      // Add video if exists - reels-style (no thumbnail)
-      if (post.video) {
-        const videoUrl = processMediaUrl(post.video)
-        if (videoUrl) {
-          const videoItem = {
-            type: 'video',
-            url: videoUrl,
-            // No thumbnail for reels-style autoplay
-            duration: typeof post.video === 'object' ? post.video.duration : undefined,
-            alt: 'Post video'
-          }
-          media.push(videoItem)
-          console.log(`📹 Added video to post ${post.id}:`, videoItem)
-        }
-      }
-
-      // Add photos array if exists
-      if (post.photos && Array.isArray(post.photos)) {
-        const validPhotos = post.photos
-          .map((photo: any) => {
-            const photoUrl = processMediaUrl(photo)
-            return photoUrl ? {
-              type: 'image',
-              url: photoUrl,
-              alt: typeof photo === 'object' ? photo.alt : undefined
-            } : null
-          })
-          .filter((photo: null) => photo !== null) // Only include photos with valid URLs
-
-        media = media.concat(validPhotos)
-        console.log(`📸 Added ${validPhotos.length} photos to post ${post.id}`)
-      }
-
-      const formattedPost = {
-        id: post.id,
-        caption: post.content || '',
-        author: {
-          id: post.author?.id || 'unknown',
-          name: post.author?.name || 'Anonymous',
-          profileImage: post.author?.profileImage ? {
-            url: typeof post.author.profileImage === 'object'
-              ? post.author.profileImage.url
-              : post.author.profileImage
-          } : null
-        },
-        location: post.location ? {
-          id: post.location.id,
-          name: post.location.name,
-          coordinates: post.location.coordinates
-        } : undefined,
-        media,
-        engagement: {
-          likeCount,
-          commentCount,
-          shareCount: 0, // Not implemented yet
-          saveCount,
-          isLiked,
-          isSaved
-        },
-        categories: Array.isArray(post.categories) 
-          ? post.categories.map((cat: any) => typeof cat === 'string' ? cat : cat.name || cat.slug)
-          : [],
-        tags: Array.isArray(post.tags) 
-          ? post.tags.map((tag: any) => typeof tag === 'string' ? tag : tag.tag)
-          : [],
-        createdAt: post.createdAt,
-        updatedAt: post.updatedAt,
-        rating: post.rating,
-        isPromoted: post.isSponsored || post.isFeatured || false,
-        // Add engagement score for sorting
-        _engagementScore: likeCount + commentCount * 2 + saveCount * 3
-      }
-
-      console.log(`📝 Final formatted post ${post.id}:`, {
-        id: formattedPost.id,
-        mediaCount: formattedPost.media.length,
-        mediaTypes: formattedPost.media.map(m => m.type),
-        hasVideo: formattedPost.media.some(m => m.type === 'video')
+    // Fetch posts
+    if (typesToFetch.includes('post')) {
+      const postsResult = await payload.find({
+        collection: 'posts',
+        where: whereClause,
+        sort: compoundSort,
+        page,
+        limit: sortBy === 'popularity' || sortBy === 'trending' ? Math.min(limit * 2, 50) : limit,
+        depth: 2,
       })
+      const formattedPosts = postsResult.docs.map((post: any) => {
+        // Calculate engagement stats
+        const likeCount = Array.isArray(post.likes) ? post.likes.length : 0
+        const commentCount = Array.isArray(post.comments) ? post.comments.length : 0
+        const saveCount = Array.isArray(post.savedBy) ? post.savedBy.length : 0
 
-      return formattedPost
-    })
+        // Check if current user liked/saved this post
+        let isLiked = false
+        let isSaved = false
 
-    console.log('✅ All posts formatted successfully')
+        if (currentUser) {
+          // Check likes using the existing relationship
+          isLiked = Array.isArray(post.likes) && 
+                   post.likes.some((like: any) => {
+                     const likeId = typeof like === 'string' ? like : like.id
+                     return likeId === currentUser.id
+                   })
 
-    // Apply post-processing sorting if needed
-    let finalPosts = formattedPosts
-    if (sortBy === 'popularity') {
-      finalPosts = formattedPosts
-        .sort((a, b) => b.engagement.likeCount - a.engagement.likeCount)
-        .slice(0, limit)
-      console.log('📊 Applied popularity sorting')
-    } else if (sortBy === 'trending') {
-      finalPosts = formattedPosts
-        .sort((a, b) => (b as any)._engagementScore - (a as any)._engagementScore)
-        .slice(0, limit)
-      console.log('📊 Applied trending sorting')
+          // Check saves using the existing relationship
+          isSaved = Array.isArray(post.savedBy) && 
+                   post.savedBy.some((save: any) => {
+                     const saveId = typeof save === 'string' ? save : save.id
+                     return saveId === currentUser.id
+                   })
+        }
+
+        // Enhanced media handling with better video support and proper URL processing
+        let media: any[] = []
+        
+        // Helper function to process media URLs
+        const processMediaUrl = (mediaItem: any): string | null => {
+          if (!mediaItem) return null
+          
+          let url: string | null = null
+          
+          if (typeof mediaItem === 'string') {
+            url = mediaItem
+          } else if (typeof mediaItem === 'object') {
+            // Try different URL sources in order of preference
+            url = mediaItem.url || 
+                  mediaItem.sizes?.card?.url || 
+                  mediaItem.sizes?.thumbnail?.url || 
+                  mediaItem.thumbnailURL ||
+                  (mediaItem.filename ? `/api/media/file/${mediaItem.filename}` : null)
+          }
+          
+          if (!url) return null
+          
+          // Ensure URL is properly formatted
+          if (url.startsWith('/') && !url.startsWith('http')) {
+            // For relative URLs, ensure they're properly formatted
+            if (!url.startsWith('/api/media/')) {
+              url = `/api/media/file/${url.replace(/^\/+/, '')}`
+            }
+          }
+          
+          return url
+        }
+        
+        // Add main image
+        if (post.image) {
+          const imageUrl = processMediaUrl(post.image)
+          if (imageUrl) {
+            media.push({
+              type: 'image',
+              url: imageUrl,
+              alt: typeof post.image === 'object' ? post.image.alt : undefined
+            })
+            console.log(`📸 Added image to post ${post.id}:`, imageUrl)
+          }
+        }
+
+        // Add video if exists - reels-style (no thumbnail)
+        if (post.video) {
+          const videoUrl = processMediaUrl(post.video)
+          if (videoUrl) {
+            const videoItem = {
+              type: 'video',
+              url: videoUrl,
+              // No thumbnail for reels-style autoplay
+              duration: typeof post.video === 'object' ? post.video.duration : undefined,
+              alt: 'Post video'
+            }
+            media.push(videoItem)
+            console.log(`📹 Added video to post ${post.id}:`, videoItem)
+          }
+        }
+
+        // Add photos array if exists
+        if (post.photos && Array.isArray(post.photos)) {
+          const validPhotos = post.photos
+            .map((photo: any) => {
+              const photoUrl = processMediaUrl(photo)
+              return photoUrl ? {
+                type: 'image',
+                url: photoUrl,
+                alt: typeof photo === 'object' ? photo.alt : undefined
+              } : null
+            })
+            .filter((photo: null) => photo !== null) // Only include photos with valid URLs
+
+          media = media.concat(validPhotos)
+          console.log(`📸 Added ${validPhotos.length} photos to post ${post.id}`)
+        }
+
+        const formattedPost = {
+          id: post.id,
+          caption: post.content || '',
+          author: {
+            id: post.author?.id || 'unknown',
+            name: post.author?.name || 'Anonymous',
+            profileImage: post.author?.profileImage ? {
+              url: typeof post.author.profileImage === 'object'
+                ? post.author.profileImage.url
+                : post.author.profileImage
+            } : null
+          },
+          location: post.location ? {
+            id: post.location.id,
+            name: post.location.name,
+            coordinates: post.location.coordinates
+          } : undefined,
+          media,
+          engagement: {
+            likeCount,
+            commentCount,
+            shareCount: 0, // Not implemented yet
+            saveCount,
+            isLiked,
+            isSaved
+          },
+          categories: Array.isArray(post.categories) 
+            ? post.categories.map((cat: any) => typeof cat === 'string' ? cat : cat.name || cat.slug)
+            : [],
+          tags: Array.isArray(post.tags) 
+            ? post.tags.map((tag: any) => typeof tag === 'string' ? tag : tag.tag)
+            : [],
+          createdAt: post.createdAt,
+          updatedAt: post.updatedAt,
+          rating: post.rating,
+          isPromoted: post.isSponsored || post.isFeatured || false,
+          // Add engagement score for sorting
+          _engagementScore: likeCount + commentCount * 2 + saveCount * 3
+        }
+
+        console.log(`📝 Final formatted post ${post.id}:`, {
+          id: formattedPost.id,
+          mediaCount: formattedPost.media.length,
+          mediaTypes: formattedPost.media.map(m => m.type),
+          hasVideo: formattedPost.media.some(m => m.type === 'video')
+        })
+
+        return {
+          type: 'post',
+          ...formattedPost
+        }
+      })
+      feedItems = feedItems.concat(formattedPosts)
     }
 
-    // Remove temporary fields
-    finalPosts.forEach((post: any) => delete post._engagementScore)
+    // Fetch place recommendations (locations)
+    if (typesToFetch.includes('place_recommendation')) {
+      const locationsResult = await payload.find({
+        collection: 'locations',
+        where: { status: { equals: 'published' } },
+        sort: '-createdAt',
+        page,
+        limit,
+        depth: 1,
+      })
+      const formattedPlaces = locationsResult.docs.map((loc: any) => ({
+        type: 'place_recommendation',
+        id: loc.id,
+        name: loc.name,
+        description: loc.description || '',
+        image: loc.image ? (typeof loc.image === 'object' ? loc.image.url : loc.image) : null,
+        rating: loc.rating || null,
+        categories: loc.categories || [],
+        location: loc.coordinates ? { latitude: loc.coordinates.latitude, longitude: loc.coordinates.longitude } : null,
+        address: loc.address || '',
+        createdAt: loc.createdAt,
+        updatedAt: loc.updatedAt,
+        isPromoted: loc.isFeatured || false
+      }))
+      feedItems = feedItems.concat(formattedPlaces)
+    }
 
-    // Calculate pagination
-    const totalPages = Math.ceil(postsResult.totalDocs / limit)
-    const hasNext = page < totalPages
-    const hasPrev = page > 1
+    // Fetch people suggestions (users)
+    if (typesToFetch.includes('people_suggestion')) {
+      const usersResult = await payload.find({
+        collection: 'users',
+        where: { _status: { equals: 'active' } },
+        sort: '-createdAt',
+        page,
+        limit,
+        depth: 1,
+      })
+      const formattedPeople = usersResult.docs.map((user: any) => ({
+        type: 'people_suggestion',
+        id: user.id,
+        name: user.name,
+        bio: user.bio || '',
+        profileImage: user.profileImage ? (typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage) : null,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }))
+      feedItems = feedItems.concat(formattedPeople)
+    }
 
+    // Sort all feed items by createdAt descending (if available)
+    feedItems.sort((a, b) => {
+      const aDate = new Date(a.createdAt || 0).getTime()
+      const bDate = new Date(b.createdAt || 0).getTime()
+      return bDate - aDate
+    })
+
+    // Paginate after merging
+    const paginatedItems = feedItems.slice(0, limit)
+
+    // Build response
     const response: MobileFeedResponse = {
       success: true,
       message: 'Feed retrieved successfully',
       data: {
-        posts: finalPosts,
+        posts: paginatedItems, // Now polymorphic
         pagination: {
           page,
           limit,
-          total: postsResult.totalDocs,
-          totalPages,
-          hasNext,
-          hasPrev,
-          nextCursor: finalPosts.length > 0 
-            ? finalPosts[finalPosts.length - 1]?.createdAt 
-            : undefined
+          total: feedItems.length,
+          totalPages: Math.ceil(feedItems.length / limit),
+          hasNext: page * limit < feedItems.length,
+          hasPrev: page > 1,
+          nextCursor: paginatedItems.length > 0 ? paginatedItems[paginatedItems.length - 1]?.createdAt : undefined
         },
         meta: {
           feedType,
@@ -392,20 +433,20 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       }
     }
 
-    console.log(`✅ Returning ${finalPosts.length} posts successfully`)
+    console.log(`✅ Returning ${paginatedItems.length} posts successfully`)
     
     return NextResponse.json(response, {
       status: 200,
       headers: {
         'Cache-Control': feedType === 'personalized' || feedType === 'following'
-          ? 'private, no-cache, no-store, must-revalidate' // No caching for personalized feeds
+          ? 'private, no-cache, no-store, must-revalidate'
           : sortBy === 'createdAt'
-          ? 'public, max-age=30, must-revalidate' // Very short cache for recent posts (30 seconds)
-          : 'public, max-age=120, must-revalidate', // 2 minutes for other feeds
+          ? 'public, max-age=30, must-revalidate'
+          : 'public, max-age=120, must-revalidate',
         'X-Content-Type-Options': 'nosniff',
         'Pragma': 'no-cache',
         'Expires': '0',
-        'Vary': 'Authorization' // Cache varies based on auth
+        'Vary': 'Authorization'
       }
     })
 
