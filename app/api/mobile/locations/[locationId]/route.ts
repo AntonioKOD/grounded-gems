@@ -97,7 +97,10 @@ export async function GET(
       reviewCount: location.reviewCount || 0,
       visitCount: location.visitCount || 0,
       businessHours: location.businessHours || [],
-      contactInfo: location.contactInfo || {},
+      contactInfo: {
+        ...location.contactInfo,
+        socialMedia: location.contactInfo?.socialMedia || location.socialMedia || undefined
+      },
       accessibility: location.accessibility || {},
       bestTimeToVisit: location.bestTimeToVisit || [],
       insiderTips: location.insiderTips,
@@ -105,6 +108,7 @@ export async function GET(
       isFeatured: location.isFeatured || false,
       hasBusinessPartnership: location.hasBusinessPartnership || false,
       partnershipDetails: location.partnershipDetails,
+      neighborhood: location.neighborhood || undefined,
       // User interaction state
       isSaved,
       isSubscribed,
