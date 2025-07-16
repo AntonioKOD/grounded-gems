@@ -250,35 +250,36 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         }
         
         // Add main image
+        let mainImageUrl: string | null = null
         if (post.image) {
-          const imageUrl = processMediaUrl(post.image)
-          if (imageUrl) {
+          mainImageUrl = processMediaUrl(post.image)
+          if (mainImageUrl) {
             media.push({
               type: 'image',
-              url: imageUrl,
+              url: mainImageUrl,
               alt: typeof post.image === 'object' ? post.image.alt : undefined
             })
-            console.log(`📸 Added image to post ${post.id}:`, imageUrl)
+            console.log(`📸 Added image to post ${post.id}:`, mainImageUrl)
           }
         }
 
         // Add video if exists - reels-style (no thumbnail)
+        let videoItem = null
         if (post.video) {
           const videoUrl = processMediaUrl(post.video)
           if (videoUrl) {
-            const videoItem = {
+            videoItem = {
               type: 'video',
               url: videoUrl,
               // No thumbnail for reels-style autoplay
               duration: typeof post.video === 'object' ? post.video.duration : undefined,
               alt: 'Post video'
             }
-            media.push(videoItem)
             console.log(`📹 Added video to post ${post.id}:`, videoItem)
           }
         }
 
-        // Add photos array if exists
+        // Add photos array if exists, skipping duplicates
         if (post.photos && Array.isArray(post.photos)) {
           const validPhotos = post.photos
             .map((photo: any) => {
@@ -289,10 +290,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
                 alt: typeof photo === 'object' ? photo.alt : undefined
               } : null
             })
-            .filter((photo: null) => photo !== null) // Only include photos with valid URLs
-
-          media = media.concat(validPhotos)
+            .filter((photo: any) => photo !== null && photo.url !== mainImageUrl) // Only include photos with valid URLs and not the main image
+          media.push(...validPhotos)
           console.log(`📸 Added ${validPhotos.length} photos to post ${post.id}`)
+        }
+
+        // Always put video first if it exists
+        if (videoItem) {
+          media.unshift(videoItem)
         }
 
         const formattedPost = {
