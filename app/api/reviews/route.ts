@@ -39,13 +39,25 @@ export async function GET(req: NextRequest) {
         }
       }
     });
+    const numReviews = await payload.find({
+      collection: 'reviews',
+      where: {
+        location: { equals: locationId }
+      }
+    });
+
+    const averageRating = numReviews.docs.reduce((sum: number, review: any) => sum + review.rating, 0) / numReviews.docs.length;
+
+    const totalReviews = numReviews.docs.length;
 
     return NextResponse.json({
       success: true,
       reviews: reviews.docs,
       totalPages: reviews.totalPages,
       page: reviews.page,
-      totalDocs: reviews.totalDocs
+      totalDocs: reviews.totalDocs,
+      averageRating,
+      totalReviews
     });
 
   } catch (error) {

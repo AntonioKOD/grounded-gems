@@ -4,8 +4,42 @@ import config from '@payload-config'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('📝 Post creation API called')
+    console.log('📝 Request headers:', Object.fromEntries(request.headers.entries()))
+    console.log('📝 Request method:', request.method)
+    console.log('📝 Content-Type:', request.headers.get('content-type'))
+    
     const payload = await getPayload({ config })
-    const formData = await request.formData()
+    
+    let formData: FormData
+    
+    // Check content type to determine how to parse the request
+    const contentType = request.headers.get('content-type') || ''
+    
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData
+      formData = await request.formData()
+    } else if (contentType.includes('application/json')) {
+      // Handle JSON and convert to FormData
+      const jsonData = await request.json()
+      formData = new FormData()
+      
+      // Convert JSON fields to FormData
+      Object.entries(jsonData).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach(item => formData.append(key, item))
+        } else if (value !== null && value !== undefined) {
+          formData.append(key, String(value))
+        }
+      })
+    } else {
+      // Unsupported content type
+      console.error('📝 Unsupported content type:', contentType)
+      return NextResponse.json(
+        { success: false, message: 'Invalid request format. Expected FormData or JSON.' },
+        { status: 400 }
+      )
+    }
     
     // Extract user ID from headers or session
     const userId = request.headers.get('x-user-id')
@@ -31,11 +65,22 @@ export async function POST(request: NextRequest) {
 
     // Extract form data
     const content = formData.get('content') as string
-    const postType = formData.get('postType') as string || 'general'
+    const title = formData.get('title') as string
+    let type = formData.get('type') as string || formData.get('postType') as string || 'post'
+    const rating = formData.get('rating') as string
     const locationId = formData.get('locationId') as string
+    const locationName = formData.get('locationName') as string
     const tags = formData.get('tags') as string
-    const isPublic = formData.get('isPublic') === 'true'
-    const allowComments = formData.get('allowComments') !== 'false'
+
+    // Ensure type is always 'post' unless explicitly set to another valid value
+    if (!type || typeof type !== 'string' || !type.trim()) {
+      type = 'post'
+    } else {
+      type = type.trim().toLowerCase()
+      if (type !== 'post' && type !== 'review') { // Add other allowed types if needed
+        type = 'post'
+      }
+    }
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json(
@@ -44,8 +89,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Process media files
-    const imageFiles = formData.getAll('images') as File[]
+    // Process media files - handle both field name conventions
+    const imageFiles = [
+      ...(formData.getAll('images') as File[]),
+      ...(formData.getAll('media') as File[])
+    ].filter(file => file.type.startsWith('image/'))
     const videoFiles = formData.getAll('videos') as File[]
     const mediaIds: string[] = []
 
@@ -136,11 +184,27 @@ export async function POST(request: NextRequest) {
     // Prepare post data
     const postData: any = {
       content: content.trim(),
-      type: 'post', // required by schema
+      type: type, // Use the type from form data
       author: userId,
-      isPublic,
-      allowComments,
+      status: 'published', // Set status to published
+      visibility: 'public', // Set visibility to public
+      likeCount: 0,
+      commentCount: 0,
       shareCount: 0,
+      saveCount: 0,
+    }
+    
+    // Add title if provided
+    if (title && title.trim()) {
+      postData.title = title.trim()
+    }
+    
+    // Add rating if provided and type is review
+    if (rating && type === 'review') {
+      const ratingNum = parseInt(rating)
+      if (ratingNum >= 1 && ratingNum <= 5) {
+        postData.rating = ratingNum
+      }
     }
 
     // Add location if provided
@@ -156,24 +220,84 @@ export async function POST(request: NextRequest) {
       } catch (error) {
         console.log('Location not found, continuing without location')
       }
+    } else if (locationName && locationName.trim()) {
+      // If no location ID but location name provided, store it as a string
+      // This will be handled by the frontend to create a location later
+      postData.location = locationName.trim()
     }
 
-    // Add media if any
+    // Add media if any - properly handle both images and videos
     if (mediaIds.length > 0) {
-      postData.media = mediaIds
+      // Separate images and videos based on the files we processed
+      const imageIds: string[] = []
+      const videoIds: string[] = []
+      
+      // We need to track which media IDs correspond to images vs videos
+      // Since we processed images first, then videos, we can use the counts
+      const imageCount = imageFiles.length
+      const videoCount = videoFiles.length
+      
+      // First imageCount items are images, rest are videos
+      if (imageCount > 0) {
+        imageIds.push(...mediaIds.slice(0, imageCount))
+      }
+      if (videoCount > 0) {
+        videoIds.push(...mediaIds.slice(imageCount))
+      }
+      
+      // Set the first image as the main image
+      if (imageIds.length > 0) {
+        postData.image = imageIds[0]
+        // Set remaining images as photos array
+        if (imageIds.length > 1) {
+          postData.photos = imageIds.slice(1)
+        }
+      }
+      
+      // Set videos if any
+      if (videoIds.length > 0) {
+        postData.video = videoIds[0] // First video as main video
+        // Set remaining videos as additional videos array if needed
+        if (videoIds.length > 1) {
+          postData.videos = videoIds.slice(1)
+        }
+      }
     }
 
-    // Add tags if provided
-    if (tags) {
+    // Add tags if provided - handle both field name conventions
+    const tagsArray = formData.getAll('tags[]') as string[]
+    if (tagsArray.length > 0) {
+      postData.tags = tagsArray.map(tag => ({ tag }))
+    } else if (tags) {
+      // Accept both JSON arrays and comma-separated strings
       try {
-        const parsedTags = JSON.parse(tags)
+        let parsedTags
+        if (tags.startsWith('[')) {
+          // Try to parse as JSON array
+          parsedTags = JSON.parse(tags)
+        } else {
+          // Treat as comma-separated string
+          parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean)
+        }
         if (Array.isArray(parsedTags)) {
-          postData.tags = parsedTags
+          postData.tags = parsedTags.map(tag => ({ tag }))
         }
       } catch (error) {
         console.error('Error parsing tags:', error)
+        // If JSON parsing fails, try as comma-separated string
+        try {
+          const commaSeparatedTags = tags.split(',').map(t => t.trim()).filter(Boolean)
+          if (commaSeparatedTags.length > 0) {
+            postData.tags = commaSeparatedTags.map(tag => ({ tag }))
+          }
+        } catch (fallbackError) {
+          console.error('Error parsing tags as comma-separated string:', fallbackError)
+        }
       }
     }
+
+    // Debug log for postData
+    console.log('📝 postData to be created:', postData)
 
     // Create the post
     const post = await payload.create({

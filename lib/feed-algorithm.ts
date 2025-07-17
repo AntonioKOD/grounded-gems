@@ -75,7 +75,13 @@ export class FeedAlgorithm {
     let url: string | null = null
     
     if (typeof mediaItem === 'string') {
-      url = mediaItem
+      // If it's a string, check if it's already a URL or just an ID
+      if (mediaItem.startsWith('http') || mediaItem.startsWith('/api/media/')) {
+        url = mediaItem
+      } else {
+        // It's likely a media ID, construct the URL
+        url = `/api/media/file/${mediaItem}`
+      }
     } else if (typeof mediaItem === 'object') {
       // Try different URL sources in order of preference
       url = mediaItem.url || 
