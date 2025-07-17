@@ -275,13 +275,6 @@ export default function MediaCarousel({
             }}
             className="w-full h-full object-cover rounded-lg"
           />
-          
-          {/* Video overlay with play button */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
-              <Play className="w-8 h-8 text-white ml-1" />
-            </div>
-          </div>
         </div>
       )
     }

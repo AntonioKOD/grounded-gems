@@ -137,47 +137,49 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
     }
 
     // Fallback: reconstruct from individual fields (legacy support)
-    const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
+    const items: any[] = []
     
-    const imageUrl = getImageUrl(post.image || (post as any).featuredImage)
-    const videoUrl = getVideoUrl(post.video)
-    const photos = Array.isArray(post.photos) 
-      ? post.photos.map(photo => getImageUrl(photo)).filter(url => url !== "/placeholder.svg")
-      : []
-
-    // Prioritize video if available
-    if (videoUrl) {
-      items.push({ 
-        type: 'video', 
-        url: videoUrl,
-        thumbnail: videoUrl, // Use video URL as thumbnail for now
-        alt: "Post video"
-      })
-    }
-    
-    // Add main image only if no video
-    if (imageUrl !== "/placeholder.svg" && !videoUrl) {
-      items.push({ 
-        type: 'image', 
-        url: imageUrl,
-        alt: post.title || 'Post image'
-      })
-    }
-    
-    // Add photos, avoiding duplicates
-    photos.forEach((photoUrl, index) => {
-      if (photoUrl && photoUrl !== imageUrl) {
-        items.push({ 
-          type: 'image', 
-          url: photoUrl,
-          alt: `Photo ${index + 1}`
+    // Add main image if exists
+    if (post.image) {
+      const imageUrl = getImageUrl(post.image)
+      if (imageUrl) {
+        items.push({
+          type: 'image',
+          url: imageUrl,
+          alt: 'Post image'
         })
       }
-    })
-    
-    console.log(`📱 EnhancedFeedPost ${post.id} using fallback media construction:`, items)
+    }
+
+    // Add video if exists - videos should come first for better UX
+    if (post.video) {
+      const videoUrl = getVideoUrl(post.video)
+      if (videoUrl) {
+        items.unshift({
+          type: 'video',
+          url: videoUrl,
+          thumbnail: videoUrl, // Use video URL as thumbnail - VideoPlayer will generate its own
+          alt: 'Post video'
+        })
+      }
+    }
+
+    // Add photos array if exists
+    if (post.photos && Array.isArray(post.photos)) {
+      post.photos.forEach((photo: any) => {
+        const photoUrl = getImageUrl(photo)
+        if (photoUrl) {
+          items.push({
+            type: 'image',
+            url: photoUrl,
+            alt: 'Post photo'
+          })
+        }
+      })
+    }
+
     return items
-  }, [(post as any).media, post.image, (post as any).featuredImage, post.video, post.photos, (post as any).videoThumbnail, post.title, post.id])
+  }, [post])
 
   // Legacy URL extraction for backward compatibility
   const imageUrl = useMemo(() => {

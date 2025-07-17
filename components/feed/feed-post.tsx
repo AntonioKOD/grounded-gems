@@ -137,7 +137,7 @@ export const FeedPost = memo(function FeedPost({
     // If post has a media array from API, use it directly (this is the correct approach for videos)
     if (Array.isArray(postData.media) && postData.media.length > 0) {
       // Deduplicate media items by URL
-      const uniqueMedia = postData.media.reduce((acc: any[], item: any) => {
+      const uniqueMedia = postData.media.reduce((acc: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }>, item: any) => {
         const existingItem = acc.find(existing => existing.url === item.url)
         if (!existingItem) {
           acc.push({
@@ -150,54 +150,56 @@ export const FeedPost = memo(function FeedPost({
         return acc
       }, [])
       
-      return uniqueMedia
+      // Ensure videos come first
+      const videos = uniqueMedia.filter((item: { type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }) => item.type === 'video')
+      const images = uniqueMedia.filter((item: { type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }) => item.type === 'image')
+      return [...videos, ...images]
     }
 
     // Fallback: reconstruct from individual fields (legacy support)
     const items: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = []
-    const processedUrls = new Set<string>()
     
-    const imageUrl = getImageUrl(postData.image || postData.featuredImage)
-    const videoUrl = getVideoUrl(postData.video)
-    const photos = Array.isArray(postData.photos) 
-      ? postData.photos.map((photo: any) => getImageUrl(photo)).filter((url: string) => url !== "/placeholder.svg")
-      : []
-
-    // Prioritize video if available
-    if (videoUrl && !processedUrls.has(videoUrl)) {
-      items.push({ 
-        type: 'video', 
-        url: videoUrl,
-        thumbnail: videoUrl, // Use video URL as thumbnail
-        alt: "Post video"
-      })
-      processedUrls.add(videoUrl)
-    }
-    
-    // Add main image only if no video and not already processed
-    if (imageUrl !== "/placeholder.svg" && !videoUrl && !processedUrls.has(imageUrl)) {
-      items.push({ 
-        type: 'image', 
-        url: imageUrl, 
-        alt: postData.content || "Post image" 
-      })
-      processedUrls.add(imageUrl)
-    }
-    
-    // Add photos, avoiding duplicates
-    photos.forEach((photoUrl: string, index: number) => {
-      if (photoUrl && !processedUrls.has(photoUrl)) {
-        items.push({ 
-          type: 'image', 
-          url: photoUrl, 
-          alt: `Photo ${index + 1}` 
+    // Add main image if exists
+    if (postData.image) {
+      const imageUrl = getImageUrl(postData.image)
+      if (imageUrl) {
+        items.push({
+          type: 'image',
+          url: imageUrl,
+          alt: 'Post image'
         })
-        processedUrls.add(photoUrl)
       }
-    })
-    
+    }
+
+    // Add video if exists - videos should come first for better UX
+    if (postData.video) {
+      const videoUrl = getVideoUrl(postData.video)
+      if (videoUrl) {
+        items.unshift({
+          type: 'video',
+          url: videoUrl,
+          thumbnail: videoUrl, // Use video URL as thumbnail - VideoPlayer will generate its own
+          alt: 'Post video'
+        })
+      }
+    }
+
+    // Add photos array if exists
+    if (postData.photos && Array.isArray(postData.photos)) {
+      postData.photos.forEach((photo: any) => {
+        const photoUrl = getImageUrl(photo)
+        if (photoUrl) {
+          items.push({
+            type: 'image',
+            url: photoUrl,
+            alt: 'Post photo'
+          })
+        }
+      })
+    }
+
     return items
-  }, [postData.media, postData.image, postData.featuredImage, postData.video, postData.photos, postData.videoThumbnail, postData.content, postData.id])
+  }, [postData])
 
   const hasMedia = mediaItems.length > 0
 
@@ -579,7 +581,7 @@ export const FeedPost = memo(function FeedPost({
           {/* Enhanced Media Display with Carousel */}
           {hasMedia && (
             <div className="mb-4">
-              {mediaItems.length > 1 || mediaItems.some((item: any) => item.type === 'video') ? (
+              {mediaItems.length > 1 || mediaItems.some((item: { type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }) => item.type === 'video') ? (
                 <MediaCarousel
                   media={mediaItems}
                   aspectRatio="video"

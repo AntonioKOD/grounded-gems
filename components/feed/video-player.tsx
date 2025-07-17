@@ -32,7 +32,7 @@ export default function VideoPlayer({
   src,
   thumbnail,
   aspectRatio = "16/9",
-  autoPlay = true,
+  autoPlay = false,
   muted = true,
   loop = true,
   onPlay,
@@ -49,229 +49,154 @@ export default function VideoPlayer({
   preload = "metadata"
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const progressTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
-  
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isMuted, setIsMuted] = useState(muted)
-  const [progress, setProgress] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [showControls, setShowControls] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [hasStartedPlaying, setHasStartedPlaying] = useState(false)
-  const [viewCompleted, setViewCompleted] = useState(false)
-  const [isInView, setIsInView] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
   const [thumbnailGenerated, setThumbnailGenerated] = useState(false)
+  const [showControls, setShowControls] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [viewStartTime, setViewStartTime] = useState<number | null>(null)
+  const [viewCompleteTime, setViewCompleteTime] = useState<number | null>(null)
 
-  // Generate thumbnail from video first frame
+  // Optimize thumbnail generation - only generate once and cache
   const generateThumbnail = useCallback(() => {
     const videoElement = videoRef.current
-    if (!videoElement || !videoElement.videoWidth) return
+    const canvasElement = canvasRef.current
+    if (!videoElement || !canvasElement || thumbnailGenerated) return
 
     try {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
+      // Only generate thumbnail if video has loaded metadata
+      if (videoElement.readyState >= 1) {
+        const ctx = canvasElement.getContext('2d')
+        if (!ctx) return
 
-      canvas.width = videoElement.videoWidth
-      canvas.height = videoElement.videoHeight
-      
-      // Draw the current video frame to canvas
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
-      
-      // Convert to data URL
-      const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
-      
-      // Set as poster
-      videoElement.poster = thumbnailUrl
-      
-      console.log('🎬 Generated thumbnail for video:', src)
+        // Set canvas size to match video dimensions
+        canvasElement.width = videoElement.videoWidth || 640
+        canvasElement.height = videoElement.videoHeight || 360
+        
+        // Seek to 0.5 seconds to avoid black frames
+        videoElement.currentTime = 0.5
+        
+        // Wait for seek to complete
+        const handleSeeked = () => {
+          if (videoElement.videoWidth > 0) {
+            ctx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height)
+            const thumbnailUrl = canvasElement.toDataURL('image/jpeg', 0.7)
+            videoElement.poster = thumbnailUrl
+            setThumbnailGenerated(true)
+            console.log('🎬 Generated thumbnail for video:', src)
+          }
+          videoElement.removeEventListener('seeked', handleSeeked)
+        }
+        
+        videoElement.addEventListener('seeked', handleSeeked)
+      }
     } catch (error) {
       console.error('Error generating thumbnail:', error)
     }
-  }, [src])
+  }, [src, thumbnailGenerated])
 
-  // Handle video loaded metadata to generate thumbnail
+  // Handle video loading
   const handleLoadedMetadata = useCallback(() => {
-    const videoElement = videoRef.current
-    if (!videoElement) return
-
-    console.log('🎬 Video metadata loaded:', {
-      src: videoElement.src,
-      duration: videoElement.duration,
-      videoWidth: videoElement.videoWidth,
-      videoHeight: videoElement.videoHeight
-    })
-
-    // Generate thumbnail if no poster is set
-    if (!videoElement.poster && videoElement.videoWidth > 0) {
-      // Seek to 0.1 seconds to get a good frame (avoid black frame at 0)
-      videoElement.currentTime = 0.1
-      
-      // Wait for seek to complete then generate thumbnail
-      const handleSeeked = () => {
-        generateThumbnail()
-        videoElement.removeEventListener('seeked', handleSeeked)
-        // Reset to beginning
-        videoElement.currentTime = 0
-      }
-      
-      videoElement.addEventListener('seeked', handleSeeked)
-    }
-  }, [generateThumbnail])
-
-  // Intersection Observer for autoplay when in view
-  useEffect(() => {
-    const video = videoRef.current
-    const container = containerRef.current
-    if (!video || !container) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0]
-        setIsInView(entry?.isIntersecting ?? false)
-        
-        if (entry?.isIntersecting && entry.intersectionRatio > 0.5) {
-          if (autoPlay && !hasStartedPlaying) {
-            video.play().catch(console.error)
-          }
-        } else {
-          if (isPlaying) {
-            video.pause()
-          }
-        }
-      },
-      {
-        threshold: [0.5, 0.75], // Play when 50% visible, track engagement at 75%
-        rootMargin: "0px"
-      }
-    )
-
-    observer.observe(container)
-
-    return () => {
-      observer.disconnect()
-      if (progressTimeoutRef.current) {
-        clearTimeout(progressTimeoutRef.current)
-      }
-    }
-  }, [autoPlay, hasStartedPlaying, isPlaying])
-
-  // Handle video events
-  const handleLoadStart = useCallback(() => {
-    setIsLoading(true)
-  }, [])
-
-  const handleLoadedData = useCallback(() => {
     setIsLoading(false)
-    // Generate thumbnail after video is loaded
-    generateThumbnail()
-  }, [generateThumbnail])
+    setHasError(false)
+    
+    const videoElement = videoRef.current
+    if (videoElement) {
+      setDuration(videoElement.duration || 0)
+      
+      // Generate thumbnail if not already done
+      if (!thumbnailGenerated && !thumbnail) {
+        generateThumbnail()
+      }
+    }
+  }, [generateThumbnail, thumbnail, thumbnailGenerated])
 
+  // Handle video errors
+  const handleError = useCallback((error: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    console.error('🎬 Video error:', error)
+    setIsLoading(false)
+    setHasError(true)
+    onError?.()
+  }, [onError])
+
+  // Handle play/pause
   const handlePlay = useCallback(() => {
     setIsPlaying(true)
-    if (!hasStartedPlaying) {
-      setHasStartedPlaying(true)
+    setShowControls(false)
+    onPlay?.()
+    
+    // Track view start
+    if (!viewStartTime) {
+      setViewStartTime(Date.now())
       onViewStart?.()
     }
-    onPlay?.()
-  }, [hasStartedPlaying, onPlay, onViewStart])
+  }, [onPlay, onViewStart, viewStartTime])
 
   const handlePause = useCallback(() => {
     setIsPlaying(false)
     onPause?.()
   }, [onPause])
 
-  const handleEnded = useCallback(() => {
-    setIsPlaying(false)
-    if (!viewCompleted) {
-      setViewCompleted(true)
-      onViewComplete?.()
-    }
-    onEnded?.()
-  }, [viewCompleted, onEnded, onViewComplete])
-
-  // Handle video errors
-  const handleError = useCallback((error: React.SyntheticEvent<HTMLVideoElement, Event>) => {
-    console.error('🎬 Video error:', error)
+  // Handle time updates
+  const handleTimeUpdate = useCallback(() => {
     const videoElement = videoRef.current
     if (videoElement) {
-      console.error('🎬 Video error details:', {
-        error: videoElement.error,
-        networkState: videoElement.networkState,
-        readyState: videoElement.readyState,
-        src: videoElement.src,
-        currentSrc: videoElement.currentSrc
-      })
-    }
-    
-    // Check if it's a CORS error
-    if (error.target) {
-      const target = error.target as HTMLVideoElement
-      if (target.error && target.error.code === MediaError.MEDIA_ERR_NETWORK) {
-        console.error('🎬 CORS or network error detected')
-        // Try to fix CORS by updating the src
-        if (target.src && target.src.includes('www.sacavia.com')) {
-          const fixedSrc = target.src.replace('www.sacavia.com', 'sacavia.com')
-          console.log('🎬 Attempting to fix CORS by updating src to:', fixedSrc)
-          target.src = fixedSrc
-          target.load()
-          return
-        }
+      setCurrentTime(videoElement.currentTime)
+      onTimeUpdate?.(videoElement.currentTime, videoElement.duration)
+      
+      // Track view completion (90% of video watched)
+      if (videoElement.currentTime / videoElement.duration > 0.9 && !viewCompleteTime) {
+        setViewCompleteTime(Date.now())
+        onViewComplete?.()
       }
     }
-    
-    onError?.()
-  }, [onError])
+  }, [onTimeUpdate, onViewComplete, viewCompleteTime])
 
-  const handleTimeUpdate = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    const currentTime = video.currentTime
-    const duration = video.duration
-    const newProgress = (currentTime / duration) * 100
-
-    setProgress(newProgress)
-    onTimeUpdate?.(currentTime, duration)
-
-    // Track view completion at 80%
-    if (newProgress >= 80 && !viewCompleted) {
-      setViewCompleted(true)
-      onViewComplete?.()
-    }
-  }, [onTimeUpdate, onViewComplete, viewCompleted])
+  // Handle video end
+  const handleEnded = useCallback(() => {
+    setIsPlaying(false)
+    setCurrentTime(0)
+    onEnded?.()
+  }, [onEnded])
 
   // Toggle play/pause
   const togglePlay = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
+    const videoElement = videoRef.current
+    if (!videoElement) return
 
     if (isPlaying) {
-      video.pause()
+      videoElement.pause()
     } else {
-      video.play().catch(console.error)
+      videoElement.play().catch(error => {
+        console.error('Error playing video:', error)
+        setHasError(true)
+      })
     }
   }, [isPlaying])
 
   // Toggle mute
   const toggleMute = useCallback(() => {
-    const video = videoRef.current
-    if (!video) return
+    const videoElement = videoRef.current
+    if (videoElement) {
+      videoElement.muted = !isMuted
+      setIsMuted(!isMuted)
+    }
+  }, [isMuted])
 
-    video.muted = !video.muted
-    setIsMuted(video.muted)
-  }, [])
-
-  // Toggle fullscreen
+  // Handle fullscreen
   const toggleFullscreen = useCallback(() => {
-    const container = containerRef.current
-    if (!container) return
+    const videoElement = videoRef.current
+    if (!videoElement) return
 
     if (!isFullscreen) {
-      if (container.requestFullscreen) {
-        container.requestFullscreen()
+      if (videoElement.requestFullscreen) {
+        videoElement.requestFullscreen()
       }
     } else {
       if (document.exitFullscreen) {
@@ -290,148 +215,197 @@ export default function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
   }, [])
 
-  // Show/hide controls
-  const handleMouseEnter = useCallback(() => {
-    setShowControls(true)
+  // Handle progress bar click
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const videoElement = videoRef.current
+    if (!videoElement) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const percentage = clickX / rect.width
+    const newTime = percentage * videoElement.duration
+    videoElement.currentTime = newTime
   }, [])
 
-  const handleMouseLeave = useCallback(() => {
-    setShowControls(false)
-  }, [])
-
-  // Check if video URL is valid
-  const isValidVideoUrl = useMemo(() => {
-    if (!src) return false
-    
-    // Check if it's a valid video URL
-    const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv']
-    const isVideoFile = videoExtensions.some(ext => src.toLowerCase().includes(ext))
-    const isVideoUrl = src.includes('/api/media/file/') || isVideoFile
-    
-    return isVideoUrl
-  }, [src])
-
-  // Reset states when src changes
+  // Auto-hide controls
   useEffect(() => {
-    setHasError(false)
-    setIsLoading(true)
-    setIsPlaying(false)
-    setViewCompleted(false)
-    setHasStartedPlaying(false)
-    setThumbnailGenerated(false)
-  }, [src])
-
-  // Add timeout for stuck loading states
-  useEffect(() => {
-    if (!isLoading || hasError) return
-
-    const timeout = setTimeout(() => {
-      console.warn('VideoPlayer: Loading timeout, setting error state:', src)
-      setHasError(true)
-      setIsLoading(false)
-      onError?.()
-    }, 10000) // 10 second timeout for videos
-
+    let timeout: NodeJS.Timeout
+    if (isPlaying && !isHovered) {
+      timeout = setTimeout(() => setShowControls(false), 2000)
+    }
     return () => clearTimeout(timeout)
-  }, [isLoading, hasError, src, onError])
+  }, [isPlaying, isHovered])
+
+  // Calculate aspect ratio styles
+  const aspectRatioStyles = useMemo(() => {
+    const [width, height] = aspectRatio.split('/').map(Number)
+    return {
+      aspectRatio: `${width}/${height}`,
+      width: '100%',
+      height: 'auto'
+    }
+  }, [aspectRatio])
+
+  // Show play button only when video is not playing and not loading
+  const shouldShowPlayButton = showPlayButton && !isPlaying && !isLoading && !hasError
 
   return (
-    <div
-      ref={containerRef}
-      className={cn("relative group overflow-hidden bg-black", className)}
-      style={{ aspectRatio }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
+    <div 
+      className={cn(
+        "relative group bg-black rounded-lg overflow-hidden",
+        className
+      )}
+      style={aspectRatioStyles}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
+      {/* Hidden canvas for thumbnail generation */}
+      <canvas 
+        ref={canvasRef} 
+        className="hidden" 
+        style={{ display: 'none' }}
+      />
+      
+      {/* Video element */}
       <video
         ref={videoRef}
         src={src}
         poster={thumbnail}
-        muted={isMuted}
+        autoPlay={autoPlay}
+        muted={muted}
         loop={loop}
-        playsInline
         preload={preload}
+        playsInline
         className="w-full h-full object-cover"
-        onLoadStart={handleLoadStart}
-        onLoadedData={handleLoadedData}
         onLoadedMetadata={handleLoadedMetadata}
         onPlay={handlePlay}
         onPause={handlePause}
-        onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
         onError={handleError}
-        crossOrigin="anonymous"
+        onLoadStart={() => setIsLoading(true)}
+        onCanPlay={() => setIsLoading(false)}
       />
 
-      {/* Loading indicator */}
+      {/* Loading overlay */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
         </div>
       )}
 
-      {/* Error state */}
+      {/* Error overlay */}
       {hasError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-red-600 via-purple-600 to-pink-600">
-          <div className="text-center text-white p-6">
-            <div className="text-6xl mb-4">🎬</div>
-            <p className="text-lg font-medium">Video not available</p>
-            <p className="text-sm opacity-75 mt-1">Content shows below</p>
-          </div>
-        </div>
-      )}
-
-      {/* Play button overlay - only show when paused */}
-      {showPlayButton && !isPlaying && !isLoading && !hasError && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            className="w-16 h-16 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-all duration-300 flex items-center justify-center"
-            onClick={togglePlay}
-          >
-            <Play className="h-8 w-8 ml-1" />
-          </motion.button>
-        </div>
-      )}
-
-      {/* Minimal controls overlay - TikTok style */}
-      {controls && (
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          {/* Mute button - top right */}
-          <div className="absolute top-4 right-4">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-all flex items-center justify-center"
-              onClick={toggleMute}
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+          <div className="text-center text-white">
+            <p className="text-sm">Failed to load video</p>
+            <Button 
+              size="sm" 
+              onClick={() => window.location.reload()}
+              className="mt-2"
             >
-              {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-            </motion.button>
+              Retry
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Play button overlay - only show when not playing */}
+      {shouldShowPlayButton && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          className="absolute inset-0 flex items-center justify-center bg-black/20"
+        >
+          <Button
+            onClick={togglePlay}
+            size="lg"
+            className="h-16 w-16 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 border-2 border-white/30"
+          >
+            <Play className="h-8 w-8 text-white ml-1" />
+          </Button>
+        </motion.div>
+      )}
+
+      {/* Controls overlay */}
+      {(showControls || isHovered) && controls && !isLoading && !hasError && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"
+        >
+          {/* Top controls */}
+          <div className="absolute top-4 right-4 flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleMute}
+              className="h-8 w-8 p-0 bg-black/30 hover:bg-black/50 text-white"
+            >
+              {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleFullscreen}
+              className="h-8 w-8 p-0 bg-black/30 hover:bg-black/50 text-white"
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+            </Button>
           </div>
 
-          {/* Progress bar - bottom */}
-          {showProgress && (
-            <div className="absolute bottom-4 left-4 right-4">
-              <div className="w-full bg-white/20 rounded-full h-1 overflow-hidden">
-                <motion.div
-                  className="h-full bg-white rounded-full"
-                  style={{ width: `${progress}%` }}
-                  transition={{ duration: 0.1 }}
+          {/* Center play/pause button */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Button
+              onClick={togglePlay}
+              size="lg"
+              className="h-16 w-16 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70"
+            >
+              {isPlaying ? (
+                <Pause className="h-8 w-8 text-white" />
+              ) : (
+                <Play className="h-8 w-8 text-white ml-1" />
+              )}
+            </Button>
+          </div>
+
+          {/* Bottom controls */}
+          <div className="absolute bottom-4 left-4 right-4">
+            {/* Progress bar */}
+            {showProgress && (
+              <div 
+                className="w-full h-2 bg-white/30 rounded-full cursor-pointer mb-2"
+                onClick={handleProgressClick}
+              >
+                <div 
+                  className="h-full bg-white rounded-full transition-all duration-150"
+                  style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
                 />
               </div>
+            )}
+
+            {/* Time display */}
+            <div className="flex items-center justify-between text-white text-sm">
+              <span>
+                {Math.floor(currentTime / 60)}:{(currentTime % 60).toFixed(0).padStart(2, '0')}
+              </span>
+              <span>
+                {Math.floor(duration / 60)}:{(duration % 60).toFixed(0).padStart(2, '0')}
+              </span>
             </div>
-          )}
-        </div>
+          </div>
+        </motion.div>
       )}
 
-      {/* Mobile tap area for play/pause */}
-      <div
-        className="absolute inset-0 md:hidden"
-        onClick={togglePlay}
-      />
+      {/* Click to play overlay */}
+      {!isPlaying && !isLoading && !hasError && !shouldShowPlayButton && (
+        <div 
+          className="absolute inset-0 cursor-pointer"
+          onClick={togglePlay}
+        />
+      )}
     </div>
   )
 } 
