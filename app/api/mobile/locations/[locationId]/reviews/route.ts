@@ -34,12 +34,35 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // POST /api/mobile/locations/[locationId]/reviews - Add a review
 export async function POST(request: NextRequest, { params }: { params: Promise<{ locationId: string }> }) {
   try {
-    const { locationId } = await params
-    const user = await getServerSideUser()
-    if (!user) {
-      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
+    console.log('[REVIEWS] POST called');
+    const { locationId } = await params;
+    console.log('[REVIEWS] locationId:', locationId);
+
+    // Get current user
+    let user;
+    try {
+      user = await getServerSideUser();
+      console.log('[REVIEWS] user:', user);
+    } catch (userError) {
+      console.error('[REVIEWS] Error in getServerSideUser:', userError);
+      return NextResponse.json({ error: 'User auth error', details: userError instanceof Error ? userError.message : userError }, { status: 500 });
     }
-    const body = await request.json()
+
+    if (!user) {
+      console.warn('[REVIEWS] No user found');
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 });
+    }
+
+    // Parse request body
+    let body;
+    try {
+      body = await request.json();
+      console.log('[REVIEWS] request body:', body);
+    } catch (bodyError) {
+      console.error('[REVIEWS] Error parsing request body:', bodyError);
+      return NextResponse.json({ error: 'Invalid request body', details: bodyError instanceof Error ? bodyError.message : bodyError }, { status: 400 });
+    }
+
     const { title, content, rating, visitDate, pros, cons, tips } = body
     if (!title || !content || !rating) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
@@ -48,23 +71,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { getPayload } = await import('payload')
     const config = (await import('@payload-config')).default
     const payload = await getPayload({ config })
+    const reviewData = {
+      title,
+      content,
+      rating,
+      visitDate,
+      pros,
+      cons,
+      tips,
+      reviewType: body.reviewType,
+      location: locationId,
+      author: user.id,
+      status: 'published'
+    }
+    console.log('[REVIEWS] reviewData to create:', reviewData)
     const review = await payload.create({
       collection: 'reviews',
-      data: {
-        title,
-        content,
-        rating,
-        visitDate,
-        pros,
-        cons,
-        tips,
-        location: locationId,
-        author: user.id,
-        status: 'published'
-      }
+      data: reviewData
     })
+    console.log('[REVIEWS] Created review:', review)
     return NextResponse.json({ success: true, data: { review } })
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Failed to add review' }, { status: 500 })
+    console.error('[REVIEWS] Error in POST:', error);
+    return NextResponse.json({ error: 'Failed to add review', details: error instanceof Error ? error.message : error }, { status: 500 });
   }
 } 

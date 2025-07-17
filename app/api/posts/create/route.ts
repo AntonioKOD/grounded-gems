@@ -71,7 +71,12 @@ export async function POST(request: NextRequest) {
           data: {
             alt: file.name,
           },
-          file: file as any,
+          file: {
+            data: Buffer.from(await file.arrayBuffer()),
+            mimetype: file.type,
+            name: file.name,
+            size: file.size,
+          },
         })
 
         if (mediaDoc.id) {
@@ -108,7 +113,12 @@ export async function POST(request: NextRequest) {
           data: {
             alt: file.name,
           },
-          file: file as any,
+          file: {
+            data: Buffer.from(await file.arrayBuffer()),
+            mimetype: file.type,
+            name: file.name,
+            size: file.size,
+          },
         })
 
         if (videoDoc.id) {
@@ -126,7 +136,7 @@ export async function POST(request: NextRequest) {
     // Prepare post data
     const postData: any = {
       content: content.trim(),
-      postType,
+      type: 'post', // required by schema
       author: userId,
       isPublic,
       allowComments,

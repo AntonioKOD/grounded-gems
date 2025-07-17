@@ -280,6 +280,34 @@ export const Locations: CollectionConfig = {
           // Don't fail the main operation if notification fails
         }
 
+        // Ensure any new user-submitted gallery photo is also in communityPhotos
+        try {
+          if (Array.isArray(doc.gallery)) {
+            // Find gallery items that are not in communityPhotos
+            const communityPhotos = Array.isArray(doc.communityPhotos) ? doc.communityPhotos : [];
+            const newCommunityPhotos = doc.gallery
+              .filter((g: any) => g.submittedBy && !communityPhotos.some((cp: any) => String(cp.photo) == String(g.image)))
+              .map((g: any) => ({
+                photo: g.image,
+                caption: g.caption || '',
+                submittedBy: g.submittedBy,
+                submittedAt: new Date().toISOString(),
+                status: 'approved',
+              }));
+            if (newCommunityPhotos.length > 0) {
+              await req.payload.update({
+                collection: 'locations',
+                id: doc.id,
+                data: {
+                  communityPhotos: [...communityPhotos, ...newCommunityPhotos],
+                },
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error syncing gallery to communityPhotos:', err);
+        }
+
         return doc;
       },
     ],
@@ -611,5 +639,43 @@ export const Locations: CollectionConfig = {
     { name: 'reviewCount', type: 'number', admin: { readOnly: true } },
     { name: 'followerCount', type: 'number', admin: { readOnly: true, description: 'Number of users following this location' } },
     { name: 'foursquareId', type: 'text', admin: { description: 'Foursquare place ID for API integration' } },
+    {
+      name: 'communityPhotos',
+      type: 'array',
+      admin: {
+        description: 'User-submitted community photos for this location (approved or pending)',
+      },
+      fields: [
+        {
+          name: 'photo',
+          type: 'upload',
+          relationTo: 'media',
+          required: true,
+        },
+        {
+          name: 'caption',
+          type: 'text',
+        },
+        {
+          name: 'submittedBy',
+          type: 'relationship',
+          relationTo: 'users',
+        },
+        {
+          name: 'submittedAt',
+          type: 'date',
+        },
+        {
+          name: 'status',
+          type: 'select',
+          options: [
+            { label: 'Pending', value: 'pending' },
+            { label: 'Approved', value: 'approved' },
+            { label: 'Rejected', value: 'rejected' },
+          ],
+          defaultValue: 'pending',
+        },
+      ],
+    },
   ],
 };

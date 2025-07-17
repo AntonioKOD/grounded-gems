@@ -223,368 +223,151 @@ function getImageDimensions(buffer: Buffer, mimeType: string): { width?: number;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<MobileUploadResponse>> {
+  console.log('--- [UPLOAD] /api/mobile/upload/image handler START ---')
   try {
-    const payload = await getPayload({ config })
-    
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization')
-    const token = authHeader?.replace('Bearer ', '').replace('JWT ', '')
+    // Log request headers
+    const headersObj = Object.fromEntries(request.headers.entries())
+    console.log('[UPLOAD] Request headers:', headersObj)
 
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
+    // Check content type
+    const contentType = request.headers.get('content-type')
+    console.log('[UPLOAD] Content-Type:', contentType)
 
-    const { user } = await payload.auth({ headers: request.headers })
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    console.log('📱 User authenticated successfully for upload:', user.email)
-
-    // Parse form data to validate the file before sending to Payload
-    let formData: FormData
+    let formData
     try {
       formData = await request.formData()
-      console.log('📱 FormData parsed successfully')
-      
-      // Debug: Log all FormData entries
-      console.log('📱 FormData entries:')
-      for (const [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(`  ${key}: File(name="${value.name}", size=${value.size}, type="${value.type}")`)
-        } else {
-          console.log(`  ${key}: ${value}`)
-        }
-      }
-    } catch (error) {
-      console.error('📱 Failed to parse FormData:', error)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid form data',
-          error: 'Failed to parse uploaded file',
-          code: 'INVALID_FORM_DATA'
-        },
-        { status: 400 }
-      )
+      console.log('[UPLOAD] formData keys:', Array.from(formData.keys()))
+    } catch (formError) {
+      console.error('[UPLOAD] Error parsing formData:', formError)
+      return NextResponse.json({ success: false, message: 'Invalid form data', error: 'Invalid form data', code: 'INVALID_FORM_DATA' }, { status: 400 })
     }
 
-    // Get the file from FormData
-    const file = formData.get('file') as File
+    // Get file from formData
+    const file = formData.get('image') as File | null
     if (!file) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'No file provided',
-          error: 'A file is required for upload',
-          code: 'NO_FILE'
-        },
-        { status: 400 }
-      )
+      console.warn('[UPLOAD] No file found in formData under key "image"')
+      return NextResponse.json({ success: false, message: 'No image file provided', error: 'No image file provided', code: 'NO_IMAGE' }, { status: 400 })
     }
-
-    console.log('📱 File received:', {
+    console.log('[UPLOAD] File info:', {
       name: file.name,
-      size: file.size,
       type: file.type,
-      lastModified: file.lastModified ? new Date(file.lastModified).toISOString() : 'unknown'
+      size: file.size
     })
 
-    // ENHANCED: Check for empty file early with detailed error
-    if (file.size === 0) {
-      console.error('📱 Empty file detected:', {
-        fileName: file.name,
-        fileType: file.type,
-        lastModified: file.lastModified,
-        formDataKeys: Array.from(formData.keys())
-      })
-      
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Empty file received',
-          error: 'The uploaded file is empty (0 bytes). This can happen if:\n' +
-                 '• The image failed to load properly in the mobile app\n' +
-                 '• There was an issue accessing the camera/photo library\n' +
-                 '• The file was corrupted during selection\n' +
-                 'Please try selecting the image again or choose a different image.',
-          code: 'EMPTY_FILE',
-          debugInfo: {
-            fileName: file.name,
-            receivedType: file.type,
-            platform: 'mobile'
-          }
-        },
-        { status: 400 }
-      )
-    }
-
-    // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'File too large',
-          error: `File size must be less than ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-          code: 'FILE_TOO_LARGE'
-        },
-        { status: 400 }
-      )
-    }
-
-    // ENHANCED: Check for suspiciously small files
-    if (file.size < 100) {
-      console.warn('📱 Suspiciously small file:', {
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type
-      })
-      
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'File too small',
-          error: `The uploaded file is only ${file.size} bytes, which is too small to be a valid image. ` +
-                 'Please ensure you selected a complete image file.',
-          code: 'FILE_TOO_SMALL',
-          debugInfo: {
-            fileName: file.name,
-            fileSize: file.size,
-            minimumExpected: 100
-          }
-        },
-        { status: 400 }
-      )
-    }
-
-    // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid file type',
-          error: `File type must be one of: ${ALLOWED_TYPES.join(', ')}`,
-          code: 'INVALID_FILE_TYPE'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Validate file content and get buffer
-    let buffer: Buffer
-    let dimensions: { width?: number; height?: number } = {}
-    
+    // Read file buffer
+    let buffer
     try {
-      console.log('📱 Reading file buffer...')
-      const arrayBuffer = await file.arrayBuffer()
-      buffer = Buffer.from(arrayBuffer)
-      
-      console.log('📱 File buffer created:', {
-        size: buffer.length,
-        type: file.type,
-        strictValidationDisabled: DISABLE_STRICT_VALIDATION,
-        bufferMatchesFileSize: buffer.length === file.size
-      })
-
-      // ENHANCED: Double-check buffer isn't empty
-      if (buffer.length === 0) {
-        console.error('📱 Buffer is empty despite file.size being non-zero:', {
-          fileSize: file.size,
-          bufferLength: buffer.length,
-          fileName: file.name
-        })
-        
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'File content is empty',
-            error: 'The file appears to have content but the data could not be read. ' +
-                   'This might be a permissions issue or the file may be corrupted.',
-            code: 'EMPTY_BUFFER',
-            debugInfo: {
-              reportedFileSize: file.size,
-              actualBufferSize: buffer.length,
-              fileName: file.name
-            }
-          },
-          { status: 400 }
-        )
-      }
-      
-      if (DISABLE_STRICT_VALIDATION) {
-        console.log('⚠️ Strict image validation is DISABLED via environment variable')
-      } else {
-        if (!validateImageBuffer(buffer, file.type)) {
-          console.error('📱 Invalid image file signature detected:', {
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: buffer.length,
-            firstBytes: buffer.length >= 10 ? Array.from(buffer.subarray(0, 10)).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' ') : 'Buffer too small'
-          })
-          return NextResponse.json(
-            {
-              success: false,
-              message: 'Invalid image file',
-              error: `The uploaded file does not appear to be a valid ${file.type} image. First bytes: ${buffer.length >= 10 ? Array.from(buffer.subarray(0, 10)).map(b => `0x${b.toString(16).padStart(2, '0')}`).join(' ') : 'Buffer too small'}`,
-              code: 'INVALID_IMAGE_FORMAT'
-            },
-            { status: 400 }
-          )
-        }
-      }
-      
-      // Get dimensions safely without using image-size library
-      dimensions = getImageDimensions(buffer, file.type)
-      
-      console.log('📱 File validation passed:', {
-        bufferSize: buffer.length,
-        dimensions
-      })
-    } catch (validationError) {
-      console.error('📱 File validation failed:', validationError)
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'File validation failed',
-          error: 'Unable to read the uploaded file',
-          code: 'FILE_VALIDATION_ERROR'
-        },
-        { status: 400 }
-      )
+      buffer = Buffer.from(await file.arrayBuffer())
+      console.log('[UPLOAD] File buffer length:', buffer.length)
+    } catch (bufferError) {
+      console.error('[UPLOAD] Error reading file buffer:', bufferError)
+      return NextResponse.json({ success: false, message: 'Failed to read file buffer', error: 'Failed to read file buffer', code: 'BUFFER_ERROR' }, { status: 400 })
     }
 
-    // Generate unique filename
-    const fileExtension = path.extname(file.name) || '.jpg'
-    const uniqueFilename = `${uuidv4()}${fileExtension}`
-    
-    // Get metadata from _payload field
-    let metadata: any = {}
-    const payloadMetadata = formData.get('_payload')
-    if (payloadMetadata) {
-      try {
-        metadata = JSON.parse(payloadMetadata as string)
-      } catch (e) {
-        console.warn('Invalid _payload metadata:', e)
-      }
+    // Validate image
+    const isValid = validateImageBuffer(buffer, file.type)
+    console.log('[UPLOAD] Image validation result:', isValid)
+    if (!isValid) {
+      console.warn('[UPLOAD] Image failed validation')
+      return NextResponse.json({ success: false, message: 'Invalid image file', error: 'Invalid image file', code: 'INVALID_IMAGE' }, { status: 400 })
     }
 
-    // Create media record manually without triggering Payload's file processing
+    // Get image dimensions
+    const dimensions = getImageDimensions(buffer, file.type)
+    console.log('[UPLOAD] Image dimensions:', dimensions)
+
+    // Upload to Payload CMS media collection
+    console.log('[UPLOAD] Calling getPayload...')
+    const payload = await getPayload({ config })
+    console.log('[UPLOAD] getPayload resolved')
+    const alt = file.name // Or get from formData if you want
+    console.log('[UPLOAD] Uploading to media collection with alt:', alt)
+    let mediaDoc
     try {
-      console.log('📱 Creating media record manually...')
-      
-      // Prepare the media data
-      const mediaData = {
-        filename: uniqueFilename,
-        mimeType: file.type,
-        filesize: buffer.length,
-        width: dimensions.width,
-        height: dimensions.height,
-        alt: metadata.alt || file.name,
-        uploadedBy: user.id,
-        uploadSource: 'mobile',
-        folder: metadata.folder || 'uploads',
-        // Skip automatic file processing by not including file data
-        url: `/media/${uniqueFilename}`, // We'll generate the URL
-      }
-
-      // Create the record in the database without file upload
-      const uploadResult = await payload.create({
+      console.log('[UPLOAD] Calling payload.create for media...')
+      mediaDoc = await payload.create({
         collection: 'media',
-        data: mediaData,
-        // Don't pass file data to avoid Payload's automatic processing
-      })
-
-      console.log('📱 Media record created:', uploadResult.id)
-
-      // Now manually save the file to the media directory
-      const mediaDir = path.join(process.cwd(), 'media')
-      
-      // Ensure media directory exists
-      if (!fs.existsSync(mediaDir)) {
-        fs.mkdirSync(mediaDir, { recursive: true })
-      }
-      
-      const filePath = path.join(mediaDir, uniqueFilename)
-      fs.writeFileSync(filePath, buffer)
-      
-      console.log('📱 File saved to:', filePath)
-
-      // Update the record with the correct URL after file is saved
-      const finalUrl = `/media/${uniqueFilename}`
-      await payload.update({
-        collection: 'media',
-        id: uploadResult.id,
         data: {
-          url: finalUrl
-        }
-      })
-
-      // Format response
-      const response: MobileUploadResponse = {
-        success: true,
-        message: 'Image uploaded successfully',
-        data: {
-          id: uploadResult.id as string,
-          url: finalUrl,
-          filename: uniqueFilename,
-          mimeType: file.type,
-          filesize: buffer.length,
-          width: dimensions.width,
-          height: dimensions.height,
-          alt: metadata.alt || file.name,
+          alt: alt,
         },
+        file: {
+          data: buffer,
+          mimetype: file.type,
+          name: file.name,
+          size: file.size,
+        },
+      })
+      console.log('[UPLOAD] Payload media upload successful:', mediaDoc.id)
+      console.log('[UPLOAD] Full mediaDoc:', mediaDoc)
+    } catch (mediaError) {
+      console.error('[UPLOAD] Payload media upload failed:', mediaError)
+      if (mediaError instanceof Error) {
+        console.error('[UPLOAD] Media upload error stack:', mediaError.stack)
       }
-
-      return NextResponse.json(response, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'no-store',
-          'X-Content-Type-Options': 'nosniff',
-        }
-      })
-
-    } catch (error: any) {
-      console.error('📱 Manual upload failed:', error)
-      
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Upload failed',
-          error: 'Failed to save image to server storage',
-          code: 'MANUAL_UPLOAD_FAILED',
-        },
-        { status: 500 }
-      )
+      return NextResponse.json({ success: false, message: 'Failed to upload image to media collection', error: mediaError instanceof Error ? mediaError.message : String(mediaError), code: 'MEDIA_UPLOAD_ERROR' }, { status: 500 })
     }
 
+    // Get additional info for LocationPhotoSubmissions
+    const locationId = formData.get('locationId') as string
+    const caption = formData.get('caption') as string | undefined
+    const category = (formData.get('category') as string) || 'other'
+    console.log('[UPLOAD] Submission info:', { locationId, caption, category })
+    if (!locationId) {
+      console.error('[UPLOAD] No locationId provided in formData')
+      return NextResponse.json({ success: false, message: 'locationId is required', error: 'No locationId', code: 'NO_LOCATION_ID' }, { status: 400 })
+    }
+
+    // Get user from auth
+    let user
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+      if (!user) throw new Error('No user found')
+      console.log('[UPLOAD] Authenticated user:', user.id)
+    } catch (authError) {
+      console.error('[UPLOAD] Failed to authenticate user:', authError)
+      return NextResponse.json({ success: false, message: 'Authentication required', error: 'No user', code: 'NO_USER' }, { status: 401 })
+    }
+
+    // Create LocationPhotoSubmissions document
+    let submissionDoc
+    try {
+      submissionDoc = await payload.create({
+        collection: 'locationPhotoSubmissions',
+        data: {
+          location: locationId,
+          submittedBy: user.id,
+          photo: mediaDoc.id,
+          caption,
+          category,
+          status: 'pending'
+        }
+      })
+      console.log('[UPLOAD] LocationPhotoSubmission created:', submissionDoc.id)
+    } catch (submissionError) {
+      console.error('[UPLOAD] Failed to create LocationPhotoSubmission:', submissionError)
+      return NextResponse.json({ success: false, message: 'Failed to submit photo for review', error: submissionError instanceof Error ? submissionError.message : String(submissionError), code: 'SUBMISSION_ERROR' }, { status: 500 })
+    }
+
+    // Return the submission info (not just the media)
+    const responseData = {
+      url: mediaDoc.url,
+      id: String(mediaDoc.id),
+      filename: String(mediaDoc.filename || file.name),
+      mimeType: file.type,
+      filesize: file.size,
+      alt: alt,
+      submissionId: String(submissionDoc.id),
+      status: submissionDoc.status,
+      caption: submissionDoc.caption,
+      category: submissionDoc.category
+    }
+    console.log('[UPLOAD] Success response data:', responseData)
+    console.log('--- [UPLOAD] /api/mobile/upload/image handler END ---')
+    return NextResponse.json({ success: true, message: 'Photo submitted for review', data: responseData })
   } catch (error) {
-    console.error('📱 Upload route error:', error)
-    
-    return NextResponse.json(
-      {
-        success: false,
-        message: 'Internal server error',
-        error: 'Upload service unavailable',
-        code: 'SERVER_ERROR'
-      },
-      { status: 500 }
-    )
+    console.error('❌ [UPLOAD] Error in image upload:', error)
+    return NextResponse.json({ success: false, message: 'Failed to upload image', error: error instanceof Error ? error.message : String(error), code: 'SERVER_ERROR' }, { status: 500 })
   }
 }
 

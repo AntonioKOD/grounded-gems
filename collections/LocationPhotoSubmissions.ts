@@ -17,6 +17,8 @@ export const LocationPhotoSubmissions: CollectionConfig = {
     },
     create: ({ req: { user } }) => Boolean(user),
     update: ({ req: { user } }) => {
+      // Allow Antonio (antonio_kodheli@icloud.com) to update any submission
+      if (user?.email === 'antonio_kodheli@icloud.com') return true;
       // Allow users to update their own submissions if status is 'pending' or 'needs_improvement'
       // Allow admins/moderators to update any submission for review
       return Boolean(user);
@@ -350,61 +352,38 @@ export const LocationPhotoSubmissions: CollectionConfig = {
     ],
     afterChange: [
       async ({ operation, doc, req }) => {
-        // If photo is approved, add it to the location's gallery
+        // If photo is approved, add it to the location's communityPhotos array
         if (operation === 'update' && doc.status === 'approved') {
           try {
             const payload = req.payload;
-            
             // Get the current location
             const location = await payload.findByID({
               collection: 'locations',
               id: doc.location,
             });
-            
             if (location) {
-              // Add the photo to the location's gallery
-              const updatedGallery = [
-                ...(location.gallery || []),
-                {
-                  image: doc.photo,
-                  caption: doc.caption || '',
-                  submittedBy: doc.submittedBy,
-                  featured: doc.featured || false,
-                },
-              ];
-              
+              // Prepare new community photo entry
+              const newCommunityPhoto = {
+                photo: doc.photo,
+                caption: doc.caption || '',
+                submittedBy: doc.submittedBy,
+                submittedAt: doc.submittedAt || new Date().toISOString(),
+                status: 'approved',
+              };
+              // Avoid duplicates: filter out any with the same photo ID
+              const existing = Array.isArray(location.communityPhotos) ? location.communityPhotos : [];
+              const filtered = existing.filter((item: any) => String(item.photo) !== String(doc.photo));
+              const updatedCommunityPhotos = [...filtered, newCommunityPhoto];
               await payload.update({
                 collection: 'locations',
                 id: doc.location,
                 data: {
-                  gallery: updatedGallery,
-                },
-              });
-              
-              // Create notification for the submitter
-              await payload.create({
-                collection: 'notifications',
-                data: {
-                  recipient: doc.submittedBy,
-                  type: 'photo_approved',
-                  title: 'Photo Approved!',
-                  message: `Your photo submission for ${location.name} has been approved and added to the gallery.`,
-                  priority: 'normal',
-                  relatedTo: {
-                    relationTo: 'locations',
-                    value: doc.location,
-                  },
-                  metadata: {
-                    locationName: location.name,
-                    photoId: doc.photo,
-                    submissionId: doc.id,
-                  },
-                  read: false,
+                  communityPhotos: updatedCommunityPhotos,
                 },
               });
             }
           } catch (error) {
-            console.error('Error adding approved photo to location gallery:', error);
+            console.error('Error adding approved photo to communityPhotos:', error);
           }
         }
         

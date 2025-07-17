@@ -4,18 +4,23 @@ import config from '@payload-config'
 import { cookies } from 'next/headers'
 
 export async function GET(request: NextRequest) {
+  console.log('--- [ME] /api/users/me handler START ---')
   try {
+    // Log request headers
+    const headersObj = Object.fromEntries(request.headers.entries())
+    console.log('[ME] Request headers:', headersObj)
+
     const cookieStore = await cookies()
     const payloadToken = cookieStore.get('payload-token')?.value
 
     console.log('[ME] payload-token from cookie:', payloadToken)
-
     if (!payloadToken) {
       console.warn('[ME] No payload-token found in cookies')
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
     const payload = await getPayload({ config })
+    console.log('[ME] getPayload resolved')
 
     // Use Payload's built-in authentication to get current user
     let userAuthResult
@@ -110,17 +115,16 @@ export async function GET(request: NextRequest) {
     response.headers.set('Expires', '0')
     response.headers.set('Surrogate-Control', 'no-store')
 
+    console.log('--- [ME] /api/users/me handler END ---')
     return response
   } catch (error) {
     console.error('❌ [API] Error fetching user:', error)
-    
     // More specific error handling
     if (error instanceof Error) {
       // Check for specific Payload errors
       if (error.message.includes('Unauthorized') || error.message.includes('Invalid token')) {
         return NextResponse.json({ user: null }, { status: 401 })
       }
-      
       // Check for database connection errors
       if (error.message.includes('ECONNREFUSED') || error.message.includes('timeout')) {
         return NextResponse.json(
@@ -129,7 +133,6 @@ export async function GET(request: NextRequest) {
         )
       }
     }
-    
     return NextResponse.json(
       { error: 'Failed to fetch user data' },
       { status: 500 }
