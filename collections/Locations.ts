@@ -8,7 +8,7 @@ export const Locations: CollectionConfig = {
     plural: 'Locations',
   },
   access: {
-    read: ({ req }) => {
+    read: ({req}) => {
       if (!req.user) {
         return {
           privacy: { equals: 'public' },
@@ -53,7 +53,8 @@ export const Locations: CollectionConfig = {
       return {
         createdBy: { equals: req.user.id }
       };
-    },
+    }
+,
   },
   hooks: {
     beforeChange: [

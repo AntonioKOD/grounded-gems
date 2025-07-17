@@ -8,29 +8,45 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies()
     const payloadToken = cookieStore.get('payload-token')?.value
 
+    console.log('[ME] payload-token from cookie:', payloadToken)
+
     if (!payloadToken) {
+      console.warn('[ME] No payload-token found in cookies')
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
     const payload = await getPayload({ config })
 
     // Use Payload's built-in authentication to get current user
-    const { user } = await payload.auth({
-      headers: request.headers,
-    })
+    let userAuthResult
+    try {
+      userAuthResult = await payload.auth({ headers: request.headers })
+      console.log('[ME] payload.auth result:', userAuthResult)
+    } catch (authError) {
+      console.error('[ME] Error in payload.auth:', authError)
+      return NextResponse.json({ error: 'Auth error', details: authError instanceof Error ? authError.message : authError }, { status: 500 })
+    }
+    const { user } = userAuthResult || {}
 
     if (!user) {
+      console.warn('[ME] No user found after payload.auth')
       return NextResponse.json({ user: null }, { status: 401 })
     }
 
-    console.log('🔍 [API] Fetching user with profile image relationship...')
+    console.log('[ME] Fetching user with profile image relationship...')
 
-    // Fetch the full user data with relationships - INCREASED DEPTH for profile images
-    const fullUser = await payload.findByID({
-      collection: 'users',
-      id: user.id,
-      depth: 3, // Increased depth to ensure profileImage media relationship is populated
-    })
+    let fullUser
+    try {
+      fullUser = await payload.findByID({
+        collection: 'users',
+        id: user.id,
+        depth: 3,
+      })
+      console.log('[ME] fullUser found:', fullUser)
+    } catch (findError) {
+      console.error('[ME] Error in payload.findByID:', findError)
+      return NextResponse.json({ error: 'findByID error', details: findError instanceof Error ? findError.message : findError }, { status: 500 })
+    }
 
     console.log('🖼️ [API] Profile image data structure:', {
       hasProfileImage: !!fullUser.profileImage,
