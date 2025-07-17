@@ -93,11 +93,28 @@ export class FeedAlgorithm {
     
     if (!url) return null
     
-    // Ensure URL is properly formatted
+    // Fix CORS issues by ensuring URLs use the same domain as the current site
     if (url.startsWith('/') && !url.startsWith('http')) {
       // For relative URLs, ensure they're properly formatted
       if (!url.startsWith('/api/media/')) {
         url = `/api/media/file/${url.replace(/^\/+/, '')}`
+      }
+    } else if (url.startsWith('http')) {
+      // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
+      // or vice versa to match the current domain
+      try {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'sacavia.com'
+        const urlObj = new URL(url)
+        
+        if (urlObj.hostname === 'www.sacavia.com' && currentDomain === 'sacavia.com') {
+          urlObj.hostname = 'sacavia.com'
+          url = urlObj.toString()
+        } else if (urlObj.hostname === 'sacavia.com' && currentDomain === 'www.sacavia.com') {
+          urlObj.hostname = 'www.sacavia.com'
+          url = urlObj.toString()
+        }
+      } catch (error) {
+        console.warn('Error processing media URL:', error)
       }
     }
     

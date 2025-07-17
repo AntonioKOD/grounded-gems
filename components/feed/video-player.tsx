@@ -171,12 +171,38 @@ export default function VideoPlayer({
     onEnded?.()
   }, [viewCompleted, onEnded, onViewComplete])
 
-  const handleError = useCallback(() => {
-    console.warn('VideoPlayer failed to load:', src)
-    setHasError(true)
-    setIsLoading(false)
+  // Handle video errors
+  const handleError = useCallback((error: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    console.error('🎬 Video error:', error)
+    const videoElement = videoRef.current
+    if (videoElement) {
+      console.error('🎬 Video error details:', {
+        error: videoElement.error,
+        networkState: videoElement.networkState,
+        readyState: videoElement.readyState,
+        src: videoElement.src,
+        currentSrc: videoElement.currentSrc
+      })
+    }
+    
+    // Check if it's a CORS error
+    if (error.target) {
+      const target = error.target as HTMLVideoElement
+      if (target.error && target.error.code === MediaError.MEDIA_ERR_NETWORK) {
+        console.error('🎬 CORS or network error detected')
+        // Try to fix CORS by updating the src
+        if (target.src && target.src.includes('www.sacavia.com')) {
+          const fixedSrc = target.src.replace('www.sacavia.com', 'sacavia.com')
+          console.log('🎬 Attempting to fix CORS by updating src to:', fixedSrc)
+          target.src = fixedSrc
+          target.load()
+          return
+        }
+      }
+    }
+    
     onError?.()
-  }, [onError, src])
+  }, [onError])
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current

@@ -184,10 +184,23 @@ export function getVideoUrl(video: any): string | null {
   if (typeof video === "string" && video.trim() !== "") {
     let url = video.trim()
     
-    // Ensure URL is properly formatted for production
+    // Fix CORS issues by ensuring URLs use the same domain as the current site
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
+    } else if (url.startsWith('http')) {
+      // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
+      // or vice versa to match the current domain
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'sacavia.com'
+      const urlObj = new URL(url)
+      
+      if (urlObj.hostname === 'www.sacavia.com' && currentDomain === 'sacavia.com') {
+        urlObj.hostname = 'sacavia.com'
+        url = urlObj.toString()
+      } else if (urlObj.hostname === 'sacavia.com' && currentDomain === 'www.sacavia.com') {
+        urlObj.hostname = 'www.sacavia.com'
+        url = urlObj.toString()
+      }
     }
     
     return url
@@ -202,21 +215,38 @@ export function getVideoUrl(video: any): string | null {
       url = video.url
     } else if (video.filename) {
       url = `/api/media/file/${video.filename}`
-    } else if (video.id) {
-      url = `/api/media/file/${video.id}`
+    } else if (video.sizes?.card?.url) {
+      url = video.sizes.card.url
+    } else if (video.sizes?.thumbnail?.url) {
+      url = video.sizes.thumbnail.url
+    } else if (video.thumbnailURL) {
+      url = video.thumbnailURL
     }
     
     if (!url) return null
     
-    // Ensure URL is properly formatted for production
+    // Fix CORS issues by ensuring URLs use the same domain as the current site
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
+    } else if (url.startsWith('http')) {
+      // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
+      // or vice versa to match the current domain
+      const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'sacavia.com'
+      const urlObj = new URL(url)
+      
+      if (urlObj.hostname === 'www.sacavia.com' && currentDomain === 'sacavia.com') {
+        urlObj.hostname = 'sacavia.com'
+        url = urlObj.toString()
+      } else if (urlObj.hostname === 'sacavia.com' && currentDomain === 'www.sacavia.com') {
+        urlObj.hostname = 'www.sacavia.com'
+        url = urlObj.toString()
+      }
     }
     
     return url
   }
-
+  
   return null
 }
 

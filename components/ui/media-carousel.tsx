@@ -280,6 +280,20 @@ export default function MediaCarousel({
                 src: e.currentTarget.src,
                 error: e
               })
+              
+              // Check if it's a CORS error and try to fix it
+              const videoElement = e.currentTarget as HTMLVideoElement
+              if (videoElement.error && videoElement.error.code === MediaError.MEDIA_ERR_NETWORK) {
+                console.error('🎬 CORS or network error detected')
+                // Try to fix CORS by updating the src
+                if (videoElement.src && videoElement.src.includes('www.sacavia.com')) {
+                  const fixedSrc = videoElement.src.replace('www.sacavia.com', 'sacavia.com')
+                  console.log('🎬 Attempting to fix CORS by updating src to:', fixedSrc)
+                  videoElement.src = fixedSrc
+                  videoElement.load()
+                  return
+                }
+              }
             }}
             onLoadStart={() => {
               console.log('🎬 Video loading started:', item.url)
