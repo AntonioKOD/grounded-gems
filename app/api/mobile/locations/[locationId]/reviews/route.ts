@@ -25,7 +25,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       helpfulCount: review.helpfulCount || 0,
       createdAt: review.createdAt
     }))
-    return NextResponse.json({ success: true, data: { reviews } })
+    const numReviews = reviews.length;
+    const averageRating = reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / numReviews;
+
+    return NextResponse.json({ success: true, data: { reviews, numReviews, averageRating } })
   } catch (error) {
     return NextResponse.json({ success: false, error: 'Failed to fetch reviews' }, { status: 500 })
   }

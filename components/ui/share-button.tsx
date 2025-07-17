@@ -70,7 +70,7 @@ export default function ShareButton({
   return (
     <Button
       variant={variant}
-      size={size}
+      size={size === "md" ? "default" : size}
       onClick={handleShare}
       className={cn(
         "transition-all duration-200",

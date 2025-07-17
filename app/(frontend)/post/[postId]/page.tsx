@@ -82,16 +82,21 @@ export default async function PostPage({ params }: PostPageProps) {
     }
 
     // Process media for the post
-    const mediaItems = []
+    const mediaItems: Array<{
+      type: 'image' | 'video'
+      url: string
+      thumbnail?: string
+      alt?: string
+    }> = []
     
     // Add video if available
     if (post.video) {
       const videoUrl = getVideoUrl(post.video)
       if (videoUrl) {
         mediaItems.push({
-          type: 'video',
+          type: 'video' as const,
           url: videoUrl,
-          thumbnail: post.image ? getImageUrl(post.image) : null,
+          thumbnail: post.image ? getImageUrl(post.image) : undefined,
           alt: 'Post video'
         })
       }
@@ -102,7 +107,7 @@ export default async function PostPage({ params }: PostPageProps) {
       const imageUrl = getImageUrl(post.image)
       if (imageUrl !== "/placeholder.svg") {
         mediaItems.push({
-          type: 'image',
+          type: 'image' as const,
           url: imageUrl,
           alt: post.title || 'Post image'
         })
@@ -115,7 +120,7 @@ export default async function PostPage({ params }: PostPageProps) {
         const photoUrl = getImageUrl(photo)
         if (photoUrl !== "/placeholder.svg") {
           mediaItems.push({
-            type: 'image',
+            type: 'image' as const,
             url: photoUrl,
             alt: `Photo ${index + 1}`
           })
@@ -239,7 +244,7 @@ export default async function PostPage({ params }: PostPageProps) {
             <div className="border-t border-gray-200 pt-6">
               <h3 className="font-semibold text-gray-900 mb-4">Comments</h3>
               <CommentSystemLight 
-                postId={post.id}
+                postId={String(post.id)}
                 className="bg-transparent"
                 autoShow={true}
               />
