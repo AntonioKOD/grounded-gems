@@ -26,6 +26,9 @@ interface VideoPlayerProps {
   showProgress?: boolean
   showPlayButton?: boolean
   preload?: "none" | "metadata" | "auto"
+  enableAutoplay?: boolean
+  enableVoice?: boolean
+  isVisible?: boolean
 }
 
 export default function VideoPlayer({
@@ -46,7 +49,10 @@ export default function VideoPlayer({
   controls = true,
   showProgress = true,
   showPlayButton = true,
-  preload = "metadata"
+  preload = "metadata",
+  enableAutoplay = true,
+  enableVoice = true,
+  isVisible = false
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -62,6 +68,110 @@ export default function VideoPlayer({
   const [isHovered, setIsHovered] = useState(false)
   const [viewStartTime, setViewStartTime] = useState<number | null>(null)
   const [viewCompleteTime, setViewCompleteTime] = useState<number | null>(null)
+  const [isInView, setIsInView] = useState(false)
+
+  // Process video URL to ensure it's correct
+  const processedVideoUrl = useMemo(() => {
+    if (!src) return ''
+    
+    let url = src
+    
+    // Fix CORS issues by ensuring URLs use the same domain as the current site
+    if (url.startsWith('/') && !url.startsWith('http')) {
+      // For relative URLs, ensure they're properly formatted
+      if (!url.startsWith('/api/media/')) {
+        url = `/api/media/file/${url.replace(/^\/+/, '')}`
+      }
+    } else if (url.startsWith('http')) {
+      // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
+      // or vice versa to match the current domain
+      try {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'sacavia.com'
+        const urlObj = new URL(url)
+        
+        if (urlObj.hostname === 'www.sacavia.com' && currentDomain === 'sacavia.com') {
+          urlObj.hostname = 'sacavia.com'
+          url = urlObj.toString()
+        } else if (urlObj.hostname === 'sacavia.com' && currentDomain === 'www.sacavia.com') {
+          urlObj.hostname = 'www.sacavia.com'
+          url = urlObj.toString()
+        }
+      } catch (error) {
+        console.warn('Error processing video URL:', error)
+      }
+    }
+    
+    return url
+  }, [src])
+
+  // Intersection Observer for TikTok-style autoplay
+  useEffect(() => {
+    const videoElement = videoRef.current
+    if (!videoElement || !enableAutoplay) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        const isIntersecting = Boolean(entry?.isIntersecting && entry.intersectionRatio > 0.5)
+        
+        setIsInView(isIntersecting)
+        
+        if (isIntersecting) {
+          // Video is in view - autoplay with voice if enabled
+          const shouldMute = !enableVoice
+          videoElement.muted = shouldMute
+          setIsMuted(Boolean(shouldMute))
+          
+          videoElement.play().catch((error) => {
+            console.log('🎬 Autoplay prevented:', error)
+            // If autoplay fails, try with muted
+            if (!shouldMute) {
+              videoElement.muted = true
+              setIsMuted(true)
+              videoElement.play().catch((mutedError) => {
+                console.log('🎬 Muted autoplay also failed:', mutedError)
+              })
+            }
+          })
+        } else {
+          // Video is out of view - pause
+          videoElement.pause()
+        }
+      },
+      { 
+        threshold: [0.5],
+        rootMargin: '0px 0px -10% 0px' // Start autoplay slightly before fully in view
+      }
+    )
+
+    observer.observe(videoElement)
+    return () => observer.disconnect()
+  }, [enableAutoplay, enableVoice])
+
+  // Handle visibility prop changes
+  useEffect(() => {
+    const videoElement = videoRef.current
+    if (!videoElement) return
+
+    if (isVisible && enableAutoplay) {
+      const shouldMute = !enableVoice
+      videoElement.muted = shouldMute
+      setIsMuted(Boolean(shouldMute))
+      
+      videoElement.play().catch((error) => {
+        console.log('🎬 Visibility-based autoplay prevented:', error)
+        if (!shouldMute) {
+          videoElement.muted = true
+          setIsMuted(true)
+          videoElement.play().catch((mutedError) => {
+            console.log('🎬 Muted visibility autoplay also failed:', mutedError)
+          })
+        }
+      })
+    } else if (!isVisible) {
+      videoElement.pause()
+    }
+  }, [isVisible, enableAutoplay, enableVoice])
 
   // Optimize thumbnail generation - only generate once and cache
   const generateThumbnail = useCallback(() => {
@@ -89,7 +199,7 @@ export default function VideoPlayer({
             const thumbnailUrl = canvasElement.toDataURL('image/jpeg', 0.7)
             videoElement.poster = thumbnailUrl
             setThumbnailGenerated(true)
-            console.log('🎬 Generated thumbnail for video:', src)
+            console.log('🎬 Generated thumbnail for video:', processedVideoUrl)
           }
           videoElement.removeEventListener('seeked', handleSeeked)
         }
@@ -99,7 +209,7 @@ export default function VideoPlayer({
     } catch (error) {
       console.error('Error generating thumbnail:', error)
     }
-  }, [src, thumbnailGenerated])
+  }, [processedVideoUrl, thumbnailGenerated])
 
   // Handle video loading
   const handleLoadedMetadata = useCallback(() => {
@@ -173,12 +283,17 @@ export default function VideoPlayer({
     if (isPlaying) {
       videoElement.pause()
     } else {
+      // When manually playing, respect voice settings
+      const shouldMute = !enableVoice
+      videoElement.muted = shouldMute
+      setIsMuted(Boolean(shouldMute))
+      
       videoElement.play().catch(error => {
         console.error('Error playing video:', error)
         setHasError(true)
       })
     }
-  }, [isPlaying])
+  }, [isPlaying, enableVoice])
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -269,7 +384,7 @@ export default function VideoPlayer({
       {/* Video element */}
       <video
         ref={videoRef}
-        src={src}
+        src={processedVideoUrl}
         poster={thumbnail}
         autoPlay={autoPlay}
         muted={muted}

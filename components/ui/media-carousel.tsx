@@ -64,23 +64,33 @@ export default function MediaCarousel({
         (entries) => {
           entries.forEach((entry) => {
             if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+              // Video is in view - autoplay with voice enabled
+              currentVideo.muted = false // Enable voice by default
               currentVideo.play().catch((error) => {
-                console.log('Auto-play prevented:', error)
+                console.log('🎬 Auto-play prevented, trying muted:', error)
+                // If autoplay fails, try with muted
+                currentVideo.muted = true
+                currentVideo.play().catch((mutedError) => {
+                  console.log('🎬 Muted auto-play also failed:', mutedError)
+                })
               })
               setVideoStates(prev => ({
                 ...prev,
-                [currentIndex]: { isPlaying: true, isMuted: prev[currentIndex]?.isMuted ?? true, isHovered: prev[currentIndex]?.isHovered ?? false }
+                [currentIndex]: { isPlaying: true, isMuted: false, isHovered: prev[currentIndex]?.isHovered ?? false }
               }))
             } else {
               currentVideo.pause()
               setVideoStates(prev => ({
                 ...prev,
-                [currentIndex]: { isPlaying: false, isMuted: prev[currentIndex]?.isMuted ?? true, isHovered: prev[currentIndex]?.isHovered ?? false }
+                [currentIndex]: { isPlaying: false, isMuted: prev[currentIndex]?.isMuted ?? false, isHovered: prev[currentIndex]?.isHovered ?? false }
               }))
             }
           })
         },
-        { threshold: [0.5] }
+        { 
+          threshold: [0.5],
+          rootMargin: '0px 0px -10% 0px' // Start autoplay slightly before fully in view
+        }
       )
 
       const carouselElement = carouselRef.current
@@ -264,12 +274,14 @@ export default function MediaCarousel({
             thumbnail={item.thumbnail || item.url} // Use video URL as fallback thumbnail
             aspectRatio="16/9"
             autoPlay={false}
-            muted={true}
+            muted={false} // Start unmuted for voice
             loop={true}
             controls={true}
             showProgress={true}
             showPlayButton={true}
             preload="metadata"
+            enableAutoplay={true}
+            enableVoice={true}
             onError={() => {
               console.error('🎬 MediaCarousel video error for:', item.url)
             }}

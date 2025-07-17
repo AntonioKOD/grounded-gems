@@ -444,6 +444,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                 showDots={true}
                 enableVideoPreview={true}
                 videoPreviewMode="hover"
+                autoPlay={true}
                 className="rounded-2xl overflow-hidden bg-gray-100"
               />
             </div>
