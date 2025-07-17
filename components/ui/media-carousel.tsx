@@ -253,7 +253,9 @@ export default function MediaCarousel({
           onLoad={() => handleLoad(index)}
         />
       )
-    } else if (item.type === 'video') {
+    }
+    
+    if (item.type === 'video') {
       return (
         <div 
           className="relative w-full h-full group"
@@ -263,13 +265,29 @@ export default function MediaCarousel({
           <video
             ref={(el) => { videoRefs.current[index] = el }}
             src={item.url}
-            poster={item.thumbnail}
+            poster={item.thumbnail || item.url} // Use video URL as poster if no thumbnail
             className="w-full h-full object-cover"
             muted={videoStates[index]?.isMuted !== false}
             loop
             playsInline
             preload="metadata"
+            crossOrigin="anonymous"
             onClick={(e) => handleVideoClick(index, e)}
+            onError={(e) => {
+              console.error('🎬 MediaCarousel video error:', {
+                url: item.url,
+                alt: item.alt,
+                src: e.currentTarget.src,
+                error: e
+              })
+            }}
+            onLoadStart={() => {
+              console.log('🎬 Video loading started:', item.url)
+            }}
+            onLoadedData={() => {
+              console.log('🎬 Video loaded successfully:', item.url)
+              handleLoad(index)
+            }}
           />
           
           {/* Video controls overlay */}
@@ -288,50 +306,38 @@ export default function MediaCarousel({
             )}
             
             {/* Sound control */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                const video = videoRefs.current[index]
-                if (video) {
-                  const newIsMuted = !videoStates[index]?.isMuted
-                  setVideoStates(prev => ({
-                    ...prev,
-                    [index]: { 
-                      isPlaying: prev[index]?.isPlaying ?? false,
-                      isHovered: prev[index]?.isHovered ?? false,
-                      isMuted: newIsMuted 
-                    }
-                  }))
-                  video.muted = newIsMuted
-                }
-              }}
-              className="absolute top-3 right-3 bg-black/70 hover:bg-black/90 text-white w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-110 z-10"
-            >
-              {videoStates[index]?.isMuted !== false ? (
-                <VolumeX className="w-5 h-5" />
-              ) : (
-                <Volume2 className="w-5 h-5" />
-              )}
-            </button>
-            
-            {/* Tap to unmute indicator */}
-            {videoStates[index]?.isMuted !== false && (
-              <div className="absolute bottom-3 left-3 bg-black/70 text-white px-3 py-1 rounded-full text-xs flex items-center gap-2">
-                <VolumeX className="w-3 h-3" />
-                <span>Tap 🔊 for sound</span>
-              </div>
-            )}
-              
-            {/* Duration indicator */}
-            {item.duration && (
-              <div className="absolute bottom-3 right-3 bg-black/50 text-white px-2 py-1 rounded-full text-xs">
-                {Math.floor(item.duration / 60)}:{(item.duration % 60).toString().padStart(2, '0')}
-              </div>
-            )}
+            <div className="absolute top-4 right-4">
+              <button
+                className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-all flex items-center justify-center"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const video = videoRefs.current[index]
+                  if (video) {
+                    const newIsMuted = !videoStates[index]?.isMuted
+                    setVideoStates(prev => ({
+                      ...prev,
+                      [index]: {
+                        isPlaying: prev[index]?.isPlaying ?? false,
+                        isMuted: newIsMuted,
+                        isHovered: prev[index]?.isHovered ?? false
+                      }
+                    }))
+                    video.muted = newIsMuted
+                  }
+                }}
+              >
+                {videoStates[index]?.isMuted !== false ? (
+                  <VolumeX className="w-5 h-5" />
+                ) : (
+                  <Volume2 className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )
     }
+    
     return null
   }
 

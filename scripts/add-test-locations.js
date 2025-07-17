@@ -1,5 +1,5 @@
 import { getPayload } from 'payload'
-import config from '../payload.config.js'
+import config from '../payload.config.ts'
 
 async function addTestLocations() {
   try {

@@ -62,6 +62,43 @@ export default function VideoPlayer({
   const [viewCompleted, setViewCompleted] = useState(false)
   const [isInView, setIsInView] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [thumbnailGenerated, setThumbnailGenerated] = useState(false)
+
+  // Generate thumbnail from video if not provided
+  const generateThumbnail = useCallback(() => {
+    const video = videoRef.current
+    if (!video || thumbnailGenerated || thumbnail) return
+
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Set canvas size
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 360
+
+    // Seek to beginning of video
+    video.currentTime = 0.1
+
+    const handleSeeked = () => {
+      try {
+        // Draw the video frame to canvas
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        
+        // Convert to data URL and set as poster
+        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
+        video.poster = thumbnailUrl
+        setThumbnailGenerated(true)
+        
+        // Clean up
+        video.removeEventListener('seeked', handleSeeked)
+      } catch (error) {
+        console.error('Error generating thumbnail:', error)
+      }
+    }
+
+    video.addEventListener('seeked', handleSeeked)
+  }, [thumbnail, thumbnailGenerated])
 
   // Intersection Observer for autoplay when in view
   useEffect(() => {
@@ -107,7 +144,9 @@ export default function VideoPlayer({
 
   const handleLoadedData = useCallback(() => {
     setIsLoading(false)
-  }, [])
+    // Generate thumbnail after video is loaded
+    generateThumbnail()
+  }, [generateThumbnail])
 
   const handlePlay = useCallback(() => {
     setIsPlaying(true)
@@ -213,32 +252,27 @@ export default function VideoPlayer({
     setShowControls(false)
   }, [])
 
-  // Check if video URL is likely broken and set error state immediately
-  const isKnownBrokenUrl = useMemo(() => {
-    if (!src) return true
-    // Known broken URL patterns
-    const brokenPatterns = [
-      'sacavia.com/api/media/file/',
-              'localhost:', // Development backend that might be down
-        '127.0.0.1:', // Local development
-        '192.168.', // Local network development
-    ]
-    return brokenPatterns.some(pattern => src.includes(pattern))
+  // Check if video URL is valid
+  const isValidVideoUrl = useMemo(() => {
+    if (!src) return false
+    
+    // Check if it's a valid video URL
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.mkv']
+    const isVideoFile = videoExtensions.some(ext => src.toLowerCase().includes(ext))
+    const isVideoUrl = src.includes('/api/media/file/') || isVideoFile
+    
+    return isVideoUrl
   }, [src])
 
-  // Set error state immediately for known broken URLs
+  // Reset states when src changes
   useEffect(() => {
-    if (isKnownBrokenUrl) {
-      console.warn('VideoPlayer: Known broken URL detected:', src)
-      setHasError(true)
-      setIsLoading(false)
-      return
-    }
-    
-    // Reset states when src changes to a potentially valid URL
     setHasError(false)
     setIsLoading(true)
-  }, [src, isKnownBrokenUrl])
+    setIsPlaying(false)
+    setViewCompleted(false)
+    setHasStartedPlaying(false)
+    setThumbnailGenerated(false)
+  }, [src])
 
   // Add timeout for stuck loading states
   useEffect(() => {
@@ -249,19 +283,10 @@ export default function VideoPlayer({
       setHasError(true)
       setIsLoading(false)
       onError?.()
-    }, 8000) // 8 second timeout for videos
+    }, 10000) // 10 second timeout for videos
 
     return () => clearTimeout(timeout)
   }, [isLoading, hasError, src, onError])
-
-  // Reset states when src changes
-  useEffect(() => {
-    setHasError(false)
-    setIsLoading(true)
-    setIsPlaying(false)
-    setViewCompleted(false)
-    setHasStartedPlaying(false)
-  }, [src])
 
   return (
     <div
@@ -287,6 +312,7 @@ export default function VideoPlayer({
         onEnded={handleEnded}
         onTimeUpdate={handleTimeUpdate}
         onError={handleError}
+        crossOrigin="anonymous"
       />
 
       {/* Loading indicator */}
@@ -308,7 +334,7 @@ export default function VideoPlayer({
       )}
 
       {/* Play button overlay - only show when paused */}
-      {showPlayButton && !isPlaying && !isLoading && (
+      {showPlayButton && !isPlaying && !isLoading && !hasError && (
         <div className="absolute inset-0 flex items-center justify-center">
           <motion.button
             initial={{ scale: 0 }}

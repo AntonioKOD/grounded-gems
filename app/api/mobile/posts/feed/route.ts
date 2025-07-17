@@ -271,7 +271,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
             videoItem = {
               type: 'video',
               url: videoUrl,
-              // No thumbnail for reels-style autoplay
+              // Use video URL as thumbnail for now - the video element will generate its own poster
+              thumbnail: videoUrl,
               duration: typeof post.video === 'object' ? post.video.duration : undefined,
               alt: 'Post video'
             }

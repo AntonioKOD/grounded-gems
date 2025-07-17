@@ -27,15 +27,7 @@ export const Reviews: CollectionConfig = {
         author: { equals: user?.id }
       }
     },
-    delete: ({ req: { user } }) => {
-      // Admin can delete any review
-      if (user?.role === 'admin') return true
-      
-      // Users can delete their own reviews
-      return {
-        author: { equals: user?.id }
-      }
-    },
+    delete: () => true,
     // Ensure admin can access the collection in admin UI
     admin: ({ req: { user } }) => {
       return user?.role === 'admin'
@@ -161,6 +153,91 @@ export const Reviews: CollectionConfig = {
         return data
       },
     ],
+    afterChange: [
+      async ({ doc }) => {
+        // Only update if this is a location review and has a location
+        if (doc.reviewType === 'location' && doc.location) {
+          try {
+            const { getPayload } = await import('payload')
+            const config = (await import('../payload.config')).default
+            const payload = await getPayload({ config })
+            
+            // Extract location ID (could be string or populated object)
+            const locationId = typeof doc.location === 'string' ? doc.location : doc.location.id
+            
+            // Get all published reviews for this location
+            const reviews = await payload.find({
+              collection: 'reviews',
+              where: {
+                and: [
+                  { location: { equals: locationId } },
+                  { status: { equals: 'published' } }
+                ]
+              },
+              limit: 1000
+            })
+            const publishedReviews = reviews.docs
+            const reviewCount = publishedReviews.length
+            const averageRating = reviewCount > 0
+              ? publishedReviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount
+              : 0
+            await payload.update({
+              collection: 'locations',
+              id: locationId,
+              data: {
+                averageRating: Math.round(averageRating * 10) / 10,
+                reviewCount
+              }
+            })
+            console.log(`[REVIEWS HOOK] Updated location ${locationId}: rating=${averageRating}, count=${reviewCount}`)
+          } catch (err) {
+            console.error('[REVIEWS HOOK] Failed to update location stats:', err)
+          }
+        }
+      }
+    ],
+    afterDelete: [
+      async ({ doc }) => {
+        if (doc.reviewType === 'location' && doc.location) {
+          try {
+            const { getPayload } = await import('payload')
+            const config = (await import('../payload.config')).default
+            const payload = await getPayload({ config })
+            
+            // Extract location ID (could be string or populated object)
+            const locationId = typeof doc.location === 'string' ? doc.location : doc.location.id
+            
+            // Get all published reviews for this location
+            const reviews = await payload.find({
+              collection: 'reviews',
+              where: {
+                and: [
+                  { location: { equals: locationId } },
+                  { status: { equals: 'published' } }
+                ]
+              },
+              limit: 1000
+            })
+            const publishedReviews = reviews.docs
+            const reviewCount = publishedReviews.length
+            const averageRating = reviewCount > 0
+              ? publishedReviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount
+              : 0
+            await payload.update({
+              collection: 'locations',
+              id: locationId,
+              data: {
+                averageRating: Math.round(averageRating * 10) / 10,
+                reviewCount
+              }
+            })
+            console.log(`[REVIEWS HOOK] Updated location ${locationId} after delete: rating=${averageRating}, count=${reviewCount}`)
+          } catch (err) {
+            console.error('[REVIEWS HOOK] Failed to update location stats after delete:', err)
+          }
+        }
+      }
+    ]
   },
   indexes: [
     {

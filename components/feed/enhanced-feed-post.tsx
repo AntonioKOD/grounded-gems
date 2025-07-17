@@ -131,7 +131,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       return (post as any).media.map((item: any) => ({
         type: item.type,
         url: item.url,
-        thumbnail: item.thumbnail,
+        thumbnail: item.thumbnail || (item.type === 'video' ? item.url : undefined), // Use video URL as thumbnail
         alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
       }))
     }
@@ -150,7 +150,7 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
       items.push({ 
         type: 'video', 
         url: videoUrl,
-        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : (post as any).videoThumbnail,
+        thumbnail: videoUrl, // Use video URL as thumbnail for now
         alt: "Post video"
       })
     }

@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 async function addBasicChallenges() {
   try {
     // Import config dynamically using require
-    const config = await import('../payload.config.js')
+    const config = await import('../payload.config.ts')
     const payload = await getPayload({ config: config.default })
     
     console.log('🚀 Adding basic challenges to database...')

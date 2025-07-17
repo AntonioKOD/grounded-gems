@@ -94,33 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     console.log('[REVIEWS] Created review:', review)
 
-    // Update location's averageRating and reviewCount
-    try {
-      // Fetch all published reviews for this location
-      const allReviews = await payload.find({
-        collection: 'reviews',
-        where: {
-          and: [
-            { location: { equals: locationId } },
-            { status: { equals: 'published' } }
-          ]
-        },
-        limit: 1000 // reasonable upper bound
-      })
-      const ratings = allReviews.docs.map((r: any) => r.rating).filter((r: any) => typeof r === 'number')
-      const reviewCount = ratings.length
-      const averageRating = reviewCount > 0 ? ratings.reduce((a: number, b: number) => a + b, 0) / reviewCount : 0
-      await payload.update({
-        collection: 'locations',
-        id: locationId,
-        data: {
-          averageRating,
-          reviewCount
-        }
-      })
-    } catch (err) {
-      console.error('[REVIEWS] Failed to update location averageRating/reviewCount:', err)
-    }
+    // No need to manually update location stats here; handled by hooks
 
     return NextResponse.json({ success: true, data: { review } })
   } catch (error) {

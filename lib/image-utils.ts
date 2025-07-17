@@ -184,10 +184,7 @@ export function getVideoUrl(video: any): string | null {
   if (typeof video === "string" && video.trim() !== "") {
     let url = video.trim()
     
-    // In development, transform API media URLs to blob URLs
-    url = transformToBlobUrl(url)
-    
-    // Ensure the URL is properly formatted for serving
+    // Ensure URL is properly formatted for production
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
@@ -197,13 +194,21 @@ export function getVideoUrl(video: any): string | null {
   }
   
   // Handle PayloadCMS media objects
-  if (typeof video === "object" && video !== null && video.url) {
-    let url = video.url
+  if (typeof video === "object" && video !== null) {
+    let url: string | null = null
     
-    // In development, transform API media URLs to blob URLs
-    url = transformToBlobUrl(url)
+    // Try different URL sources in order of preference
+    if (video.url) {
+      url = video.url
+    } else if (video.filename) {
+      url = `/api/media/file/${video.filename}`
+    } else if (video.id) {
+      url = `/api/media/file/${video.id}`
+    }
     
-    // Ensure the URL is properly formatted for serving
+    if (!url) return null
+    
+    // Ensure URL is properly formatted for production
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
@@ -213,6 +218,68 @@ export function getVideoUrl(video: any): string | null {
   }
 
   return null
+}
+
+/**
+ * Generate a video thumbnail URL from the beginning of the video
+ * This creates a thumbnail by seeking to 0.1 seconds into the video
+ */
+export function getVideoThumbnailUrl(video: any): string | null {
+  if (!video) return null
+  
+  const videoUrl = getVideoUrl(video)
+  if (!videoUrl) return null
+  
+  // For now, return the video URL itself - the video element will use it as poster
+  // In a production environment, you might want to generate actual thumbnail images
+  // and store them separately, but for now this will work
+  return videoUrl
+}
+
+/**
+ * Create a video thumbnail by seeking to the beginning of the video
+ * This is a client-side function that can be used to generate thumbnails
+ */
+export function createVideoThumbnail(videoElement: HTMLVideoElement): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    
+    if (!ctx) {
+      reject(new Error('Could not get canvas context'))
+      return
+    }
+    
+    // Set canvas size
+    canvas.width = videoElement.videoWidth || 640
+    canvas.height = videoElement.videoHeight || 360
+    
+    // Seek to beginning of video
+    videoElement.currentTime = 0.1
+    
+    const handleSeeked = () => {
+      try {
+        // Draw the video frame to canvas
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+        
+        // Convert to data URL
+        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
+        resolve(thumbnailUrl)
+        
+        // Clean up
+        videoElement.removeEventListener('seeked', handleSeeked)
+      } catch (error) {
+        reject(error)
+      }
+    }
+    
+    videoElement.addEventListener('seeked', handleSeeked)
+    
+    // Handle errors
+    videoElement.addEventListener('error', () => {
+      reject(new Error('Video error occurred'))
+    })
+  })
 }
 
 /**

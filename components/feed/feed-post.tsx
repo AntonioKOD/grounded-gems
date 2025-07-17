@@ -143,7 +143,7 @@ export const FeedPost = memo(function FeedPost({
           acc.push({
             type: item.type,
             url: item.url,
-            thumbnail: item.thumbnail,
+            thumbnail: item.thumbnail || (item.type === 'video' ? item.url : undefined), // Use video URL as thumbnail
             alt: item.alt || (item.type === 'video' ? 'Post video' : 'Post image')
           })
         }
@@ -168,7 +168,7 @@ export const FeedPost = memo(function FeedPost({
       items.push({ 
         type: 'video', 
         url: videoUrl,
-        thumbnail: imageUrl !== "/placeholder.svg" ? imageUrl : postData.videoThumbnail,
+        thumbnail: videoUrl, // Use video URL as thumbnail
         alt: "Post video"
       })
       processedUrls.add(videoUrl)

@@ -1,6 +1,6 @@
 import payload from 'payload'
 import dotenv from 'dotenv'
-import config from '../payload.config.js'
+import config from '../payload.config.ts'
 dotenv.config()
 
 const createAdminUser = async () => {
