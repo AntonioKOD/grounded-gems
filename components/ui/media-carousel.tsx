@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import Image from 'next/image'
+import VideoPlayer from '@/components/feed/video-player'
 
 interface MediaItem {
   type: 'image' | 'video'
@@ -257,95 +258,28 @@ export default function MediaCarousel({
     
     if (item.type === 'video') {
       return (
-        <div 
-          className="relative w-full h-full group"
-          onMouseEnter={() => handleVideoHover(index, true)}
-          onMouseLeave={() => handleVideoHover(index, false)}
-        >
-          <video
-            ref={(el) => { videoRefs.current[index] = el }}
+        <div className="relative w-full h-full">
+          <VideoPlayer
             src={item.url}
-            poster={item.thumbnail || item.url} // Use video URL as poster if no thumbnail
-            className="w-full h-full object-cover"
-            muted={videoStates[index]?.isMuted !== false}
-            loop
-            playsInline
+            thumbnail={item.thumbnail || item.url} // Use video URL as fallback thumbnail
+            aspectRatio="16/9"
+            autoPlay={false}
+            muted={true}
+            loop={true}
+            controls={true}
+            showProgress={true}
+            showPlayButton={true}
             preload="metadata"
-            crossOrigin="anonymous"
-            onClick={(e) => handleVideoClick(index, e)}
-            onError={(e) => {
-              console.error('🎬 MediaCarousel video error:', {
-                url: item.url,
-                alt: item.alt,
-                src: e.currentTarget.src,
-                error: e
-              })
-              
-              // Check if it's a CORS error and try to fix it
-              const videoElement = e.currentTarget as HTMLVideoElement
-              if (videoElement.error && videoElement.error.code === MediaError.MEDIA_ERR_NETWORK) {
-                console.error('🎬 CORS or network error detected')
-                // Try to fix CORS by updating the src
-                if (videoElement.src && videoElement.src.includes('www.sacavia.com')) {
-                  const fixedSrc = videoElement.src.replace('www.sacavia.com', 'sacavia.com')
-                  console.log('🎬 Attempting to fix CORS by updating src to:', fixedSrc)
-                  videoElement.src = fixedSrc
-                  videoElement.load()
-                  return
-                }
-              }
+            onError={() => {
+              console.error('🎬 MediaCarousel video error for:', item.url)
             }}
-            onLoadStart={() => {
-              console.log('🎬 Video loading started:', item.url)
-            }}
-            onLoadedData={() => {
-              console.log('🎬 Video loaded successfully:', item.url)
-              handleLoad(index)
-            }}
+            className="w-full h-full object-cover rounded-lg"
           />
           
-          {/* Video controls overlay */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            {/* Play/Pause indicator */}
-            {videoPreviewMode === 'click' && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  {videoStates[index]?.isPlaying ? (
-                    <Pause className="w-8 h-8 text-white" />
-                  ) : (
-                    <Play className="w-8 h-8 text-white ml-1" />
-                  )}
-                </div>
-              </div>
-            )}
-            
-            {/* Sound control */}
-            <div className="absolute top-4 right-4">
-              <button
-                className="w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 text-white backdrop-blur-sm transition-all flex items-center justify-center"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  const video = videoRefs.current[index]
-                  if (video) {
-                    const newIsMuted = !videoStates[index]?.isMuted
-                    setVideoStates(prev => ({
-                      ...prev,
-                      [index]: {
-                        isPlaying: prev[index]?.isPlaying ?? false,
-                        isMuted: newIsMuted,
-                        isHovered: prev[index]?.isHovered ?? false
-                      }
-                    }))
-                    video.muted = newIsMuted
-                  }
-                }}
-              >
-                {videoStates[index]?.isMuted !== false ? (
-                  <VolumeX className="w-5 h-5" />
-                ) : (
-                  <Volume2 className="w-5 h-5" />
-                )}
-              </button>
+          {/* Video overlay with play button */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-16 h-16 bg-black/50 rounded-full flex items-center justify-center backdrop-blur-sm">
+              <Play className="w-8 h-8 text-white ml-1" />
             </div>
           </div>
         </div>

@@ -64,41 +64,62 @@ export default function VideoPlayer({
   const [hasError, setHasError] = useState(false)
   const [thumbnailGenerated, setThumbnailGenerated] = useState(false)
 
-  // Generate thumbnail from video if not provided
+  // Generate thumbnail from video first frame
   const generateThumbnail = useCallback(() => {
-    const video = videoRef.current
-    if (!video || thumbnailGenerated || thumbnail) return
+    const videoElement = videoRef.current
+    if (!videoElement || !videoElement.videoWidth) return
 
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+    try {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
 
-    // Set canvas size
-    canvas.width = video.videoWidth || 640
-    canvas.height = video.videoHeight || 360
-
-    // Seek to beginning of video
-    video.currentTime = 0.1
-
-    const handleSeeked = () => {
-      try {
-        // Draw the video frame to canvas
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        
-        // Convert to data URL and set as poster
-        const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
-        video.poster = thumbnailUrl
-        setThumbnailGenerated(true)
-        
-        // Clean up
-        video.removeEventListener('seeked', handleSeeked)
-      } catch (error) {
-        console.error('Error generating thumbnail:', error)
-      }
+      canvas.width = videoElement.videoWidth
+      canvas.height = videoElement.videoHeight
+      
+      // Draw the current video frame to canvas
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+      
+      // Convert to data URL
+      const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.8)
+      
+      // Set as poster
+      videoElement.poster = thumbnailUrl
+      
+      console.log('🎬 Generated thumbnail for video:', src)
+    } catch (error) {
+      console.error('Error generating thumbnail:', error)
     }
+  }, [src])
 
-    video.addEventListener('seeked', handleSeeked)
-  }, [thumbnail, thumbnailGenerated])
+  // Handle video loaded metadata to generate thumbnail
+  const handleLoadedMetadata = useCallback(() => {
+    const videoElement = videoRef.current
+    if (!videoElement) return
+
+    console.log('🎬 Video metadata loaded:', {
+      src: videoElement.src,
+      duration: videoElement.duration,
+      videoWidth: videoElement.videoWidth,
+      videoHeight: videoElement.videoHeight
+    })
+
+    // Generate thumbnail if no poster is set
+    if (!videoElement.poster && videoElement.videoWidth > 0) {
+      // Seek to 0.1 seconds to get a good frame (avoid black frame at 0)
+      videoElement.currentTime = 0.1
+      
+      // Wait for seek to complete then generate thumbnail
+      const handleSeeked = () => {
+        generateThumbnail()
+        videoElement.removeEventListener('seeked', handleSeeked)
+        // Reset to beginning
+        videoElement.currentTime = 0
+      }
+      
+      videoElement.addEventListener('seeked', handleSeeked)
+    }
+  }, [generateThumbnail])
 
   // Intersection Observer for autoplay when in view
   useEffect(() => {
@@ -333,6 +354,7 @@ export default function VideoPlayer({
         className="w-full h-full object-cover"
         onLoadStart={handleLoadStart}
         onLoadedData={handleLoadedData}
+        onLoadedMetadata={handleLoadedMetadata}
         onPlay={handlePlay}
         onPause={handlePause}
         onEnded={handleEnded}
