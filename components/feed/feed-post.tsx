@@ -263,9 +263,21 @@ export const FeedPost = memo(function FeedPost({
     e.stopPropagation()
     
     try {
-      // Copy link to clipboard
+      // Generate shareable link
       const postUrl = `${window.location.origin}/post/${postData.id}`
-      await navigator.clipboard.writeText(postUrl)
+      
+      // Try native sharing first (mobile)
+      if (navigator.share) {
+        await navigator.share({
+          title: `${postData.author?.name || 'Someone'} on Sacavia`,
+          text: postData.content?.substring(0, 100) || 'Check out this post on Sacavia',
+          url: postUrl,
+        })
+      } else {
+        // Fallback to clipboard
+        await navigator.clipboard.writeText(postUrl)
+        toast.success("Link copied to clipboard!")
+      }
 
       // Update local state optimistically
       setShareCount((prev: number) => prev + 1)
@@ -278,14 +290,19 @@ export const FeedPost = memo(function FeedPost({
         })).unwrap()
       }
 
-      toast.success("Link copied to clipboard")
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
     } catch (error) {
       console.error("Error sharing post:", error)
-      toast.error("Failed to share post")
+      if (error instanceof Error && error.name !== 'AbortError') {
+        toast.error("Failed to share post")
+      }
       // Revert optimistic update
       setShareCount((prev: number) => post.shareCount || 0)
     }
-  }, [post.id, user, dispatch, post.shareCount])
+  }, [post.id, postData.author?.name, postData.content, user, dispatch, post.shareCount])
 
   // Handle save action
   const handleSave = useCallback(async (e: React.MouseEvent) => {
