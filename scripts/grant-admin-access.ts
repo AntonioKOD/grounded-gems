@@ -1,5 +1,5 @@
 import { getPayload } from 'payload'
-import config from '../payload.config.ts'
+import config from '../payload.config'
 
 const AUTHORIZED_ADMIN_EMAILS = [
   'antonio_kodheli@icloud.com',
