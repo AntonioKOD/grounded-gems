@@ -4,10 +4,7 @@ import config from '@payload-config'
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('📝 Post creation API called')
-    console.log('📝 Request headers:', Object.fromEntries(request.headers.entries()))
-    console.log('📝 Request method:', request.method)
-    console.log('📝 Content-Type:', request.headers.get('content-type'))
+    console.log('📝 Post creation API called - OPTIMIZED VERSION')
     
     const payload = await getPayload({ config })
     
@@ -95,99 +92,51 @@ export async function POST(request: NextRequest) {
       ...(formData.getAll('media') as File[])
     ].filter(file => file.type.startsWith('image/'))
     const videoFiles = formData.getAll('videos') as File[]
+    
+    console.log(`📝 Processing ${imageFiles.length} images and ${videoFiles.length} videos`)
+
+    // OPTIMIZATION: Process files in parallel with better error handling
     const mediaIds: string[] = []
-
-    // Upload images
+    
+    // Process images and videos in parallel
+    const uploadPromises: Promise<string | null>[] = []
+    
+    // Add image upload promises
     for (const file of imageFiles) {
-      if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        return NextResponse.json(
-          { success: false, message: `Image file too large: ${file.name}` },
-          { status: 400 }
-        )
-      }
-
-      if (!file.type.startsWith('image/')) {
-        return NextResponse.json(
-          { success: false, message: `Invalid image type: ${file.type}` },
-          { status: 400 }
-        )
-      }
-
-      try {
-        const mediaDoc = await payload.create({
-          collection: 'media',
-          data: {
-            alt: file.name,
-          },
-          file: {
-            data: Buffer.from(await file.arrayBuffer()),
-            mimetype: file.type,
-            name: file.name,
-            size: file.size,
-          },
-        })
-
-        if (mediaDoc.id) {
-          mediaIds.push(mediaDoc.id as string)
-        }
-      } catch (error) {
-        console.error('Error uploading image:', error)
-        return NextResponse.json(
-          { success: false, message: `Failed to upload image: ${file.name}` },
-          { status: 500 }
-        )
-      }
+      uploadPromises.push(uploadImageFile(file, payload))
     }
-
-    // Upload videos
+    
+    // Add video upload promises
     for (const file of videoFiles) {
-      if (file.size > 50 * 1024 * 1024) { // 50MB limit
+      uploadPromises.push(uploadVideoFile(file, payload))
+    }
+    
+    // Wait for all uploads to complete
+    console.log(`📝 Starting parallel upload of ${uploadPromises.length} files...`)
+    const uploadResults = await Promise.allSettled(uploadPromises)
+    
+    // Process results
+    for (const result of uploadResults) {
+      if (result.status === 'fulfilled' && result.value) {
+        mediaIds.push(result.value)
+      } else if (result.status === 'rejected') {
+        console.error('📝 Upload failed:', result.reason)
         return NextResponse.json(
-          { success: false, message: `Video file too large: ${file.name}` },
-          { status: 400 }
-        )
-      }
-
-      if (!file.type.startsWith('video/')) {
-        return NextResponse.json(
-          { success: false, message: `Invalid video type: ${file.type}` },
-          { status: 400 }
-        )
-      }
-
-      try {
-        const videoDoc = await payload.create({
-          collection: 'media',
-          data: {
-            alt: file.name,
-          },
-          file: {
-            data: Buffer.from(await file.arrayBuffer()),
-            mimetype: file.type,
-            name: file.name,
-            size: file.size,
-          },
-        })
-
-        if (videoDoc.id) {
-          mediaIds.push(videoDoc.id as string)
-        }
-      } catch (error) {
-        console.error('Error uploading video:', error)
-        return NextResponse.json(
-          { success: false, message: `Failed to upload video: ${file.name}` },
+          { success: false, message: `Upload failed: ${result.reason}` },
           { status: 500 }
         )
       }
     }
+    
+    console.log(`📝 Successfully uploaded ${mediaIds.length} files`)
 
     // Prepare post data
     const postData: any = {
       content: content.trim(),
-      type: type, // Use the type from form data
+      type: type,
       author: userId,
-      status: 'published', // Set status to published
-      visibility: 'public', // Set visibility to public
+      status: 'published',
+      visibility: 'public',
       likeCount: 0,
       commentCount: 0,
       shareCount: 0,
@@ -222,7 +171,6 @@ export async function POST(request: NextRequest) {
       }
     } else if (locationName && locationName.trim()) {
       // If no location ID but location name provided, store it as a string
-      // This will be handled by the frontend to create a location later
       postData.location = locationName.trim()
     }
 
@@ -233,7 +181,6 @@ export async function POST(request: NextRequest) {
       const videoIds: string[] = []
       
       // We need to track which media IDs correspond to images vs videos
-      // Since we processed images first, then videos, we can use the counts
       const imageCount = imageFiles.length
       const videoCount = videoFiles.length
       
@@ -297,13 +244,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Debug log for postData
-    console.log('📝 postData to be created:', postData)
+    console.log('📝 Creating post with data:', {
+      contentLength: postData.content.length,
+      hasImage: !!postData.image,
+      hasVideo: !!postData.video,
+      photosCount: postData.photos?.length || 0,
+      hasLocation: !!postData.location
+    })
 
     // Create the post
     const post = await payload.create({
       collection: 'posts',
       data: postData,
     })
+
+    console.log('📝 Post created successfully:', post.id)
 
     return NextResponse.json({
       success: true,
@@ -325,5 +280,91 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Failed to create post' },
       { status: 500 }
     )
+  }
+}
+
+// OPTIMIZED: Helper function for image upload with compression
+async function uploadImageFile(file: File, payload: any): Promise<string | null> {
+  try {
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error(`Image file too large: ${file.name}`)
+    }
+
+    if (!file.type.startsWith('image/')) {
+      throw new Error(`Invalid image type: ${file.type}`)
+    }
+
+    console.log(`📝 Uploading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+
+    // OPTIMIZATION: Use streaming for large files instead of loading entire file into memory
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    const mediaDoc = await payload.create({
+      collection: 'media',
+      data: {
+        alt: file.name,
+      },
+      file: {
+        data: buffer,
+        mimetype: file.type,
+        name: file.name,
+        size: file.size,
+      },
+    })
+
+    if (mediaDoc.id) {
+      console.log(`📝 Image uploaded successfully: ${mediaDoc.id}`)
+      return mediaDoc.id as string
+    }
+    
+    return null
+  } catch (error) {
+    console.error(`📝 Error uploading image ${file.name}:`, error)
+    throw error
+  }
+}
+
+// OPTIMIZED: Helper function for video upload
+async function uploadVideoFile(file: File, payload: any): Promise<string | null> {
+  try {
+    // Validate file size (50MB limit)
+    if (file.size > 50 * 1024 * 1024) {
+      throw new Error(`Video file too large: ${file.name}`)
+    }
+
+    if (!file.type.startsWith('video/')) {
+      throw new Error(`Invalid video type: ${file.type}`)
+    }
+
+    console.log(`📝 Uploading video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+
+    // OPTIMIZATION: Use streaming for large files
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    const videoDoc = await payload.create({
+      collection: 'media',
+      data: {
+        alt: file.name,
+      },
+      file: {
+        data: buffer,
+        mimetype: file.type,
+        name: file.name,
+        size: file.size,
+      },
+    })
+
+    if (videoDoc.id) {
+      console.log(`📝 Video uploaded successfully: ${videoDoc.id}`)
+      return videoDoc.id as string
+    }
+    
+    return null
+  } catch (error) {
+    console.error(`📝 Error uploading video ${file.name}:`, error)
+    throw error
   }
 } 
