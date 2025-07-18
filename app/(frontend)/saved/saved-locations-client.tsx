@@ -37,6 +37,7 @@ interface SavedLocation {
     name: string
     description?: string
     shortDescription?: string
+    slug?: string
     address?: {
       street?: string
       city?: string
@@ -514,7 +515,7 @@ function SavedLocationCardGrid({
         <div className="space-y-3">
           <div>
             <h3 className="font-semibold text-lg line-clamp-1 group-hover:text-[#FF6B6B] transition-colors">
-              <Link href={`/locations/${location.id}`}>
+              <Link href={`/locations/${location.slug}`}>
                 {location.name}
               </Link>
             </h3>
@@ -547,7 +548,7 @@ function SavedLocationCardGrid({
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <Link href={`/locations/${location.id}`}>
+            <Link href={`/locations/${location.slug}`}>
               <Button size="sm" className="bg-gradient-to-r from-[#4ECDC4] to-[#4ECDC4]/80 text-white">
                 View Details
                 <ExternalLink className="w-3 h-3 ml-1" />
@@ -608,7 +609,7 @@ function SavedLocationCardList({
             <div className="flex items-start justify-between">
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-xl line-clamp-1 group-hover:text-[#FF6B6B] transition-colors">
-                  <Link href={`/locations/${location.id}`}>
+                  <Link href={`/locations/${location.slug}`}>
                     {location.name}
                   </Link>
                 </h3>
@@ -654,7 +655,7 @@ function SavedLocationCardList({
                   </div>
                 )}
                 
-                <Link href={`/locations/${location.id}`}>
+                <Link href={`/locations/${location.slug}`}>
                   <Button size="sm" className="bg-gradient-to-r from-[#4ECDC4] to-[#4ECDC4]/80 text-white">
                     View Details
                   </Button>
