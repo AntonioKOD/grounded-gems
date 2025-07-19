@@ -2,6 +2,41 @@ import type { CollectionConfig } from 'payload'
 import path from 'path'
 import fs from 'fs'
 
+// Queue for Live Photo conversions to prevent conflicts
+const conversionQueue: Array<{
+  id: string
+  filePath: string
+  outputPath: string
+  resolve: (value: boolean) => void
+  reject: (error: Error) => void
+}> = []
+
+let isProcessingQueue = false
+
+// Process conversion queue sequentially
+const processConversionQueue = async () => {
+  if (isProcessingQueue || conversionQueue.length === 0) return
+  
+  isProcessingQueue = true
+  
+  while (conversionQueue.length > 0) {
+    const task = conversionQueue.shift()
+    if (!task) continue
+    
+    try {
+      const result = await convertHeicToJpeg(task.filePath, task.outputPath)
+      task.resolve(result)
+    } catch (error) {
+      task.reject(error as Error)
+    }
+    
+    // Small delay between conversions to prevent system overload
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  isProcessingQueue = false
+}
+
 // Helper function to safely load Sharp
 const loadSharp = async () => {
   try {
@@ -40,6 +75,39 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
     console.error('❌ Error converting HEIC to JPEG:', error)
     return false
   }
+}
+
+// Helper function to queue conversion with unique file handling
+const queueConversion = async (filePath: string, outputPath: string): Promise<boolean> => {
+  return new Promise((resolve, reject) => {
+    // Add task to queue
+    conversionQueue.push({
+      id: path.basename(filePath),
+      filePath,
+      outputPath,
+      resolve,
+      reject
+    })
+    
+    // Start processing if not already running
+    processConversionQueue()
+  })
+}
+
+// Helper function to generate unique filename
+const generateUniqueFilename = (originalPath: string, baseDir: string): string => {
+  const ext = path.extname(originalPath)
+  const baseName = path.basename(originalPath, ext)
+  let counter = 1
+  let newPath = path.join(baseDir, `${baseName}${ext}`)
+  
+  // Keep trying until we find a unique filename
+  while (fs.existsSync(newPath)) {
+    newPath = path.join(baseDir, `${baseName}_${counter}${ext}`)
+    counter++
+  }
+  
+  return newPath
 }
 
 export const Media: CollectionConfig = {
@@ -241,18 +309,23 @@ export const Media: CollectionConfig = {
           try {
             console.log('📱 Converting Live Photo to JPEG:', doc.filename)
             
-            // Add a small delay to ensure the file is fully saved
-            await new Promise(resolve => setTimeout(resolve, 2000))
+            // Add a longer delay to ensure the file is fully saved and prevent conflicts
+            await new Promise(resolve => setTimeout(resolve, 3000))
             
-            const filePath = path.join(process.cwd(), 'media', doc.filename)
-            const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
+            const mediaDir = path.join(process.cwd(), 'media')
+            const filePath = path.join(mediaDir, doc.filename)
             
-            // Attempt conversion
-            const conversionSuccess = await convertHeicToJpeg(filePath, outputPath)
+            // Generate unique output path to prevent conflicts
+            const baseName = path.basename(doc.filename, path.extname(doc.filename))
+            const timestamp = Date.now()
+            const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
+            
+            // Queue the conversion to prevent conflicts with multiple uploads
+            const conversionSuccess = await queueConversion(filePath, uniqueOutputPath)
             
             if (conversionSuccess) {
               // Update the document with new filename and MIME type
-              const newFilename = path.basename(outputPath)
+              const newFilename = path.basename(uniqueOutputPath)
               
               try {
                 await req.payload.update({

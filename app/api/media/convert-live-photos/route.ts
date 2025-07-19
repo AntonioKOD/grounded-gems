@@ -4,6 +4,41 @@ import config from '@/payload.config'
 import path from 'path'
 import fs from 'fs'
 
+// Queue for batch conversions
+const batchConversionQueue: Array<{
+  id: string
+  filePath: string
+  outputPath: string
+  resolve: (value: boolean) => void
+  reject: (error: Error) => void
+}> = []
+
+let isProcessingBatchQueue = false
+
+// Process batch conversion queue sequentially
+const processBatchQueue = async () => {
+  if (isProcessingBatchQueue || batchConversionQueue.length === 0) return
+  
+  isProcessingBatchQueue = true
+  
+  while (batchConversionQueue.length > 0) {
+    const task = batchConversionQueue.shift()
+    if (!task) continue
+    
+    try {
+      const result = await convertHeicToJpeg(task.filePath, task.outputPath)
+      task.resolve(result)
+    } catch (error) {
+      task.reject(error as Error)
+    }
+    
+    // Small delay between conversions
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+  
+  isProcessingBatchQueue = false
+}
+
 // Helper function to safely load Sharp
 const loadSharp = async () => {
   try {
@@ -36,6 +71,36 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
     console.error('❌ Error converting HEIC to JPEG:', error)
     return false
   }
+}
+
+// Helper function to queue batch conversion
+const queueBatchConversion = async (filePath: string, outputPath: string): Promise<boolean> => {
+  return new Promise((resolve, reject) => {
+    batchConversionQueue.push({
+      id: path.basename(filePath),
+      filePath,
+      outputPath,
+      resolve,
+      reject
+    })
+    
+    processBatchQueue()
+  })
+}
+
+// Helper function to generate unique filename
+const generateUniqueFilename = (originalPath: string, baseDir: string): string => {
+  const ext = path.extname(originalPath)
+  const baseName = path.basename(originalPath, ext)
+  let counter = 1
+  let newPath = path.join(baseDir, `${baseName}${ext}`)
+  
+  while (fs.existsSync(newPath)) {
+    newPath = path.join(baseDir, `${baseName}_${counter}${ext}`)
+    counter++
+  }
+  
+  return newPath
 }
 
 export async function POST(req: NextRequest) {
@@ -92,15 +157,20 @@ export async function POST(req: NextRequest) {
 
     console.log('🔄 Converting Live Photo:', mediaDoc.filename)
 
-    const filePath = path.join(process.cwd(), 'media', mediaDoc.filename)
-    const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
+    const mediaDir = path.join(process.cwd(), 'media')
+    const filePath = path.join(mediaDir, mediaDoc.filename)
+    
+    // Generate unique output path to prevent conflicts
+    const baseName = path.basename(mediaDoc.filename, path.extname(mediaDoc.filename))
+    const timestamp = Date.now()
+    const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
 
-    // Attempt conversion
-    const conversionSuccess = await convertHeicToJpeg(filePath, outputPath)
+    // Queue the conversion
+    const conversionSuccess = await queueBatchConversion(filePath, uniqueOutputPath)
 
     if (conversionSuccess) {
       // Update the document
-      const newFilename = path.basename(outputPath)
+      const newFilename = path.basename(uniqueOutputPath)
       
       await payload.update({
         collection: 'media',

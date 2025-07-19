@@ -3,10 +3,39 @@
 /**
  * Quick script to fix failed Live Photo conversions in production
  * Run this script to convert any HEIC files that failed to convert during upload
+ * Now supports multiple Live Photos with proper queuing
  */
 
 const fs = require('fs')
 const path = require('path')
+
+// Queue for batch conversions
+const conversionQueue = []
+let isProcessingQueue = false
+
+// Process conversion queue sequentially
+const processQueue = async () => {
+  if (isProcessingQueue || conversionQueue.length === 0) return
+  
+  isProcessingQueue = true
+  
+  while (conversionQueue.length > 0) {
+    const task = conversionQueue.shift()
+    if (!task) continue
+    
+    try {
+      const result = await convertHeicToJpeg(task.filePath, task.outputPath)
+      task.resolve(result)
+    } catch (error) {
+      task.reject(error)
+    }
+    
+    // Small delay between conversions to prevent system overload
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+  
+  isProcessingQueue = false
+}
 
 // Helper function to safely load Sharp
 const loadSharp = async () => {
@@ -42,6 +71,36 @@ const convertHeicToJpeg = async (filePath, outputPath) => {
   }
 }
 
+// Helper function to queue conversion
+const queueConversion = async (filePath, outputPath) => {
+  return new Promise((resolve, reject) => {
+    conversionQueue.push({
+      id: path.basename(filePath),
+      filePath,
+      outputPath,
+      resolve,
+      reject
+    })
+    
+    processQueue()
+  })
+}
+
+// Helper function to generate unique filename
+const generateUniqueFilename = (originalPath, baseDir) => {
+  const ext = path.extname(originalPath)
+  const baseName = path.basename(originalPath, ext)
+  let counter = 1
+  let newPath = path.join(baseDir, `${baseName}${ext}`)
+  
+  while (fs.existsSync(newPath)) {
+    newPath = path.join(baseDir, `${baseName}_${counter}${ext}`)
+    counter++
+  }
+  
+  return newPath
+}
+
 // Main function to fix Live Photos
 async function fixLivePhotos() {
   console.log('🚀 Starting Live Photo fix script...')
@@ -70,27 +129,31 @@ async function fixLivePhotos() {
     let successCount = 0
     let failCount = 0
 
+    // Process files sequentially to prevent conflicts
     for (const filename of heicFiles) {
       try {
         console.log(`🔄 Converting: ${filename}`)
         
         const filePath = path.join(mediaDir, filename)
-        const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
-        const newFilename = path.basename(outputPath)
+        
+        // Generate unique output path to prevent conflicts
+        const baseName = path.basename(filename, path.extname(filename))
+        const timestamp = Date.now()
+        const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
 
         // Check if JPEG already exists
-        if (fs.existsSync(outputPath)) {
+        if (fs.existsSync(uniqueOutputPath)) {
           console.log(`⚠️ JPEG already exists for ${filename}, skipping`)
           continue
         }
 
-        // Convert HEIC to JPEG
-        const success = await convertHeicToJpeg(filePath, outputPath)
+        // Queue the conversion
+        const success = await queueConversion(filePath, uniqueOutputPath)
 
         if (success) {
           // Remove the original HEIC file
           fs.unlinkSync(filePath)
-          console.log(`✅ Converted: ${filename} → ${newFilename}`)
+          console.log(`✅ Converted: ${filename} → ${path.basename(uniqueOutputPath)}`)
           successCount++
         } else {
           console.log(`❌ Failed to convert: ${filename}`)
