@@ -32,7 +32,8 @@
     "perf:bundle-analyzer": "ANALYZE=true npm run build",
     "test:load": "npx autocannon -c 10 -d 30 http://localhost:3000",
     "sync-categories": "node scripts/sync-foursquare-categories.js",
-    "test-categories": "node test-category-sync.js"
+    "test-categories": "node test-category-sync.js",
+    "fix-live-photos": "node scripts/fix-live-photos.js"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",

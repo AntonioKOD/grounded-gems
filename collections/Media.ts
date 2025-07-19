@@ -2,6 +2,46 @@ import type { CollectionConfig } from 'payload'
 import path from 'path'
 import fs from 'fs'
 
+// Helper function to safely load Sharp
+const loadSharp = async () => {
+  try {
+    // Try to load Sharp dynamically
+    const sharp = await import('sharp')
+    return sharp.default
+  } catch (error) {
+    console.error('❌ Failed to load Sharp library:', error)
+    return null
+  }
+}
+
+// Helper function to convert HEIC to JPEG with fallback
+const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
+  try {
+    const sharp = await loadSharp()
+    if (!sharp) {
+      console.log('⚠️ Sharp not available, keeping original HEIC file')
+      return false
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      console.log('⚠️ Original file not found for conversion:', filePath)
+      return false
+    }
+
+    // Convert HEIC to JPEG
+    await sharp(filePath)
+      .jpeg({ quality: 90 })
+      .toFile(outputPath)
+
+    console.log('✅ HEIC converted to JPEG successfully')
+    return true
+  } catch (error) {
+    console.error('❌ Error converting HEIC to JPEG:', error)
+    return false
+  }
+}
+
 export const Media: CollectionConfig = {
   slug: 'media',
   access: {
@@ -132,6 +172,21 @@ export const Media: CollectionConfig = {
       },
     },
     {
+      name: 'conversionStatus',
+      type: 'select',
+      options: [
+        { label: 'Not Converted', value: 'not_converted' },
+        { label: 'Converted Successfully', value: 'converted' },
+        { label: 'Conversion Failed', value: 'failed' },
+        { label: 'No Conversion Needed', value: 'not_needed' },
+      ],
+      defaultValue: 'not_needed',
+      admin: {
+        description: 'Status of Live Photo conversion',
+        readOnly: true,
+      },
+    },
+    {
       name: 'videoThumbnail',
       type: 'upload',
       relationTo: 'media',
@@ -162,6 +217,7 @@ export const Media: CollectionConfig = {
         if (operation === 'create' && (data.mimeType === 'image/heic' || data.mimeType === 'image/heif')) {
           console.log('📱 Media beforeChange: Live Photo detected:', data.filename)
           data.originalFormat = data.mimeType
+          data.conversionStatus = 'not_converted'
         }
         
         return data
@@ -176,7 +232,8 @@ export const Media: CollectionConfig = {
           isVideo: doc.isVideo,
           hasThumbnail: !!doc.videoThumbnail,
           docId: doc.id,
-          originalFormat: doc.originalFormat
+          originalFormat: doc.originalFormat,
+          conversionStatus: doc.conversionStatus
         })
         
         // Handle Live Photo conversion to JPEG
@@ -185,44 +242,73 @@ export const Media: CollectionConfig = {
             console.log('📱 Converting Live Photo to JPEG:', doc.filename)
             
             // Add a small delay to ensure the file is fully saved
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            await new Promise(resolve => setTimeout(resolve, 2000))
             
-            // Convert HEIC/HEIF to JPEG using sharp
-            try {
-              const sharp = require('sharp')
-              const filePath = path.join(process.cwd(), 'media', doc.filename)
-              const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
+            const filePath = path.join(process.cwd(), 'media', doc.filename)
+            const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
+            
+            // Attempt conversion
+            const conversionSuccess = await convertHeicToJpeg(filePath, outputPath)
+            
+            if (conversionSuccess) {
+              // Update the document with new filename and MIME type
+              const newFilename = path.basename(outputPath)
               
-              if (fs.existsSync(filePath)) {
-                await sharp(filePath)
-                  .jpeg({ quality: 90 })
-                  .toFile(outputPath)
-                
-                // Update the document with new filename and MIME type
-                const newFilename = path.basename(outputPath)
+              try {
                 await req.payload.update({
                   collection: 'media',
                   id: doc.id,
                   data: {
                     filename: newFilename,
                     mimeType: 'image/jpeg',
+                    conversionStatus: 'converted',
                   },
                 })
                 
                 // Remove the original HEIC/HEIF file
-                fs.unlinkSync(filePath)
+                if (fs.existsSync(filePath)) {
+                  fs.unlinkSync(filePath)
+                  console.log('📱 Original HEIC file removed')
+                }
                 
                 console.log('📱 Live Photo converted successfully to JPEG:', newFilename)
-              } else {
-                console.log('📱 Original file not found for conversion:', filePath)
+              } catch (updateError) {
+                console.error('❌ Error updating document after conversion:', updateError)
+                // Mark as failed but keep the original
+                await req.payload.update({
+                  collection: 'media',
+                  id: doc.id,
+                  data: {
+                    conversionStatus: 'failed',
+                  },
+                })
               }
-            } catch (conversionError) {
-              console.error('📱 Error converting Live Photo:', conversionError)
-              // Don't fail the upload if conversion fails - keep the original
+            } else {
+              // Conversion failed, mark as failed but keep the original
+              console.log('⚠️ Live Photo conversion failed, keeping original HEIC file')
+              await req.payload.update({
+                collection: 'media',
+                id: doc.id,
+                data: {
+                  conversionStatus: 'failed',
+                },
+              })
             }
             
           } catch (error) {
             console.error('📱 Error in Live Photo processing:', error)
+            // Mark as failed
+            try {
+              await req.payload.update({
+                collection: 'media',
+                id: doc.id,
+                data: {
+                  conversionStatus: 'failed',
+                },
+              })
+            } catch (updateError) {
+              console.error('❌ Error updating conversion status:', updateError)
+            }
           }
         }
         
