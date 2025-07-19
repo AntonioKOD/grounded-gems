@@ -76,7 +76,6 @@ export async function POST(request: NextRequest) {
       type = type.trim().toLowerCase()
       if (type !== 'post' && type !== 'review') { // Add other allowed types if needed
         type = 'post'
-      }
     }
 
     if (!content || content.trim().length === 0) {
@@ -95,40 +94,76 @@ export async function POST(request: NextRequest) {
     
     console.log(`📝 Processing ${imageFiles.length} images and ${videoFiles.length} videos`)
 
-    // OPTIMIZATION: Process files in parallel with better error handling
+    // FIXED: Separate Live Photos from other files for sequential processing
+    const livePhotoFiles = imageFiles.filter(file => 
+      file.type === 'image/heic' || file.type === 'image/heif'
+    )
+    const regularImageFiles = imageFiles.filter(file => 
+      file.type !== 'image/heic' && file.type !== 'image/heif'
+    )
+    
+    console.log(`📝 File breakdown: ${livePhotoFiles.length} Live Photos, ${regularImageFiles.length} regular images, ${videoFiles.length} videos`)
+
     const mediaIds: string[] = []
     
-    // Process images and videos in parallel
-    const uploadPromises: Promise<string | null>[] = []
+    // FIXED: Process Live Photos sequentially to prevent conflicts
+    if (livePhotoFiles.length > 0) {
+      console.log(`📝 Processing ${livePhotoFiles.length} Live Photos sequentially...`)
+      for (const file of livePhotoFiles) {
+        try {
+          const mediaId = await uploadImageFile(file, payload)
+          if (mediaId) {
+            mediaIds.push(mediaId)
+            console.log(`📝 Live Photo uploaded successfully: ${mediaId}`)
+            
+            // Add delay between Live Photo uploads to prevent conflicts
+            if (livePhotoFiles.length > 1) {
+              await new Promise(resolve => setTimeout(resolve, 2000))
+            }
+          }
+        } catch (error) {
+          console.error(`📝 Live Photo upload failed: ${file.name}`, error)
+          return NextResponse.json(
+            { success: false, message: `Live Photo upload failed: ${file.name}` },
+            { status: 500 }
+          )
+        }
+      }
+    }
     
-    // Add image upload promises
-    for (const file of imageFiles) {
-      uploadPromises.push(uploadImageFile(file, payload))
+    // Process regular images and videos in parallel (non-Live Photos)
+    const parallelUploadPromises: Promise<string | null>[] = []
+    
+    // Add regular image upload promises
+    for (const file of regularImageFiles) {
+      parallelUploadPromises.push(uploadImageFile(file, payload))
     }
     
     // Add video upload promises
     for (const file of videoFiles) {
-      uploadPromises.push(uploadVideoFile(file, payload))
+      parallelUploadPromises.push(uploadVideoFile(file, payload))
     }
     
-    // Wait for all uploads to complete
-    console.log(`📝 Starting parallel upload of ${uploadPromises.length} files...`)
-    const uploadResults = await Promise.allSettled(uploadPromises)
-    
-    // Process results
-    for (const result of uploadResults) {
-      if (result.status === 'fulfilled' && result.value) {
-        mediaIds.push(result.value)
-      } else if (result.status === 'rejected') {
-        console.error('📝 Upload failed:', result.reason)
-        return NextResponse.json(
-          { success: false, message: `Upload failed: ${result.reason}` },
-          { status: 500 }
-        )
+    // Wait for all parallel uploads to complete
+    if (parallelUploadPromises.length > 0) {
+      console.log(`📝 Starting parallel upload of ${parallelUploadPromises.length} files...`)
+      const uploadResults = await Promise.allSettled(parallelUploadPromises)
+      
+      // Process results
+      for (const result of uploadResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          mediaIds.push(result.value)
+        } else if (result.status === 'rejected') {
+          console.error('📝 Upload failed:', result.reason)
+          return NextResponse.json(
+            { success: false, message: `Upload failed: ${result.reason}` },
+            { status: 500 }
+          )
+        }
       }
     }
     
-    console.log(`📝 Successfully uploaded ${mediaIds.length} files`)
+    console.log(`📝 Successfully uploaded ${mediaIds.length} files total`)
 
     // Prepare post data
     const postData: any = {
@@ -295,7 +330,7 @@ async function uploadImageFile(file: File, payload: any): Promise<string | null>
       throw new Error(`Invalid image type: ${file.type}`)
     }
 
-    console.log(`📝 Uploading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    console.log(`📝 Uploading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, type: ${file.type})`)
 
     // OPTIMIZATION: Use streaming for large files instead of loading entire file into memory
     const arrayBuffer = await file.arrayBuffer()
