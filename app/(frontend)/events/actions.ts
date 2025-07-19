@@ -315,8 +315,24 @@ export async function getEvents(filters: EventFilterOptions = {
     
     // Date range filtering
     if (filters.startDate) {
-      query.startDate = { 
-        greater_than_equal: filters.startDate 
+      if (typeof filters.startDate === 'string') {
+        // Handle string date (backward compatibility)
+        query.startDate = { 
+          greater_than_equal: filters.startDate 
+        }
+      } else if (filters.startDate.from || filters.startDate.to) {
+        // Handle date range object
+        if (filters.startDate.from) {
+          query.startDate = { 
+            greater_than_equal: filters.startDate.from 
+          }
+        }
+        if (filters.startDate.to) {
+          query.startDate = { 
+            ...query.startDate,
+            less_than_equal: filters.startDate.to 
+          }
+        }
       }
     }
     
@@ -1291,6 +1307,18 @@ export async function searchUsers(query: string, currentUserId?: string, limit =
       },
       limit,
       depth: 1,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        username: true,
+        profileImage: true,
+        bio: true,
+        followers: true,
+        isVerified: true,
+        lastSeen: true,
+        location: true,
+      },
     })
     
     // Filter out current user
@@ -1301,8 +1329,14 @@ export async function searchUsers(query: string, currentUserId?: string, limit =
       name: user.name,
       email: user.email,
       username: user.username,
-      avatar: user.profileImage?.url,
+      avatar: (user.profileImage as any)?.url || undefined,
       bio: user.bio,
+      profileImage: (user.profileImage as any)?.url,
+      followerCount: Array.isArray(user.followers) ? user.followers.length : 0,
+      isVerified: user.isVerified || false,
+      isFollowing: false, // This would need to be calculated based on current user
+      lastActiveAt: user.lastSeen,
+      location: user.location
     }))
   } catch (error) {
     console.error('Error searching users:', error)

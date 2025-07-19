@@ -1,5 +1,6 @@
 /**
  * Rate limiting utility to prevent rapid API calls
+ * DISABLED - Rate limiting removed for development
  */
 
 interface RateLimitEntry {
@@ -19,53 +20,18 @@ class RateLimiter {
 
   /**
    * Check if a request is rate limited
-   * @param key - Unique identifier for the rate limit (e.g., user ID, IP address)
-   * @param limit - Maximum number of requests (optional, uses default if not provided)
-   * @param windowMs - Time window in milliseconds (optional, uses default if not provided)
-   * @returns { allowed: boolean, remaining: number, resetTime: number }
+   * DISABLED - Always returns allowed: true
    */
   check(key: string, limit?: number, windowMs?: number): {
     allowed: boolean
     remaining: number
     resetTime: number
   } {
-    const currentLimit = limit ?? this.defaultLimit
-    const currentWindow = windowMs ?? this.defaultWindow
-    const now = Date.now()
-    
-    let entry = this.store.get(key)
-    
-    // If no entry exists or the window has expired, create a new one
-    if (!entry || now >= entry.resetTime) {
-      entry = {
-        count: 1,
-        resetTime: now + currentWindow
-      }
-      this.store.set(key, entry)
-      
-      return {
-        allowed: true,
-        remaining: currentLimit - 1,
-        resetTime: entry.resetTime
-      }
-    }
-    
-    // Increment the count
-    entry.count++
-    
-    // Check if limit is exceeded
-    if (entry.count > currentLimit) {
-      return {
-        allowed: false,
-        remaining: 0,
-        resetTime: entry.resetTime
-      }
-    }
-    
+    // RATE LIMITING DISABLED - Always allow requests
     return {
       allowed: true,
-      remaining: currentLimit - entry.count,
-      resetTime: entry.resetTime
+      remaining: 999999,
+      resetTime: Date.now() + 60000
     }
   }
 
@@ -107,6 +73,7 @@ export const followRateLimiter = new RateLimiter(10, 60000) // 10 follow/unfollo
 
 /**
  * Express-like middleware for rate limiting
+ * DISABLED - Always allows requests
  */
 export function createRateLimitMiddleware(
   rateLimiter: RateLimiter,
@@ -115,15 +82,15 @@ export function createRateLimitMiddleware(
   windowMs?: number
 ) {
   return (request: any) => {
-    const key = keyGenerator(request)
-    const result = rateLimiter.check(key, limit, windowMs)
-    
+    // RATE LIMITING DISABLED - Always return allowed
     return {
-      ...result,
+      allowed: true,
+      remaining: 999999,
+      resetTime: Date.now() + 60000,
       headers: {
-        'X-RateLimit-Limit': limit?.toString() || rateLimiter['defaultLimit'].toString(),
-        'X-RateLimit-Remaining': result.remaining.toString(),
-        'X-RateLimit-Reset': Math.ceil(result.resetTime / 1000).toString()
+        'X-RateLimit-Limit': '999999',
+        'X-RateLimit-Remaining': '999999',
+        'X-RateLimit-Reset': Math.ceil((Date.now() + 60000) / 1000).toString()
       }
     }
   }
@@ -131,26 +98,18 @@ export function createRateLimitMiddleware(
 
 /**
  * Client-side rate limiting helper
+ * DISABLED - Always allows calls
  */
 export class ClientRateLimiter {
   private lastCalls: Map<string, number> = new Map()
   
   /**
    * Check if enough time has passed since the last call
-   * @param key - Unique identifier for the operation
-   * @param minInterval - Minimum time between calls in milliseconds
-   * @returns boolean - true if call is allowed
+   * DISABLED - Always returns true
    */
   canCall(key: string, minInterval: number = 1000): boolean {
-    const now = Date.now()
-    const lastCall = this.lastCalls.get(key)
-    
-    if (!lastCall || (now - lastCall) >= minInterval) {
-      this.lastCalls.set(key, now)
-      return true
-    }
-    
-    return false
+    // RATE LIMITING DISABLED - Always allow calls
+    return true
   }
   
   /**
@@ -162,15 +121,11 @@ export class ClientRateLimiter {
   
   /**
    * Get time remaining until next call is allowed
+   * DISABLED - Always returns 0
    */
   getTimeRemaining(key: string, minInterval: number = 1000): number {
-    const now = Date.now()
-    const lastCall = this.lastCalls.get(key)
-    
-    if (!lastCall) return 0
-    
-    const elapsed = now - lastCall
-    return Math.max(0, minInterval - elapsed)
+    // RATE LIMITING DISABLED - No waiting time
+    return 0
   }
 }
 

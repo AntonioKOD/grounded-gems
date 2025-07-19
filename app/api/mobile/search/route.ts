@@ -25,9 +25,39 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get current user for personalization
-    const user = await getServerSideUser()
-    const currentUserId = user?.id
+    // Extract Bearer token and authenticate directly
+    const authHeader = request.headers.get('authorization')
+    let user = null
+    let currentUserId = null
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      
+      try {
+        // Call mobile users/me directly for authentication
+        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (meResponse.ok) {
+          const meData = await meResponse.json()
+          user = meData.user
+          currentUserId = user?.id
+        }
+      } catch (authError) {
+        console.error('Mobile search - Authentication error:', authError)
+      }
+    }
+    
+    // Fallback to cookie-based auth if Bearer token fails
+    if (!user) {
+      const cookieUser = await getServerSideUser()
+      currentUserId = cookieUser?.id
+    }
 
     console.log(`Mobile API: Searching for "${query}" with type: ${type}`)
 
@@ -40,9 +70,10 @@ export async function GET(request: NextRequest) {
         results.users = users.map((user: any) => ({
           id: user.id,
           name: user.name,
+          email: user.email,
           username: user.username,
           bio: user.bio,
-          profileImage: user.profileImage?.url,
+          profileImage: user.profileImage?.url || user.avatar || (typeof user.profileImage === 'object' && user.profileImage?.url) || undefined,
           followerCount: user.followerCount || 0,
           isFollowing: user.isFollowing || false,
           isVerified: user.isVerified || false,

@@ -50,8 +50,9 @@ export const Posts: CollectionConfig = {
       async ({ req, doc, previousDoc, operation }) => {
         if (!req.payload) return doc;
 
-        // --- Handle new post creation (mentions) ---
+        // --- Handle new post creation (mentions and video thumbnails) ---
         if (operation === 'create') {
+          // Handle mentions
           const mentions = extractMentions(doc.content);
           if (mentions.length) {
             const mentionedUserIds = await findUserIdsByUsernames(req.payload, mentions);
@@ -73,6 +74,73 @@ export const Posts: CollectionConfig = {
               });
             }
           }
+
+          // Handle video thumbnail generation
+          if (doc.video && !doc.videoThumbnail) {
+            try {
+              console.log('🎬 Posts: Processing video for thumbnail generation:', doc.id)
+              console.log('🎬 Posts: Video ID:', doc.video)
+              
+              // Get the video media document
+              const videoDoc = await req.payload.findByID({
+                collection: 'media',
+                id: normalizeId(doc.video),
+              })
+              
+              console.log('🎬 Posts: Video document found:', {
+                id: videoDoc?.id,
+                isVideo: videoDoc?.isVideo,
+                hasThumbnail: !!videoDoc?.videoThumbnail,
+                filename: videoDoc?.filename
+              })
+              
+              if (videoDoc && videoDoc.isVideo) {
+                // Check if video already has a thumbnail
+                if (videoDoc.videoThumbnail) {
+                  console.log('🎬 Posts: Video already has thumbnail, linking to post')
+                  // Update the post with the video's thumbnail
+                  await req.payload.update({
+                    collection: 'posts',
+                    id: doc.id,
+                    data: {
+                      videoThumbnail: videoDoc.videoThumbnail,
+                    },
+                  })
+                  console.log('🎬 Posts: Post updated with video thumbnail')
+                } else {
+                  console.log('🎬 Posts: Video has no thumbnail, generating one')
+                  // Generate thumbnail for the video
+                  const { generateVideoThumbnailManually } = await import('@/lib/video-thumbnail-generator')
+                  const thumbnailId = await generateVideoThumbnailManually(videoDoc, req.payload)
+                  
+                  if (thumbnailId) {
+                    console.log('🎬 Posts: Thumbnail generated, linking to post')
+                    // Update the post with the new thumbnail
+                    await req.payload.update({
+                      collection: 'posts',
+                      id: doc.id,
+                      data: {
+                        videoThumbnail: thumbnailId,
+                      },
+                    })
+                    console.log('🎬 Posts: Post updated with generated thumbnail')
+                  } else {
+                    console.log('🎬 Posts: Thumbnail generation failed')
+                  }
+                }
+              } else {
+                console.log('🎬 Posts: Video document not found or not marked as video')
+              }
+            } catch (error) {
+              console.error('🎬 Posts: Error processing video thumbnail:', error)
+            }
+          } else {
+            console.log('🎬 Posts: No video processing needed:', {
+              hasVideo: !!doc.video,
+              hasThumbnail: !!doc.videoThumbnail
+            })
+          }
+          
           return doc;
         }
 

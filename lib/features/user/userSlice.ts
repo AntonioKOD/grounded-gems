@@ -50,8 +50,8 @@ export const fetchUser = createAsyncThunk(
       const state = getState() as { user: UserState }
       const now = Date.now()
       
-      // Reduced cache time for faster updates - but not too aggressive in production
-      const cacheTime = process.env.NODE_ENV === 'production' ? 30000 : 10000 // 30s in prod, 10s in dev
+      // Optimized cache time to reduce redundant calls
+      const cacheTime = process.env.NODE_ENV === 'production' ? 60000 : 15000 // 60s in prod, 15s in dev
       if (!options?.force && state.user.user && state.user.lastFetched && (now - state.user.lastFetched) < cacheTime) {
         return state.user.user
       }

@@ -36,12 +36,16 @@ const profileFormSchema = z.object({
     .min(3, { message: "Username must be at least 3 characters." })
     .max(30, { message: "Username must be less than 30 characters." })
     .regex(/^[a-z0-9_-]+$/, { message: "Username can only contain lowercase letters, numbers, hyphens, and underscores." })
-    .optional(),
-  bio: z.string().optional(),
+    .optional()
+    .or(z.literal('')), // Allow empty string
+  bio: z.string()
+    .max(500, { message: "Bio must be less than 500 characters." })
+    .optional()
+    .or(z.literal('')), // Allow empty string
   location: z.object({
-    city: z.string().optional(),
-    state: z.string().optional(),
-    country: z.string().optional(),
+    city: z.string().optional().or(z.literal('')),
+    state: z.string().optional().or(z.literal('')),
+    country: z.string().optional().or(z.literal('')),
   }),
   interests: z.array(z.string()).optional(),
   socialLinks: z
@@ -161,6 +165,8 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
       creatorLevel: user.creatorLevel || "explorer",
     },
   })
+
+
 
   // Trigger file input click programmatically
   const triggerFileInput = () => {
@@ -291,14 +297,45 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
     setIsSubmitting(true)
 
     try {
-      // First update the basic profile information
+      // Prepare profile data, only including fields that have changed
       const profileData: ProfileUpdateData = {
         name: data.name,
-        username: data.username,
-        bio: data.bio,
-        location: data.location,
+        bio: data.bio || undefined, // Convert empty string to undefined
+        location: {
+          city: data.location.city || undefined,
+          state: data.location.state || undefined,
+          country: data.location.country || undefined,
+        },
         interests: data.interests?.filter(interest => interest.trim() !== ""), // Filter out empty interests
         socialLinks: data.socialLinks,
+      }
+
+      // Only include username if it's actually being changed
+      const currentUsername = user.username || ""
+      const newUsername = data.username || ""
+      
+      if (newUsername !== currentUsername) {
+        // Only validate and include username if it's actually changing
+        if (newUsername.trim()) {
+          profileData.username = newUsername
+        } else {
+          // If user is clearing the username, allow it
+          profileData.username = ""
+        }
+      }
+      // If username is the same, don't include it in the update
+
+      // Show what's being updated
+      const changes = []
+      if (data.name !== user.name) changes.push('name')
+      if (data.bio !== user.bio) changes.push('bio')
+      if (newUsername !== currentUsername) changes.push('username')
+      if (JSON.stringify(data.location) !== JSON.stringify(user.location)) changes.push('location')
+      if (JSON.stringify(data.interests) !== JSON.stringify(user.interests)) changes.push('interests')
+      if (JSON.stringify(data.socialLinks) !== JSON.stringify(user.socialLinks)) changes.push('social links')
+      
+      if (changes.length > 0) {
+        console.log('Updating profile fields:', changes.join(', '))
       }
 
       const profileResult = await updateUserProfile(user.id, profileData)
@@ -493,6 +530,11 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                         Username can be changed. Last changed: {usernameCooldown.lastChangeDate.toLocaleDateString()}
                       </span>
                     )}
+                    {usernameCooldown && usernameCooldown.canChange && !usernameCooldown.lastChangeDate && (
+                      <span className="block text-sm text-blue-600 mt-1">
+                        Username can be changed anytime.
+                      </span>
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -512,9 +554,15 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
                       className="resize-none min-h-[120px]"
                       {...field}
                       value={field.value || ""}
+                      maxLength={500}
                     />
                   </FormControl>
-                  <FormDescription>Share a brief description about yourself.</FormDescription>
+                  <FormDescription>
+                    Share a brief description about yourself.
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      {(field.value || "").length}/500 characters
+                    </span>
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

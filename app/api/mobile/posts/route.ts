@@ -280,23 +280,77 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/mobile/posts - Create a new post
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    const payload = await getPayload({ config })
+    
+    console.log('📱 Mobile Posts API: POST request received')
+    console.log('📱 Mobile Posts API: Content-Type:', request.headers.get('content-type'))
+    
+    // Get current user - use the same method as location reviews API
+    let user = null
+    
+    try {
+      console.log('📱 Mobile Posts API: Getting user with getServerSideUser...')
+      user = await getServerSideUser()
+      console.log('📱 Mobile Posts API: User found:', user?.id)
+    } catch (userError) {
+      console.error('📱 Mobile Posts API: Error in getServerSideUser:', userError)
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Authentication required',
+          details: userError instanceof Error ? userError.message : 'Unknown error'
+        },
+        { status: 401 }
+      )
+    }
     
     if (!user) {
+      console.log('📱 Mobile Posts API: No user found, returning 401')
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }
       )
     }
 
-    const formData = await request.formData()
+    console.log('📱 Mobile Posts API: Creating post for user:', user.id)
+
+    // Handle both FormData and JSON requests
+    let formData: FormData
+    
+    const contentType = request.headers.get('content-type') || ''
+    
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData (for media uploads)
+      console.log('📱 Mobile Posts API: Processing multipart/form-data')
+      formData = await request.formData()
+    } else if (contentType.includes('application/json')) {
+      // Handle JSON and convert to FormData
+      console.log('📱 Mobile Posts API: Processing application/json')
+      const jsonData = await request.json()
+      formData = new FormData()
+      
+      // Convert JSON fields to FormData
+      Object.entries(jsonData).forEach(([key, value]) => {
+        if (Array.isArray(value)) {
+          value.forEach(item => formData.append(key, item))
+        } else if (value !== null && value !== undefined) {
+          formData.append(key, String(value))
+        }
+      })
+    } else {
+      console.log('📱 Mobile Posts API: Invalid content type:', contentType)
+      return NextResponse.json(
+        { success: false, error: 'Invalid content type. Expected multipart/form-data or application/json' },
+        { status: 400 }
+      )
+    }
     
     // Add user ID to form data
     formData.append('userId', user.id)
-
-    console.log('Mobile API: Creating post for user:', user.id)
+    console.log('📱 Mobile Posts API: Added userId to formData:', user.id)
 
     const result = await createPost(formData)
+    console.log('📱 Mobile Posts API: createPost result:', result)
 
     if (result.success) {
       // Get the created post details
@@ -320,7 +374,7 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (error) {
-    console.error('Mobile API: Error creating post:', error)
+    console.error('📱 Mobile Posts API: Error creating post:', error)
     return NextResponse.json(
       {
         success: false,

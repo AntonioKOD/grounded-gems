@@ -10,8 +10,8 @@ const redirectHistory = new Map<string, { count: number; lastRedirect: number }>
 const MAX_REDIRECTS_PER_IP = 5
 const REDIRECT_WINDOW_MS = 30000 // 30 seconds
 
-// Check rate limiting
-function checkRateLimit(ip: string, maxRequests: number = 100, windowMs: number = 15 * 60 * 1000): boolean {
+// Check rate limiting - Much more generous limits for better user experience
+function checkRateLimit(ip: string, maxRequests: number = 10000, windowMs: number = 15 * 60 * 1000): boolean {
   const now = Date.now()
   const record = rateLimitStore.get(ip)
   

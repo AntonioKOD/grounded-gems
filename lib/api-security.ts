@@ -28,39 +28,7 @@ export async function withRateLimit(
 ) {
   return function (handler: Function) {
     return async function (request: NextRequest, ...args: any[]) {
-      const ip = getClientIP(request)
-      const now = Date.now()
-      const maxRequests = customLimit || SECURITY_CONFIG.RATE_LIMIT.MAX_REQUESTS[endpoint]
-      const windowMs = SECURITY_CONFIG.RATE_LIMIT.WINDOW_MS
-
-      const record = rateLimitStore.get(`${ip}-${endpoint}`)
-
-      if (!record || (now - record.timestamp) > windowMs) {
-        rateLimitStore.set(`${ip}-${endpoint}`, { count: 1, timestamp: now, attempts: 0 })
-      } else {
-        if (record.count >= maxRequests) {
-          console.warn(`Rate limit exceeded for ${ip} on ${endpoint}`)
-          return NextResponse.json(
-            { 
-              success: false, 
-              error: 'Rate limit exceeded. Please try again later.',
-              code: 'RATE_LIMIT_EXCEEDED',
-              retryAfter: Math.ceil((windowMs - (now - record.timestamp)) / 1000)
-            },
-            { 
-              status: 429,
-              headers: {
-                'Retry-After': Math.ceil((windowMs - (now - record.timestamp)) / 1000).toString(),
-                'X-RateLimit-Limit': maxRequests.toString(),
-                'X-RateLimit-Remaining': '0',
-                'X-RateLimit-Reset': new Date(record.timestamp + windowMs).toISOString()
-              }
-            }
-          )
-        }
-        record.count++
-      }
-
+      // RATE LIMITING DISABLED - Always allow requests
       return handler(request, ...args)
     }
   }

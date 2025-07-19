@@ -26,7 +26,7 @@ interface NavBarProps {
 }
 
 export default function NavBar({ initialUser }: NavBarProps) {
-  const { user, isAuthenticated, logout, isLoading } = useAuth()
+  const { user, isAuthenticated, logout, isLoading } = useAuth('NavBar')
   const [notificationCount] = useState(0);
   const [isHydrated, setIsHydrated] = useState(false);
   const [imageError, setImageError] = useState(false);

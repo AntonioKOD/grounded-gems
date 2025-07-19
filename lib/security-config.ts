@@ -21,11 +21,11 @@ export const SECURITY_CONFIG = {
   RATE_LIMIT: {
     WINDOW_MS: 15 * 60 * 1000, // 15 minutes
     MAX_REQUESTS: {
-      API: 100,
-      LOGIN: 5,
-      REGISTRATION: 3,
-      PASSWORD_RESET: 3,
-      IMAGE_UPLOAD: 10
+      API: 999999, // Effectively disabled
+      LOGIN: 999999, // Effectively disabled
+      REGISTRATION: 999999, // Effectively disabled
+      PASSWORD_RESET: 999999, // Effectively disabled
+      IMAGE_UPLOAD: 999999 // Effectively disabled
     }
   },
 
@@ -35,14 +35,19 @@ export const SECURITY_CONFIG = {
     MAX_EMAIL_LENGTH: 254,
     MAX_PASSWORD_LENGTH: 128,
     MIN_PASSWORD_LENGTH: 8,
-    MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+    MAX_FILE_SIZE: 20 * 1024 * 1024, // 20MB - Increased for mobile uploads
     ALLOWED_IMAGE_TYPES: [
       'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
       'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
       'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
       'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
     ],
-    ALLOWED_VIDEO_TYPES: ['video/mp4', 'video/webm', 'video/ogg']
+    ALLOWED_VIDEO_TYPES: [
+      'video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/avi', 'video/quicktime',
+      'video/x-msvideo', 'video/3gpp', 'video/3gpp2', 'video/x-matroska', 'video/mp2t',
+      'video/mpeg', 'video/mpg', 'video/mpe', 'video/mpv', 'video/m4v', 'video/3gp',
+      'video/3g2', 'video/ts', 'video/mts', 'video/m2ts'
+    ]
   },
 
   // Content Security Policy
@@ -193,23 +198,7 @@ export function checkRateLimit(
   identifier: string, 
   endpoint: keyof typeof SECURITY_CONFIG.RATE_LIMIT.MAX_REQUESTS
 ): boolean {
-  const now = Date.now()
-  const maxRequests = SECURITY_CONFIG.RATE_LIMIT.MAX_REQUESTS[endpoint]
-  const windowMs = SECURITY_CONFIG.RATE_LIMIT.WINDOW_MS
-
-  const record = rateLimitStore.get(identifier)
-  
-  if (!record || (now - record.timestamp) > windowMs) {
-    // Reset or create new record
-    rateLimitStore.set(identifier, { count: 1, timestamp: now })
-    return true
-  }
-
-  if (record.count >= maxRequests) {
-    return false
-  }
-
-  record.count++
+  // RATE LIMITING DISABLED - Always allow requests
   return true
 }
 

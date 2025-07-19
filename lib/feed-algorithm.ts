@@ -55,6 +55,10 @@ const TIME_BASED_ADJUSTMENTS = {
   }
 }
 
+// Cache for user data to prevent redundant queries
+const userDataCache = new Map<string, { data: any; timestamp: number }>()
+const CACHE_DURATION = 30000 // 30 seconds
+
 export class FeedAlgorithm {
   private payload: any
 
@@ -64,6 +68,45 @@ export class FeedAlgorithm {
 
   private async initializePayload() {
     this.payload = await getPayload({ config })
+  }
+
+  /**
+   * Get user data with caching to prevent redundant queries
+   */
+  private async getUserData(userId?: string) {
+    if (!userId) return null
+    
+    const now = Date.now()
+    const cached = userDataCache.get(userId)
+    
+    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+      console.log('📦 Using cached user data for:', userId)
+      return cached.data
+    }
+    
+    try {
+      console.log('🔍 Fetching fresh user data for:', userId)
+      const user = await this.payload.findByID({
+        collection: 'users',
+        id: userId,
+        depth: 1 // Increased depth to get more data in one query
+      })
+      
+      const userData = {
+        likedPosts: Array.isArray(user.likedPosts) ? user.likedPosts : [],
+        savedPosts: Array.isArray(user.savedPosts) ? user.savedPosts : [],
+        interests: user.interests || [],
+        location: user.location,
+        followers: user.followers || [],
+        following: user.following || []
+      }
+      
+      userDataCache.set(userId, { data: userData, timestamp: now })
+      return userData
+    } catch (error) {
+      console.log('Could not fetch user data:', error)
+      return null
+    }
   }
 
   /**
@@ -156,60 +199,114 @@ export class FeedAlgorithm {
         filters
       })
 
-      // Fetch all content types in parallel
-      const [
-        posts,
-        weeklyFeatures,
-        peopleSuggestions,
-        placeRecommendations,
-        miniBlogCards
-      ] = await Promise.all([
-        this.fetchPosts(userId, Math.ceil(limit * 0.6), page, location, interests),
-        this.fetchWeeklyFeatures(1),
-        this.fetchPeopleSuggestions(userId, 1, socialCircle),
-        this.fetchPlaceRecommendations(userId, 2, location, weather, timeOfDay),
-        this.fetchMiniBlogCards(userId, 2, interests)
-      ])
+      // Get user data once and reuse it across all methods
+      const userData = await this.getUserData(userId)
+      const userInterests = userData?.interests || interests
 
-      console.log('📊 Fetched content counts:', {
-        posts: posts.length,
-        weeklyFeatures: weeklyFeatures.length,
-        peopleSuggestions: peopleSuggestions.length,
-        placeRecommendations: placeRecommendations.length,
-        miniBlogCards: miniBlogCards.length
-      })
+      // Determine which content types to fetch based on filters
+      const includeTypes = filters?.includeTypes || []
+      const excludeTypes = filters?.excludeTypes || []
+      
+      console.log('🎯 Content type filters:', { includeTypes, excludeTypes })
 
-      // Combine all content
-      let allItems: FeedItem[] = [
-        ...posts,
-        ...weeklyFeatures,
-        ...peopleSuggestions,
-        ...placeRecommendations,
-        ...miniBlogCards
-      ]
+      // Fetch content based on filters
+      let allItems: FeedItem[] = []
+      
+      // If specific types are requested, only fetch those
+      if (includeTypes.length > 0) {
+        const fetchPromises: Promise<FeedItem[]>[] = []
+        
+        if (includeTypes.includes('post')) {
+          fetchPromises.push(this.fetchPosts(userData, Math.ceil(limit * 0.8), page, location, userInterests))
+        }
+        
+        if (includeTypes.includes('people_suggestion')) {
+          fetchPromises.push(this.fetchPeopleSuggestions(userData, Math.ceil(limit * 0.6), socialCircle))
+        }
+        
+        if (includeTypes.includes('place_recommendation')) {
+          fetchPromises.push(this.fetchPlaceRecommendations(userData, Math.ceil(limit * 0.8), location, weather, timeOfDay))
+        }
+        
+        if (includeTypes.includes('weekly_feature')) {
+          fetchPromises.push(this.fetchWeeklyFeatures(Math.ceil(limit * 0.2)))
+        }
+        
+        if (includeTypes.includes('guide_spotlight')) {
+          fetchPromises.push(this.fetchGuideSpotlights(userData, Math.ceil(limit * 0.2), userInterests))
+        }
+        
+        if (includeTypes.includes('mini_blog_card')) {
+          fetchPromises.push(this.fetchMiniBlogCards(userData, Math.ceil(limit * 0.2), userInterests))
+        }
+        
+        const results = await Promise.all(fetchPromises)
+        allItems = results.flat()
+      } else {
+        // Fetch all content types in parallel with optimized queries
+        const [
+          posts,
+          weeklyFeatures,
+          peopleSuggestions,
+          placeRecommendations,
+          miniBlogCards
+        ] = await Promise.all([
+          this.fetchPosts(userData, Math.ceil(limit * 0.6), page, location, userInterests),
+          this.fetchWeeklyFeatures(1),
+          this.fetchPeopleSuggestions(userData, Math.ceil(limit * 0.3), socialCircle),
+          this.fetchPlaceRecommendations(userData, 2, location, weather, timeOfDay),
+          this.fetchMiniBlogCards(userData, 2, userInterests)
+        ])
 
-      // Apply filters
-      if (filters.excludeTypes && filters.excludeTypes.length > 0) {
-        allItems = allItems.filter(item => !filters.excludeTypes!.includes(item.type))
+        // Combine all content
+        allItems = [
+          ...posts,
+          ...weeklyFeatures,
+          ...peopleSuggestions,
+          ...placeRecommendations,
+          ...miniBlogCards
+        ]
       }
 
-      if (filters.includeTypes && filters.includeTypes.length > 0) {
-        allItems = allItems.filter(item => filters.includeTypes!.includes(item.type))
+      console.log('📊 Fetched content counts:', {
+        posts: allItems.filter(item => item.type === 'post').length,
+        weeklyFeatures: allItems.filter(item => item.type === 'weekly_feature').length,
+        peopleSuggestions: allItems.filter(item => item.type === 'people_suggestion').length,
+        placeRecommendations: allItems.filter(item => item.type === 'place_recommendation').length,
+        miniBlogCards: allItems.filter(item => item.type === 'mini_blog_card').length,
+        total: allItems.length
+      })
+
+      // Apply exclude filters
+      if (excludeTypes.length > 0) {
+        allItems = allItems.filter(item => !excludeTypes.includes(item.type))
+        console.log('🚫 Excluded content types:', excludeTypes)
       }
 
       // Sort items based on algorithm
-      allItems = this.sortFeedItems(allItems, sortBy, userId, interests, location)
+      allItems = this.sortFeedItems(allItems, sortBy, userId, userInterests, location)
+
+      // Apply intelligent shuffling for better variety (only if not filtering by specific types)
+      if (includeTypes.length === 0) {
+        allItems = this.intelligentShuffle(allItems)
+      }
 
       // Apply pagination
       const startIndex = (page - 1) * limit
       const endIndex = startIndex + limit
       const paginatedItems = allItems.slice(startIndex, endIndex)
 
-      console.log('✅ Generated feed with', paginatedItems.length, 'items')
+      console.log('✅ Feed generation complete:', {
+        totalItems: allItems.length,
+        paginatedItems: paginatedItems.length,
+        page,
+        limit,
+        hasMore: endIndex < allItems.length
+      })
 
       return paginatedItems
     } catch (error) {
-      console.error('❌ Error generating feed:', error)
+      console.error('Error generating feed:', error)
       return []
     }
   }
@@ -229,7 +326,9 @@ export class FeedAlgorithm {
     if (timeAdjustments) {
       Object.keys(timeAdjustments).forEach(key => {
         const adjustment = timeAdjustments[key as keyof typeof timeAdjustments]
-        mix[key as keyof FeedMixConfig] = Math.max(0, mix[key as keyof FeedMixConfig] + adjustment)
+        if (key in mix) {
+          mix[key as keyof FeedMixConfig] = Math.max(0, mix[key as keyof FeedMixConfig] + adjustment)
+        }
       })
     }
 
@@ -276,7 +375,7 @@ export class FeedAlgorithm {
    * Fetch regular posts
    */
   private async fetchPosts(
-    userId?: string,
+    userData: any,
     limit: number = 10,
     page: number = 1,
     location?: { latitude: number; longitude: number },
@@ -286,26 +385,9 @@ export class FeedAlgorithm {
 
     try {
       // Get user's liked and saved posts if userId is provided
-      let userLikedPosts: string[] = []
-      let userSavedPosts: string[] = []
+      const userLikedPosts = userData?.likedPosts || []
+      const userSavedPosts = userData?.savedPosts || []
       
-      if (userId) {
-        try {
-          const user = await this.payload.findByID({
-            collection: 'users',
-            id: userId,
-            depth: 0
-          })
-          
-          if (user) {
-            userLikedPosts = Array.isArray(user.likedPosts) ? user.likedPosts : []
-            userSavedPosts = Array.isArray(user.savedPosts) ? user.savedPosts : []
-          }
-        } catch (userError) {
-          console.log('Could not fetch user data for post interactions:', userError)
-        }
-      }
-
       const posts = await this.payload.find({
         collection: 'posts',
         limit,
@@ -386,7 +468,7 @@ export class FeedAlgorithm {
           type: 'post',
           createdAt: post.createdAt,
           updatedAt: post.updatedAt,
-          priority: this.calculatePostPriority(post, userId, interests),
+          priority: this.calculatePostPriority(post, userData?.id, interests),
           post: {
             id: post.id,
             content: post.content || '',
@@ -430,7 +512,7 @@ export class FeedAlgorithm {
    * Fetch people suggestions
    */
   private async fetchPeopleSuggestions(
-    userId?: string,
+    userData: any,
     limit: number = 1,
     socialCircle: string[] = []
   ): Promise<PeopleSuggestionItem[]> {
@@ -438,16 +520,24 @@ export class FeedAlgorithm {
 
     try {
       // Get users who are not in the current user's social circle
-      const excludeIds = userId ? [userId, ...socialCircle] : []
+      const excludeIds = userData?.id ? [userData.id, ...socialCircle] : []
       
+      // Get current user's location for nearby suggestions
+      const currentUserLocation = userData?.location?.coordinates
+      
+      // Build query conditions - ensure current user is always excluded
+      const whereConditions: any[] = [
+        { id: { not_equals: userData?.id } }, // Always exclude current user
+        ...(socialCircle.length > 0 ? [{ id: { not_in: socialCircle } }] : [])
+      ]
+      
+      // Enhanced query to get better people suggestions
       const users = await this.payload.find({
         collection: 'users',
-        limit,
-        depth: 1,
+        limit: limit * 3, // Reduced from 5x to 3x for better quality
+        depth: 2,
         where: {
-          and: [
-            ...(excludeIds.length > 0 ? [{ id: { not_in: excludeIds } }] : [])
-          ]
+          and: whereConditions
         },
         sort: '-createdAt'
       })
@@ -457,7 +547,130 @@ export class FeedAlgorithm {
         return []
       }
 
-      return users.docs.map((user: any) => ({
+      // Get current user's following list to calculate mutual connections
+      const currentUserFollowing = userData?.following || []
+      
+      // Enhance users with additional data and sort by relevance
+      const enhancedUsers = await Promise.all(
+        users.docs.map(async (user: any) => {
+          try {
+            // Skip if this is the current user
+            if (user.id === userData?.id) {
+              return null
+            }
+
+            // Skip if current user is already following this user
+            if (userData?.following && userData.following.includes(user.id)) {
+              return null
+            }
+
+            // Get user's recent posts count
+            const postsResult = await this.payload.find({
+              collection: 'posts',
+              where: {
+                author: { equals: user.id },
+                status: { equals: 'published' }
+              },
+              limit: 0
+            })
+
+            // Get user's followers count
+            const followersResult = await this.payload.find({
+              collection: 'users',
+              where: {
+                following: { contains: user.id }
+              },
+              limit: 0
+            })
+
+            // Calculate mutual connections
+            const mutualConnections = currentUserFollowing.filter((followingId: string) => 
+              user.following && user.following.includes(followingId)
+            ).length
+
+            // Calculate distance if both users have location data
+            let distance = null
+            if (currentUserLocation && user.location?.coordinates) {
+              distance = this.calculateDistance(
+                currentUserLocation,
+                user.location.coordinates
+              )
+            }
+
+            // Calculate relevance score with enhanced logic
+            let relevanceScore = 0
+            
+            // Base score from activity
+            relevanceScore += (postsResult.totalDocs * 2) // Posts are important
+            relevanceScore += (followersResult.totalDocs * 1.5) // Followers show popularity
+            
+            // Creator bonus
+            if (user.isCreator || user.role === 'creator') {
+              relevanceScore += 15
+            }
+            
+            // Verification bonus
+            if (user.creatorProfile?.verification?.isVerified) {
+              relevanceScore += 10
+            }
+            
+            // Mutual connections are very relevant
+            relevanceScore += (mutualConnections * 8)
+            
+            // Nearby users get bonus (closer = higher score)
+            if (distance !== null) {
+              if (distance < 5) { // Within 5 miles
+                relevanceScore += 20
+              } else if (distance < 25) { // Within 25 miles
+                relevanceScore += 10
+              } else if (distance < 100) { // Within 100 miles
+                relevanceScore += 5
+              }
+            }
+            
+            // Interests overlap bonus
+            if (userData?.interests && user.interests) {
+              const commonInterests = userData.interests.filter((interest: string) => 
+                user.interests.includes(interest)
+              )
+              relevanceScore += (commonInterests.length * 3)
+            }
+            
+            // Recent activity bonus
+            if (user.lastLogin) {
+              const daysSinceLastLogin = (Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24)
+              if (daysSinceLastLogin < 7) {
+                relevanceScore += 5
+              } else if (daysSinceLastLogin < 30) {
+                relevanceScore += 2
+              }
+            }
+
+            return {
+              user,
+              postsCount: postsResult.totalDocs,
+              followersCount: followersResult.totalDocs,
+              mutualConnections,
+              distance,
+              relevanceScore
+            }
+          } catch (error) {
+            console.warn(`Failed to enhance user ${user.id}:`, error)
+            return null
+          }
+        })
+      )
+
+      // Filter out null values and sort by relevance score
+      const validUsers = enhancedUsers.filter(item => item !== null && item.relevanceScore > 0)
+      
+      // Take only the best suggestions (max 3-4 for better UX)
+      const maxSuggestions = Math.min(limit, 4)
+      const sortedUsers = validUsers
+        .sort((a, b) => b.relevanceScore - a.relevanceScore)
+        .slice(0, maxSuggestions)
+
+      return sortedUsers.map(({ user, postsCount, followersCount, mutualConnections, distance }) => ({
         id: `people_${user.id}`,
         type: 'people_suggestion',
         createdAt: user.createdAt,
@@ -467,16 +680,23 @@ export class FeedAlgorithm {
           id: user.id,
           name: user.name || 'Anonymous User',
           username: user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'user',
-          bio: user.bio || 'Passionate explorer sharing amazing discoveries',
-          avatar: this.processMediaUrl(user.profileImage || user.avatar),
-          followersCount: user.followersCount || 0,
-          postsCount: user.postsCount || 0,
-          mutualConnections: this.calculateMutualConnections(user.id, socialCircle),
+          bio: user.bio || this.generateUserBio(user),
+          avatar: this.processMediaUrl(user.profileImage || user.avatar) || undefined,
+          followersCount: followersCount,
+          postsCount: postsCount,
+          mutualConnections: mutualConnections,
           isFollowing: false,
           interests: user.interests || [],
-          location: user.location || null,
-          verified: user._verified || false,
-          createdAt: user.createdAt
+          location: user.location ? this.formatUserLocation(user.location) : undefined,
+          verified: user.creatorProfile?.verification?.isVerified || false,
+          createdAt: user.createdAt,
+          // Additional enhanced fields
+          isCreator: user.isCreator || user.role === 'creator' || false,
+          creatorLevel: user.creatorProfile?.creatorLevel,
+          lastActive: user.lastLogin || user.updatedAt,
+          averageRating: user.creatorProfile?.stats?.averageRating || 0,
+          reviewCount: 0, // Will be calculated separately if needed
+          distance: distance ? `${Math.round(distance)} mi away` : undefined
         }
       }))
     } catch (error) {
@@ -486,10 +706,48 @@ export class FeedAlgorithm {
   }
 
   /**
+   * Generate a personalized bio for users who don't have one
+   */
+  private generateUserBio(user: any): string {
+    const interests = user.interests || []
+    const isCreator = user.isCreator || user.role === 'creator' || false
+    const isVerified = user.creatorProfile?.verification?.isVerified || false
+    
+    if (isCreator) {
+      return `Local expert and content creator sharing hidden gems and authentic experiences.`
+    }
+    
+    if (isVerified) {
+      return `Verified explorer passionate about discovering amazing places and sharing authentic experiences.`
+    }
+    
+    if (interests.length > 0) {
+      const topInterests = interests.slice(0, 2).join(' & ')
+      return `Passionate about ${topInterests}. Always exploring and sharing amazing discoveries!`
+    }
+    
+    return `Passionate explorer sharing amazing discoveries and authentic experiences.`
+  }
+
+  /**
+   * Format user location for display
+   */
+  private formatUserLocation(location: any): string {
+    if (!location) return ''
+    
+    const parts = []
+    if (location.city) parts.push(location.city)
+    if (location.state) parts.push(location.state)
+    if (location.country) parts.push(location.country)
+    
+    return parts.join(', ')
+  }
+
+  /**
    * Fetch place recommendations
    */
   private async fetchPlaceRecommendations(
-    userId?: string,
+    userData: any,
     limit: number = 2,
     location?: { latitude: number; longitude: number },
     weather?: string,
@@ -538,8 +796,8 @@ export class FeedAlgorithm {
           address: location.address,
           priceRange: location.priceRange,
           isOpen: this.calculateIsOpen(location.businessHours),
-          distance: location.coordinates && location ? 
-            this.calculateDistance(location, location.coordinates) : undefined,
+          distance: location.coordinates && userData?.location?.coordinates ? 
+            this.calculateDistance(userData.location.coordinates, location.coordinates) : undefined,
           quickTip: this.generateQuickTip(location, timeOfDay, weather),
           theme,
           isSaved: false, // Will be updated by the API
@@ -557,7 +815,7 @@ export class FeedAlgorithm {
    * Fetch guide spotlights
    */
   private async fetchGuideSpotlights(
-    userId?: string,
+    userData: any,
     limit: number = 1,
     interests: string[] = []
   ): Promise<GuideSpotlightItem[]> {
@@ -760,7 +1018,7 @@ export class FeedAlgorithm {
    * Fetch challenges
    */
   private async fetchChallenges(
-    userId?: string,
+    userData: any,
     limit: number = 1,
     interests: string[] = []
   ): Promise<ChallengeCardItem[]> {
@@ -774,7 +1032,7 @@ export class FeedAlgorithm {
    * Fetch mini blog cards
    */
   private async fetchMiniBlogCards(
-    userId?: string,
+    userData: any,
     limit: number = 2,
     interests: string[] = []
   ): Promise<MiniBlogCardItem[]> {
@@ -903,16 +1161,30 @@ export class FeedAlgorithm {
     return Math.floor(Math.random() * 5)
   }
 
+  /**
+   * Calculate distance between two coordinate points using Haversine formula
+   */
   private calculateDistance(
-    userLocation: { latitude: number; longitude: number },
-    placeLocation: any
+    point1: { latitude: number; longitude: number },
+    point2: { latitude: number; longitude: number }
   ): number {
-    if (!placeLocation?.latitude || !placeLocation?.longitude) return 0
-    
-    // Simple distance calculation (Haversine formula would be more accurate)
-    const latDiff = userLocation.latitude - placeLocation.latitude
-    const lonDiff = userLocation.longitude - placeLocation.longitude
-    return Math.sqrt(latDiff * latDiff + lonDiff * lonDiff) * 111 // Rough km conversion
+    const R = 3959 // Earth's radius in miles
+    const dLat = this.deg2rad(point2.latitude - point1.latitude)
+    const dLon = this.deg2rad(point2.longitude - point1.longitude)
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(this.deg2rad(point1.latitude)) * Math.cos(this.deg2rad(point2.latitude)) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    const distance = R * c
+    return distance
+  }
+
+  /**
+   * Convert degrees to radians
+   */
+  private deg2rad(deg: number): number {
+    return deg * (Math.PI/180)
   }
 
   private calculateIsOpen(businessHours: any): boolean {

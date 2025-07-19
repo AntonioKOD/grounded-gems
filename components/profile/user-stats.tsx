@@ -2,19 +2,17 @@
 "use client"
 
 import { useState } from "react"
-import { Users, UserCheck, MapPin, Star, Award, Calendar } from "lucide-react"
+import { Users, UserCheck, MapPin, Star, Award } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { formatDistanceToNow } from "date-fns"
 
 interface UserStatsProps {
   userId: string
   followers: any[]
   following: any[]
-  joinDate: string
   postCount: number
   reviewCount: number
   recommendationCount: number
@@ -26,7 +24,6 @@ export function UserStats({
   userId,
   followers,
   following,
-  joinDate,
   postCount,
   reviewCount,
   recommendationCount,
@@ -81,11 +78,6 @@ export function UserStats({
             <Separator />
 
             <div className="space-y-3">
-              <div className="flex items-center">
-                <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
-                <span className="text-sm">Joined {formatDistanceToNow(new Date(joinDate), { addSuffix: true })}</span>
-              </div>
-
               {averageRating && (
                 <div className="flex items-center">
                   <Star className="h-4 w-4 mr-2 text-yellow-500" />

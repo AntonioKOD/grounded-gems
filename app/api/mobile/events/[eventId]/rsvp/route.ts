@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@payload-config';
 import { z } from 'zod';
+import { getAuthenticatedUser, getMobileUser } from '@/lib/auth-server';
 
 const rsvpStatusSchema = z.enum(['going', 'interested', 'not_going']);
 
@@ -51,14 +52,34 @@ export async function POST(
     }
     const { status } = validationResult.data;
 
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ success: false, message: 'Authentication required', code: 'NO_TOKEN' }, { status: 401 });
+    // Extract Bearer token and authenticate directly
+    const authHeader = request.headers.get('authorization')
+    let currentUser = null
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      
+      try {
+        // Call mobile users/me directly for authentication
+        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (meResponse.ok) {
+          const meData = await meResponse.json()
+          currentUser = meData.user
+        }
+      } catch (authError) {
+        console.error('Mobile events RSVP - Authentication error:', authError)
+      }
     }
-    const { user: currentUser } = await payload.auth({ headers: request.headers });
+    
     if (!currentUser) {
-      return NextResponse.json({ success: false, message: 'Invalid token', code: 'INVALID_TOKEN' }, { status: 401 });
+      return NextResponse.json({ success: false, message: 'Authentication required', code: 'NO_TOKEN' }, { status: 401 });
     }
 
     // Check if event exists

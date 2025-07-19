@@ -127,81 +127,82 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
     // Prepare the update data
     const updateData: Record<string, any> = {}
 
-    // Only include fields that are provided
+    // Only include fields that are provided and not empty (unless explicitly clearing)
     if (data.name !== undefined) updateData.name = data.name
     if (data.bio !== undefined) updateData.bio = data.bio
 
     // Handle username with validation and cooldown check - only if explicitly provided
-    if (data.username !== undefined && data.username !== null) {
+    if (data.username !== undefined) {
       const username = data.username.trim().toLowerCase()
       
-      // If username is provided and not empty, validate it
-      if (username) {
-        // Get current user to check existing username
-        const currentUser = await payload.findByID({
-          collection: "users",
-          id: userId,
-        })
+      // Get current user to check existing username
+      const currentUser = await payload.findByID({
+        collection: "users",
+        id: userId,
+      })
 
-        // Only check cooldown if username is actually being changed
-        if (currentUser.username && currentUser.username !== username) {
-          const cooldownCheck = await checkUsernameChangeCooldown(userId)
-          
-          if (!cooldownCheck.canChange) {
-            throw new Error(`You can change your username again in ${cooldownCheck.daysRemaining} day(s). Next change available: ${cooldownCheck.nextChangeDate?.toLocaleDateString()}`)
+      // Only process username change if it's actually different
+      if (currentUser.username !== username) {
+        // If username is provided and not empty, validate it
+        if (username) {
+          // Only check cooldown if username is actually being changed
+          if (currentUser.username) {
+            const cooldownCheck = await checkUsernameChangeCooldown(userId)
+            
+            if (!cooldownCheck.canChange) {
+              throw new Error(`You can change your username again in ${cooldownCheck.daysRemaining} day(s). Next change available: ${cooldownCheck.nextChangeDate?.toLocaleDateString()}`)
+            }
           }
-        }
 
-        // Validate username format
-        if (!/^[a-z0-9_-]+$/.test(username)) {
-          throw new Error("Username can only contain lowercase letters, numbers, hyphens, and underscores")
-        }
-        if (username.length < 3) {
-          throw new Error("Username must be at least 3 characters long")
-        }
-        if (username.length > 30) {
-          throw new Error("Username must be less than 30 characters")
-        }
-        
-        // Check if username is already taken (if it's being changed)
-        const existingUser = await payload.find({
-          collection: "users",
-          where: {
-            and: [
-              { username: { equals: username } },
-              { id: { not_equals: userId } }
-            ]
-          },
-          limit: 1
-        })
-        
-        if (existingUser.docs.length > 0) {
-          throw new Error("Username is already taken")
-        }
-        
-        updateData.username = username
-        
-        // If username is actually being changed, update the lastUsernameChange timestamp
-        if (currentUser.username && currentUser.username !== username) {
+          // Validate username format
+          if (!/^[a-z0-9_-]+$/.test(username)) {
+            throw new Error("Username can only contain lowercase letters, numbers, hyphens, and underscores")
+          }
+          if (username.length < 3) {
+            throw new Error("Username must be at least 3 characters long")
+          }
+          if (username.length > 30) {
+            throw new Error("Username must be less than 30 characters")
+          }
+          
+          // Check if username is already taken (if it's being changed)
+          const existingUser = await payload.find({
+            collection: "users",
+            where: {
+              and: [
+                { username: { equals: username } },
+                { id: { not_equals: userId } }
+              ]
+            },
+            limit: 1
+          })
+          
+          if (existingUser.docs.length > 0) {
+            throw new Error("Username is already taken")
+          }
+          
+          updateData.username = username
+          
+          // Update the lastUsernameChange timestamp
           updateData.lastUsernameChange = new Date().toISOString()
-        } else if (!currentUser.username) {
-          // First time setting username, also update the timestamp
-          updateData.lastUsernameChange = new Date().toISOString()
+        } else {
+          // User is clearing their username
+          updateData.username = ''
         }
       }
-      // If username is provided but empty, we'll let Payload handle it according to the validation rules
-      else if (data.username === '') {
-        updateData.username = ''
-      }
+      // If username is the same, don't include it in the update
     }
-    // If username is not provided at all, don't include it in the update
 
-    // Handle location as a group field
+    // Handle location as a group field - only include non-empty values
     if (data.location) {
-      updateData.location = {
-        ...(data.location.city !== undefined && { city: data.location.city }),
-        ...(data.location.state !== undefined && { state: data.location.state }),
-        ...(data.location.country !== undefined && { country: data.location.country }),
+      const locationData: any = {}
+      if (data.location.city !== undefined) locationData.city = data.location.city || null
+      if (data.location.state !== undefined) locationData.state = data.location.state || null
+      if (data.location.country !== undefined) locationData.country = data.location.country || null
+      
+      // Only include location if there are actual values
+      if (Object.keys(locationData).length > 0) {
+        updateData.location = locationData
       }
     }
 
@@ -209,7 +210,7 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
     if (data.interests) {
       updateData.interests = (data.interests as (string | { interest: string })[]).map((interest) => 
         typeof interest === 'string' ? interest : interest.interest
-      )
+      ).filter(interest => interest.trim() !== '')
     }
 
     // Handle social links as an array field

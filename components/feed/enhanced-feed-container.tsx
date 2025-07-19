@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RefreshCw, Filter, TrendingUp, Calendar, Users, MapPin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -69,8 +69,12 @@ export default function EnhancedFeedContainer({
   const [activeFilters, setActiveFilters] = useState<FeedContentType[]>([])
   const [weeklyFeature, setWeeklyFeature] = useState<any>(null)
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(false)
-  const [weeklyChallenges, setWeeklyChallenges] = useState<any>(null)
-  const [isLoadingWeeklyChallenges, setIsLoadingWeeklyChallenges] = useState(false)
+  // const [weeklyChallenges, setWeeklyChallenges] = useState<any>(null)
+  // const [isLoadingWeeklyChallenges, setIsLoadingWeeklyChallenges] = useState(false)
+
+  // Add refs to prevent duplicate API calls
+  const lastRequestRef = useRef<string>('')
+  const isRequestingRef = useRef(false)
 
   // Content type filters - redesigned for better UX
   const contentTypeFilters = [
@@ -80,6 +84,23 @@ export default function EnhancedFeedContainer({
   ]
 
   const fetchFeedItems = useCallback(async (pageNum: number = 1, refresh: boolean = false) => {
+    // Create a unique request key to prevent duplicate calls
+    const requestKey = `${pageNum}-${activeFilters.join(',')}-${userId || user?.id}-${refresh}`
+    
+    // Prevent duplicate requests
+    if (isRequestingRef.current) {
+      console.log('🔄 Skipping duplicate request:', requestKey)
+      return
+    }
+    
+    if (lastRequestRef.current === requestKey && !refresh) {
+      console.log('🔄 Skipping identical request:', requestKey)
+      return
+    }
+    
+    isRequestingRef.current = true
+    lastRequestRef.current = requestKey
+    
     try {
       if (refresh) {
         setIsRefreshing(true)
@@ -104,9 +125,11 @@ export default function EnhancedFeedContainer({
       if (activeFilters.length > 0) {
         // When filters are active, only show those types
         params.append('includeTypes', activeFilters.join(','))
+        console.log('🔍 Applying filters:', activeFilters)
       } else {
         // When no filters are active, show all types (don't add any filter params)
         // This ensures we get the default algorithm mix
+        console.log('🔍 No filters applied - showing all content types')
       }
 
       // Add user interests
@@ -192,83 +215,71 @@ export default function EnhancedFeedContainer({
     } finally {
       setIsLoading(false)
       setIsRefreshing(false)
+      isRequestingRef.current = false
     }
   }, [userId, location, preferences, activeFilters, user?.id])
+
+  // Define loadWeeklyChallenges before useEffect hooks that use it
+  // const loadWeeklyChallenges = useCallback(async () => {
+  //   if (isLoadingWeeklyChallenges) return
+  //   
+  //   setIsLoadingWeeklyChallenges(true)
+  //   try {
+  //     const response = await fetch('/api/challenges/weekly')
+  //     if (response.ok) {
+  //       const data = await response.json()
+  //       setWeeklyChallenges(data.challenges || [])
+  //     }
+  //   } catch (error) {
+  //     console.error('Error loading weekly challenges:', error)
+  //   } finally {
+  //     setIsLoadingWeeklyChallenges(false)
+  //   }
+  // }, [isLoadingWeeklyChallenges])
 
   // Add useEffect to refetch when filters change
   useEffect(() => {
     console.log('🔄 Active filters changed:', activeFilters)
     
-    // Create a new function to avoid circular dependency
-    const refetchWithFilters = async () => {
-      try {
-        setIsRefreshing(true)
-
-        const params = new URLSearchParams({
-          page: '1',
-          limit: '20',
-          userId: userId || user?.id || '',
-          feedStyle: preferences?.feedStyle || 'mixed'
-        })
-
-        // Add location if available
-        if (location) {
-          params.append('lat', location.latitude.toString())
-          params.append('lng', location.longitude.toString())
-        }
-
-        // Handle content type filters properly
-        if (activeFilters.length > 0) {
-          params.append('includeTypes', activeFilters.join(','))
-        }
-
-        // Add user interests
-        if (preferences?.interests && Array.isArray(preferences.interests) && preferences.interests.length > 0) {
-          params.append('interests', preferences.interests.join(','))
-        }
-
-        // Add sort by parameter
-        const sortBy = (activeFilters as any).includes('trending') ? 'popular' : 
-                      (activeFilters as any).includes('recent') ? 'recent' : 'recommended'
-        params.append('sortBy', sortBy)
-
-        // Add feed type
-        const feedType = preferences?.feedStyle === 'chronological' ? 'chronological' : 
-                        preferences?.feedStyle === 'algorithmic' ? 'algorithmic' : 'mixed'
-        params.append('feedType', feedType)
-
-        console.log('🔍 Fetching feed with new filters:', Object.fromEntries(params))
-
-        const response = await fetch(`/api/feed/enhanced?${params}`)
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch feed (${response.status})`)
-        }
-
-        const data = await response.json()
-        const items = data?.data?.items || data?.items || []
-        const hasMoreData = data?.data?.pagination?.hasMore ?? data?.hasMore ?? false
-        
-        setFeedItems(items)
-        setHasMore(hasMoreData)
-        setPage(1)
-        setError(null)
-        
-      } catch (error) {
-        console.error('Error refetching with filters:', error)
-        setError('Failed to update feed with new filters')
-      } finally {
-        setIsRefreshing(false)
+    // Debounce filter changes to prevent excessive API calls
+    const timeoutId = setTimeout(() => {
+      const refetchWithFilters = async () => {
+        console.log('🔄 Refetching feed with new filters:', activeFilters)
+        setPage(1) // Reset to first page
+        setHasMore(true) // Reset pagination
+        await fetchFeedItems(1, true) // Refresh with new filters
       }
-    }
+      
+      refetchWithFilters()
+    }, 300) // 300ms debounce
+    
+    return () => clearTimeout(timeoutId)
+  }, [activeFilters]) // Removed fetchFeedItems from dependencies to prevent circular dependency
 
-    refetchWithFilters()
-  }, [activeFilters, userId, location, preferences, user?.id])
-
-  // Initial load
+  // Load initial feed data
   useEffect(() => {
+    console.log('🚀 Initial feed load for user:', userId || user?.id)
     fetchFeedItems(1, false)
-  }, [fetchFeedItems])
+  }, [userId, user?.id]) // Only depend on user changes, not fetchFeedItems
+
+  // Load weekly challenges separately to avoid blocking main feed
+  // useEffect(() => {
+  //   if (userId || user?.id) {
+  //     loadWeeklyChallenges()
+  //   }
+  // }, [userId, user?.id, loadWeeklyChallenges])
+
+  // Memoize the fetchFeedItems function to prevent unnecessary re-renders
+  const memoizedFetchFeedItems = useCallback(fetchFeedItems, [
+    userId, 
+    location, 
+    preferences, 
+    activeFilters, 
+    user?.id
+  ])
+
+  // Memoize the loadWeeklyChallenges function
+  // const memoizedLoadWeeklyChallenges = useCallback(loadWeeklyChallenges, [userId, user?.id])
 
   // Now we can have conditional returns after all hooks are called
   if (!user) {
@@ -314,6 +325,12 @@ export default function EnhancedFeedContainer({
 
   // Rest of the component logic...
   const handleRefresh = () => {
+    // Prevent rapid successive refresh calls
+    if (isRequestingRef.current) {
+      console.log('🔄 Skipping refresh - request in progress')
+      return
+    }
+    
     fetchFeedItems(1, true)
   }
 
@@ -324,6 +341,12 @@ export default function EnhancedFeedContainer({
   }
 
   const handleFilterToggle = (contentType: FeedContentType) => {
+    // Prevent rapid successive filter changes
+    if (isRequestingRef.current) {
+      console.log('🔄 Skipping filter change - request in progress')
+      return
+    }
+    
     setActiveFilters(prev => {
       const isActive = prev.includes(contentType)
       if (isActive) {
@@ -354,21 +377,6 @@ export default function EnhancedFeedContainer({
     setFeedItems(prev => prev.filter(item => item.id !== itemId))
   }
 
-  const loadWeeklyChallenges = async () => {
-    try {
-      setIsLoadingWeeklyChallenges(true)
-      const response = await fetch('/api/challenges/weekly')
-      if (response.ok) {
-        const data = await response.json()
-        setWeeklyChallenges(data)
-      }
-    } catch (error) {
-      console.error('Error loading weekly challenges:', error)
-    } finally {
-      setIsLoadingWeeklyChallenges(false)
-    }
-  }
-
   const renderFeedItem = (item: FeedItem, index: number) => {
 
     switch (item.type) {
@@ -396,8 +404,6 @@ export default function EnhancedFeedContainer({
           <PeopleSuggestionCard
             key={item.id}
             item={item as PeopleSuggestionItem}
-            onDismiss={() => handleDismissItem(item.id)}
-            className="animate-in slide-in-from-bottom-2 duration-300"
           />
         )
       

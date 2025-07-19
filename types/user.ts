@@ -38,5 +38,7 @@ export interface User {
     followingCount?: number
     isFollowing?: boolean
     role?: string
+    followers?: any[]
+    following?: any[]
   }
   

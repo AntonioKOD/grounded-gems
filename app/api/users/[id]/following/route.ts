@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, context: any) {
   try {
     const payload = await getPayload({ config })
     const user = await payload.findByID({ collection: 'users', id: params.id, depth: 1 })
-    if (!user) return NextResponse.json({ users: [] })
+    if (!user) return NextResponse.json({ success: false, following: [] })
     const following = Array.isArray(user.following) ? user.following : []
     // following may be array of IDs or objects
     const followingObjs = await Promise.all(
@@ -26,8 +26,14 @@ export async function GET(req: NextRequest, context: any) {
       email: u.email,
       profileImage: u.profileImage || null,
     }))
-    return NextResponse.json({ users })
+    return NextResponse.json({ 
+      success: true,
+      following: users 
+    })
   } catch (err: any) {
-    return NextResponse.json({ users: [] })
+    return NextResponse.json({ 
+      success: false,
+      following: [] 
+    })
   }
 } 

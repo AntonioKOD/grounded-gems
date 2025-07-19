@@ -865,6 +865,11 @@ export async function followUser(userId: string, currentUserId: string) {
   const payload = await getPayload({ config });
 
   try {
+    // Prevent users from following themselves
+    if (userId === currentUserId) {
+      throw new Error('Users cannot follow themselves');
+    }
+
     // 1) Read the raw user documents (depth: 0 returns scalar + relationship ID arrays)
     const currentUserDoc = await payload.findByID({
       collection: 'users',
@@ -876,6 +881,11 @@ export async function followUser(userId: string, currentUserId: string) {
       id: userId,
       depth: 0,
     });
+
+    // Check if users exist
+    if (!currentUserDoc || !userToFollowDoc) {
+      throw new Error('User not found');
+    }
 
     // 2) Merge in the new IDs (use Set to prevent duplicates)
     const updatedFollowing = Array.from(
@@ -953,11 +963,11 @@ export async function unfollowUser(userId: string, currentUserId: string) {
 }
 
 export async function getFollowing(userId: string) {
-  // Simple cache to prevent rapid repeated calls
+  // Enhanced cache with longer duration to reduce redundant calls
   const cacheKey = `following-${userId}`
   if (typeof globalThis !== 'undefined' && globalThis._followCache) {
     const cached = globalThis._followCache.get(cacheKey)
-    if (cached && (Date.now() - cached.timestamp) < 30000) { // 30 second cache
+    if (cached && (Date.now() - cached.timestamp) < 120000) { // 2 minute cache (increased from 30s)
       console.log('Using cached following data for', userId)
       return cached.data
     }
@@ -973,9 +983,102 @@ export async function getFollowing(userId: string) {
       depth: 1,
     });
 
-    const result = user?.following || [];
+    if (!user) {
+      console.warn('User not found:', userId)
+      return []
+    }
+
+    const followingData = user?.following || [];
+    console.log('Raw following data:', followingData)
     
-    // Cache the result
+    // Clean up the following data - handle both string IDs and full objects
+    const validFollowingIds: string[] = []
+    const invalidEntries: any[] = []
+    
+    for (const item of followingData) {
+      if (typeof item === 'string') {
+        // Check if it's a valid MongoDB ObjectId format
+        if (/^[0-9a-fA-F]{24}$/.test(item)) {
+          // Check if it's not the same user (self-following)
+          if (item !== userId) {
+            validFollowingIds.push(item)
+          } else {
+            console.warn(`Removing self-following for user: ${userId}`)
+            invalidEntries.push(item)
+          }
+        } else {
+          console.log('Invalid following ID format:', item)
+          invalidEntries.push(item)
+        }
+      } else if (item && typeof item === 'object' && item.id) {
+        // Handle case where following array contains full user objects
+        console.log('Found full user object in following array:', item.id)
+        if (/^[0-9a-fA-F]{24}$/.test(item.id) && item.id !== userId) {
+          validFollowingIds.push(item.id)
+        } else {
+          invalidEntries.push(item)
+        }
+      } else {
+        console.log('Invalid following entry:', item)
+        invalidEntries.push(item)
+      }
+    }
+
+    console.log('Valid following IDs:', validFollowingIds)
+    
+    // Get the actual user objects for the following IDs
+    const followingUsers = await Promise.all(
+      validFollowingIds.slice(0, 100).map(async (followingId: string) => {
+        try {
+          const followingUser = await payload.findByID({
+            collection: 'users',
+            id: followingId,
+            depth: 1
+          })
+          
+          if (followingUser) {
+            return {
+              id: followingUser.id,
+              name: followingUser.name || 'Unknown User',
+              username: followingUser.username,
+              email: followingUser.email || '',
+              profileImage: followingUser.profileImage,
+              bio: followingUser.bio,
+              isVerified: followingUser.isVerified || false,
+              followerCount: followingUser.followers?.length || 0
+            }
+          }
+          return null
+        } catch (error) {
+          console.warn(`Failed to fetch following user ${followingId}:`, error)
+          // Remove this invalid ID from the valid list
+          const index = validFollowingIds.indexOf(followingId)
+          if (index > -1) {
+            validFollowingIds.splice(index, 1)
+          }
+          return null
+        }
+      })
+    )
+
+    const result = followingUsers.filter(user => user !== null);
+    
+    // If we found invalid entries, clean up the user's following array
+    if (invalidEntries.length > 0 || validFollowingIds.length !== followingData.length) {
+      console.log('Cleaning up invalid following entries for user:', userId)
+      try {
+        await payload.update({
+          collection: 'users',
+          id: userId,
+          data: { following: validFollowingIds }
+        })
+        console.log('Successfully cleaned up following array for user:', userId)
+      } catch (cleanupError) {
+        console.error('Failed to clean up following array:', cleanupError)
+      }
+    }
+    
+    // Cache the result with longer duration
     if (typeof globalThis !== 'undefined') {
       if (!globalThis._followCache) {
         globalThis._followCache = new Map()
@@ -991,11 +1094,11 @@ export async function getFollowing(userId: string) {
 }
 
 export async function getFollowers(userId: string) {
-  // Simple cache to prevent rapid repeated calls
+  // Enhanced cache with longer duration to reduce redundant calls
   const cacheKey = `followers-${userId}`
   if (typeof globalThis !== 'undefined' && globalThis._followCache) {
     const cached = globalThis._followCache.get(cacheKey)
-    if (cached && (Date.now() - cached.timestamp) < 30000) { // 30 second cache
+    if (cached && (Date.now() - cached.timestamp) < 120000) { // 2 minute cache (increased from 30s)
       console.log('Using cached followers data for', userId)
       return cached.data
     }
@@ -1005,23 +1108,37 @@ export async function getFollowers(userId: string) {
 
   try {
     console.log('Fetching followers data for user:', userId)
-    const user = await payload.findByID({
-      collection: 'users',
-      id: userId,
-      depth: 1,
-    });
-
-    const result = user?.followers || [];
     
-    // Cache the result
+    // Find users who are following this user
+    const followersResult = await payload.find({
+      collection: 'users',
+      where: {
+        following: { contains: userId }
+      },
+      limit: 100,
+      depth: 1
+    })
+
+    const followers = followersResult.docs.map((follower: any) => ({
+      id: follower.id,
+      name: follower.name || 'Unknown User',
+      username: follower.username,
+      email: follower.email || '',
+      profileImage: follower.profileImage,
+      bio: follower.bio,
+      isVerified: follower.isVerified || false,
+      followerCount: follower.followers?.length || 0
+    }));
+    
+    // Cache the result with longer duration
     if (typeof globalThis !== 'undefined') {
       if (!globalThis._followCache) {
         globalThis._followCache = new Map()
       }
-      globalThis._followCache.set(cacheKey, { data: result, timestamp: Date.now() })
+      globalThis._followCache.set(cacheKey, { data: followers, timestamp: Date.now() })
     }
 
-    return result;
+    return followers;
   } catch (error) {
     console.error('Error fetching followers:', error);
     throw error;
@@ -2052,8 +2169,12 @@ export async function createPost(formData: FormData) {
     const legacyImageFiles = formData.getAll("image") as File[]
     const legacyVideoFiles = formData.getAll("video") as File[]
     
+    // Check for iOS app field names
+    const iosImageFiles = formData.getAll("images") as File[]
+    const iosVideoFiles = formData.getAll("videos") as File[] // This is already covered above
+    
     // Combine files from all possible field names
-    const allImageFiles = [...mediaFiles, ...legacyImageFiles].filter(file => 
+    const allImageFiles = [...mediaFiles, ...legacyImageFiles, ...iosImageFiles].filter(file => 
       file instanceof File && file.size > 0 && file.type.startsWith('image/')
     )
     const allVideoFiles = [...videoFiles, ...legacyVideoFiles].filter(file => 
@@ -2065,6 +2186,7 @@ export async function createPost(formData: FormData) {
       videosField: videoFiles.length,
       legacyImageField: legacyImageFiles.length,
       legacyVideoField: legacyVideoFiles.length,
+      iosImageField: iosImageFiles.length,
       totalImages: allImageFiles.length,
       totalVideos: allVideoFiles.length
     })
@@ -2216,13 +2338,32 @@ export async function createPost(formData: FormData) {
 
             if (videoDoc?.id && !videoId) {
               console.log(`📝 CreatePost: Video uploaded successfully - ID: ${videoDoc.id}`)
+              console.log(`📝 CreatePost: Waiting for Media hook to process video...`)
+              
+              // Wait for the Media hook to process the video
+              await new Promise(resolve => setTimeout(resolve, 3000))
+              
+              // Check if the video has been processed by the Media hook
+              const updatedVideoDoc = await payload.findByID({
+                collection: 'media',
+                id: videoDoc.id,
+              })
+              
+              if (updatedVideoDoc?.isVideo) {
+                console.log(`📝 CreatePost: Video processed by Media hook, isVideo: ${updatedVideoDoc.isVideo}`)
+                if (updatedVideoDoc.videoThumbnail) {
+                  console.log(`📝 CreatePost: Video has thumbnail: ${updatedVideoDoc.videoThumbnail}`)
+                  // Set the videoThumbnailId for the post
+                  videoThumbnailId = String(updatedVideoDoc.videoThumbnail)
+                } else {
+                  console.log(`📝 CreatePost: Video marked as video but no thumbnail yet`)
+                }
+              } else {
+                console.log(`📝 CreatePost: Video not yet processed by Media hook`)
+              }
+              
               // Set first video as main video
               videoId = String(videoDoc.id)
-              
-              // For video posts, also set the first image as thumbnail if available
-              if (imageId) {
-                videoThumbnailId = imageId
-              }
             } else if (!videoDoc?.id) {
               console.error('📝 CreatePost: Video document creation failed - no ID returned')
               return {
@@ -5088,10 +5229,43 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
       const media: Array<{ type: 'image' | 'video'; url: string; thumbnail?: string; alt?: string }> = [];
       // Video first
       if (post.video) {
+        // Get video thumbnail from the post's videoThumbnail field first
+        let videoThumbnail = null;
+        
+        // Check if post has a videoThumbnail field (from Posts collection)
+        if (post.videoThumbnail) {
+          if (typeof post.videoThumbnail === 'object' && post.videoThumbnail.url) {
+            videoThumbnail = post.videoThumbnail.url;
+            console.log('🎬 Found video thumbnail from post field:', videoThumbnail);
+          } else if (typeof post.videoThumbnail === 'string') {
+            videoThumbnail = `/api/media/file/${post.videoThumbnail}`;
+            console.log('🎬 Found video thumbnail ID from post field:', post.videoThumbnail);
+          }
+        } else if (post.video && typeof post.video === 'object') {
+          // Fallback to video media document thumbnail
+          if (post.video.videoThumbnail) {
+            videoThumbnail = post.video.videoThumbnail.url;
+            console.log('🎬 Found video thumbnail from video media:', videoThumbnail);
+          } else if (post.video.isVideo) {
+            // If it's marked as video but no thumbnail, use placeholder
+            videoThumbnail = '/api/media/placeholder-video-thumbnail';
+            console.log('🎬 Using placeholder thumbnail for video');
+          }
+        } else if (post.image || post.featuredImage) {
+          // Fallback to main image if available
+          videoThumbnail = post.image || post.featuredImage;
+          console.log('🎬 Using fallback thumbnail:', videoThumbnail);
+        } else {
+          console.log('🎬 No thumbnail available for video');
+        }
+        
         media.push({
           type: 'video',
-          url: post.video,
-          thumbnail: post.videoThumbnail || post.image || post.featuredImage,
+          url: typeof post.video === 'object' && post.video.url ? post.video.url : 
+               typeof post.video === 'object' && post.video.filename ? `/api/media/file/${post.video.filename}` :
+               typeof post.video === 'object' && post.video.id ? `/api/media/file/${post.video.id}` :
+               post.video,
+          thumbnail: videoThumbnail,
           alt: 'Post video',
         });
       }
@@ -5155,7 +5329,10 @@ async function formatPostsForFrontend(posts: any[], currentUserId?: string): Pro
         createdAt: post.createdAt || new Date().toISOString(),
         updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
         image: post.image || post.featuredImage || undefined,
-        video: post.video || undefined,
+        video: typeof post.video === 'object' && post.video.url ? post.video.url : 
+               typeof post.video === 'object' && post.video.filename ? `/api/media/file/${post.video.filename}` :
+               typeof post.video === 'object' && post.video.id ? `/api/media/file/${post.video.id}` :
+               post.video || undefined,
         videoThumbnail: post.videoThumbnail || undefined,
         photos: (Array.isArray(post.photos) ? post.photos.filter(Boolean) : undefined),
         likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
@@ -5477,5 +5654,282 @@ export async function updateLocationPrivacy(
       success: false,
       message: error instanceof Error ? error.message : 'Failed to update privacy settings'
     }
+  }
+}
+
+export async function getUserProfile(userId: string, currentUserId?: string) {
+  try {
+    console.log("getUserProfile called with ID:", userId)
+    console.log("getUserProfile - ID length:", userId?.length, "ID type:", typeof userId)
+    
+    if (!userId || userId.trim() === '') {
+      console.error("getUserProfile called with empty or invalid id")
+      return null
+    }
+
+    const cleanId = userId.trim()
+    console.log("getUserProfile - cleanId:", cleanId, "cleanId length:", cleanId.length)
+    
+    // MongoDB ObjectIds are 24 characters, but let's be more lenient for edge cases
+    if (cleanId.length < 8) {
+      console.error("getUserProfile called with invalid id format (too short):", userId)
+      return null
+    }
+
+    const payload = await getPayload({ config: config })
+    
+    console.log("getUserProfile - Attempting to find user with ID:", cleanId)
+    
+    // Get detailed user information with depth 1 for basic relationships (reduced from depth 2)
+    const targetUser = await payload.findByID({
+      collection: "users",
+      id: cleanId,
+      depth: 1,
+      overrideAccess: true,
+    })
+
+    if (!targetUser) {
+      console.log(`No user found with ID: ${cleanId}`)
+      console.log(`getUserProfile - Database query returned null for ID: ${cleanId}`)
+      return null
+    }
+
+    console.log(`Found user: ${targetUser.name || 'Unknown'} (ID: ${targetUser.id})`)
+
+    // Get user statistics - simplified to reduce database calls
+    let stats = {
+      postsCount: 0,
+      followersCount: 0,
+      followingCount: 0,
+      savedPostsCount: 0,
+      likedPostsCount: 0,
+      locationsCount: 0,
+      reviewCount: 0,
+      recommendationCount: 0,
+      averageRating: undefined as number | undefined,
+    }
+
+    // Use existing data from targetUser when possible to reduce database calls
+    if (targetUser.followers) {
+      stats.followersCount = Array.isArray(targetUser.followers) ? targetUser.followers.length : 0
+    }
+    if (targetUser.following) {
+      stats.followingCount = Array.isArray(targetUser.following) ? targetUser.following.length : 0
+    }
+
+    // Only fetch additional stats if they're not already available
+    try {
+      // Get posts count (only if not already available)
+      if (!targetUser.postsCount) {
+        const postsResult = await payload.find({
+          collection: 'posts',
+          where: {
+            author: { equals: cleanId },
+            status: { equals: 'published' }
+          },
+          limit: 1,
+          depth: 0
+        })
+        stats.postsCount = postsResult.totalDocs
+      } else {
+        stats.postsCount = targetUser.postsCount
+      }
+
+      // Get saved posts count (only if needed)
+      if (!targetUser.savedPostsCount) {
+        const savedPostsResult = await payload.find({
+          collection: 'posts',
+          where: {
+            'savedBy': { contains: cleanId }
+          },
+          limit: 1,
+          depth: 0
+        })
+        stats.savedPostsCount = savedPostsResult.totalDocs
+      } else {
+        stats.savedPostsCount = targetUser.savedPostsCount
+      }
+
+      // Get liked posts count (only if needed)
+      if (!targetUser.likedPostsCount) {
+        const likedPostsResult = await payload.find({
+          collection: 'posts',
+          where: {
+            'likes': { contains: cleanId }
+          },
+          limit: 1,
+          depth: 0
+        })
+        stats.likedPostsCount = likedPostsResult.totalDocs
+      } else {
+        stats.likedPostsCount = targetUser.likedPostsCount
+      }
+
+      // Get locations count (only if needed)
+      if (!targetUser.locationsCount) {
+        const locationsResult = await payload.find({
+          collection: 'locations',
+          where: {
+            createdBy: { equals: cleanId }
+          },
+          limit: 1,
+          depth: 0
+        })
+        stats.locationsCount = locationsResult.totalDocs
+      } else {
+        stats.locationsCount = targetUser.locationsCount
+      }
+
+      // Get reviews count (only if needed)
+      if (!targetUser.reviewCount) {
+        const reviewsResult = await payload.find({
+          collection: 'reviews',
+          where: {
+            author: { equals: cleanId }
+          },
+          limit: 1,
+          depth: 0
+        })
+        stats.reviewCount = reviewsResult.totalDocs
+      } else {
+        stats.reviewCount = targetUser.reviewCount
+      }
+
+    } catch (statsError) {
+      console.warn("Error fetching user stats:", statsError)
+      // Continue with default stats
+    }
+
+    // Check if current user is following this user - simplified
+    let isFollowing = false
+    let isFollowedBy = false
+    
+    if (currentUserId && currentUserId !== cleanId) {
+      try {
+        // Use existing data when possible
+        isFollowing = Array.isArray(targetUser.following) && targetUser.following.includes(currentUserId)
+        isFollowedBy = Array.isArray(targetUser.followers) && targetUser.followers.includes(currentUserId)
+        
+        // Only fetch current user data if we need to check following status
+        if (!isFollowing && !isFollowedBy) {
+          const currentUser = await payload.findByID({
+            collection: 'users',
+            id: currentUserId,
+            depth: 0
+          })
+          
+          if (currentUser) {
+            isFollowing = Array.isArray(currentUser.following) && currentUser.following.includes(cleanId)
+            isFollowedBy = Array.isArray(targetUser.followers) && targetUser.followers.includes(currentUserId)
+          }
+        }
+      } catch (followError) {
+        console.warn("Error checking follow status:", followError)
+      }
+    }
+
+    // Get recent posts - only if needed (reduced from 5 to 3 for performance)
+    let recentPosts: any[] = []
+    try {
+      const postsResult = await payload.find({
+        collection: 'posts',
+        where: {
+          author: { equals: cleanId },
+          status: { equals: 'published' }
+        },
+        sort: '-createdAt',
+        limit: 3, // Reduced from 5 to 3
+        depth: 1
+      })
+      
+      recentPosts = postsResult.docs.map((post: any) => ({
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        image: post.image,
+        video: post.video,
+        videoThumbnail: post.videoThumbnail,
+        photos: post.photos,
+        videos: post.videos,
+        media: post.media,
+        featuredImage: post.featuredImage ? {
+          url: typeof post.featuredImage === 'object' ? post.featuredImage.url : post.featuredImage
+        } : null,
+        likeCount: Array.isArray(post.likes) ? post.likes.length : 0,
+        commentCount: Array.isArray(post.comments) ? post.comments.length : 0,
+        createdAt: post.createdAt,
+        type: post.type,
+        rating: post.rating,
+        location: post.location,
+        author: post.author
+      }))
+    } catch (postsError) {
+      console.warn("Error fetching recent posts:", postsError)
+    }
+
+    // Format the response similar to mobile API
+    const isOwnProfile = currentUserId === cleanId
+    
+    return {
+      id: String(targetUser.id),
+      name: targetUser.name || '',
+      email: isOwnProfile ? targetUser.email : '', // Only show email for own profile
+      username: targetUser.username,
+      profileImage: targetUser.profileImage ? {
+        url: typeof targetUser.profileImage === 'object' && targetUser.profileImage.url
+          ? targetUser.profileImage.url 
+          : typeof targetUser.profileImage === 'string'
+          ? targetUser.profileImage
+          : ''
+      } : null,
+      coverImage: targetUser.coverImage ? {
+        url: typeof targetUser.coverImage === 'object' && targetUser.coverImage.url
+          ? targetUser.coverImage.url 
+          : typeof targetUser.coverImage === 'string'
+          ? targetUser.coverImage
+          : ''
+      } : null,
+      bio: targetUser.bio,
+      location: targetUser.location ? {
+        coordinates: targetUser.location.coordinates,
+        address: targetUser.location.address,
+        city: targetUser.location.city,
+        state: targetUser.location.state,
+        country: targetUser.location.country,
+      } : undefined,
+      role: targetUser.role || 'user',
+      isCreator: targetUser.isCreator || false,
+      creatorLevel: targetUser.creatorLevel,
+      isVerified: targetUser.isVerified || false,
+      preferences: {
+        categories: targetUser.interests || [],
+        notifications: targetUser.notificationSettings?.enabled ?? true,
+        radius: targetUser.searchRadius || 25,
+        primaryUseCase: targetUser.onboardingData?.primaryUseCase,
+        budgetPreference: targetUser.onboardingData?.budgetPreference,
+        travelRadius: targetUser.onboardingData?.travelRadius
+      },
+      stats,
+      socialLinks: targetUser.socialLinks || [],
+      interests: targetUser.interests || [],
+      deviceInfo: isOwnProfile ? (targetUser.deviceInfo ? {
+        platform: targetUser.deviceInfo.platform,
+        appVersion: targetUser.deviceInfo.appVersion,
+        lastSeen: targetUser.deviceInfo.lastSeen,
+      } : undefined) : undefined,
+      isFollowing: !isOwnProfile ? isFollowing : undefined,
+      isFollowedBy: !isOwnProfile ? isFollowedBy : undefined,
+      joinedAt: targetUser.createdAt,
+      lastLogin: isOwnProfile ? targetUser.lastLogin : undefined,
+      website: targetUser.website,
+      recentPosts: recentPosts.length > 0 ? recentPosts : undefined,
+    }
+
+  } catch (error) {
+    console.error("Error in getUserProfile:", {
+      error: error instanceof Error ? error.message : String(error),
+      userId
+    })
+    return null
   }
 }

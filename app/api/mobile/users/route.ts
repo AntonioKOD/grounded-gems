@@ -207,9 +207,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
       })
       stats.followersCount = followersResult.totalDocs
 
-      // Get following count
+      // Get following count (only count valid users)
       if (targetUser.following && Array.isArray(targetUser.following)) {
-        stats.followingCount = targetUser.following.length
+        // Filter out any invalid user IDs and count only valid ones
+        const validFollowingIds = targetUser.following.filter((id: any) => 
+          typeof id === 'string' && id.length > 0
+        )
+        stats.followingCount = validFollowingIds.length
       }
 
     } catch (statsError) {

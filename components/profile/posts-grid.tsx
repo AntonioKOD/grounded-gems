@@ -3,14 +3,13 @@
 import React, { useState } from "react"
 import Image from "next/image"
 import { Heart, MessageCircle, Bookmark, Play, Image as ImageIcon, MapPin, ChevronLeft, ChevronRight, X, Share2, Video } from "lucide-react"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-
-import MediaCarousel from "@/components/ui/media-carousel"
 import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import MediaCarousel from "@/components/ui/media-carousel"
 
 interface Post {
   isLiked: any
@@ -20,7 +19,13 @@ interface Post {
   content?: string
   caption?: string
   image?: string
-  video?: string
+  video?: string | {
+    filename?: string
+    url?: string
+    id?: string
+    mimeType?: string
+    isVideo?: boolean
+  }
   videos?: any[]
   photos?: any[]
   media?: Array<{
@@ -40,6 +45,7 @@ interface Post {
     id: string
     name: string
   }
+  videoThumbnail?: string // Added for new logic
 }
 
 interface PostsGridProps {
@@ -65,174 +71,6 @@ function PostModal({ post, isOpen, onClose, onLike, onSave }: PostModalProps) {
     })
   }
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-hidden p-0 bg-white rounded-xl shadow-2xl">
-        <div className="grid grid-cols-1 lg:grid-cols-2 h-full max-h-[90vh]">
-          {/* Image Section */}
-          <div className="relative aspect-square lg:aspect-auto bg-black flex items-center justify-center">
-            {post.image ? (
-              <Image
-                src={post.image}
-                alt={post.title || "Post image"}
-                fill
-                className="object-cover"
-                priority
-              />
-            ) : (
-              <div className="flex items-center justify-center w-full h-full bg-gray-100">
-                <ImageIcon className="h-20 w-20 text-gray-400" />
-              </div>
-            )}
-            {post.type === "video" && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-black/60 backdrop-blur-sm rounded-full p-6 hover:bg-black/70 transition-colors cursor-pointer">
-                  <Play className="h-10 w-10 text-white" />
-                </div>
-              </div>
-            )}
-            
-            {/* Image navigation for carousel */}
-            {post.type === "carousel" && (
-              <>
-                <button className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors">
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors">
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Content Section */}
-          <div className="flex flex-col h-[600px] lg:h-auto">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b bg-white">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 ring-2 ring-gray-100">
-                  <AvatarImage src={post.author?.avatar || "/placeholder.svg"} alt={post.author?.name || "User"} />
-                  <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#FF8E53] text-white font-semibold">
-                    {post.author?.name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-semibold text-sm hover:text-[#FF6B6B] cursor-pointer transition-colors">{post.author?.name || "Unknown User"}</p>
-                  {post.location && (
-                    <p className="text-xs text-gray-500 flex items-center hover:text-gray-700 cursor-pointer transition-colors">
-                      <MapPin className="h-3 w-3 mr-1" />
-                      {post.location.name}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-gray-100 rounded-full">
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 p-4 overflow-y-auto bg-gray-50/30">
-              <div className="space-y-4">
-                {post.title && (
-                  <h3 className="font-bold text-xl text-gray-900">{post.title}</h3>
-                )}
-                
-                {post.content && (
-                  <div className="bg-white p-4 rounded-lg border border-gray-100">
-                    <p className="text-gray-700 leading-relaxed">{post.content}</p>
-                  </div>
-                )}
-
-                {post.rating && (
-                  <div className="flex items-center gap-3 bg-white p-4 rounded-lg border border-gray-100">
-                    <div className="flex">
-                      {[...Array(5)].map((_, i) => (
-                        <div
-                          key={i}
-                          className={`h-5 w-5 ${
-                            i < post.rating! ? "text-yellow-400" : "text-gray-300"
-                          }`}
-                        >
-                          ⭐
-                        </div>
-                      ))}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700">{post.rating}/5 stars</span>
-                  </div>
-                )}
-
-                <div className="bg-white p-4 rounded-lg border border-gray-100">
-                  <p className="text-xs text-gray-500 mb-1">Posted on</p>
-                  <p className="text-sm font-medium text-gray-700">{formatDate(post.createdAt)}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="border-t bg-white p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-6">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="p-0 h-auto hover:scale-110 transition-transform"
-                    onClick={() => onLike?.(post.id)}
-                  >
-                    <Heart
-                      className={`h-7 w-7 transition-colors ${
-                        post.isLiked ? "text-red-500 fill-red-500" : "text-gray-700 hover:text-red-500"
-                      }`}
-                    />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="p-0 h-auto hover:scale-110 transition-transform">
-                    <MessageCircle className="h-7 w-7 text-gray-700 hover:text-blue-500 transition-colors" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="p-0 h-auto hover:scale-110 transition-transform">
-                    <Share2 className="h-7 w-7 text-gray-700 hover:text-green-500 transition-colors" />
-                  </Button>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-0 h-auto hover:scale-110 transition-transform"
-                  onClick={() => onSave?.(post.id)}
-                >
-                  <Bookmark className="h-7 w-7 text-gray-700 hover:text-yellow-500 transition-colors" />
-                </Button>
-              </div>
-              
-              <div className="text-sm space-y-1">
-                <p className="font-bold text-gray-900">
-                  {post.likeCount || 0} {(post.likeCount || 0) === 1 ? "like" : "likes"}
-                </p>
-                {post.commentCount && post.commentCount > 0 && (
-                  <p className="text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
-                    View all {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
-  const [selectedPost, setSelectedPost] = useState<Post | null>(null)
-  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({})
-
-  const handleImageLoad = (postId: string) => {
-    setImageLoadingStates(prev => ({ ...prev, [postId]: false }))
-  }
-
-  const handleImageLoadStart = (postId: string) => {
-    setImageLoadingStates(prev => ({ ...prev, [postId]: true }))
-  }
-
-  // Helper function to get media for a post
   const getPostMedia = (post: Post) => {
     const media = []
     
@@ -245,14 +83,82 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
     
     // Add main video first (if exists)
     const videoUrl = getVideoUrl(post.video)
+    
     if (videoUrl) {
-      media.push({
+      // Get video thumbnail - prioritize post's videoThumbnail field
+      let videoThumbnail = null
+      
+      // 1. Check if post has a videoThumbnail field (from Posts collection)
+      if (post.videoThumbnail) {
+        videoThumbnail = getImageUrl(post.videoThumbnail)
+      }
+      // 2. Fallback to main image if no video thumbnail
+      else if (post.image) {
+        const imageUrl = getImageUrl(post.image)
+        if (imageUrl !== '/placeholder.svg') {
+          videoThumbnail = imageUrl
+        }
+      }
+      // 3. Use placeholder if no thumbnail available
+      if (!videoThumbnail || videoThumbnail === '/placeholder.svg') {
+        videoThumbnail = '/api/media/placeholder-video-thumbnail'
+      }
+      
+      const videoMedia = {
         type: 'video' as const,
         url: videoUrl,
-        thumbnail: getImageUrl(post.image) !== '/placeholder.svg' ? getImageUrl(post.image) : undefined,
+        thumbnail: videoThumbnail,
         alt: 'Post video',
         duration: undefined // Could be extracted from video metadata if needed
-      })
+      }
+      
+      media.push(videoMedia)
+    } else {
+      // If getVideoUrl returns null, try to construct URL manually
+      if (post.video && typeof post.video === 'object' && post.video.filename) {
+        const manualVideoUrl = `/api/media/file/${post.video.filename}`
+        const videoMedia = {
+          type: 'video' as const,
+          url: manualVideoUrl,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object' && post.video.url) {
+        // If video object has a direct URL, use it
+        const videoMedia = {
+          type: 'video' as const,
+          url: post.video.url,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object') {
+        // Last resort: try to construct URL from any available field
+        const videoObj = post.video as any
+        let fallbackUrl = null
+        
+        if (videoObj.url) {
+          fallbackUrl = videoObj.url
+        } else if (videoObj.filename) {
+          fallbackUrl = `/api/media/file/${videoObj.filename}`
+        } else if (videoObj.id) {
+          fallbackUrl = `/api/media/file/${videoObj.id}`
+        }
+        
+        if (fallbackUrl) {
+          const videoMedia = {
+            type: 'video' as const,
+            url: fallbackUrl,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video',
+            duration: undefined
+          }
+          media.push(videoMedia)
+        }
+      }
     }
     
     // Add videos array
@@ -263,7 +169,7 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
           media.push({
             type: 'video' as const,
             url,
-            thumbnail: undefined,
+            thumbnail: '/api/media/placeholder-video-thumbnail', // Use placeholder for additional videos
             alt: 'Post video'
           })
         }
@@ -299,25 +205,405 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
     return media
   }
 
+  const media = getPostMedia(post)
+  const hasVideo = media.some(item => item.type === 'video')
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden p-0 bg-white rounded-xl shadow-2xl">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Post Details</DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-1 lg:grid-cols-2 h-full max-h-[90vh]">
+          {/* Media Section */}
+          <div className="relative bg-black flex items-center justify-center min-h-[50vh] lg:min-h-[70vh]">
+            {media.length > 0 ? (
+              <MediaCarousel
+                media={media}
+                aspectRatio="auto"
+                enableVideoPreview={true}
+                videoPreviewMode="click"
+                showControls={true}
+                showDots={true}
+                autoPlay={false}
+                className="w-full h-full"
+              />
+            ) : (
+              <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                <ImageIcon className="h-24 w-24 text-gray-400" />
+              </div>
+            )}
+            
+            {/* Video indicator */}
+            {hasVideo && (
+              <div className="absolute top-4 right-4 bg-black/70 text-white p-2 rounded-full">
+                <Video className="h-5 w-5" />
+              </div>
+            )}
+          </div>
+
+          {/* Content Section */}
+          <div className="flex flex-col h-full overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b bg-white">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12 ring-2 ring-gray-100">
+                  <AvatarImage src={post.author?.avatar || "/placeholder.svg"} alt={post.author?.name || "User"} />
+                  <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#FF8E53] text-white font-semibold">
+                    {post.author?.name?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-base hover:text-[#FF6B6B] cursor-pointer transition-colors">
+                    {post.author?.name || "Unknown User"}
+                  </p>
+                  {post.location && (
+                    <p className="text-sm text-gray-500 flex items-center hover:text-gray-700 cursor-pointer transition-colors">
+                      <MapPin className="h-4 w-4 mr-1" />
+                      {post.location.name}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-gray-100 rounded-full">
+                <X className="h-6 w-6" />
+              </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 p-6 overflow-y-auto bg-gray-50/30">
+              <div className="space-y-6">
+                {/* Post type badge */}
+                {post.type && post.type !== 'post' && (
+                  <Badge className="bg-[#FF6B6B] text-white px-3 py-1 text-sm font-medium">
+                    {post.type.charAt(0).toUpperCase() + post.type.slice(1)}
+                  </Badge>
+                )}
+
+                {/* Title */}
+                {post.title && (
+                  <h3 className="font-bold text-2xl text-gray-900 leading-tight">
+                    {post.title}
+                  </h3>
+                )}
+                
+                {/* Content */}
+                {post.content && (
+                  <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
+                    <p className="text-gray-700 leading-relaxed text-base whitespace-pre-wrap">
+                      {post.content}
+                    </p>
+                  </div>
+                )}
+
+                {/* Rating */}
+                {post.rating && (
+                  <div className="flex items-center gap-4 bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-6 w-6 ${
+                            i < post.rating! ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                        >
+                          ⭐
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-lg font-medium text-gray-700">{post.rating}/5 stars</span>
+                  </div>
+                )}
+
+                {/* Media info */}
+                {media.length > 0 && (
+                  <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3">Media</h4>
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      {hasVideo && (
+                        <div className="flex items-center gap-1">
+                          <Video className="h-4 w-4" />
+                          <span>Video</span>
+                        </div>
+                      )}
+                      {media.some(item => item.type === 'image') && (
+                        <div className="flex items-center gap-1">
+                          <ImageIcon className="h-4 w-4" />
+                          <span>{media.filter(item => item.type === 'image').length} Photo{media.filter(item => item.type === 'image').length !== 1 ? 's' : ''}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Date */}
+                <div className="bg-white p-6 rounded-lg border border-gray-100 shadow-sm">
+                  <p className="text-sm text-gray-500 mb-1">Posted on</p>
+                  <p className="text-base font-medium text-gray-700">{formatDate(post.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="border-t bg-white p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-6">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-0 h-auto hover:scale-110 transition-transform"
+                    onClick={() => onLike?.(post.id)}
+                  >
+                    <Heart
+                      className={`h-8 w-8 transition-colors ${
+                        post.isLiked ? "text-red-500 fill-red-500" : "text-gray-700 hover:text-red-500"
+                      }`}
+                    />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="p-0 h-auto hover:scale-110 transition-transform">
+                    <MessageCircle className="h-8 w-8 text-gray-700 hover:text-blue-500 transition-colors" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="p-0 h-auto hover:scale-110 transition-transform">
+                    <Share2 className="h-8 w-8 text-gray-700 hover:text-green-500 transition-colors" />
+                  </Button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="p-0 h-auto hover:scale-110 transition-transform"
+                  onClick={() => onSave?.(post.id)}
+                >
+                  <Bookmark className="h-8 w-8 text-gray-700 hover:text-yellow-500 transition-colors" />
+                </Button>
+              </div>
+              
+              <div className="text-base space-y-2">
+                <p className="font-bold text-gray-900">
+                  {post.likeCount || 0} {(post.likeCount || 0) === 1 ? "like" : "likes"}
+                </p>
+                {post.commentCount && post.commentCount > 0 && (
+                  <p className="text-gray-500 hover:text-gray-700 cursor-pointer transition-colors">
+                    View all {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+  const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({})
+
+  const handleImageLoad = (postId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [postId]: false }))
+  }
+
+  const handleImageLoadStart = (postId: string) => {
+    setImageLoadingStates(prev => ({ ...prev, [postId]: true }))
+  }
+
   // Helper function to get primary display URL for grid thumbnail
   const getPrimaryDisplayUrl = (post: Post) => {
     const media = getPostMedia(post)
     if (media.length > 0) {
       // For videos, use thumbnail if available, otherwise use video URL
       if (media[0]?.type === 'video') {
-        return media[0]?.thumbnail || media[0]?.url
+        // If video has a thumbnail, use it
+        if (media[0]?.thumbnail && media[0].thumbnail !== '/placeholder.svg' && media[0].thumbnail !== '/api/media/placeholder-video-thumbnail') {
+          return media[0].thumbnail
+        }
+        // Otherwise, use placeholder thumbnail for videos
+        return '/api/media/placeholder-video-thumbnail'
       }
       return media[0]?.url
     }
     
     // Fallback to legacy fields
-    return getImageUrl(post.image) !== '/placeholder.svg' ? getImageUrl(post.image) : null
+    const imageUrl = getImageUrl(post.image)
+    return imageUrl !== '/placeholder.svg' ? imageUrl : null
   }
 
   // Helper function to determine if post has video content
   const hasVideoContent = (post: Post) => {
-    const media = getPostMedia(post)
-    return media.some(item => item.type === 'video')
+    // Primary check: post has video field
+    if (post.video) {
+      return true
+    }
+    
+    // Check if post has videos array
+    if (post.videos && Array.isArray(post.videos) && post.videos.length > 0) {
+      return true
+    }
+    
+    // Check if post has media array with video
+    if (post.media && Array.isArray(post.media)) {
+      return post.media.some(item => item.type === 'video')
+    }
+    
+    // Check if the post has a video-related field that indicates it's a video
+    if (post.type === 'video') {
+      return true
+    }
+    
+    // Check if the video object has video-specific properties
+    if (post.video && typeof post.video === 'object') {
+      const videoObj = post.video as { isVideo?: boolean }
+      if (videoObj.isVideo) {
+        return true
+      }
+    }
+    
+    // Additional check: if the post has a video URL string
+    if (typeof post.video === 'string' && post.video.includes('video')) {
+      return true
+    }
+    
+    // Check for video in the post content or title
+    if (post.content?.toLowerCase().includes('video') || post.title?.toLowerCase().includes('video')) {
+      return true
+    }
+    
+    return false
+  }
+
+  // Helper function to get media for a post
+  const getPostMedia = (post: Post) => {
+    const media = []
+    
+    // If post already has media array, use it
+    if (post.media && Array.isArray(post.media)) {
+      return post.media
+    }
+    
+    // Otherwise, construct media array from individual fields
+    
+    // Add main video first (if exists)
+    const videoUrl = getVideoUrl(post.video)
+    
+    if (videoUrl) {
+      // Get video thumbnail - prioritize post's videoThumbnail field
+      let videoThumbnail = null
+      
+      // 1. Check if post has a videoThumbnail field (from Posts collection)
+      if (post.videoThumbnail) {
+        videoThumbnail = getImageUrl(post.videoThumbnail)
+      }
+      // 2. Fallback to main image if no video thumbnail
+      else if (post.image) {
+        const imageUrl = getImageUrl(post.image)
+        if (imageUrl !== '/placeholder.svg') {
+          videoThumbnail = imageUrl
+        }
+      }
+      // 3. Use placeholder if no thumbnail available
+      if (!videoThumbnail || videoThumbnail === '/placeholder.svg') {
+        videoThumbnail = '/api/media/placeholder-video-thumbnail'
+      }
+      
+      const videoMedia = {
+        type: 'video' as const,
+        url: videoUrl,
+        thumbnail: videoThumbnail,
+        alt: 'Post video',
+        duration: undefined // Could be extracted from video metadata if needed
+      }
+      
+      media.push(videoMedia)
+    } else {
+      // If getVideoUrl returns null, try to construct URL manually
+      if (post.video && typeof post.video === 'object' && post.video.filename) {
+        const manualVideoUrl = `/api/media/file/${post.video.filename}`
+        const videoMedia = {
+          type: 'video' as const,
+          url: manualVideoUrl,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object' && post.video.url) {
+        // If video object has a direct URL, use it
+        const videoMedia = {
+          type: 'video' as const,
+          url: post.video.url,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object') {
+        // Last resort: try to construct URL from any available field
+        const videoObj = post.video as any
+        let fallbackUrl = null
+        
+        if (videoObj.url) {
+          fallbackUrl = videoObj.url
+        } else if (videoObj.filename) {
+          fallbackUrl = `/api/media/file/${videoObj.filename}`
+        } else if (videoObj.id) {
+          fallbackUrl = `/api/media/file/${videoObj.id}`
+        }
+        
+        if (fallbackUrl) {
+          const videoMedia = {
+            type: 'video' as const,
+            url: fallbackUrl,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video',
+            duration: undefined
+          }
+          media.push(videoMedia)
+        }
+      }
+    }
+    
+    // Add videos array
+    if (post.videos && Array.isArray(post.videos)) {
+      post.videos.forEach(video => {
+        const url = getVideoUrl(video)
+        if (url) {
+          media.push({
+            type: 'video' as const,
+            url,
+            thumbnail: '/api/media/placeholder-video-thumbnail', // Use placeholder for additional videos
+            alt: 'Post video'
+          })
+        }
+      })
+    }
+    
+    // Add main image (only if no video)
+    if (!videoUrl && post.image) {
+      const imageUrl = getImageUrl(post.image)
+      if (imageUrl !== '/placeholder.svg') {
+        media.push({
+          type: 'image' as const,
+          url: imageUrl,
+          alt: 'Post image'
+        })
+      }
+    }
+    
+    // Add photos array
+    if (post.photos && Array.isArray(post.photos)) {
+      post.photos.forEach((photo, index) => {
+        const imageUrl = getImageUrl(photo)
+        if (imageUrl !== '/placeholder.svg') {
+          media.push({
+            type: 'image' as const,
+            url: imageUrl,
+            alt: `Photo ${index + 1}`
+          })
+        }
+      })
+    }
+    
+    return media
   }
 
   // Helper function to get media count
@@ -351,7 +637,7 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-1 sm:gap-2 md:gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {posts.map((post, index) => {
           const primaryUrl = getPrimaryDisplayUrl(post)
           const isVideo = hasVideoContent(post)
@@ -360,19 +646,44 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
           return (
             <Card
               key={post.id}
-              className="aspect-square relative overflow-hidden cursor-pointer group border-0 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
+              className="relative overflow-hidden cursor-pointer group border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 bg-white"
               onClick={() => setSelectedPost(post)}
             >
-              {primaryUrl ? (
-                <>
-                  {imageLoadingStates[post.id] && (
-                    <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
-                      <ImageIcon className="h-8 w-8 text-gray-400" />
-                    </div>
-                  )}
-                  
-                  {isVideo ? (
-                    <div className="relative w-full h-full">
+              {/* Media Section */}
+              <div className="aspect-square relative overflow-hidden">
+                {primaryUrl ? (
+                  <>
+                    {imageLoadingStates[post.id] && (
+                      <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
+                        <ImageIcon className="h-8 w-8 text-gray-400" />
+                      </div>
+                    )}
+                    
+                    {isVideo ? (
+                      <div className="relative w-full h-full">
+                        {/* Video thumbnail with play button */}
+                        <Image
+                          src={primaryUrl}
+                          alt={post.title || "Post"}
+                          fill
+                          className="object-cover transition-all duration-300 group-hover:scale-110"
+                          onLoadingComplete={() => handleImageLoad(post.id)}
+                          onLoadStart={() => handleImageLoadStart(post.id)}
+                        />
+                        
+                        {/* Video indicator */}
+                        <div className="absolute top-3 right-3 bg-black/70 text-white p-2 rounded-full">
+                          <Video className="h-4 w-4" />
+                        </div>
+                        
+                        {/* Play button overlay */}
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center">
+                            <Play className="h-8 w-8 text-gray-800 ml-1" />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
                       <Image
                         src={primaryUrl}
                         alt={post.title || "Post"}
@@ -381,59 +692,110 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                         onLoadingComplete={() => handleImageLoad(post.id)}
                         onLoadStart={() => handleImageLoadStart(post.id)}
                       />
-                      
-                      {/* Video indicator */}
-                      <div className="absolute top-2 right-2 bg-black/70 text-white p-1 rounded-full">
-                        <Video className="h-3 w-3" />
-                      </div>
-                      
-                      {/* Play button overlay */}
-                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center">
-                          <Play className="h-6 w-6 text-gray-800 ml-1" />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <Image
-                      src={primaryUrl}
-                      alt={post.title || "Post"}
-                      fill
-                      className="object-cover transition-all duration-300 group-hover:scale-110"
-                      onLoadingComplete={() => handleImageLoad(post.id)}
-                      onLoadStart={() => handleImageLoadStart(post.id)}
-                    />
-                  )}
-                </>
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300">
-                  <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-gray-500 transition-colors" />
-                </div>
-              )}
+                    )}
+                  </>
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300">
+                    <ImageIcon className="h-12 w-12 text-gray-400 group-hover:text-gray-500 transition-colors" />
+                  </div>
+                )}
 
-              {/* Media count indicator */}
-              {mediaCount > 1 && (
-                <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
-                  <ImageIcon className="h-3 w-3" />
-                  {mediaCount}
-                </div>
-              )}
+                {/* Media count indicator */}
+                {mediaCount > 1 && (
+                  <div className="absolute top-3 left-3 bg-black/70 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                    <ImageIcon className="h-3 w-3" />
+                    {mediaCount}
+                  </div>
+                )}
 
-              {/* Overlay with stats */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3">
-                <div className="flex items-center gap-3 text-white text-sm">
-                  {post.likeCount !== undefined && (
-                    <div className="flex items-center gap-1">
-                      <span>❤️</span>
-                      <span>{post.likeCount}</span>
+                {/* Post type badge */}
+                {post.type && post.type !== 'post' && (
+                  <div className="absolute top-3 left-3 bg-[#FF6B6B] text-white px-2 py-1 rounded-full text-xs font-medium">
+                    {post.type.charAt(0).toUpperCase() + post.type.slice(1)}
+                  </div>
+                )}
+              </div>
+
+              {/* Content Section */}
+              <div className="p-4">
+                {/* Title */}
+                {post.title && (
+                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#FF6B6B] transition-colors">
+                    {post.title}
+                  </h3>
+                )}
+                
+                {/* Content preview */}
+                {post.content && (
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-3 leading-relaxed">
+                    {post.content}
+                  </p>
+                )}
+
+                {/* Location */}
+                {post.location && (
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
+                    <MapPin className="h-3 w-3" />
+                    <span className="truncate">{post.location.name}</span>
+                  </div>
+                )}
+
+                {/* Rating */}
+                {post.rating && (
+                  <div className="flex items-center gap-1 mb-2">
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => (
+                        <span
+                          key={i}
+                          className={`text-sm ${
+                            i < post.rating! ? "text-yellow-400" : "text-gray-300"
+                          }`}
+                        >
+                          ⭐
+                        </span>
+                      ))}
                     </div>
-                  )}
-                  {post.commentCount !== undefined && (
-                    <div className="flex items-center gap-1">
-                      <span>💬</span>
-                      <span>{post.commentCount}</span>
-                    </div>
-                  )}
+                    <span className="text-xs text-gray-500 ml-1">{post.rating}/5</span>
+                  </div>
+                )}
+
+                {/* Stats and Date */}
+                <div className="flex items-center justify-between text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center gap-3">
+                    {post.likeCount !== undefined && (
+                      <div className="flex items-center gap-1">
+                        <span>❤️</span>
+                        <span>{post.likeCount}</span>
+                      </div>
+                    )}
+                    {post.commentCount !== undefined && (
+                      <div className="flex items-center gap-1">
+                        <span>💬</span>
+                        <span>{post.commentCount}</span>
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs">
+                    {new Date(post.createdAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              {/* Hover overlay with quick actions */}
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="flex items-center gap-4">
+                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
+                    <Heart className="h-6 w-6 text-gray-700" />
+                  </div>
+                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
+                    <MessageCircle className="h-6 w-6 text-gray-700" />
+                  </div>
+                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
+                    <Share2 className="h-6 w-6 text-gray-700" />
+                  </div>
                 </div>
               </div>
             </Card>
@@ -443,8 +805,11 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
 
       {/* Post Modal */}
       {selectedPost && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setSelectedPost(null)}>
-          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <Dialog open={!!selectedPost} onOpenChange={() => setSelectedPost(null)}>
+          <DialogContent className="max-w-4xl w-full max-h-[90vh] overflow-hidden p-0 bg-white rounded-2xl">
+            <DialogHeader className="sr-only">
+              <DialogTitle>Post Details</DialogTitle>
+            </DialogHeader>
             <div className="flex flex-col lg:flex-row h-full">
               {/* Media Section */}
               <div className="flex-1 bg-black flex items-center justify-center min-h-[40vh] lg:min-h-[60vh]">
@@ -454,6 +819,9 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                     aspectRatio="auto"
                     enableVideoPreview={true}
                     videoPreviewMode="click"
+                    showControls={true}
+                    showDots={true}
+                    autoPlay={false}
                     className="w-full h-full"
                   />
                 ) : (
@@ -512,8 +880,8 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </>
   )

@@ -45,9 +45,16 @@ export async function GET(request: NextRequest) {
       fullUser = await payload.findByID({
         collection: 'users',
         id: user.id,
-        depth: 3,
+        depth: 1, // Reduced from 3 to 1 to minimize data processing
       })
-      console.log('[ME] fullUser found:', fullUser)
+      console.log('[ME] fullUser found:', {
+      id: fullUser.id,
+      name: fullUser.name,
+      email: fullUser.email,
+      hasProfileImage: !!fullUser.profileImage,
+      savedPostsCount: Array.isArray(fullUser.savedPosts) ? fullUser.savedPosts.length : 0,
+      likedPostsCount: Array.isArray(fullUser.likedPosts) ? fullUser.likedPosts.length : 0
+    })
     } catch (findError) {
       console.error('[ME] Error in payload.findByID:', findError)
       return NextResponse.json({ error: 'findByID error', details: findError instanceof Error ? findError.message : findError }, { status: 500 })
@@ -72,10 +79,8 @@ export async function GET(request: NextRequest) {
       : []
 
     console.log('📊 [API] User interaction data:', { 
-      rawSavedPosts: fullUser.savedPosts, 
-      extractedSavedPostIds: savedPostIds,
-      rawLikedPosts: fullUser.likedPosts,
-      extractedLikedPostIds: likedPostIds
+      savedPostsCount: savedPostIds.length,
+      likedPostsCount: likedPostIds.length
     })
 
     // Prepare response with enhanced profile image handling
@@ -83,6 +88,8 @@ export async function GET(request: NextRequest) {
       id: fullUser.id,
       name: fullUser.name,
       email: fullUser.email,
+      username: fullUser.username,
+      bio: fullUser.bio,
       profileImage: fullUser.profileImage ? {
         id: fullUser.profileImage.id,
         url: fullUser.profileImage.url,
@@ -92,9 +99,13 @@ export async function GET(request: NextRequest) {
         sizes: fullUser.profileImage.sizes
       } : null,
       location: fullUser.location,
+      interests: fullUser.interests,
+      socialLinks: fullUser.socialLinks,
       savedPosts: savedPostIds,
       likedPosts: likedPostIds,
       role: fullUser.role,
+      isCreator: fullUser.isCreator,
+      creatorLevel: fullUser.creatorLevel,
       // Add any other fields you need
     }
 

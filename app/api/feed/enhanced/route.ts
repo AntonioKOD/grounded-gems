@@ -65,12 +65,18 @@ export async function GET(request: NextRequest) {
       timeOfDay: timeOfDay as any,
       interests,
       socialCircle,
+      page,
+      limit,
+      feedType,
+      sortBy,
+      filters: {
+        includeTypes,
+        excludeTypes
+      }
     })
 
-    // Update user interaction states if user is logged in
-    if (user?.id && feedItems.length > 0) {
-      await updateUserInteractionStates(feedItems, user?.id as string, payload)
-    }
+    // Note: User interaction states are now handled within the feed algorithm
+    // No need for additional user data queries here
 
     const itemTypeCounts = feedItems.reduce((acc: Record<string, number>, item) => {
       acc[item.type] = (acc[item.type] || 0) + 1
@@ -141,82 +147,22 @@ export async function GET(request: NextRequest) {
 
 /**
  * Update interaction states (likes, saves) for feed items
+ * NOTE: This function is now deprecated as interaction states are handled within the feed algorithm
  */
 async function updateUserInteractionStates(
   items: FeedItem[],
   userId: string,
   payload: any
 ): Promise<void> {
-  try {
-    // Get user with their liked posts, saved posts, and purchased guides
-    const [userWithInteractions, purchasedGuides] = await Promise.all([
-      payload.findByID({
-        collection: 'users',
-        id: userId,
-        depth: 1
-      }),
-      payload.find({
-        collection: 'guide-purchases',
-        where: { user: { equals: userId } },
-        limit: 1000
-      })
-    ])
-    
-    const likedPostIds = new Set((userWithInteractions.likedPosts || []).map((post: any) => 
-      typeof post === 'string' ? post : post?.id
-    ))
-    
-    const savedPostIds = new Set((userWithInteractions.savedPosts || []).map((post: any) => 
-      typeof post === 'string' ? post : post?.id
-    ))
-    
-    const purchasedGuideIds = new Set(purchasedGuides.docs.map((purchase: any) => 
-      purchase.guide?.id || purchase.guide
-    ))
-    
-    // Update post items with interaction states
-    items.forEach(item => {
-      if (item.type === 'post' && item.post) {
-        // Check if this post is in the user's liked/saved arrays
-        item.post.isLiked = likedPostIds.has(item.post.id)
-        item.post.isSaved = savedPostIds.has(item.post.id)
-        
-        console.log(`📝 Post ${item.post.id} interaction states:`, {
-          isLiked: item.post.isLiked,
-          isSaved: item.post.isSaved,
-          userLikedPosts: Array.from(likedPostIds),
-          userSavedPosts: Array.from(savedPostIds)
-        })
-      }
-      
-      if (item.type === 'guide_spotlight' && item.guide) {
-        item.guide.isPurchased = purchasedGuideIds.has(item.guide.id)
-      }
-    })
-  } catch (error) {
-    console.error('Error updating user interaction states:', error)
-  }
+  // This function is no longer needed as interaction states are handled in the feed algorithm
+  console.log('⚠️ updateUserInteractionStates is deprecated - interaction states handled in feed algorithm')
 }
 
-/**
- * Calculate content mix percentages
- */
 function calculateContentMix(items: FeedItem[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  const total = items.length
-  
-  if (total === 0) return {}
-  
-  items.forEach(item => {
-    counts[item.type] = (counts[item.type] || 0) + 1
-  })
-  
-  return Object.fromEntries(
-    Object.entries(counts).map(([type, count]) => [
-      type, 
-      Math.round((count / total) * 100)
-    ])
-  )
+  return items.reduce((acc: Record<string, number>, item) => {
+    acc[item.type] = (acc[item.type] || 0) + 1
+    return acc
+  }, {})
 }
 
 export async function OPTIONS() {

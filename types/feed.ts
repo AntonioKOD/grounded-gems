@@ -106,6 +106,13 @@ export interface User {
       location?: string
       verified: boolean
       createdAt: string
+      // Enhanced fields
+      isCreator?: boolean
+      creatorLevel?: string
+      lastActive?: string
+      averageRating?: number
+      reviewCount?: number
+      distance?: string
     }
   }
   

@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import {
   Mail,
   MapPin,
-  Calendar,
   ExternalLink,
   Instagram,
   Twitter,
@@ -33,7 +32,8 @@ import {
   Star,
   Sparkles,
   AlertCircle,
-  DollarSign
+  DollarSign,
+  Calendar
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
@@ -44,7 +44,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { followUser, unfollowUser, getFeedPostsByUser, getFollowers, getFollowing, getUserbyId, getCategories } from "@/app/actions"
+import { getFeedPostsByUser, getFollowers, getFollowing, getUserProfile, getCategories } from "@/app/actions"
 import { PostCard } from "@/components/post/post-card"
 import type { Post } from "@/types/feed"
 import { useAuth } from "@/hooks/use-auth"
@@ -58,9 +58,10 @@ import { logoutUser } from "@/lib/auth"
 import { getImageUrl } from "@/lib/image-utils"
 import CreatorApplicationButton from "@/components/creator/creator-application-button"
 import CreatorEarningsDashboard from "@/components/guides/creator-earnings-dashboard"
+import FollowersModal from "./followers-modal"
+import FollowingModal from "./following-modal"
 
-// Environment check for debugging
-const isDevelopment = process.env.NODE_ENV === 'development'
+
 
 // Helper to debounce API calls
 const debounce = <T extends (...args: any[]) => any>(func: T, wait: number): T => {
@@ -88,7 +89,7 @@ export default function ProfileContent({
 
   // State
   const [profile, setProfile] = useState<UserProfile | null>(initialUserData)
-  const [isLoading, setIsLoading] = useState(!initialUserData)
+  const [isLoading, setIsLoading] = useState(false) // Changed to false since we have initial data
   const [error, setError] = useState<string | null>(null)
   const [isCurrentUser, setIsCurrentUser] = useState(false)
   const [isFollowing, setIsFollowing] = useState(false)
@@ -102,12 +103,54 @@ export default function ProfileContent({
   const [activeTab, setActiveTab] = useState("posts")
   const [hasLoadedPosts, setHasLoadedPosts] = useState(false)
   const [hasLoadedSavedPosts, setHasLoadedSavedPosts] = useState(false)
+  const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false)
+  const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false)
 
   // Rate limiting and caching refs
   const lastFetchTime = useRef<number>(0)
   const fetchCache = useRef<Map<string, { data: any; timestamp: number }>>(new Map())
   const isDataStale = useRef<boolean>(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const hasInitialized = useRef<boolean>(false) // Track if initial data fetch is complete
+
+  // Helper function to normalize user ID for comparison
+  const normalizeId = (id: any): string => {
+    if (typeof id === 'string') return id
+    if (id && typeof id === 'object' && id.id) return String(id.id)
+    return String(id)
+  }
+
+  // Initialize following state from initial data
+  useEffect(() => {
+    if (initialUserData && currentUser) {
+      // Only initialize if we're not viewing our own profile
+      const isOwnProfile = currentUser.id === initialUserData.id
+      
+      if (!isOwnProfile) {
+        // Priority 1: Use the isFollowing field from API if available
+        if (initialUserData.isFollowing !== undefined) {
+          setIsFollowing(initialUserData.isFollowing)
+        } 
+        // Priority 2: Check followers list as fallback
+        else if (initialUserData.followers && Array.isArray(initialUserData.followers)) {
+          const currentUserId = normalizeId(currentUser.id)
+          const isUserFollowing = initialUserData.followers.some((followerId: any) => {
+            const followerIdNormalized = normalizeId(followerId)
+            const matches = followerIdNormalized === currentUserId
+            return matches
+          })
+          setIsFollowing(isUserFollowing)
+        } 
+        // Priority 3: Default to false if no data available
+        else {
+          setIsFollowing(false)
+        }
+      } else {
+        // If it's our own profile, ensure following state is false
+        setIsFollowing(false)
+      }
+    }
+  }, [initialUserData, currentUser])
 
   // Helper function to normalize post data
   const normalizePost = useCallback((post: any): any => {
@@ -116,9 +159,36 @@ export default function ProfileContent({
         ? post.image.trim()
         : post.image?.url || post.featuredImage?.url || null
 
+    const normalizedVideo = post.video || null
+    
+    // Handle video thumbnail from the post's videoThumbnail field first
+    let normalizedVideoThumbnail = null;
+    
+    // Check if post has a videoThumbnail field (from Posts collection)
+    if (post.videoThumbnail) {
+      if (typeof post.videoThumbnail === 'object' && post.videoThumbnail.url) {
+        normalizedVideoThumbnail = post.videoThumbnail.url;
+      } else if (typeof post.videoThumbnail === 'string') {
+        normalizedVideoThumbnail = `/api/media/file/${post.videoThumbnail}`;
+      }
+    } else if (post.video && typeof post.video === 'object') {
+      // Fallback to video media document thumbnail
+      if (post.video.videoThumbnail) {
+        normalizedVideoThumbnail = post.video.videoThumbnail.url;
+      } else if (post.video.isVideo) {
+        // If it's marked as video but no thumbnail, use placeholder
+        normalizedVideoThumbnail = '/api/media/placeholder-video-thumbnail';
+      }
+    } else if (post.image || post.featuredImage) {
+      // Fallback to main image if available
+      normalizedVideoThumbnail = post.image?.url || post.featuredImage?.url || post.image || post.featuredImage;
+    }
+
     return {
       ...post,
       image: normalizedImage,
+      video: normalizedVideo,
+      videoThumbnail: normalizedVideoThumbnail,
     }
   }, [])
 
@@ -126,35 +196,31 @@ export default function ProfileContent({
   const rateLimitedApiCall = useCallback(async (
     key: string, 
     apiCall: () => Promise<any>, 
-    minInterval: number = 2000, // Increased back to 2000ms for better rate limiting
+    minInterval: number = 500, // Reduced from 2000ms to 500ms for better UX
     priority: 'high' | 'medium' | 'low' = 'medium'
   ) => {
     const now = Date.now()
     const cached = fetchCache.current.get(key)
     
     // Return cached data if it's fresh (varied cache time based on priority)
-    const cacheTime = priority === 'high' ? 5000 : priority === 'medium' ? 15000 : 30000
+    const cacheTime = priority === 'high' ? 10000 : priority === 'medium' ? 30000 : 60000
     if (cached && (now - cached.timestamp) < cacheTime) {
-      console.log(`Using cached data for ${key} (priority: ${priority})`)
       return cached.data
     }
 
-    // Advanced rate limiting with priority queue
+    // Advanced rate limiting with priority queue - Much more lenient
     const timeSinceLastCall = now - lastFetchTime.current
     const shouldRateLimit = timeSinceLastCall < minInterval
     
     if (shouldRateLimit && cached) {
-      console.log(`Rate limiting API call for ${key} (${timeSinceLastCall}ms < ${minInterval}ms), returning cached data`)
       return cached.data
     }
 
     // If high priority and no cache, allow even if rate limited
     if (priority === 'high' && !cached && shouldRateLimit) {
-      console.log(`High priority call for ${key}, bypassing rate limit`)
     } else if (shouldRateLimit) {
       // Wait for the remaining time before making the call
       const waitTime = minInterval - timeSinceLastCall
-      console.log(`Waiting ${waitTime}ms before making call for ${key}`)
       await new Promise(resolve => setTimeout(resolve, waitTime))
     }
 
@@ -167,7 +233,6 @@ export default function ProfileContent({
       abortControllerRef.current = new AbortController()
       lastFetchTime.current = Date.now()
       
-      console.log(`Making API call for ${key} (priority: ${priority})`)
       const result = await apiCall()
       
       // Cache the result with timestamp
@@ -176,14 +241,12 @@ export default function ProfileContent({
       return result
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        console.log(`Request aborted for ${key}`)
         return cached?.data || null
       }
       console.error(`API call failed for ${key}:`, error)
       
       // Return cached data if available, even if stale
       if (cached) {
-        console.log(`Returning stale cached data for ${key} due to error`)
         return cached.data
       }
       
@@ -194,60 +257,81 @@ export default function ProfileContent({
   // Coordinated follow data fetcher with proper sequencing
   const debouncedFetchFollowData = useMemo(
     () => debounce(async (profileId: string, currentUserId?: string) => {
-      if (!profileId || isProcessingFollow) return
+      if (!profileId || isProcessingFollow) {
+        return
+      }
 
       try {
-        console.log(`Fetching follow data for profile ${profileId}`)
+        // Clear cache before fetching to ensure fresh data
+        if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+          globalThis._followCache.delete(`followers-${profileId}`)
+          globalThis._followCache.delete(`following-${profileId}`)
+          if (currentUserId && currentUserId !== profileId) {
+            globalThis._followCache.delete(`followers-${currentUserId}`)
+            globalThis._followCache.delete(`following-${currentUserId}`)
+          }
+        }
         
         // Fetch followers first, then following with slight delay for better coordination
         const followersData = await rateLimitedApiCall(
           `followers-${profileId}`,
           () => getFollowers(profileId),
-          2500, // Increased rate limiting for better coordination
+          500, // Reduced from 2500ms to 500ms
           'medium'
         )
 
         // Small delay before fetching following data
-        await new Promise(resolve => setTimeout(resolve, 200))
+        await new Promise(resolve => setTimeout(resolve, 100)) // Reduced from 200ms to 100ms
 
         const followingData = await rateLimitedApiCall(
           `following-${profileId}`,
           () => getFollowing(profileId),
-          2500,
+          500, // Reduced from 2500ms to 500ms
           'medium'
         )
 
-        console.log('Follow data received:', { 
-          followersCount: followersData?.length || 0, 
-          followingCount: followingData?.length || 0 
-        })
-
-        // Update state even if only one call succeeded
+        // Update followers list with fresh data from server
         if (followersData !== null) {
-          setFollowers(Array.isArray(followersData) ? followersData : [])
+          const freshFollowers = Array.isArray(followersData) ? followersData : []
+          setFollowers(freshFollowers)
+          
+          // Update profile follower count to match server data
+          setProfile(prev => prev ? {
+            ...prev,
+            followerCount: freshFollowers.length
+          } : prev)
         }
         
         if (followingData !== null) {
           setFollowing(Array.isArray(followingData) ? followingData : [])
         }
 
-        // Check following status
+        // Check following status with improved ID comparison
         if (currentUserId && followersData && Array.isArray(followersData)) {
-          const isUserFollowing = followersData.some((follower: any) => follower.id === currentUserId)
-          setIsFollowing(isUserFollowing)
-          console.log(`User ${currentUserId} is ${isUserFollowing ? '' : 'not '}following ${profileId}`)
+          const currentId = normalizeId(currentUserId)
+          const isUserFollowing = followersData.some((follower: any) => {
+            const followerId = normalizeId(follower.id || follower)
+            const matches = followerId === currentId
+            return matches
+          })
+          
+          // Only update if the state is different AND we're not in the middle of a follow action
+          if (isFollowing !== isUserFollowing && !isProcessingFollow) {
+            setIsFollowing(isUserFollowing)
+          } else {
+          }
         }
       } catch (error) {
-        console.error("Error fetching follow data:", error)
+        console.error("❌ Error fetching follow data:", error)
         if (error instanceof Error && error.message.includes('429')) {
           toast.error("Too many requests. Please wait a moment.")
         } else {
           // Don't show error toast for follow data failures - it's not critical
-          console.warn("Follow data fetch failed, continuing without it")
+          console.warn("⚠️ Follow data fetch failed, continuing without it")
         }
       }
-    }, 800), // Balanced debounce time
-    [rateLimitedApiCall, isProcessingFollow]
+    }, 800),
+    [rateLimitedApiCall, isProcessingFollow, isFollowing]
   )
 
   // Coordinated posts fetcher with priority handling
@@ -257,16 +341,12 @@ export default function ProfileContent({
 
       setIsLoadingPosts(true)
       try {
-        console.log(`Fetching posts for profile ${profileId}`)
-        
         const posts = await rateLimitedApiCall(
           `posts-${profileId}`,
           () => getFeedPostsByUser(profileId),
-          3000, // Increased for better coordination with follow data
-          'high' // High priority for posts as they're user-requested
+          500, // Reduced from 3000ms to 500ms
+          'high'
         )
-
-        console.log('Posts data received:', { postsCount: posts?.length || 0 })
 
         if (posts && Array.isArray(posts)) {
           const formattedPosts = posts.map((post: any) => {
@@ -285,6 +365,11 @@ export default function ProfileContent({
               createdAt: post.createdAt || new Date().toISOString(),
               updatedAt: post.updatedAt || post.createdAt || new Date().toISOString(),
               image: normalizedPost.image,
+              video: normalizedPost.video,
+              videoThumbnail: normalizedPost.videoThumbnail,
+              media: post.media, // Include the media array from backend
+              photos: post.photos,
+              videos: post.videos,
               likeCount: post.likes?.length || 0,
               commentCount: post.comments?.length || 0,
               isLiked: false,
@@ -306,9 +391,7 @@ export default function ProfileContent({
 
           setUserPosts(formattedPosts)
           setHasLoadedPosts(true)
-          console.log(`Successfully loaded ${formattedPosts.length} posts for profile`)
         } else {
-          console.log('No posts found or invalid posts data')
           setUserPosts([])
           setHasLoadedPosts(true)
         }
@@ -318,14 +401,13 @@ export default function ProfileContent({
           toast.error("Too many requests. Please wait a moment.")
         } else {
           console.error("Failed to load user posts:", error)
-          // Don't show error toast immediately - might be temporary
         }
         // Still mark as loaded to prevent infinite retries
         setHasLoadedPosts(true)
       } finally {
         setIsLoadingPosts(false)
       }
-    }, 1000), // Increased debounce for better coordination
+    }, 1000),
     [rateLimitedApiCall, hasLoadedPosts, activeTab, normalizePost, profile]
   )
 
@@ -337,133 +419,76 @@ export default function ProfileContent({
         setIsCurrentUser(isOwn)
       }
 
-      // Only update following status if we have followers data and it's different
-      if (followers.length > 0) {
-        const shouldBeFollowing = followers.some((follower) => follower.id === currentUser.id)
-        if (isFollowing !== shouldBeFollowing) {
-          setIsFollowing(shouldBeFollowing)
-        }
+      // Initialize global follow cache if it doesn't exist
+      if (typeof globalThis !== 'undefined' && !globalThis._followCache) {
+        globalThis._followCache = new Map()
       }
     }
-  }, [currentUser, profile, followers, isCurrentUser, isFollowing])
+  }, [currentUser, profile, isCurrentUser])
 
-  // Fetch profile data if not provided or incomplete
+  // Also check with initialUserData for immediate state setting
   useEffect(() => {
-    const fetchProfileData = async () => {
-      // Skip if we already have valid profile data
-      if (initialUserData && initialUserData.id) {
-        console.log('Using initial user data for profile:', initialUserData.id)
-        return
-      }
-
-      if (!userId) {
-        console.error('No userId provided for profile fetch')
-        setError("Profile ID is missing")
-        return
-      }
-
-      console.log('Fetching profile data for userId:', userId)
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const userData = await rateLimitedApiCall(
-          `profile-${userId}`,
-          () => getUserbyId(userId),
-          2000,
-          'high' // High priority for initial profile load
-        )
-
-        if (userData) {
-          console.log('Successfully fetched profile data:', userData.name || 'Unknown')
-          
-          const mappedProfile: UserProfile = {
-            id: userData.id as string,
-            email: userData.email || '',
-            name: userData.name || '',
-            bio: userData.bio || '',
-            location: userData.location || null,
-            profileImage: userData.profileImage || null,
-            createdAt: userData.createdAt || '',
-            followerCount: userData.followerCount || 0,
-            followingCount: userData.followingCount || 0,
-            isCreator: userData.isCreator || false,
-            creatorLevel: userData.creatorLevel || undefined,
-            interests: userData.interests || [],
-            socialLinks: userData.socialLinks || []
-          }
-
-          setProfile(mappedProfile)
-          isDataStale.current = false
-        } else {
-          console.warn('No user data returned for userId:', userId)
-          setError("Could not load this profile. It may not exist or you may not have permission to view it.")
-        }
-      } catch (err) {
-        console.error("Error fetching profile:", err)
-        if (err instanceof Error) {
-          if (err.message.includes('429')) {
-            setError("Too many requests. Please refresh the page in a moment.")
-          } else if (err.message.includes('404') || err.message.includes('Not Found')) {
-            setError("This profile does not exist.")
-          } else if (err.message.includes('Invalid ID')) {
-            setError("Invalid profile ID format.")
-          } else {
-            setError("Failed to load profile data. Please try refreshing the page.")
-          }
-        } else {
-          setError("Failed to load profile data")
-        }
-      } finally {
-        setIsLoading(false)
+    if (currentUser && initialUserData) {
+      const isOwn = currentUser.id === initialUserData.id
+      if (isCurrentUser !== isOwn) {
+        setIsCurrentUser(isOwn)
       }
     }
+  }, [currentUser, initialUserData, isCurrentUser])
 
-    fetchProfileData()
-  }, [userId, initialUserData, rateLimitedApiCall])
-
-  // Coordinated data fetching sequence
+  // Separate useEffect for following status updates from followers list
   useEffect(() => {
-    if (!profile?.id) return
-
-    // Sequenced data fetching for better coordination
-    const fetchProfileData = async () => {
-      console.log('Starting coordinated data fetch for profile:', profile.id)
+    if (currentUser && !isCurrentUser && followers.length > 0 && !isProcessingFollow) {
+      const currentId = normalizeId(currentUser.id)
+      const shouldBeFollowing = followers.some((follower) => {
+        const followerId = normalizeId(follower.id || follower)
+        const matches = followerId === currentId
+        return matches
+      })
       
-      // Step 1: Always fetch follow data first (lower priority, cached longer)
-      if (followers.length === 0 || following.length === 0 || isDataStale.current) {
-        console.log('Triggering follow data fetch for profile:', profile.id)
-        debouncedFetchFollowData(profile.id, currentUser?.id)
-        
-        // Step 2: Wait a bit before fetching posts if needed
-        if (activeTab === "posts" && !hasLoadedPosts) {
-          setTimeout(() => {
-            console.log('Triggering delayed posts fetch for tab:', activeTab)
-            debouncedFetchUserPosts(profile.id)
-          }, 1000) // 1 second delay for coordination
-        }
-      } else if (activeTab === "posts" && !hasLoadedPosts) {
-        // If we already have follow data, fetch posts immediately
-        console.log('Triggering immediate posts fetch for tab:', activeTab)
-        debouncedFetchUserPosts(profile.id)
+      // Only update if the state is different to avoid unnecessary re-renders
+      if (isFollowing !== shouldBeFollowing) {
+        setIsFollowing(shouldBeFollowing)
+      } else {
+      }
+    } else if (followers.length === 0 && !isCurrentUser) {
+      console.log('⚠️ No followers data available for follow status check')
+    } else if (isProcessingFollow) {
+      console.log('⏸️ Skipping follow status check - processing follow action')
+    }
+  }, [currentUser, followers, isCurrentUser, isFollowing, isProcessingFollow])
+
+  // SINGLE CONSOLIDATED useEffect for all data fetching
+  useEffect(() => {
+    if (!profile?.id || hasInitialized.current) return
+
+    const initializeProfileData = async () => {
+      hasInitialized.current = true
+
+      // Step 1: Fetch follow data (only once)
+      if (followers.length === 0 || following.length === 0) {
+        await debouncedFetchFollowData(profile.id, currentUser?.id)
+      }
+
+      // Step 2: Fetch posts if on posts tab (only if not already loaded)
+      if (activeTab === "posts" && !hasLoadedPosts) {
+        setTimeout(() => {
+          debouncedFetchUserPosts(profile.id)
+        }, 500) // Small delay to avoid overwhelming the server
       }
     }
 
-    fetchProfileData()
+    initializeProfileData()
   }, [profile?.id, currentUser?.id, activeTab, hasLoadedPosts, debouncedFetchFollowData, debouncedFetchUserPosts])
 
-  // Handle tab changes for posts
+  // Handle tab changes for posts (only when switching to posts tab)
   useEffect(() => {
-    if (!profile?.id) return
+    if (!profile?.id || activeTab !== "posts" || hasLoadedPosts) return
     
-    // Only trigger posts fetch when switching to posts tab
-    if (activeTab === "posts" && !hasLoadedPosts && followers.length > 0) {
-      console.log('Tab changed to posts, triggering fetch')
-      debouncedFetchUserPosts(profile.id)
-    }
-  }, [activeTab, profile?.id, hasLoadedPosts, followers.length, debouncedFetchUserPosts])
+    debouncedFetchUserPosts(profile.id)
+  }, [activeTab, profile?.id, hasLoadedPosts, debouncedFetchUserPosts])
 
-  // Coordinated saved posts fetching
+  // Coordinated saved posts fetching (only when needed)
   useEffect(() => {
     const fetchSavedPosts = async () => {
       if (!profile?.id || hasLoadedSavedPosts || activeTab !== "saved") return
@@ -471,24 +496,26 @@ export default function ProfileContent({
 
       setIsLoadingSavedPosts(true)
       try {
-        console.log(`Fetching saved posts for user ${profile.id}`)
-        
         const savedPostsCall = () => fetch(`/api/users/${profile.id}/saved-posts?page=1&limit=50`)
-          .then(res => res.json())
-
-        const data = await rateLimitedApiCall(
+        const response = await rateLimitedApiCall(
           `saved-posts-${profile.id}`,
           savedPostsCall,
-          3500, // Higher interval to avoid conflicts with other calls
-          'low' // Lower priority since it's secondary data
+          3000,
+          'medium'
         )
 
-        if (data?.success && data.posts) {
-          setSavedPosts(Array.isArray(data.posts) ? data.posts : [])
-          setHasLoadedSavedPosts(true)
-          console.log(`Successfully loaded ${data.posts.length} saved posts`)
+        if (response && response.ok) {
+          const data = await response.json()
+          if (data && Array.isArray(data)) {
+            const formattedSavedPosts = data.map((post: any) => normalizePost(post))
+            setSavedPosts(formattedSavedPosts)
+            setHasLoadedSavedPosts(true)
+          } else {
+            setSavedPosts([])
+            setHasLoadedSavedPosts(true)
+          }
         } else {
-          console.error("Failed to load saved posts:", data?.error)
+          console.error('Failed to fetch saved posts:', response?.status)
           setSavedPosts([])
           setHasLoadedSavedPosts(true)
         }
@@ -496,16 +523,95 @@ export default function ProfileContent({
         console.error("Error fetching saved posts:", error)
         setSavedPosts([])
         setHasLoadedSavedPosts(true)
-        // Don't show error toast for saved posts - it's not critical
       } finally {
         setIsLoadingSavedPosts(false)
       }
     }
 
-    // Coordinated debounce with other data fetching
-    const timeoutId = setTimeout(fetchSavedPosts, 1200) // Longer delay for coordination
-    return () => clearTimeout(timeoutId)
-  }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser, rateLimitedApiCall])
+    fetchSavedPosts()
+  }, [profile?.id, activeTab, hasLoadedSavedPosts, isCurrentUser, rateLimitedApiCall, normalizePost])
+
+  // Function to refresh profile data from server
+  const refreshProfileData = useCallback(async () => {
+    if (!profile?.id) return
+    
+    try {
+      // Clear ALL caches to ensure fresh data
+      if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+        globalThis._followCache.delete(`followers-${profile.id}`)
+        globalThis._followCache.delete(`following-${profile.id}`)
+        // Also clear cache for current user if different from profile user
+        if (currentUser && currentUser.id !== profile.id) {
+          globalThis._followCache.delete(`followers-${currentUser.id}`)
+          globalThis._followCache.delete(`following-${currentUser.id}`)
+        }
+      }
+      
+      // Clear local cache as well
+      fetchCache.current.delete(`followers-${profile.id}`)
+      fetchCache.current.delete(`following-${profile.id}`)
+      if (currentUser && currentUser.id !== profile.id) {
+        fetchCache.current.delete(`followers-${currentUser.id}`)
+        fetchCache.current.delete(`following-${currentUser.id}`)
+      }
+      
+      // Fetch profile data
+      const response = await fetch(`/api/users/${profile.id}/profile`, {
+        credentials: 'include',
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.user) {
+          setProfile(data.user)
+          
+          // Also refresh followers list to update the UI immediately
+          try {
+            const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
+              credentials: 'include',
+            })
+            
+            if (followersResponse.ok) {
+              const followersData = await followersResponse.json()
+              if (followersData.success && Array.isArray(followersData.followers)) {
+                setFollowers(followersData.followers)
+                
+                // Update isFollowing state based on new followers list ONLY if we don't have a recent follow action
+                if (currentUser) {
+                  const currentId = normalizeId(currentUser.id)
+                  const isUserFollowing = followersData.followers.some((follower: any) => {
+                    const followerId = normalizeId(follower.id || follower)
+                    return followerId === currentId
+                  })
+                  
+                  // Only update if the state is different AND we're not in the middle of a follow action
+                  if (isFollowing !== isUserFollowing && !isProcessingFollow) {
+                    setIsFollowing(isUserFollowing)
+                  }
+                }
+              }
+            }
+          } catch (followersError) {
+            console.error('❌ Error refreshing followers:', followersError)
+          }
+        } else {
+          console.error('❌ Invalid profile data structure:', data)
+        }
+      } else {
+        console.error('❌ Failed to refresh profile data:', response.status)
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing profile data:', error)
+    }
+  }, [profile?.id, currentUser?.id, isFollowing, isProcessingFollow])
+
+  // Auto-refresh data when marked as stale
+  useEffect(() => {
+    if (isDataStale.current && profile?.id && !isProcessingFollow) {
+      debouncedFetchFollowData(profile.id, currentUser?.id)
+      isDataStale.current = false
+    }
+  }, [isDataStale.current, profile?.id, isProcessingFollow, debouncedFetchFollowData, currentUser?.id])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -515,8 +621,18 @@ export default function ProfileContent({
       }
       // Clear cache on unmount
       fetchCache.current.clear()
+      
+      // Clear follow cache for both users when component unmounts
+      if (typeof globalThis !== 'undefined' && globalThis._followCache && profile?.id && currentUser?.id) {
+        globalThis._followCache.delete(`followers-${profile.id}`)
+        globalThis._followCache.delete(`following-${profile.id}`)
+        if (currentUser.id !== profile.id) {
+          globalThis._followCache.delete(`followers-${currentUser.id}`)
+          globalThis._followCache.delete(`following-${currentUser.id}`)
+        }
+      }
     }
-  }, [])
+  }, [profile?.id, currentUser?.id])
 
   const handleLogout = async () => {
     try {
@@ -530,47 +646,332 @@ export default function ProfileContent({
   const handleFollowToggle = async () => {
     if (isProcessingFollow || !profile || !currentUser?.id) return
 
+    // Prevent self-following
+    if (profile.id === currentUser.id) {
+      toast.error("You cannot follow yourself")
+      return
+    }
+
     setIsProcessingFollow(true)
+    
     try {
       if (isFollowing) {
-        await unfollowUser(profile.id, currentUser.id)
-        toast.success(`Unfollowed ${profile.name || "user"}`)
+        // UNFOLLOW LOGIC
+        
+        const response = await fetch('/api/users/follow', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ userId: profile.id }),
+        })
 
-        setProfile((prev: UserProfile | null) =>
-          prev
-            ? {
-                ...prev,
-                followerCount: Math.max(0, (prev.followerCount || 1) - 1),
+        if (response.ok) {
+          toast.success(`Unfollowed ${profile.name || "user"}`)
+          
+          // IMMEDIATE UI UPDATES - No waiting for server refresh
+          setIsFollowing(false)
+          
+          // Immediately remove current user from followers list
+          setFollowers(prev => {
+            const currentId = normalizeId(currentUser.id)
+            const updated = prev.filter(follower => {
+              const followerId = normalizeId(follower.id || follower)
+              const shouldKeep = followerId !== currentId
+              return shouldKeep
+            })
+            return updated
+          })
+          
+          // Update profile follower count immediately
+          setProfile(prev => prev ? {
+            ...prev,
+            followerCount: Math.max(0, (prev.followerCount || 0) - 1),
+            followers: prev.followers ? prev.followers.filter((followerId: any) => {
+              const followerIdNormalized = normalizeId(followerId)
+              const currentId = normalizeId(currentUser.id)
+              return followerIdNormalized !== currentId
+            }) : prev.followers
+          } : prev)
+          
+          // Clear ALL caches immediately
+          if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+            globalThis._followCache.delete(`followers-${profile.id}`)
+            globalThis._followCache.delete(`following-${profile.id}`)
+            globalThis._followCache.delete(`followers-${currentUser.id}`)
+            globalThis._followCache.delete(`following-${currentUser.id}`)
+          }
+          fetchCache.current.delete(`followers-${profile.id}`)
+          fetchCache.current.delete(`following-${profile.id}`)
+          fetchCache.current.delete(`followers-${currentUser.id}`)
+          fetchCache.current.delete(`following-${currentUser.id}`)
+          
+          // Force refresh profile data after a delay to ensure server has recorded the action
+          setTimeout(async () => {
+            try {
+              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
+                credentials: 'include',
+              })
+            
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json()
+              if (refreshData.success && refreshData.user) {
+                setProfile(refreshData.user)
+                
+                // Also refresh followers list to ensure consistency
+                const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
+                  credentials: 'include',
+                })
+                
+                if (followersResponse.ok) {
+                  const followersData = await followersResponse.json()
+                  if (followersData.success && Array.isArray(followersData.followers)) {
+                    setFollowers(followersData.followers)
+                    
+                    // Update isFollowing state based on refreshed data
+                    if (currentUser) {
+                      const currentId = normalizeId(currentUser.id)
+                      const isUserFollowing = followersData.followers.some((follower: any) => {
+                        const followerId = normalizeId(follower.id || follower)
+                        return followerId === currentId
+                      })
+                      
+                      if (isFollowing !== isUserFollowing) {
+                        setIsFollowing(isUserFollowing)
+                      }
+                    }
+                  }
+                }
               }
-            : null
-        )
-
-        setFollowers((prev) => prev.filter((follower) => follower.id !== currentUser.id))
+            }
+          } catch (refreshError) {
+            console.error('Error refreshing profile after unfollow:', refreshError)
+          }
+          }, 1000) // Wait 1 second before refreshing
+          
+          // Mark data as stale to force refresh
+          isDataStale.current = true
+          
+          // Also refresh follow data in background for consistency
+          setTimeout(async () => {
+            try {
+              await debouncedFetchFollowData(profile.id, currentUser.id)
+            } catch (error) {
+              console.error('Background follow data refresh failed:', error)
+            }
+          }, 500)
+          
+        } else {
+          const errorData = await response.json()
+          console.error('❌ Unfollow API error:', errorData)
+          throw new Error(errorData.error || 'Failed to unfollow')
+        }
       } else {
-        await followUser(profile.id, currentUser.id)
-        toast.success(`Now following ${profile.name || "user"}`)
+        // FOLLOW LOGIC
+        
+        const response = await fetch('/api/users/follow', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ userId: profile.id }),
+        })
 
-        setProfile((prev: UserProfile | null) =>
-          prev
-            ? {
-                ...prev,
-                followerCount: (prev.followerCount || 0) + 1,
+        if (response.ok) {
+          toast.success(`Now following ${profile.name || "user"}`)
+          
+          // IMMEDIATE UI UPDATES - No waiting for server refresh
+          setIsFollowing(true)
+          
+          // Immediately add current user to followers list
+          const newFollower = {
+            id: currentUser.id,
+            name: currentUser.name || 'User',
+            username: currentUser.email?.split('@')[0] || 'user',
+            email: currentUser.email,
+            profileImage: currentUser.profileImage,
+            bio: '',
+            isVerified: false,
+            followerCount: 0
+          }
+          
+          setFollowers(prev => {
+            // Check if user is already in the list to avoid duplicates
+            const currentId = normalizeId(currentUser.id)
+            const alreadyExists = prev.some(follower => {
+              const followerId = normalizeId(follower.id || follower)
+              return followerId === currentId
+            })
+            
+            if (alreadyExists) {
+              return prev
+            }
+            
+            const updated = [newFollower, ...prev]
+            return updated
+          })
+          
+          // Update profile follower count immediately
+          setProfile(prev => prev ? {
+            ...prev,
+            followerCount: (prev.followerCount || 0) + 1,
+            followers: prev.followers ? [...prev.followers, currentUser.id] : [currentUser.id]
+          } : prev)
+          
+          // Clear ALL caches immediately
+          if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+            globalThis._followCache.delete(`followers-${profile.id}`)
+            globalThis._followCache.delete(`following-${profile.id}`)
+            globalThis._followCache.delete(`followers-${currentUser.id}`)
+            globalThis._followCache.delete(`following-${currentUser.id}`)
+          }
+          fetchCache.current.delete(`followers-${profile.id}`)
+          fetchCache.current.delete(`following-${profile.id}`)
+          fetchCache.current.delete(`followers-${currentUser.id}`)
+          fetchCache.current.delete(`following-${currentUser.id}`)
+          
+          // Force refresh profile data after a delay to ensure server has recorded the action
+          setTimeout(async () => {
+            try {
+              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
+                credentials: 'include',
+              })
+            
+            if (refreshResponse.ok) {
+              const refreshData = await refreshResponse.json()
+              if (refreshData.success && refreshData.user) {
+                setProfile(refreshData.user)
+                
+                // Also refresh followers list to ensure consistency
+                const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
+                  credentials: 'include',
+                })
+                
+                if (followersResponse.ok) {
+                  const followersData = await followersResponse.json()
+                  if (followersData.success && Array.isArray(followersData.followers)) {
+                    setFollowers(followersData.followers)
+                    
+                    // Update isFollowing state based on refreshed data
+                    if (currentUser) {
+                      const currentId = normalizeId(currentUser.id)
+                      const isUserFollowing = followersData.followers.some((follower: any) => {
+                        const followerId = normalizeId(follower.id || follower)
+                        return followerId === currentId
+                      })
+                      
+                      if (isFollowing !== isUserFollowing) {
+                        setIsFollowing(isUserFollowing)
+                      }
+                    }
+                  }
+                }
               }
-            : null,
-        )
-
-        setFollowers((prev) => [...prev, { id: currentUser.id, name: currentUser.name }])
+            }
+          } catch (refreshError) {
+            console.error('Error refreshing profile after follow:', refreshError)
+          }
+          }, 1000) // Wait 1 second before refreshing
+          
+          // Mark data as stale to force refresh
+          isDataStale.current = true
+          
+          // Also refresh follow data in background for consistency
+          setTimeout(async () => {
+            try {
+              await debouncedFetchFollowData(profile.id, currentUser.id)
+            } catch (error) {
+              console.error('Background follow data refresh failed:', error)
+            }
+          }, 500)
+          
+        } else {
+          const errorData = await response.json()
+          console.error('❌ Follow API error:', errorData)
+          
+          if (errorData.error === 'Already following this user') {
+            // User is already following, update state to reflect this
+            setIsFollowing(true)
+            toast.info("You are already following this user")
+            
+            // Force refresh profile data to get correct state
+            try {
+              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
+                credentials: 'include',
+              })
+              
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json()
+                if (refreshData.success && refreshData.user) {
+                  setProfile(refreshData.user)
+                  console.log('✅ Profile data refreshed after "Already following" error')
+                  
+                  // Also refresh followers list
+                  const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
+                    credentials: 'include',
+                  })
+                  
+                  if (followersResponse.ok) {
+                    const followersData = await followersResponse.json()
+                    if (followersData.success && Array.isArray(followersData.followers)) {
+                      setFollowers(followersData.followers)
+                      console.log('✅ Followers list refreshed after "Already following" error')
+                    }
+                  }
+                }
+              }
+            } catch (refreshError) {
+              console.error('Error refreshing profile after "Already following":', refreshError)
+            }
+            
+            // Clear cache and refresh data to ensure consistency
+            if (typeof globalThis !== 'undefined' && globalThis._followCache) {
+              globalThis._followCache.delete(`followers-${profile.id}`)
+              globalThis._followCache.delete(`following-${profile.id}`)
+              globalThis._followCache.delete(`followers-${currentUser.id}`)
+              globalThis._followCache.delete(`following-${currentUser.id}`)
+            }
+            fetchCache.current.delete(`followers-${profile.id}`)
+            fetchCache.current.delete(`following-${profile.id}`)
+            fetchCache.current.delete(`followers-${currentUser.id}`)
+            fetchCache.current.delete(`following-${currentUser.id}`)
+            isDataStale.current = true
+            
+            setTimeout(async () => {
+              try {
+                await debouncedFetchFollowData(profile.id, currentUser.id)
+              } catch (error) {
+                console.error('Background follow data refresh failed:', error)
+              }
+            }, 500)
+          } else {
+            throw new Error(errorData.error || 'Failed to follow')
+          }
+        }
       }
 
-      setIsFollowing(!isFollowing)
-      isDataStale.current = true // Mark data as stale
-
+      // Haptic feedback
       if (navigator.vibrate) {
         navigator.vibrate(50)
       }
+      
     } catch (error) {
-      console.error("Error toggling follow:", error)
-      toast.error("Failed to update follow status")
+      console.error("❌ Error toggling follow:", error)
+      
+      // Revert UI state on error
+      if (isFollowing) {
+        setIsFollowing(false)
+      } else {
+        setIsFollowing(true)
+      }
+      
+      if (error instanceof Error && error.message === 'Users cannot follow themselves') {
+        toast.error("You cannot follow yourself")
+      } else {
+        toast.error("Failed to update follow status")
+      }
     } finally {
       setIsProcessingFollow(false)
     }
@@ -647,17 +1048,6 @@ export default function ProfileContent({
   const getProfileImageUrl = () => {
     if (!profile?.profileImage) return "/placeholder.svg"
     const imageUrl = getImageUrl(profile.profileImage)
-    
-    if (isDevelopment) {
-      console.log('🖼️ [ProfileContent] Profile image processing:', {
-        profileId: profile.id,
-        hasProfileImage: !!profile.profileImage,
-        profileImageStructure: profile.profileImage,
-        processedUrl: imageUrl,
-        isPlaceholder: imageUrl === "/placeholder.svg"
-      })
-    }
-    
     return imageUrl !== "/placeholder.svg" ? imageUrl : "/placeholder.svg"
   }
 
@@ -742,6 +1132,8 @@ export default function ProfileContent({
   }
 
   if (!profile) return null
+
+
 
   const creatorLevel = getCreatorLevelDetails(profile.creatorLevel)
 
@@ -906,17 +1298,14 @@ export default function ProfileContent({
                         )}
 
                         {/* Bio */}
-                        {profile.bio && (
+                        {profile.bio ? (
                           <p className="text-gray-700 mb-3 leading-relaxed">{profile.bio}</p>
+                        ) : (
+                          <p className="text-gray-500 mb-3 italic">No bio provided</p>
                         )}
 
                         {/* Meta Info */}
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <Mail className="h-4 w-4 mr-1" />
-                            <span className="truncate">{profile.email}</span>
-                          </div>
-                          
                           {profile.location && (profile.location.city || profile.location.country) && (
                             <div className="flex items-center">
                               <MapPin className="h-4 w-4 mr-1" />
@@ -927,11 +1316,6 @@ export default function ProfileContent({
                               </span>
                             </div>
                           )}
-
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-1" />
-                            <span>Joined {formatDate(profile.createdAt)}</span>
-                          </div>
                         </div>
 
                         {/* Social Links */}
@@ -1000,6 +1384,7 @@ export default function ProfileContent({
                             {isFollowing ? "Following" : "Follow"}
                           </Button>
                         )}
+
                       </div>
                     </div>
                   </div>
@@ -1013,18 +1398,24 @@ export default function ProfileContent({
                     <div className="text-xl sm:text-2xl font-bold text-gray-900">{userPosts.length}</div>
                     <div className="text-xs sm:text-sm text-gray-500">Posts</div>
                   </div>
-                  <div className="space-y-1">
+                  <button 
+                    onClick={() => setIsFollowersModalOpen(true)}
+                    className="space-y-1 hover:bg-gray-100 rounded-lg p-2 transition-colors cursor-pointer"
+                  >
                     <div className="text-xl sm:text-2xl font-bold text-gray-900">
                       {followers.length || profile.followerCount || 0}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-500">Followers</div>
-                  </div>
-                  <div className="space-y-1">
+                  </button>
+                  <button 
+                    onClick={() => setIsFollowingModalOpen(true)}
+                    className="space-y-1 hover:bg-gray-100 rounded-lg p-2 transition-colors cursor-pointer"
+                  >
                     <div className="text-xl sm:text-2xl font-bold text-gray-900">
                       {following.length || profile.followingCount || 0}
                     </div>
                     <div className="text-xs sm:text-sm text-gray-500">Following</div>
-                  </div>
+                  </button>
                 </div>
               </div>
             </CardContent>
@@ -1114,7 +1505,7 @@ export default function ProfileContent({
                       <PostsGridSkeleton />
                     ) : (
                       <EnhancedPostsGrid
-                        posts={userPosts}
+                        posts={userPosts as any}
                         isCurrentUser={isCurrentUser}
                         gridType="dynamic"
                       />
@@ -1162,7 +1553,7 @@ export default function ProfileContent({
                           <PostsGridSkeleton />
                         ) : (
                           <EnhancedPostsGrid
-                            posts={savedPosts}
+                            posts={savedPosts as any}
                             isCurrentUser={isCurrentUser}
                             gridType="masonry"
                           />
@@ -1177,21 +1568,6 @@ export default function ProfileContent({
                 <div className="p-6 pt-4 space-y-6">
                   {/* About Information */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Card className="border-gray-200">
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-lg flex items-center">
-                          <Mail className="h-5 w-5 mr-2 text-[#FF6B6B]" />
-                          Contact
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <div>
-                          <label className="text-sm font-medium text-gray-500">Email</label>
-                          <p className="text-gray-900">{profile.email}</p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
                     <Card className="border-gray-200">
                       <CardHeader className="pb-3">
                         <CardTitle className="text-lg flex items-center">
@@ -1211,23 +1587,23 @@ export default function ProfileContent({
                         )}
                       </CardContent>
                     </Card>
+
+                    <Card className="border-gray-200">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg flex items-center">
+                          <Calendar className="h-5 w-5 mr-2 text-[#FF6B6B]" />
+                          Member Since
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div>
+                          <p className="text-gray-900">{formatDate(profile.createdAt)}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
 
-                  {/* Bio Section */}
-                  <Card className="border-gray-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg">About {profile.name || "User"}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {profile.bio ? (
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                          <p className="text-gray-700 leading-relaxed">{profile.bio}</p>
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 italic">No bio provided</p>
-                      )}
-                    </CardContent>
-                  </Card>
+
 
                   {/* Interests */}
                   {profile.interests && profile.interests.length > 0 && (
@@ -1290,24 +1666,7 @@ export default function ProfileContent({
                     </Card>
                   )}
 
-                  {/* Member Since */}
-                  <Card className="border-gray-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg flex items-center">
-                        <Calendar className="h-5 w-5 mr-2 text-[#FF6B6B]" />
-                        Member Since
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-gray-900 font-medium">{formatDate(profile.createdAt)}</p>
-                      <p className="text-sm text-gray-500 mt-1" suppressHydrationWarning>
-                        {profile.createdAt && typeof window !== 'undefined'
-                                                      ? `${Math.ceil((new Date().getTime() - new Date(profile.createdAt).getTime()) / (1000 * 60 * 60 * 24))} days on the journey`
-                          : 'Explorer with Sacavia'
-                        }
-                      </p>
-                    </CardContent>
-                  </Card>
+
                 </div>
               </TabsContent>
 
@@ -1323,6 +1682,24 @@ export default function ProfileContent({
           </Card>
         </div>
       </div>
+
+      {/* Followers Modal */}
+      <FollowersModal
+        isOpen={isFollowersModalOpen}
+        onClose={() => setIsFollowersModalOpen(false)}
+        userId={userId}
+        followers={followers}
+        onFollowersUpdate={setFollowers}
+      />
+
+      {/* Following Modal */}
+      <FollowingModal
+        isOpen={isFollowingModalOpen}
+        onClose={() => setIsFollowingModalOpen(false)}
+        userId={userId}
+        following={following}
+        onFollowingUpdate={setFollowing}
+      />
     </div>
   )
 }

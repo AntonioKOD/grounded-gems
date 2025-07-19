@@ -3,10 +3,10 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import ProfileHeader from "@/components/profile/profile-header"
+
 import ProfileContent from "@/components/profile/profile-content"
 import ProfileSkeleton from "@/components/profile/profile-skeleton"
-import { getUserbyId, getFollowers, getFollowing } from "@/app/actions"
+
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -22,9 +22,7 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
   const [isCurrentUser, setIsCurrentUser] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [followers, setFollowers] = useState<any[]>([])
-  const [following, setFollowing] = useState<any[]>([])
-  const [isFollowing, setIsFollowing] = useState(false)
+
 
   // Rate limiting and caching
   const lastFetchTime = useRef<number>(0)
@@ -36,7 +34,7 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
   const rateLimitedApiCall = useCallback(async (
     key: string, 
     apiCall: () => Promise<any>, 
-    minInterval: number = 3000
+    minInterval: number = 500 // Reduced from 3000ms to 500ms for better UX
   ) => {
     const now = Date.now()
     const cached = fetchCache.current.get(key)
@@ -47,12 +45,7 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
       return cached.data
     }
 
-    // Rate limit: prevent calls more frequent than minInterval
-    if ((now - lastFetchTime.current) < minInterval) {
-      console.log(`Rate limiting API call for ${key}, waiting...`)
-      return cached?.data || null
-    }
-
+    // RATE LIMITING DISABLED - Always execute immediately
     try {
       // Abort any previous request
       if (abortControllerRef.current) {
@@ -82,10 +75,12 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
         return cached?.data || null
       }
       
-      console.error(`Rate-limited API call failed for ${key}:`, error)
+      console.error(`API call failed for ${key}:`, error)
       throw error
     }
   }, [])
+
+
 
   useEffect(() => {
     // Prevent multiple initializations
@@ -120,7 +115,7 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
               }
               return null
             },
-            2000
+            500 // Reduced from 2000ms to 500ms
           )
 
           if (response) {
@@ -149,60 +144,35 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
           
           const profileData = await rateLimitedApiCall(
             `profile-${userId}`,
-            () => getUserbyId(userId),
+            async () => {
+              const res = await fetch(`/api/users/${userId}/profile`, {
+                method: "GET",
+                credentials: "include",
+              })
+              if (res.ok) {
+                const data = await res.json()
+                return data.user
+              }
+              throw new Error(`Failed to fetch profile: ${res.status}`)
+            },
             3000
           )
 
-          if (profileData) {
-            console.log("Profile data fetched:", profileData.id)
-            setProfileUser(profileData)
-            setIsCurrentUser(false)
+                  if (profileData) {
+          console.log("Profile data fetched:", profileData.id)
+          console.log("Profile data details:", {
+            isFollowing: profileData.isFollowing,
+            followers: profileData.followers,
+            followerCount: profileData.followerCount
+          })
+          setProfileUser(profileData)
+          setIsCurrentUser(false)
 
-            // 4. Fetch followers and following with delay
-            setTimeout(async () => {
-              try {
-                console.log(`Fetching follow data for user ID: ${profileData.id}`)
-                
-                const [fetchedFollowers, fetchedFollowing] = await Promise.all([
-                  rateLimitedApiCall(
-                    `followers-${profileData.id}`,
-                    () => getFollowers(profileData.id as string),
-                    4000
-                  ),
-                  rateLimitedApiCall(
-                    `following-${profileData.id}`,
-                    () => getFollowing(profileData.id as string),
-                    4000
-                  )
-                ])
 
-                if (fetchedFollowers) {
-                  setFollowers(fetchedFollowers || [])
-                  console.log(`Fetched ${fetchedFollowers?.length || 0} followers`)
-                }
-
-                if (fetchedFollowing) {
-                  setFollowing(fetchedFollowing || [])
-                  console.log(`Fetched ${fetchedFollowing?.length || 0} following`)
-                }
-
-                // Check if current user is following this profile
-                if (currentUserData && fetchedFollowers) {
-                  const isCurrentUserFollowing = fetchedFollowers.some(
-                    (follower: any) => follower.id === currentUserData.id,
-                  )
-                  setIsFollowing(isCurrentUserFollowing)
-                  console.log(`Current user is ${isCurrentUserFollowing ? "" : "not "}following this profile`)
-                }
-              } catch (error) {
-                console.error("Error fetching followers/following:", error)
-                // Don't set error state for follow data failures
-              }
-            }, 1000) // 1 second delay
 
           } else {
             setError("User not found")
-            console.log("User not found from getUserById")
+            console.log("User not found from getUserProfile")
           }
         } catch (error) {
           console.error("Error fetching profile user:", error)
@@ -272,17 +242,6 @@ export default function ProfileContainer({ userId }: ProfileContainerProps) {
   }
 
   return (
-    <>
-      <ProfileHeader
-        profileUser={profileUser}
-        currentUser={currentUser}
-        isCurrentUser={isCurrentUser}
-        isFollowing={isFollowing}
-        setIsFollowing={setIsFollowing}
-        followers={followers}
-        setFollowers={setFollowers}
-      />
-      <ProfileContent initialUserData={profileUser} userId={userId} />
-    </>
+    <ProfileContent initialUserData={profileUser} userId={userId} />
   )
 }

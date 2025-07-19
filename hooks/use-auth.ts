@@ -9,6 +9,38 @@ import type { UserData } from '@/lib/features/user/userSlice'
 import { useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
+// Global state to track auth initialization across all components
+const globalAuthState = {
+  isInitializing: false,
+  lastFetchTime: 0,
+  fetchPromise: null as Promise<any> | null,
+  initializedComponents: new Set<string>(),
+  
+  canFetch(): boolean {
+    const now = Date.now()
+    const timeSinceLastFetch = now - this.lastFetchTime
+    const minInterval = 5000 // 5 seconds minimum between fetches
+    
+    return !this.isInitializing && timeSinceLastFetch > minInterval
+  },
+  
+  startFetch(): Promise<any> {
+    if (this.fetchPromise) {
+      return this.fetchPromise
+    }
+    
+    this.isInitializing = true
+    this.lastFetchTime = Date.now()
+    
+    return Promise.resolve()
+  },
+  
+  endFetch() {
+    this.isInitializing = false
+    this.fetchPromise = null
+  }
+}
+
 // Circuit breaker to prevent infinite API calls
 const circuitBreaker = {
   failures: 0,
@@ -46,39 +78,64 @@ const circuitBreaker = {
   }
 }
 
-export function useAuth() {
+export function useAuth(componentId?: string) {
   const dispatch = useAppDispatch()
   const router = useRouter()
   const { user, isLoading, isAuthenticated, error } = useAppSelector((state) => state.user)
   const fetchAttempted = useRef(false)
+  const componentKey = componentId || 'default'
 
   // Note: User fetching is now handled by the controlled effect below with circuit breaker
 
-  // Controlled user fetch with circuit breaker
+  // Controlled user fetch with circuit breaker and global coordination
   useEffect(() => {
-    console.log('🔐 [useAuth] Auth state check:', { user: !!user, isLoading, fetchAttempted: fetchAttempted.current })
+    console.log('🔐 [useAuth] Auth state check:', { 
+      user: !!user, 
+      isLoading, 
+      fetchAttempted: fetchAttempted.current,
+      componentKey,
+      canFetch: globalAuthState.canFetch(),
+      circuitBreakerOpen: circuitBreaker.isOpen
+    })
     
-    if (!user && !isLoading && !fetchAttempted.current && circuitBreaker.canExecute()) {
-      console.log('🔐 [useAuth] Attempting to fetch user')
-      fetchAttempted.current = true
-      
-      dispatch(fetchUser({}))
-        .unwrap()
-        .then(() => {
-          console.log('🔐 [useAuth] User fetch successful')
-          circuitBreaker.onSuccess()
-        })
-        .catch((error) => {
-          console.error('🔐 [useAuth] Auth fetch failed:', error)
-          circuitBreaker.onFailure()
-          
-          // Reset attempt flag after a delay to allow retry
-          setTimeout(() => {
-            fetchAttempted.current = false
-          }, 5000)
-        })
+    // Skip if already fetched or if circuit breaker is open
+    if (user || isLoading || fetchAttempted.current || !circuitBreaker.canExecute()) {
+      return
     }
-  }, [dispatch, user, isLoading])
+    
+    // Check global coordination
+    if (!globalAuthState.canFetch()) {
+      console.log('🔐 [useAuth] Skipping fetch due to global coordination:', componentKey)
+      return
+    }
+    
+    // Mark this component as initialized
+    globalAuthState.initializedComponents.add(componentKey)
+    
+    console.log('🔐 [useAuth] Attempting to fetch user from component:', componentKey)
+    fetchAttempted.current = true
+    
+    // Use global coordination
+    globalAuthState.startFetch()
+    
+    dispatch(fetchUser({}))
+      .unwrap()
+      .then(() => {
+        console.log('🔐 [useAuth] User fetch successful from component:', componentKey)
+        circuitBreaker.onSuccess()
+        globalAuthState.endFetch()
+      })
+      .catch((error) => {
+        console.error('🔐 [useAuth] Auth fetch failed from component:', componentKey, error)
+        circuitBreaker.onFailure()
+        globalAuthState.endFetch()
+        
+        // Reset attempt flag after a delay to allow retry
+        setTimeout(() => {
+          fetchAttempted.current = false
+        }, 10000) // Increased to 10 seconds
+      })
+  }, [dispatch, user, isLoading, componentKey])
 
   const refetchUser = useCallback(async () => {
     if (!circuitBreaker.canExecute()) {
@@ -86,11 +143,19 @@ export function useAuth() {
       return
     }
     
+    if (!globalAuthState.canFetch()) {
+      console.warn('Global coordination prevents fetch - skipping user fetch')
+      return
+    }
+    
     try {
+      globalAuthState.startFetch()
       await dispatch(fetchUser({ force: true })).unwrap()
       circuitBreaker.onSuccess()
+      globalAuthState.endFetch()
     } catch (error) {
       circuitBreaker.onFailure()
+      globalAuthState.endFetch()
       throw error
     }
   }, [dispatch])
@@ -107,6 +172,10 @@ export function useAuth() {
       circuitBreaker.failures = 0
       circuitBreaker.isOpen = false
       fetchAttempted.current = false
+      // Reset global state
+      globalAuthState.isInitializing = false
+      globalAuthState.fetchPromise = null
+      globalAuthState.initializedComponents.clear()
       // Dispatch logout event for other components
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new Event('logout-success'))
@@ -123,7 +192,8 @@ export function useAuth() {
     dispatch(setUser(userData))
     circuitBreaker.onSuccess()
     fetchAttempted.current = true
-  }, [dispatch])
+    globalAuthState.initializedComponents.add(componentKey)
+  }, [dispatch, componentKey])
 
   const updateUserData = useCallback((userData: Partial<UserData>) => {
     dispatch(updateUser(userData))

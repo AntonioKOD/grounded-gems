@@ -1,14 +1,41 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState } from "react"
 import Image from "next/image"
-import { Heart, MessageCircle, Bookmark, Play, Image as ImageIcon, MapPin, ChevronLeft, ChevronRight, X, Share2, Sparkles, Star, TrendingUp } from "lucide-react"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Heart, MessageCircle, Bookmark, Play, Image as ImageIcon, MapPin, ChevronLeft, ChevronRight, X, Share2, Video, Star, TrendingUp, Sparkles } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import type { Post } from "@/types/feed"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import MediaCarousel from "@/components/ui/media-carousel"
+
+interface Post {
+  id: string
+  title?: string
+  content?: string
+  image?: any
+  video?: any
+  videos?: any[]
+  photos?: any[]
+  media?: Array<{
+    type: 'image' | 'video'
+    url: string
+    thumbnail?: string
+    alt?: string
+    duration?: number
+  }>
+  createdAt: string
+  likeCount?: number
+  commentCount?: number
+  type?: string
+  rating?: number
+  location?: {
+    id: string
+    name: string
+  }
+  videoThumbnail?: string
+}
 
 interface EnhancedPostsGridProps {
   posts: Post[]
@@ -26,209 +53,300 @@ interface PostModalProps {
 
 function PostModal({ post, isOpen, onClose, onLike, onSave }: PostModalProps) {
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     })
   }
 
+  // Helper function to get media for a post
+  const getPostMedia = (post: Post) => {
+    const media = []
+    
+    // If post already has media array, use it
+    if (post.media && Array.isArray(post.media)) {
+      return post.media
+    }
+    
+    // Otherwise, construct media array from individual fields
+    
+    // Add main video first (if exists)
+    const videoUrl = getVideoUrl(post.video)
+    
+    if (videoUrl) {
+      // Get video thumbnail - prioritize post's videoThumbnail field
+      let videoThumbnail = null
+      
+      // 1. Check if post has a videoThumbnail field (from Posts collection)
+      if (post.videoThumbnail) {
+        videoThumbnail = getImageUrl(post.videoThumbnail)
+      }
+      // 2. Fallback to main image if no video thumbnail
+      else if (post.image) {
+        const imageUrl = getImageUrl(post.image)
+        if (imageUrl !== '/placeholder.svg') {
+          videoThumbnail = imageUrl
+        }
+      }
+      // 3. Use placeholder if no thumbnail available
+      if (!videoThumbnail || videoThumbnail === '/placeholder.svg') {
+        videoThumbnail = '/api/media/placeholder-video-thumbnail'
+      }
+      
+      const videoMedia = {
+        type: 'video' as const,
+        url: videoUrl,
+        thumbnail: videoThumbnail,
+        alt: 'Post video',
+        duration: undefined
+      }
+      
+      media.push(videoMedia)
+    } else {
+      // If getVideoUrl returns null, try to construct URL manually
+      if (post.video && typeof post.video === 'object' && post.video.filename) {
+        const manualVideoUrl = `/api/media/file/${post.video.filename}`
+        const videoMedia = {
+          type: 'video' as const,
+          url: manualVideoUrl,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object' && post.video.url) {
+        // If video object has a direct URL, use it
+        const videoMedia = {
+          type: 'video' as const,
+          url: post.video.url,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object') {
+        // Last resort: try to construct URL from any available field
+        const videoObj = post.video as any
+        let fallbackUrl = null
+        
+        if (videoObj.url) {
+          fallbackUrl = videoObj.url
+        } else if (videoObj.filename) {
+          fallbackUrl = `/api/media/file/${videoObj.filename}`
+        } else if (videoObj.id) {
+          fallbackUrl = `/api/media/file/${videoObj.id}`
+        }
+        
+        if (fallbackUrl) {
+          const videoMedia = {
+            type: 'video' as const,
+            url: fallbackUrl,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video',
+            duration: undefined
+          }
+          media.push(videoMedia)
+        }
+      }
+    }
+    
+    // Add videos array
+    if (post.videos && Array.isArray(post.videos)) {
+      post.videos.forEach(video => {
+        const url = getVideoUrl(video)
+        if (url) {
+          media.push({
+            type: 'video' as const,
+            url,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video'
+          })
+        }
+      })
+    }
+    
+    // Add main image (only if no video)
+    if (!videoUrl && post.image) {
+      const imageUrl = getImageUrl(post.image)
+      if (imageUrl !== '/placeholder.svg') {
+        media.push({
+          type: 'image' as const,
+          url: imageUrl,
+          alt: 'Post image'
+        })
+      }
+    }
+    
+    // Add photos array
+    if (post.photos && Array.isArray(post.photos)) {
+      post.photos.forEach((photo, index) => {
+        const imageUrl = getImageUrl(photo)
+        if (imageUrl !== '/placeholder.svg') {
+          media.push({
+            type: 'image' as const,
+            url: imageUrl,
+            alt: `Photo ${index + 1}`
+          })
+        }
+      })
+    }
+    
+    return media
+  }
+
+  // Helper function to determine if post has video content
+  const hasVideoContent = (post: Post) => {
+    // Primary check: post has video field
+    if (post.video) {
+      return true
+    }
+    
+    // Check if post has videos array
+    if (post.videos && Array.isArray(post.videos) && post.videos.length > 0) {
+      return true
+    }
+    
+    // Check if post has media array with video
+    if (post.media && Array.isArray(post.media)) {
+      return post.media.some(item => item.type === 'video')
+    }
+    // Check if the post has a video-related type
+    if (post.type === 'video') {
+      return true
+    }
+    if (post.video && typeof post.video === 'object') {
+      if (post.video.mimeType?.startsWith('video/') || post.video.isVideo) {
+        return true
+      }
+    }
+    
+    // Additional check: if the post has a video URL string
+    if (typeof post.video === 'string' && post.video.includes('video')) {
+      return true
+    }
+    
+    // Check for video in the post content or title
+    if (post.content?.toLowerCase().includes('video') || post.title?.toLowerCase().includes('video')) {
+      return true
+    }
+    
+    return false
+  }
+
+  // Helper function to get primary display URL for grid thumbnail
+  const getPrimaryDisplayUrl = (post: Post) => {
+    const media = getPostMedia(post)
+    if (media.length > 0) {
+      // For videos, use thumbnail if available, otherwise use video URL
+      if (media[0]?.type === 'video') {
+        // If video has a thumbnail, use it
+        if (media[0]?.thumbnail && media[0].thumbnail !== '/placeholder.svg' && media[0].thumbnail !== '/api/media/placeholder-video-thumbnail') {
+          return media[0].thumbnail
+        }
+        // Otherwise, use placeholder thumbnail for videos
+        return '/api/media/placeholder-video-thumbnail'
+      }
+      return media[0]?.url
+    }
+    
+    // Fallback to legacy fields
+    const imageUrl = getImageUrl(post.image)
+    return imageUrl !== '/placeholder.svg' ? imageUrl : null
+  }
+
+  const postMedia = getPostMedia(post)
+  const isVideo = hasVideoContent(post)
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[95vh] overflow-hidden p-0 bg-white rounded-2xl shadow-2xl border-0">
-        <div className="grid grid-cols-1 lg:grid-cols-2 h-full max-h-[90vh]">
-          {/* Image Section */}
-          <div className="relative aspect-square lg:aspect-auto bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
-            {post.image ? (
-              <Image
-                src={post.image}
-                alt={post.title || "Post image"}
-                fill
-                className="object-cover"
-                priority
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-0 bg-white">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle className="text-xl font-semibold text-gray-900">
+            {post.title || "Post"}
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="flex flex-col lg:flex-row h-full">
+          {/* Media Section */}
+          <div className="flex-1 bg-black">
+            {postMedia.length > 0 ? (
+              <MediaCarousel 
+                media={postMedia}
+                showControls={true}
+                showThumbnails={postMedia.length > 1}
+                autoPlay={isVideo}
+                className="h-full"
               />
             ) : (
-              <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-gray-100 to-gray-300">
-                <ImageIcon className="h-24 w-24 text-gray-400" />
+              <div className="w-full h-96 bg-gray-100 flex items-center justify-center">
+                <ImageIcon className="h-16 w-16 text-gray-400" />
               </div>
-            )}
-            
-            {/* Gradient overlay for better text readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-            
-            {post.type === "video" && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-white/20 backdrop-blur-md rounded-full p-8 hover:bg-white/30 transition-all duration-300 cursor-pointer group">
-                  <Play className="h-12 w-12 text-white group-hover:scale-110 transition-transform" />
-                </div>
-              </div>
-            )}
-            
-            {/* Enhanced navigation for carousel */}
-            {post.type === "carousel" && (
-              <>
-                <button className="absolute left-6 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white rounded-full p-3 transition-all duration-300 hover:scale-110">
-                  <ChevronLeft className="h-6 w-6" />
-                </button>
-                <button className="absolute right-6 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md text-white rounded-full p-3 transition-all duration-300 hover:scale-110">
-                  <ChevronRight className="h-6 w-6" />
-                </button>
-                
-                {/* Carousel indicators */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-                  {[...Array(3)].map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                        i === 0 ? 'bg-white' : 'bg-white/50'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </>
             )}
           </div>
-
-          {/* Enhanced Content Section */}
-          <div className="flex flex-col h-[600px] lg:h-auto bg-gradient-to-b from-white to-gray-50">
-            {/* Header with enhanced styling */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
-              <div className="flex items-center gap-4">
-                <Avatar className="h-12 w-12 ring-2 ring-gradient-to-r from-[#FF6B6B] to-[#FF8E53] ring-offset-2">
-                  <AvatarImage src={post.author?.avatar || "/placeholder.svg"} alt={post.author?.name || "User"} />
-                  <AvatarFallback className="bg-gradient-to-br from-[#FF6B6B] to-[#FF8E53] text-white font-bold text-lg">
-                    {post.author?.name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-bold text-base hover:text-[#FF6B6B] cursor-pointer transition-colors">
-                    {post.author?.name || "Unknown User"}
-                  </p>
-                  {post.location && typeof post.location === 'object' && post.location !== null && (
-                    <p className="text-sm text-gray-500 flex items-center hover:text-gray-700 cursor-pointer transition-colors">
-                      <MapPin className="h-4 w-4 mr-1" />
-                      {post.location.name}
-                    </p>
-                  )}
+          
+          {/* Content Section */}
+          <div className="w-full lg:w-80 p-6 bg-white border-l border-gray-200 overflow-y-auto">
+            <div className="space-y-4">
+              {/* Post content */}
+              {post.content && (
+                <p className="text-gray-700 leading-relaxed">{post.content}</p>
+              )}
+              
+              {/* Post metadata */}
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>{formatDate(post.createdAt)}</span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <Heart className="h-4 w-4" />
+                    <span>{post.likeCount || 0}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MessageCircle className="h-4 w-4" />
+                    <span>{post.commentCount || 0}</span>
+                  </div>
                 </div>
               </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={onClose} 
-                className="hover:bg-gray-100 rounded-full p-2 transition-all duration-200 hover:scale-110"
-              >
-                <X className="h-6 w-6" />
-              </Button>
-            </div>
-
-            {/* Enhanced Content */}
-            <div className="flex-1 p-6 overflow-y-auto space-y-6">
-              {post.title && (
-                <div className="relative">
-                  <h3 className="font-bold text-2xl text-gray-900 leading-tight">{post.title}</h3>
-                  <div className="absolute -bottom-2 left-0 w-12 h-1 bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] rounded-full" />
+              
+              {/* Location */}
+              {post.location && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <MapPin className="h-4 w-4" />
+                  <span>{post.location.name}</span>
                 </div>
               )}
               
-              {post.content && (
-                <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                  <p className="text-gray-700 leading-relaxed text-lg">{post.content}</p>
-                </div>
-              )}
-
+              {/* Rating */}
               {post.rating && (
-                <div className="flex items-center gap-4 bg-gradient-to-r from-yellow-50 to-orange-50 p-6 rounded-xl border border-yellow-200">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-6 w-6 transition-all duration-200 ${
-                          i < post.rating! 
-                            ? "text-yellow-400 fill-yellow-400 animate-pulse" 
-                            : "text-gray-300"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-lg font-bold text-gray-800">{post.rating}/5</span>
-                  <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300">
-                    Rated
-                  </Badge>
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  <span className="font-semibold">{post.rating}/5</span>
                 </div>
               )}
-
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
-                <p className="text-sm text-blue-600 mb-2 font-semibold">Posted</p>
-                <p className="text-base font-bold text-blue-800">{formatDate(post.createdAt)}</p>
-              </div>
-            </div>
-
-            {/* Enhanced Actions */}
-            <div className="border-t border-gray-100 bg-white/90 backdrop-blur-sm p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-8">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="p-0 h-auto group transition-all duration-300 hover:scale-110"
-                    onClick={() => onLike?.(post.id)}
-                  >
-                    <div className={`p-3 rounded-full transition-all duration-300 ${
-                      post.isLiked 
-                        ? "bg-red-100 text-red-500" 
-                        : "bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-500"
-                    }`}>
-                      <Heart
-                        className={`h-6 w-6 transition-all duration-300 ${
-                          post.isLiked ? "fill-current animate-pulse" : "group-hover:scale-110"
-                        }`}
-                      />
-                    </div>
-                  </Button>
-                  
-                  <Button variant="ghost" size="sm" className="p-0 h-auto group transition-all duration-300 hover:scale-110">
-                    <div className="p-3 rounded-full bg-gray-100 hover:bg-blue-50 text-gray-600 hover:text-blue-500 transition-all duration-300">
-                      <MessageCircle className="h-6 w-6 group-hover:scale-110 transition-transform" />
-                    </div>
-                  </Button>
-                  
-                  <Button variant="ghost" size="sm" className="p-0 h-auto group transition-all duration-300 hover:scale-110">
-                    <div className="p-3 rounded-full bg-gray-100 hover:bg-green-50 text-gray-600 hover:text-green-500 transition-all duration-300">
-                      <Share2 className="h-6 w-6 group-hover:scale-110 transition-transform" />
-                    </div>
-                  </Button>
-                </div>
-                
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="p-0 h-auto group transition-all duration-300 hover:scale-110"
+              
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-4 border-t border-gray-200">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
+                  onClick={() => onLike?.(post.id)}
+                >
+                  <Heart className="h-4 w-4 mr-2" />
+                  Like
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex-1"
                   onClick={() => onSave?.(post.id)}
                 >
-                  <div className="p-3 rounded-full bg-gray-100 hover:bg-yellow-50 text-gray-600 hover:text-yellow-600 transition-all duration-300">
-                    <Bookmark className="h-6 w-6 group-hover:scale-110 transition-transform" />
-                  </div>
+                  <Bookmark className="h-4 w-4 mr-2" />
+                  Save
                 </Button>
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="font-bold text-gray-900 text-lg">
-                    {post.likeCount || 0} {(post.likeCount || 0) === 1 ? "like" : "likes"}
-                  </p>
-                  <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span>{post.commentCount || 0} comments</span>
-                    <span>{post.shareCount || 0} shares</span>
-                  </div>
-                </div>
-                
-                {post.commentCount && post.commentCount > 0 && (
-                  <p className="text-gray-500 hover:text-gray-700 cursor-pointer transition-colors text-sm">
-                    View all {post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}
-                  </p>
-                )}
+                <Button variant="outline" size="sm">
+                  <Share2 className="h-4 w-4" />
+                </Button>
               </div>
             </div>
           </div>
@@ -251,11 +369,209 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
     setImageLoadingStates(prev => ({ ...prev, [postId]: true }))
   }
 
+  // Helper function to determine if post has video content
+  const hasVideoContent = (post: Post) => {
+    // Primary check: post has video field
+    if (post.video) {
+      return true
+    }
+    
+    // Check if post has videos array
+    if (post.videos && Array.isArray(post.videos) && post.videos.length > 0) {
+      return true
+    }
+    
+    // Check if post has media array with video
+    if (post.media && Array.isArray(post.media)) {
+      return post.media.some(item => item.type === 'video')
+    }
+    
+    // Check if the post has a video-related field that indicates it's a video
+    if (post.type === 'video') {
+      return true
+    }
+    
+    // Check if the video object has video-specific properties
+    if (post.video && typeof post.video === 'object') {
+      if (post.video.mimeType?.startsWith('video/') || post.video.isVideo) {
+        return true
+      }
+    }
+    
+    // Additional check: if the post has a video URL string
+    if (typeof post.video === 'string' && post.video.includes('video')) {
+      return true
+    }
+    
+    // Check for video in the post content or title
+    if (post.content?.toLowerCase().includes('video') || post.title?.toLowerCase().includes('video')) {
+      return true
+    }
+    
+    return false
+  }
+
+  // Helper function to get media for a post
+  const getPostMedia = (post: Post) => {
+    const media = []
+    
+    // If post already has media array, use it
+    if (post.media && Array.isArray(post.media)) {
+      return post.media
+    }
+    
+    // Otherwise, construct media array from individual fields
+    
+    // Add main video first (if exists)
+    const videoUrl = getVideoUrl(post.video)
+    
+    if (videoUrl) {
+      // Get video thumbnail - prioritize post's videoThumbnail field
+      let videoThumbnail = null
+      
+      // 1. Check if post has a videoThumbnail field (from Posts collection)
+      if (post.videoThumbnail) {
+        videoThumbnail = getImageUrl(post.videoThumbnail)
+      }
+      // 2. Fallback to main image if no video thumbnail
+      else if (post.image) {
+        const imageUrl = getImageUrl(post.image)
+        if (imageUrl !== '/placeholder.svg') {
+          videoThumbnail = imageUrl
+        }
+      }
+      // 3. Use placeholder if no thumbnail available
+      if (!videoThumbnail || videoThumbnail === '/placeholder.svg') {
+        videoThumbnail = '/api/media/placeholder-video-thumbnail'
+      }
+      
+      const videoMedia = {
+        type: 'video' as const,
+        url: videoUrl,
+        thumbnail: videoThumbnail,
+        alt: 'Post video',
+        duration: undefined
+      }
+      
+      media.push(videoMedia)
+    } else {
+      // If getVideoUrl returns null, try to construct URL manually
+      if (post.video && typeof post.video === 'object' && post.video.filename) {
+        const manualVideoUrl = `/api/media/file/${post.video.filename}`
+        const videoMedia = {
+          type: 'video' as const,
+          url: manualVideoUrl,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object' && post.video.url) {
+        // If video object has a direct URL, use it
+        const videoMedia = {
+          type: 'video' as const,
+          url: post.video.url,
+          thumbnail: '/api/media/placeholder-video-thumbnail',
+          alt: 'Post video',
+          duration: undefined
+        }
+        media.push(videoMedia)
+      } else if (post.video && typeof post.video === 'object') {
+        // Last resort: try to construct URL from any available field
+        const videoObj = post.video as any
+        let fallbackUrl = null
+        
+        if (videoObj.url) {
+          fallbackUrl = videoObj.url
+        } else if (videoObj.filename) {
+          fallbackUrl = `/api/media/file/${videoObj.filename}`
+        } else if (videoObj.id) {
+          fallbackUrl = `/api/media/file/${videoObj.id}`
+        }
+        
+        if (fallbackUrl) {
+          const videoMedia = {
+            type: 'video' as const,
+            url: fallbackUrl,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video',
+            duration: undefined
+          }
+          media.push(videoMedia)
+        }
+      }
+    }
+    
+    // Add videos array
+    if (post.videos && Array.isArray(post.videos)) {
+      post.videos.forEach(video => {
+        const url = getVideoUrl(video)
+        if (url) {
+          media.push({
+            type: 'video' as const,
+            url,
+            thumbnail: '/api/media/placeholder-video-thumbnail',
+            alt: 'Post video'
+          })
+        }
+      })
+    }
+    
+    // Add main image (only if no video)
+    if (!videoUrl && post.image) {
+      const imageUrl = getImageUrl(post.image)
+      if (imageUrl !== '/placeholder.svg') {
+        media.push({
+          type: 'image' as const,
+          url: imageUrl,
+          alt: 'Post image'
+        })
+      }
+    }
+    
+    // Add photos array
+    if (post.photos && Array.isArray(post.photos)) {
+      post.photos.forEach((photo, index) => {
+        const imageUrl = getImageUrl(photo)
+        if (imageUrl !== '/placeholder.svg') {
+          media.push({
+            type: 'image' as const,
+            url: imageUrl,
+            alt: `Photo ${index + 1}`
+          })
+        }
+      })
+    }
+    
+    return media
+  }
+
+  // Helper function to get primary display URL for grid thumbnail
+  const getPrimaryDisplayUrl = (post: Post) => {
+    const media = getPostMedia(post)
+    if (media.length > 0) {
+      // For videos, use thumbnail if available, otherwise use video URL
+      if (media[0]?.type === 'video') {
+        // If video has a thumbnail, use it
+        if (media[0]?.thumbnail && media[0].thumbnail !== '/placeholder.svg' && media[0].thumbnail !== '/api/media/placeholder-video-thumbnail') {
+          return media[0].thumbnail
+        }
+        // Otherwise, use placeholder thumbnail for videos
+        return '/api/media/placeholder-video-thumbnail'
+      }
+      return media[0]?.url
+    }
+    
+    // Fallback to legacy fields
+    const imageUrl = getImageUrl(post.image)
+    return imageUrl !== '/placeholder.svg' ? imageUrl : null
+  }
+
   // Function to determine post size based on content and position
   const getPostSize = (post: Post, index: number) => {
     const hasHighEngagement = (post.likeCount || 0) > 10 || (post.commentCount || 0) > 5
     const isSpecialPost = post.rating && post.rating >= 4
-    const isVideo = post.type === "video"
+    const isVideo = hasVideoContent(post)
     
     // Create a pattern for variety
     if (gridType === 'masonry') {
@@ -319,6 +635,8 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
         {posts.map((post, index) => {
           const size = getPostSize(post, index)
           const isHovered = hoveredPost === post.id
+          const primaryUrl = getPrimaryDisplayUrl(post)
+          const isVideo = hasVideoContent(post)
           
           return (
             <Card
@@ -330,7 +648,7 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
               onMouseEnter={() => setHoveredPost(post.id)}
               onMouseLeave={() => setHoveredPost(null)}
             >
-              {post.image ? (
+              {primaryUrl ? (
                 <>
                   {imageLoadingStates[post.id] && (
                     <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 animate-pulse flex items-center justify-center">
@@ -338,7 +656,7 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
                     </div>
                   )}
                   <Image
-                    src={post.image}
+                    src={primaryUrl}
                     alt={post.title || "Post"}
                     fill
                     className="object-cover transition-all duration-700 group-hover:scale-110"
@@ -378,7 +696,7 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
               </div>
 
               {/* Enhanced post indicators */}
-              {post.type === "video" && (
+              {isVideo && (
                 <div className="absolute top-3 right-3 z-10">
                   <div className="bg-black/80 backdrop-blur-sm rounded-full p-2.5 shadow-lg animate-pulse">
                     <Play className="h-4 w-4 text-white" />
@@ -437,12 +755,6 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
           post={selectedPost}
           isOpen={!!selectedPost}
           onClose={() => setSelectedPost(null)}
-          onLike={(postId) => {
-            console.log("Like post:", postId)
-          }}
-          onSave={(postId) => {
-            console.log("Save post:", postId)
-          }}
         />
       )}
     </>
