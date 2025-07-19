@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       type = type.trim().toLowerCase()
       if (type !== 'post' && type !== 'review') { // Add other allowed types if needed
         type = 'post'
+      }
     }
 
     if (!content || content.trim().length === 0) {
@@ -307,14 +308,14 @@ export async function POST(request: NextRequest) {
         location: post.location,
         createdAt: post.createdAt,
       }
-    })
+    });
 
   } catch (error) {
-    console.error('Error creating post:', error)
+    console.error('Error creating post:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to create post' },
       { status: 500 }
-    )
+    );
   }
 }
 
