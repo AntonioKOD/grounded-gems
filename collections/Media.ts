@@ -23,11 +23,17 @@ export const Media: CollectionConfig = {
       'image/pjpeg',
       'image/pjp',
       
-      // Mobile-specific formats (iOS/Android)
+      // Mobile-specific formats (iOS/Android) - Live Photos
       'image/heic',
       'image/heif',
       'image/heic-sequence',
       'image/heif-sequence',
+      
+      // Additional Live Photo formats
+      'image/heic-sequence',
+      'image/heif-sequence',
+      'image/heic-sequence-1',
+      'image/heif-sequence-1',
       
       // Additional image formats
       'image/bmp',
@@ -118,6 +124,14 @@ export const Media: CollectionConfig = {
       },
     },
     {
+      name: 'originalFormat',
+      type: 'text',
+      admin: {
+        description: 'Original file format before conversion (e.g., HEIC for Live Photos)',
+        readOnly: true,
+      },
+    },
+    {
       name: 'videoThumbnail',
       type: 'upload',
       relationTo: 'media',
@@ -143,6 +157,13 @@ export const Media: CollectionConfig = {
           console.log('🎬 Media beforeChange: Marking as video:', data.filename)
           data.isVideo = true
         }
+        
+        // Store original format for Live Photos
+        if (operation === 'create' && (data.mimeType === 'image/heic' || data.mimeType === 'image/heif')) {
+          console.log('📱 Media beforeChange: Live Photo detected:', data.filename)
+          data.originalFormat = data.mimeType
+        }
+        
         return data
       },
     ],
@@ -154,8 +175,56 @@ export const Media: CollectionConfig = {
           filename: doc.filename,
           isVideo: doc.isVideo,
           hasThumbnail: !!doc.videoThumbnail,
-          docId: doc.id
+          docId: doc.id,
+          originalFormat: doc.originalFormat
         })
+        
+        // Handle Live Photo conversion to JPEG
+        if (operation === 'create' && (doc.mimeType === 'image/heic' || doc.mimeType === 'image/heif')) {
+          try {
+            console.log('📱 Converting Live Photo to JPEG:', doc.filename)
+            
+            // Add a small delay to ensure the file is fully saved
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+            // Convert HEIC/HEIF to JPEG using sharp
+            try {
+              const sharp = require('sharp')
+              const filePath = path.join(process.cwd(), 'media', doc.filename)
+              const outputPath = filePath.replace(/\.(heic|heif)$/i, '.jpg')
+              
+              if (fs.existsSync(filePath)) {
+                await sharp(filePath)
+                  .jpeg({ quality: 90 })
+                  .toFile(outputPath)
+                
+                // Update the document with new filename and MIME type
+                const newFilename = path.basename(outputPath)
+                await req.payload.update({
+                  collection: 'media',
+                  id: doc.id,
+                  data: {
+                    filename: newFilename,
+                    mimeType: 'image/jpeg',
+                  },
+                })
+                
+                // Remove the original HEIC/HEIF file
+                fs.unlinkSync(filePath)
+                
+                console.log('📱 Live Photo converted successfully to JPEG:', newFilename)
+              } else {
+                console.log('📱 Original file not found for conversion:', filePath)
+              }
+            } catch (conversionError) {
+              console.error('📱 Error converting Live Photo:', conversionError)
+              // Don't fail the upload if conversion fails - keep the original
+            }
+            
+          } catch (error) {
+            console.error('📱 Error in Live Photo processing:', error)
+          }
+        }
         
         // Only process videos on create that don't already have a thumbnail
         if (operation === 'create' && doc.isVideo && !doc.videoThumbnail) {
