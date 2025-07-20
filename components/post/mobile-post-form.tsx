@@ -225,6 +225,13 @@ export default function MobilePostForm({
         
         for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i]
+          
+          // Type guard to ensure file exists
+          if (!file) {
+            console.error(`❌ File at index ${i} is undefined`)
+            continue
+          }
+          
           const fileSizeMB = file.size / 1024 / 1024
           
           console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`)
