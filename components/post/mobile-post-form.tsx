@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { HEICImageUpload } from "@/components/ui/heic-image-upload"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { uploadFileInChunks, shouldUseChunkedUpload, getOptimalChunkSize } from "@/lib/chunked-upload"
 
 interface UserData {
   id: string
@@ -237,49 +238,70 @@ export default function MobilePostForm({
           console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`)
           
           try {
-            // Use production endpoint if in production environment
+            // Determine upload method based on file size
+            const shouldChunk = shouldUseChunkedUpload(file, 5 * 1024 * 1024) // Use chunked for files > 5MB
             const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
-            let uploadEndpoint = isProduction ? '/api/media/production' : '/api/media'
             
-            // For very large files (>10MB), try to compress or warn user
-            if (fileSizeMB > 10) {
-              toast.warning(`${file.name} is very large (${fileSizeMB.toFixed(2)}MB). Consider compressing it first.`)
-            }
-            
-            console.log(`📤 Using ${isProduction ? 'production' : 'regular'} upload for file: ${file.name}`)
-            
-            const formData = new FormData()
-            formData.append('file', file)
-            formData.append('alt', file.name)
-            
-            const uploadResponse = await fetch(uploadEndpoint, {
-              method: 'POST',
-              body: formData,
-            })
-            
-            if (!uploadResponse.ok) {
-              let errorMessage = `Failed to upload ${file.name}: ${uploadResponse.status}`
-              
-              try {
-                const errorData = await uploadResponse.json()
-                errorMessage = errorData.message || errorMessage
-              } catch (parseError) {
-                const errorText = await uploadResponse.text()
-                console.error(`❌ Upload failed for ${file.name}:`, errorText)
-                errorMessage = `Upload failed: ${uploadResponse.status} - ${errorText.substring(0, 100)}`
-              }
-              
-              throw new Error(errorMessage)
-            }
+            console.log(`📤 File: ${file.name} (${fileSizeMB.toFixed(2)}MB) - Using ${shouldChunk ? 'chunked' : 'regular'} upload`)
             
             let uploadResult
-            try {
-              uploadResult = await uploadResponse.json()
-            } catch (parseError) {
-              const errorText = await uploadResponse.text()
-              console.error(`❌ Failed to parse upload response for ${file.name}:`, errorText)
-              throw new Error(`Invalid response from server for ${file.name}`)
+            
+            if (shouldChunk) {
+              // Use chunked upload for large files
+              const chunkSize = getOptimalChunkSize(file.size)
+              console.log(`📦 Using chunked upload with ${(chunkSize / 1024 / 1024).toFixed(2)}MB chunks`)
+              
+              uploadResult = await uploadFileInChunks(file, {
+                chunkSize,
+                endpoint: '/api/media/chunked-upload',
+                onProgress: (progress) => {
+                  console.log(`📦 Upload progress for ${file.name}: ${progress.toFixed(1)}%`)
+                },
+                onChunkComplete: (chunkIndex, totalChunks) => {
+                  console.log(`📦 Chunk ${chunkIndex}/${totalChunks} completed for ${file.name}`)
+                }
+              })
+              
+              if (!uploadResult.success) {
+                throw new Error(uploadResult.message || 'Chunked upload failed')
+              }
+            } else {
+              // Use regular upload for smaller files
+              const uploadEndpoint = isProduction ? '/api/media/production' : '/api/media'
+              
+              const formData = new FormData()
+              formData.append('file', file)
+              formData.append('alt', file.name)
+              
+              const uploadResponse = await fetch(uploadEndpoint, {
+                method: 'POST',
+                body: formData,
+              })
+              
+              if (!uploadResponse.ok) {
+                let errorMessage = `Failed to upload ${file.name}: ${uploadResponse.status}`
+                
+                try {
+                  const errorData = await uploadResponse.json()
+                  errorMessage = errorData.message || errorMessage
+                } catch (parseError) {
+                  const errorText = await uploadResponse.text()
+                  console.error(`❌ Upload failed for ${file.name}:`, errorText)
+                  errorMessage = `Upload failed: ${uploadResponse.status} - ${errorText.substring(0, 100)}`
+                }
+                
+                throw new Error(errorMessage)
+              }
+              
+              try {
+                uploadResult = await uploadResponse.json()
+              } catch (parseError) {
+                const errorText = await uploadResponse.text()
+                console.error(`❌ Failed to parse upload response for ${file.name}:`, errorText)
+                throw new Error(`Invalid response from server for ${file.name}`)
+              }
             }
+            
             if (uploadResult.id) {
               mediaIds.push(uploadResult.id)
               console.log(`✅ Uploaded ${file.name}: ${uploadResult.id}`)

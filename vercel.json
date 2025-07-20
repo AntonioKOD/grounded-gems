@@ -17,6 +17,9 @@
     },
     "app/api/media/production/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/media/chunked-upload/route.ts": {
+      "maxDuration": 300
     }
   },
   "headers": [
