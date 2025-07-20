@@ -113,8 +113,8 @@ export default function MobilePostForm({
 
   // Handle file selection from HEIC upload component
   const handleFileSelected = (file: File, conversionInfo?: any) => {
-    // Validate file size
-    const maxSizeMB = 50 // 50MB max per file
+    // Validate file size - reduced limit for better reliability
+    const maxSizeMB = 25 // 25MB max per file (reduced from 50MB)
     const maxSizeBytes = maxSizeMB * 1024 * 1024
     
     if (file.size > maxSizeBytes) {
@@ -122,13 +122,13 @@ export default function MobilePostForm({
       return
     }
     
-    // Check total size of all selected files
+    // Check total size of all selected files - reduced limit
     const currentTotalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0)
     const newTotalSize = currentTotalSize + file.size
     const totalSizeMB = newTotalSize / 1024 / 1024
     
-    if (totalSizeMB > 100) {
-      toast.error(`Total file size (${totalSizeMB.toFixed(1)}MB) would exceed 100MB limit`)
+    if (totalSizeMB > 50) { // Reduced from 100MB to 50MB
+      toast.error(`Total file size (${totalSizeMB.toFixed(1)}MB) would exceed 50MB limit`)
       return
     }
     
@@ -237,12 +237,16 @@ export default function MobilePostForm({
           console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`)
           
           try {
-            // Use chunked upload for files >2MB
-            let uploadEndpoint = '/api/media'
-            if (fileSizeMB > 2) {
-              uploadEndpoint = '/api/media/chunked'
-              console.log(`📦 Using chunked upload for large file: ${file.name}`)
+            // Use production endpoint if in production environment
+            const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+            let uploadEndpoint = isProduction ? '/api/media/production' : '/api/media'
+            
+            // For very large files (>10MB), try to compress or warn user
+            if (fileSizeMB > 10) {
+              toast.warning(`${file.name} is very large (${fileSizeMB.toFixed(2)}MB). Consider compressing it first.`)
             }
+            
+            console.log(`📤 Using ${isProduction ? 'production' : 'regular'} upload for file: ${file.name}`)
             
             const formData = new FormData()
             formData.append('file', file)
@@ -285,7 +289,7 @@ export default function MobilePostForm({
             
             // Small delay between uploads
             if (i < selectedFiles.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 500))
+              await new Promise(resolve => setTimeout(resolve, 1000))
             }
             
           } catch (uploadError) {
@@ -328,7 +332,13 @@ export default function MobilePostForm({
 
       console.log('📝 Creating post with data:', postData)
 
-      const response = await fetch("/api/posts/create", {
+      // Use production endpoint if in production environment
+      const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
+      const endpoint = isProduction ? "/api/posts/create-production" : "/api/posts/create"
+      
+      console.log(`📝 Using endpoint: ${endpoint} (production: ${isProduction})`)
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -6,7 +6,7 @@ import payloadConfig from '@payload-config'
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes timeout
 
-// Additional configuration for large payloads
+// Production-specific configuration for large payloads
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 

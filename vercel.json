@@ -3,10 +3,19 @@
     "app/api/posts/create/route.ts": {
       "maxDuration": 300
     },
+    "app/api/posts/create-production/route.ts": {
+      "maxDuration": 300
+    },
     "app/api/media/chunked/route.ts": {
       "maxDuration": 300
     },
     "app/api/media/finalize/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/media/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/media/production/route.ts": {
       "maxDuration": 300
     }
   },
