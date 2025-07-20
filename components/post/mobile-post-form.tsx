@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Camera, MapPin, Loader2, X, Send, ImageIcon, Video, Smile, AlertCircle, CheckCircle, Info } from "lucide-react"
+import { Camera, MapPin, Loader2, X, Send, ImageIcon, Video, Smile, AlertCircle, Info } from "lucide-react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
@@ -12,9 +12,9 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
+
 import { HEICImageUpload } from "@/components/ui/heic-image-upload"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
 import { uploadFileInChunks, shouldUseChunkedUpload, getOptimalChunkSize } from "@/lib/chunked-upload"
 
 interface UserData {
@@ -77,9 +77,14 @@ export default function MobilePostForm({
       newErrors.push("Caption cannot exceed 500 characters")
     }
     
+    // Check if we have content or media
+    if (!postContent.trim() && selectedFiles.length === 0) {
+      newErrors.push("Please add some content or media to your post")
+    }
+    
     setErrors(newErrors)
     setIsValid(newErrors.length === 0)
-  }, [postContent])
+  }, [postContent, selectedFiles.length])
 
   // Fetch user data on component mount
   useEffect(() => {
@@ -361,12 +366,8 @@ export default function MobilePostForm({
 
       // Add media IDs if uploaded
       if (mediaIds.length > 0) {
-        // Separate Live Photos from regular images
-        const livePhotos = mediaIds.slice(0, selectedFiles.filter(f => f.type === 'image/jpeg' && f.name.includes('converted')).length)
-        const regularImages = mediaIds.slice(livePhotos.length, mediaIds.length)
-        
-        postData.livePhotos = livePhotos
-        postData.photos = regularImages
+        // All uploaded media goes to photos array
+        postData.photos = mediaIds
       }
 
       // Check total payload size before sending
@@ -513,89 +514,48 @@ export default function MobilePostForm({
         {/* Media Upload */}
         <Card className="border-gray-200">
           <CardContent className="p-4">
-            <Tabs defaultValue="upload" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="upload">Upload Media</TabsTrigger>
-                <TabsTrigger value="status">Upload Status</TabsTrigger>
-              </TabsList>
+            <div className="space-y-4">
+              {/* Live Photo Support Info - Mobile Friendly */}
+              <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
+                <Info className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                <AlertDescription className="text-xs leading-relaxed">
+                  <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                </AlertDescription>
+              </Alert>
               
-              <TabsContent value="upload" className="mt-4">
-                {/* Live Photo Support Info - Mobile Friendly */}
-                <Alert className="bg-amber-50 border border-amber-200 text-amber-800 mb-4">
-                  <Info className="h-3 w-3 flex-shrink-0 mt-0.5" />
-                  <AlertDescription className="text-xs leading-relaxed">
-                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
-                  </AlertDescription>
-                </Alert>
-                
-                <HEICImageUpload
-                  showLivePhotoWarning={false}
-                  onFileSelected={handleFileSelected}
-                  onUploadComplete={handleUploadComplete}
-                  onUploadError={handleUploadError}
-                  maxSizeInMB={10}
-                  multiple={true}
-                  showPreview={true}
-                  showDetailedLogs={true}
-                  autoUpload={true}
-                  uploadEndpoint="/api/media"
-                  className="w-full"
-                />
-                
-                {/* Live Photo Detection Banner */}
-                {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
-                  <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 text-sm">📱</span>
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-blue-800">
-                          Live Photos Detected
-                        </p>
-                        <p className="text-xs text-blue-600">
-                          {selectedFiles.filter(f => f.type === 'image/heic' || f.type === 'image/heif').length} Live Photo(s) will be processed
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
+              <HEICImageUpload
+                showLivePhotoWarning={false}
+                onFileSelected={handleFileSelected}
+                onUploadComplete={handleUploadComplete}
+                onUploadError={handleUploadError}
+                maxSizeInMB={10}
+                multiple={true}
+                showPreview={true}
+                showDetailedLogs={false}
+                autoUpload={true}
+                uploadEndpoint="/api/media"
+                className="w-full"
+              />
               
-              <TabsContent value="status" className="mt-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium">Selected Files</span>
-                    <Badge variant="secondary">{selectedFiles.length}</Badge>
-                  </div>
-                  
-                  {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
-                    <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                      <span className="text-sm font-medium text-amber-800">Live Photos</span>
-                      <Badge variant="secondary" className="bg-amber-100 text-amber-800">
-                        {selectedFiles.filter(f => f.type === 'image/heic' || f.type === 'image/heif').length}
-                      </Badge>
+              {/* Live Photo Detection Banner */}
+              {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
+                <div className="p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                      <span className="text-blue-600 text-sm">📱</span>
                     </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium">Uploaded Media</span>
-                    <Badge variant="secondary">{uploadedMediaIds.length}</Badge>
-                  </div>
-                  
-                  {uploadedMediaIds.length > 0 && (
-                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium text-green-800">
-                          Media ready for post
-                        </span>
-                      </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-blue-800">
+                        Live Photos Detected
+                      </p>
+                      <p className="text-xs text-blue-600">
+                        {selectedFiles.filter(f => f.type === 'image/heic' || f.type === 'image/heif').length} Live Photo(s) will be processed
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </div>
-              </TabsContent>
-            </Tabs>
+              )}
+            </div>
           </CardContent>
         </Card>
 
