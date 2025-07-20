@@ -109,85 +109,100 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Process media files - handle both field name conventions
+    // Check if we have media IDs (from separate upload) or files to upload
+    const livePhotos = formData.getAll('livePhotos') as string[]
+    const photos = formData.getAll('photos') as string[]
+    const videos = formData.getAll('videos') as string[]
+    
+    // Process media files if any (legacy support)
     const imageFiles = [
       ...(formData.getAll('images') as File[]),
       ...(formData.getAll('media') as File[])
     ].filter(file => file.type.startsWith('image/'))
     const videoFiles = formData.getAll('videos') as File[]
     
-    console.log(`📝 Processing ${imageFiles.length} images and ${videoFiles.length} videos`)
+    console.log(`📝 Media breakdown: ${livePhotos.length} live photo IDs, ${photos.length} photo IDs, ${videos.length} video IDs`)
+    console.log(`📝 Files to upload: ${imageFiles.length} images, ${videoFiles.length} videos`)
 
-    // FIXED: Separate Live Photos from other files for sequential processing
-    const livePhotoFiles = imageFiles.filter(file => 
-      file.type === 'image/heic' || file.type === 'image/heif'
-    )
-    const regularImageFiles = imageFiles.filter(file => 
-      file.type !== 'image/heic' && file.type !== 'image/heif'
-    )
+    let mediaIds: string[] = []
     
-    console.log(`📝 File breakdown: ${livePhotoFiles.length} Live Photos, ${regularImageFiles.length} regular images, ${videoFiles.length} videos`)
-
-    const mediaIds: string[] = []
-    
-    // FIXED: Process Live Photos sequentially to prevent conflicts
-    if (livePhotoFiles.length > 0) {
-      console.log(`📝 Processing ${livePhotoFiles.length} Live Photos sequentially...`)
-      for (const file of livePhotoFiles) {
-        try {
-          const mediaId = await uploadImageFile(file, payload)
-          if (mediaId) {
-            mediaIds.push(mediaId)
-            console.log(`📝 Live Photo uploaded successfully: ${mediaId}`)
-            
-            // Add delay between Live Photo uploads to prevent conflicts
-            if (livePhotoFiles.length > 1) {
-              await new Promise(resolve => setTimeout(resolve, 2000))
-            }
-          }
-        } catch (error) {
-          console.error(`📝 Live Photo upload failed: ${file.name}`, error)
-          return NextResponse.json(
-            { success: false, message: `Live Photo upload failed: ${file.name}` },
-            { status: 500 }
-          )
-        }
-      }
-    }
-    
-    // Process regular images and videos in parallel (non-Live Photos)
-    const parallelUploadPromises: Promise<string | null>[] = []
-    
-    // Add regular image upload promises
-    for (const file of regularImageFiles) {
-      parallelUploadPromises.push(uploadImageFile(file, payload))
-    }
-    
-    // Add video upload promises
-    for (const file of videoFiles) {
-      parallelUploadPromises.push(uploadVideoFile(file, payload))
-    }
-    
-    // Wait for all parallel uploads to complete
-    if (parallelUploadPromises.length > 0) {
-      console.log(`📝 Starting parallel upload of ${parallelUploadPromises.length} files...`)
-      const uploadResults = await Promise.allSettled(parallelUploadPromises)
+    // If we have media IDs (from separate upload), use those
+    if (livePhotos.length > 0 || photos.length > 0 || videos.length > 0) {
+      mediaIds = [...livePhotos, ...photos, ...videos]
+      console.log(`📝 Using pre-uploaded media IDs: ${mediaIds.length} total`)
+    } else if (imageFiles.length > 0 || videoFiles.length > 0) {
+      // Legacy: Upload files with the post
+      console.log(`📝 Uploading files with post (legacy mode)`)
       
-      // Process results
-      for (const result of uploadResults) {
-        if (result.status === 'fulfilled' && result.value) {
-          mediaIds.push(result.value)
-        } else if (result.status === 'rejected') {
-          console.error('📝 Upload failed:', result.reason)
-          return NextResponse.json(
-            { success: false, message: `Upload failed: ${result.reason}` },
-            { status: 500 }
-          )
+      // FIXED: Separate Live Photos from other files for sequential processing
+      const livePhotoFiles = imageFiles.filter(file => 
+        file.type === 'image/heic' || file.type === 'image/heif'
+      )
+      const regularImageFiles = imageFiles.filter(file => 
+        file.type !== 'image/heic' && file.type !== 'image/heif'
+      )
+      
+      console.log(`📝 File breakdown: ${livePhotoFiles.length} Live Photos, ${regularImageFiles.length} regular images, ${videoFiles.length} videos`)
+
+      // FIXED: Process Live Photos sequentially to prevent conflicts
+      if (livePhotoFiles.length > 0) {
+        console.log(`📝 Processing ${livePhotoFiles.length} Live Photos sequentially...`)
+        for (const file of livePhotoFiles) {
+          try {
+            const mediaId = await uploadImageFile(file, payload)
+            if (mediaId) {
+              mediaIds.push(mediaId)
+              console.log(`📝 Live Photo uploaded successfully: ${mediaId}`)
+              
+              // Add delay between Live Photo uploads to prevent conflicts
+              if (livePhotoFiles.length > 1) {
+                await new Promise(resolve => setTimeout(resolve, 2000))
+              }
+            }
+          } catch (error) {
+            console.error(`📝 Live Photo upload failed: ${file.name}`, error)
+            return NextResponse.json(
+              { success: false, message: `Live Photo upload failed: ${file.name}` },
+              { status: 500 }
+            )
+          }
         }
       }
+      
+      // Process regular images and videos in parallel (non-Live Photos)
+      const parallelUploadPromises: Promise<string | null>[] = []
+      
+      // Add regular image upload promises
+      for (const file of regularImageFiles) {
+        parallelUploadPromises.push(uploadImageFile(file, payload))
+      }
+      
+      // Add video upload promises
+      for (const file of videoFiles) {
+        parallelUploadPromises.push(uploadVideoFile(file, payload))
+      }
+      
+      // Wait for all parallel uploads to complete
+      if (parallelUploadPromises.length > 0) {
+        console.log(`📝 Starting parallel upload of ${parallelUploadPromises.length} files...`)
+        const uploadResults = await Promise.allSettled(parallelUploadPromises)
+        
+        // Process results
+        for (const result of uploadResults) {
+          if (result.status === 'fulfilled' && result.value) {
+            mediaIds.push(result.value)
+          } else if (result.status === 'rejected') {
+            console.error('📝 Upload failed:', result.reason)
+            return NextResponse.json(
+              { success: false, message: `Upload failed: ${result.reason}` },
+              { status: 500 }
+            )
+          }
+        }
+      }
+      
+      console.log(`📝 Successfully uploaded ${mediaIds.length} files total`)
     }
-    
-    console.log(`📝 Successfully uploaded ${mediaIds.length} files total`)
 
     // Prepare post data
     const postData: any = {
@@ -235,50 +250,70 @@ export async function POST(request: NextRequest) {
 
     // Add media if any - properly handle both images and videos
     if (mediaIds.length > 0) {
-      // Track which media IDs correspond to images vs videos
-      const imageIds: string[] = []
-      const videoIds: string[] = []
-      
-      // Process mediaIds in the order they were uploaded
-      let currentIndex = 0
-      
-      // First, add Live Photos (they were uploaded first, sequentially)
-      const livePhotoCount = livePhotoFiles.length
-      if (livePhotoCount > 0) {
-        imageIds.push(...mediaIds.slice(currentIndex, currentIndex + livePhotoCount))
-        currentIndex += livePhotoCount
-      }
-      
-      // Then add regular images (uploaded in parallel)
-      const regularImageCount = regularImageFiles.length
-      if (regularImageCount > 0) {
-        imageIds.push(...mediaIds.slice(currentIndex, currentIndex + regularImageCount))
-        currentIndex += regularImageCount
-      }
-      
-      // Finally add videos (uploaded in parallel)
-      const videoCount = videoFiles.length
-      if (videoCount > 0) {
-        videoIds.push(...mediaIds.slice(currentIndex, currentIndex + videoCount))
-      }
-      
-      console.log(`📝 Media assignment: ${imageIds.length} images (${livePhotoCount} Live Photos + ${regularImageCount} regular), ${videoIds.length} videos`)
-      
-      // Set the first image as the main image
-      if (imageIds.length > 0) {
-        postData.image = imageIds[0]
-        // Set remaining images as photos array
-        if (imageIds.length > 1) {
-          postData.photos = imageIds.slice(1)
+      // If we have pre-uploaded media IDs, use the original arrays
+      if (livePhotos.length > 0 || photos.length > 0 || videos.length > 0) {
+        if (livePhotos.length > 0) {
+          postData.livePhotos = livePhotos
         }
-      }
-      
-      // Set videos if any
-      if (videoIds.length > 0) {
-        postData.video = videoIds[0] // First video as main video
-        // Set remaining videos as additional videos array if needed
-        if (videoIds.length > 1) {
-          postData.videos = videoIds.slice(1)
+        if (photos.length > 0) {
+          postData.photos = photos
+        }
+        if (videos.length > 0) {
+          postData.videos = videos
+        }
+        console.log(`📝 Assigned pre-uploaded media: ${livePhotos.length} live photos, ${photos.length} photos, ${videos.length} videos`)
+      } else {
+        // Legacy: Track which media IDs correspond to images vs videos
+        const imageIds: string[] = []
+        const videoIds: string[] = []
+        
+        // Process mediaIds in the order they were uploaded
+        let currentIndex = 0
+        
+        // First, add Live Photos (they were uploaded first, sequentially)
+        const livePhotoFiles = imageFiles.filter(file => 
+          file.type === 'image/heic' || file.type === 'image/heif'
+        )
+        const livePhotoCount = livePhotoFiles.length
+        if (livePhotoCount > 0) {
+          imageIds.push(...mediaIds.slice(currentIndex, currentIndex + livePhotoCount))
+          currentIndex += livePhotoCount
+        }
+        
+        // Then add regular images (uploaded in parallel)
+        const regularImageFiles = imageFiles.filter(file => 
+          file.type !== 'image/heic' && file.type !== 'image/heif'
+        )
+        const regularImageCount = regularImageFiles.length
+        if (regularImageCount > 0) {
+          imageIds.push(...mediaIds.slice(currentIndex, currentIndex + regularImageCount))
+          currentIndex += regularImageCount
+        }
+        
+        // Finally add videos (uploaded in parallel)
+        const videoCount = videoFiles.length
+        if (videoCount > 0) {
+          videoIds.push(...mediaIds.slice(currentIndex, currentIndex + videoCount))
+        }
+        
+        console.log(`📝 Media assignment: ${imageIds.length} images (${livePhotoCount} Live Photos + ${regularImageCount} regular), ${videoIds.length} videos`)
+        
+        // Set the first image as the main image
+        if (imageIds.length > 0) {
+          postData.image = imageIds[0]
+          // Set remaining images as photos array
+          if (imageIds.length > 1) {
+            postData.photos = imageIds.slice(1)
+          }
+        }
+        
+        // Set videos if any
+        if (videoIds.length > 0) {
+          postData.video = videoIds[0] // First video as main video
+          // Set remaining videos as additional videos array if needed
+          if (videoIds.length > 1) {
+            postData.videos = videoIds.slice(1)
+          }
         }
       }
     }

@@ -217,18 +217,92 @@ export default function MobilePostForm({
     setIsSubmitting(true)
     
     try {
-      // Prepare post data
+      // Step 1: Upload media files first if any
+      let mediaIds: string[] = []
+      
+      if (selectedFiles.length > 0) {
+        console.log(`📤 Uploading ${selectedFiles.length} files first...`)
+        
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i]
+          const fileSizeMB = file.size / 1024 / 1024
+          
+          console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`)
+          
+          try {
+            // Use chunked upload for files >2MB
+            let uploadEndpoint = '/api/media'
+            if (fileSizeMB > 2) {
+              uploadEndpoint = '/api/media/chunked'
+              console.log(`📦 Using chunked upload for large file: ${file.name}`)
+            }
+            
+            const formData = new FormData()
+            formData.append('file', file)
+            formData.append('alt', file.name)
+            
+            const uploadResponse = await fetch(uploadEndpoint, {
+              method: 'POST',
+              body: formData,
+            })
+            
+            if (!uploadResponse.ok) {
+              let errorMessage = `Failed to upload ${file.name}: ${uploadResponse.status}`
+              
+              try {
+                const errorData = await uploadResponse.json()
+                errorMessage = errorData.message || errorMessage
+              } catch (parseError) {
+                const errorText = await uploadResponse.text()
+                console.error(`❌ Upload failed for ${file.name}:`, errorText)
+                errorMessage = `Upload failed: ${uploadResponse.status} - ${errorText.substring(0, 100)}`
+              }
+              
+              throw new Error(errorMessage)
+            }
+            
+            let uploadResult
+            try {
+              uploadResult = await uploadResponse.json()
+            } catch (parseError) {
+              const errorText = await uploadResponse.text()
+              console.error(`❌ Failed to parse upload response for ${file.name}:`, errorText)
+              throw new Error(`Invalid response from server for ${file.name}`)
+            }
+            if (uploadResult.id) {
+              mediaIds.push(uploadResult.id)
+              console.log(`✅ Uploaded ${file.name}: ${uploadResult.id}`)
+            } else {
+              throw new Error(`No media ID returned for ${file.name}`)
+            }
+            
+            // Small delay between uploads
+            if (i < selectedFiles.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 500))
+            }
+            
+          } catch (uploadError) {
+            console.error(`❌ Error uploading ${file.name}:`, uploadError)
+            toast.error(`Failed to upload ${file.name}`)
+            return
+          }
+        }
+        
+        console.log(`✅ All files uploaded successfully: ${mediaIds.length} media IDs`)
+      }
+      
+      // Step 2: Create post with media IDs (not files)
       const postData: any = {
         content: postContent,
         type: "post",
         location: selectedLocation ? selectedLocation.id : undefined,
       }
 
-      // Add media if uploaded
-      if (uploadedMediaIds.length > 0) {
-        // Separate Live Photos (converted HEIC) from regular images and videos
-        const livePhotos = uploadedMediaIds.slice(0, selectedFiles.filter(f => f.type === 'image/jpeg' && f.name.includes('converted')).length)
-        const regularImages = uploadedMediaIds.slice(livePhotos.length, uploadedMediaIds.length)
+      // Add media IDs if uploaded
+      if (mediaIds.length > 0) {
+        // Separate Live Photos from regular images
+        const livePhotos = mediaIds.slice(0, selectedFiles.filter(f => f.type === 'image/jpeg' && f.name.includes('converted')).length)
+        const regularImages = mediaIds.slice(livePhotos.length, mediaIds.length)
         
         postData.livePhotos = livePhotos
         postData.photos = regularImages
@@ -240,12 +314,12 @@ export default function MobilePostForm({
       
       console.log(`📊 Post payload size: ${payloadSizeMB.toFixed(2)}MB`)
       
-      if (payloadSizeMB > 4.5) { // Vercel has 4.5MB limit for serverless functions
+      if (payloadSizeMB > 4.5) {
         toast.error(`Post data too large (${payloadSizeMB.toFixed(2)}MB). Please reduce content or remove some media.`)
         return
       }
 
-      console.log('Submitting post with data:', postData)
+      console.log('📝 Creating post with data:', postData)
 
       const response = await fetch("/api/posts/create", {
         method: "POST",
@@ -257,8 +331,19 @@ export default function MobilePostForm({
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to create post")
+        let errorMessage = "Failed to create post"
+        
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorMessage
+        } catch (parseError) {
+          // If JSON parsing fails, try to get text
+          const errorText = await response.text()
+          console.error('❌ Response parsing failed:', errorText)
+          errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`
+        }
+        
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
@@ -274,7 +359,7 @@ export default function MobilePostForm({
       }
 
     } catch (error) {
-      console.error("Error creating post:", error)
+      console.error("❌ Error creating post:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create post")
     } finally {
       setIsSubmitting(false)
