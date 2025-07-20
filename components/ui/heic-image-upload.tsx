@@ -159,18 +159,18 @@ export function HEICImageUpload({
           message: `Processing ${file?.name}${isHEICFile(file || new File([], '')) ? ' (converting HEIC)' : ''}...` 
         }))
 
-        addLog('info', `Processing file ${i + 1}/${fileArray.length}: ${file.name}`)
+        addLog('info', `Processing file ${i + 1}/${fileArray.length}: ${file?.name || 'Unknown file'}`)
 
         const startTime = Date.now()
         const result = await processImageFile(file || new File([], ''), conversionOptions)
         const processingTime = Date.now() - startTime
 
         if (result.wasConverted) {
-          addLog('success', `HEIC conversion successful: ${file.name}`, 
-            `Original: ${(file.size / 1024 / 1024).toFixed(2)}MB → Converted: ${(result.file.size / 1024 / 1024).toFixed(2)}MB (${processingTime}ms)`)
+          addLog('success', `HEIC conversion successful: ${file?.name || 'Unknown file'}`, 
+            `Original: ${(file?.size || 0 / 1024 / 1024).toFixed(2)}MB → Converted: ${(result.file.size / 1024 / 1024).toFixed(2)}MB (${processingTime}ms)`)
           
           if (result.conversionInfo) {
-            addLog('info', `Conversion details: Quality ${(result.conversionInfo.quality * 100).toFixed(0)}%, Format: ${result.conversionInfo.format}`)
+            addLog('info', `Conversion details: Quality ${((result.conversionInfo as any).quality * 100).toFixed(0)}%, Format: ${(result.conversionInfo as any).format}`)
           }
           
           totalConversionInfo = result.conversionInfo
@@ -178,7 +178,7 @@ export function HEICImageUpload({
             `HEIC file converted successfully! Reduced size by ${result.conversionInfo?.compressionRatio.toFixed(1)}%`
           )
         } else {
-          addLog('info', `No conversion needed: ${file.name}`, `Processing time: ${processingTime}ms`)
+          addLog('info', `No conversion needed: ${file?.name || 'Unknown file'}`, `Processing time: ${processingTime}ms`)
         }
 
         processedFiles.push(result.file)
@@ -186,7 +186,7 @@ export function HEICImageUpload({
         // Create preview URL
         const previewUrl = URL.createObjectURL(result.file)
         newPreviewUrls.push(previewUrl)
-        addLog('info', `Preview created for: ${file.name}`)
+        addLog('info', `Preview created for: ${file?.name || 'Unknown file'}`)
 
         // Notify parent component
         if (onFileSelected) {
@@ -240,7 +240,7 @@ export function HEICImageUpload({
           message: `Uploading ${file?.name}...` 
         }))
 
-        addLog('info', `Uploading file ${i + 1}/${files.length}: ${file.name}`)
+        addLog('info', `Uploading file ${i + 1}/${files.length}: ${file?.name || 'Unknown file'}`)
 
         const formData = new FormData()
         formData.append('file', file || new File([], ''))
@@ -255,7 +255,7 @@ export function HEICImageUpload({
 
         if (!response.ok) {
           const error = await response.json()
-          const errorMsg = error.error || `Upload failed for ${file?.name}`
+          const errorMsg = error.error || `Upload failed for ${file?.name || 'Unknown file'}`
           addLog('error', `Upload failed: ${errorMsg}`, `Response status: ${response.status}`)
           throw new Error(errorMsg)
         }
@@ -263,7 +263,7 @@ export function HEICImageUpload({
         const result = await response.json()
         uploadResults.push(result)
         
-        addLog('success', `Upload successful: ${file.name}`, `Upload time: ${uploadTime}ms, Server ID: ${result.id}`)
+        addLog('success', `Upload successful: ${file?.name || 'Unknown file'}`, `Upload time: ${uploadTime}ms, Server ID: ${result.id}`)
       }
 
       setUploadState({ 
