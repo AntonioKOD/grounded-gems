@@ -114,6 +114,19 @@ export default function MobilePostForm({
 
   // Handle file selection from HEIC upload component
   const handleFileSelected = (file: File, conversionInfo?: any) => {
+    // Check for Live Photo limitations
+    const isLivePhoto = file.type === 'image/heic' || file.type === 'image/heif'
+    const currentLivePhotos = selectedFiles.filter(f => 
+      f.type === 'image/heic' || f.type === 'image/heif'
+    ).length
+    
+    if (isLivePhoto && currentLivePhotos >= 1) {
+      toast.warning(
+        "We currently support only 1 Live Photo per post. Additional Live Photos will be converted to regular photos.",
+        { duration: 4000 }
+      )
+    }
+    
     // Validate file size - reduced limit for better reliability
     const maxSizeMB = 25 // 25MB max per file (reduced from 50MB)
     const maxSizeBytes = maxSizeMB * 1024 * 1024
@@ -137,10 +150,15 @@ export default function MobilePostForm({
     
     if (conversionInfo) {
       console.log('HEIC conversion info:', conversionInfo)
-      toast.success(`HEIC converted: ${conversionInfo.compressionRatio.toFixed(1)}% size reduction`)
+      toast.success(`Live Photo converted: ${conversionInfo.compressionRatio.toFixed(1)}% size reduction`)
     }
     
-    toast.success(`Added ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
+    // Show appropriate message based on file type
+    if (isLivePhoto) {
+      toast.success(`Added Live Photo: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
+    } else {
+      toast.success(`Added ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
+    }
   }
 
   // Handle upload completion
@@ -534,6 +552,15 @@ export default function MobilePostForm({
               </TabsList>
               
               <TabsContent value="upload" className="mt-4">
+                {/* Live Photo Support Info */}
+                <Alert className="bg-amber-50 border-amber-200 text-amber-800 mb-4">
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Live Photo Support:</strong> We currently support 1 Live Photo per post. 
+                    Additional Live Photos will be automatically converted to regular photos for better compatibility.
+                  </AlertDescription>
+                </Alert>
+                
                 <HEICImageUpload
                   onFileSelected={handleFileSelected}
                   onUploadComplete={handleUploadComplete}
@@ -554,6 +581,15 @@ export default function MobilePostForm({
                     <span className="text-sm font-medium">Selected Files</span>
                     <Badge variant="secondary">{selectedFiles.length}</Badge>
                   </div>
+                  
+                  {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
+                    <div className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <span className="text-sm font-medium text-amber-800">Live Photos</span>
+                      <Badge variant="secondary" className="bg-amber-100 text-amber-800">
+                        {selectedFiles.filter(f => f.type === 'image/heic' || f.type === 'image/heif').length}
+                      </Badge>
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <span className="text-sm font-medium">Uploaded Media</span>

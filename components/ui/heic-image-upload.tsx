@@ -233,6 +233,34 @@ export function HEICImageUpload({
       }
     }
 
+    // Check for Live Photo limitations
+    const livePhotos = fileArray.filter(file => 
+      file.type === 'image/heic' || file.type === 'image/heif'
+    )
+    const existingLivePhotos = selectedFiles.filter(file => 
+      file.type === 'image/heic' || file.type === 'image/heif'
+    )
+    
+    if (livePhotos.length > 0 && existingLivePhotos.length >= 1) {
+      const warningMsg = `Live Photo Limit: You can only upload 1 Live Photo per post. ${livePhotos.length} additional Live Photo(s) will be converted to regular photos.`
+      addLog('warning', 'Live Photo Limit', warningMsg)
+      toast.warning(warningMsg, { duration: 5000 })
+      
+      // Show a more prominent warning in the upload area
+      setUploadState(prev => ({
+        ...prev,
+        message: `⚠️ Live Photo Limit: Only 1 Live Photo supported. ${livePhotos.length} additional Live Photo(s) will be converted.`
+      }))
+      
+      // Clear the warning after 5 seconds
+      setTimeout(() => {
+        setUploadState(prev => ({
+          ...prev,
+          message: 'Upload Images'
+        }))
+      }, 5000)
+    }
+
     // Process files (convert HEIC if needed)
     setUploadState({ status: 'converting', progress: 0, message: 'Processing images...' })
     addLog('info', 'Starting file processing and conversion')
@@ -453,6 +481,15 @@ export function HEICImageUpload({
 
     return (
       <div className="space-y-4">
+        {/* Live Photo Support Warning */}
+        <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Live Photo Support:</strong> We currently support 1 Live Photo per post. 
+            Additional Live Photos will be automatically converted to regular photos for better compatibility.
+          </AlertDescription>
+        </Alert>
+        
         {/* Upload Area */}
         <div
           onDrop={handleDrop}
@@ -522,6 +559,12 @@ export function HEICImageUpload({
                     <X className="h-3 w-3" />
                   </button>
                   <p className="text-xs text-gray-600 mt-1 truncate">{file.name}</p>
+                  {(file.type === 'image/heic' || file.type === 'image/heif') && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-amber-700 font-medium">Live Photo</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
