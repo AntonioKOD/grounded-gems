@@ -1,5 +1,9 @@
 {
   "functions": {
+    "app/api/upload/blob/route.ts": {
+      "maxDuration": 300,
+      "memory": 3008
+    },
     "app/api/posts/create/route.ts": {
       "maxDuration": 300
     },
@@ -19,6 +23,9 @@
       "maxDuration": 300
     },
     "app/api/media/chunked-upload/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/upload/blob/route.ts": {
       "maxDuration": 300
     }
   },

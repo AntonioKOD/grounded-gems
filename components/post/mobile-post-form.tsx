@@ -247,23 +247,43 @@ export default function MobilePostForm({
             let uploadResult
             
             if (shouldChunk) {
-              // Use chunked upload for large files
-              const chunkSize = getOptimalChunkSize(file.size)
-              console.log(`📦 Using chunked upload with ${(chunkSize / 1024 / 1024).toFixed(2)}MB chunks`)
+              // Use Vercel Blob for large files (bypasses 4.5MB limit)
+              console.log(`🚀 Using Vercel Blob upload for large file: ${file.name}`)
               
-              uploadResult = await uploadFileInChunks(file, {
-                chunkSize,
-                endpoint: '/api/media/chunked-upload',
-                onProgress: (progress) => {
-                  console.log(`📦 Upload progress for ${file.name}: ${progress.toFixed(1)}%`)
-                },
-                onChunkComplete: (chunkIndex, totalChunks) => {
-                  console.log(`📦 Chunk ${chunkIndex}/${totalChunks} completed for ${file.name}`)
-                }
+              const formData = new FormData()
+              formData.append('file', file)
+              formData.append('alt', file.name)
+              
+              const blobResponse = await fetch('/api/upload/blob', {
+                method: 'POST',
+                body: formData,
               })
               
+              if (!blobResponse.ok) {
+                let errorMessage = `Failed to upload ${file.name}: ${blobResponse.status}`
+                
+                try {
+                  const errorData = await blobResponse.json()
+                  errorMessage = errorData.message || errorMessage
+                } catch (parseError) {
+                  const errorText = await blobResponse.text()
+                  console.error(`❌ Blob upload failed for ${file.name}:`, errorText)
+                  errorMessage = `Blob upload failed: ${blobResponse.status} - ${errorText.substring(0, 100)}`
+                }
+                
+                throw new Error(errorMessage)
+              }
+              
+              try {
+                uploadResult = await blobResponse.json()
+              } catch (parseError) {
+                const errorText = await blobResponse.text()
+                console.error(`❌ Failed to parse blob response for ${file.name}:`, errorText)
+                throw new Error(`Invalid response from blob server for ${file.name}`)
+              }
+              
               if (!uploadResult.success) {
-                throw new Error(uploadResult.message || 'Chunked upload failed')
+                throw new Error(uploadResult.message || 'Blob upload failed')
               }
             } else {
               // Use regular upload for smaller files
