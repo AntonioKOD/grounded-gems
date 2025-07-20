@@ -122,8 +122,17 @@ export default function MobilePostForm({
     
     if (isLivePhoto && currentLivePhotos >= 1) {
       toast.warning(
-        "We currently support only 1 Live Photo per post. Additional Live Photos will be converted to regular photos.",
-        { duration: 4000 }
+        "📱 Live Photo Limit: Only 1 Live Photo supported per post. Additional Live Photos will be converted to regular photos.",
+        { 
+          duration: 6000,
+          style: {
+            background: 'linear-gradient(135deg, #fef3c7, #fed7aa)',
+            border: '2px solid #f59e0b',
+            color: '#92400e',
+            fontSize: '14px',
+            fontWeight: '500'
+          }
+        }
       )
     }
     
@@ -552,16 +561,29 @@ export default function MobilePostForm({
               </TabsList>
               
               <TabsContent value="upload" className="mt-4">
-                {/* Live Photo Support Info */}
-                <Alert className="bg-amber-50 border-amber-200 text-amber-800 mb-4">
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>Live Photo Support:</strong> We currently support 1 Live Photo per post. 
-                    Additional Live Photos will be automatically converted to regular photos for better compatibility.
-                  </AlertDescription>
+                {/* Live Photo Support Info - More Prominent */}
+                <Alert className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 text-amber-900 mb-6 shadow-lg">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
+                        <Info className="h-5 w-5 text-amber-600" />
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <AlertDescription className="text-base leading-relaxed">
+                        <strong className="text-amber-800 text-lg">📱 Live Photo Support</strong>
+                        <br />
+                        <span className="text-amber-700">
+                          We currently support <strong>1 Live Photo per post</strong>. 
+                          Additional Live Photos will be automatically converted to regular photos for better compatibility.
+                        </span>
+                      </AlertDescription>
+                    </div>
+                  </div>
                 </Alert>
                 
                 <HEICImageUpload
+                  showLivePhotoWarning={false}
                   onFileSelected={handleFileSelected}
                   onUploadComplete={handleUploadComplete}
                   onUploadError={handleUploadError}
@@ -573,6 +595,25 @@ export default function MobilePostForm({
                   uploadEndpoint="/api/media"
                   className="w-full"
                 />
+                
+                {/* Live Photo Detection Banner */}
+                {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
+                  <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-blue-600 text-sm">📱</span>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-800">
+                          Live Photos Detected
+                        </p>
+                        <p className="text-xs text-blue-600">
+                          {selectedFiles.filter(f => f.type === 'image/heic' || f.type === 'image/heif').length} Live Photo(s) will be processed
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
               
               <TabsContent value="status" className="mt-4">

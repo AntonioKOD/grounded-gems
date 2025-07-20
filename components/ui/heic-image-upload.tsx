@@ -32,6 +32,7 @@ interface HEICImageUploadProps {
   autoUpload?: boolean
   children?: React.ReactNode
   showDetailedLogs?: boolean // New prop for detailed logging
+  showLivePhotoWarning?: boolean // New prop to control Live Photo warning display
 }
 
 interface UploadState {
@@ -63,7 +64,8 @@ export function HEICImageUpload({
   uploadEndpoint = '/api/media',
   autoUpload = false,
   children,
-  showDetailedLogs = true // Default to showing detailed logs
+  showDetailedLogs = true, // Default to showing detailed logs
+  showLivePhotoWarning = true // Default to showing Live Photo warning
 }: HEICImageUploadProps) {
   const [uploadState, setUploadState] = useState<UploadState>({
     status: 'idle',
@@ -481,14 +483,16 @@ export function HEICImageUpload({
 
     return (
       <div className="space-y-4">
-        {/* Live Photo Support Warning */}
-        <Alert className="bg-amber-50 border-amber-200 text-amber-800">
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Live Photo Support:</strong> We currently support 1 Live Photo per post. 
-            Additional Live Photos will be automatically converted to regular photos for better compatibility.
-          </AlertDescription>
-        </Alert>
+        {/* Live Photo Support Warning - Only show if enabled */}
+        {showLivePhotoWarning && (
+          <Alert className="bg-amber-50 border-amber-200 text-amber-800">
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Live Photo Support:</strong> We currently support 1 Live Photo per post. 
+              Additional Live Photos will be automatically converted to regular photos for better compatibility.
+            </AlertDescription>
+          </Alert>
+        )}
         
         {/* Upload Area */}
         <div
