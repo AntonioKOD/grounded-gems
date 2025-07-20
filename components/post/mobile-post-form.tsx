@@ -63,8 +63,7 @@ export default function MobilePostForm({
   const [errors, setErrors] = useState<string[]>([])
   const [isValid, setIsValid] = useState(false)
 
-  // Debug state
-  const [showDebugInfo, setShowDebugInfo] = useState(false)
+
 
   // Validate form
   useEffect(() => {
@@ -95,6 +94,11 @@ export default function MobilePostForm({
         })
 
         if (!res.ok) {
+          if (res.status === 401) {
+            toast.error("Please log in to create a post")
+            router.push("/login")
+            return
+          }
           throw new Error("Failed to fetch user data")
         }
 
@@ -158,7 +162,6 @@ export default function MobilePostForm({
     setSelectedFiles(prev => [...prev, file])
     
     if (conversionInfo) {
-      console.log('HEIC conversion info:', conversionInfo)
       toast.success(`Live Photo converted: ${conversionInfo.compressionRatio.toFixed(1)}% size reduction`)
     }
     
@@ -184,7 +187,6 @@ export default function MobilePostForm({
 
   // Handle upload error
   const handleUploadError = (error: string) => {
-    console.error('Upload error:', error)
     toast.error(`Upload failed: ${error}`)
   }
 
@@ -208,7 +210,7 @@ export default function MobilePostForm({
         setShowLocationResults(true)
       }
     } catch (error) {
-      console.error('Error searching locations:', error)
+      // Silently handle location search errors
     } finally {
       setIsSearchingLocations(false)
     }
@@ -249,34 +251,25 @@ export default function MobilePostForm({
       let mediaIds: string[] = []
       
       if (selectedFiles.length > 0) {
-        console.log(`📤 Uploading ${selectedFiles.length} files first...`)
-        
         for (let i = 0; i < selectedFiles.length; i++) {
           const file = selectedFiles[i]
           
           // Type guard to ensure file exists
           if (!file) {
-            console.error(`❌ File at index ${i} is undefined`)
             continue
           }
           
           const fileSizeMB = file.size / 1024 / 1024
-          
-          console.log(`📤 Uploading file ${i + 1}/${selectedFiles.length}: ${file.name} (${fileSizeMB.toFixed(2)}MB)`)
           
           try {
             // Determine upload method based on file size
             const shouldChunk = shouldUseChunkedUpload(file, 5 * 1024 * 1024) // Use chunked for files > 5MB
             const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
             
-            console.log(`📤 File: ${file.name} (${fileSizeMB.toFixed(2)}MB) - Using ${shouldChunk ? 'chunked' : 'regular'} upload`)
-            
             let uploadResult
             
             if (shouldChunk) {
               // Use Vercel Blob for large files (bypasses 4.5MB limit)
-              console.log(`🚀 Using Vercel Blob upload for large file: ${file.name}`)
-              
               const formData = new FormData()
               formData.append('file', file)
               formData.append('alt', file.name)
@@ -287,15 +280,13 @@ export default function MobilePostForm({
               })
               
               if (!blobResponse.ok) {
-                let errorMessage = `Failed to upload ${file.name}: ${blobResponse.status}`
+                let errorMessage = `Failed to upload ${file.name}`
                 
                 try {
                   const errorData = await blobResponse.json()
                   errorMessage = errorData.message || errorMessage
                 } catch (parseError) {
-                  const errorText = await blobResponse.text()
-                  console.error(`❌ Blob upload failed for ${file.name}:`, errorText)
-                  errorMessage = `Blob upload failed: ${blobResponse.status} - ${errorText.substring(0, 100)}`
+                  errorMessage = `Upload failed for ${file.name}`
                 }
                 
                 throw new Error(errorMessage)
@@ -304,56 +295,49 @@ export default function MobilePostForm({
               try {
                 uploadResult = await blobResponse.json()
               } catch (parseError) {
-                const errorText = await blobResponse.text()
-                console.error(`❌ Failed to parse blob response for ${file.name}:`, errorText)
-                throw new Error(`Invalid response from blob server for ${file.name}`)
+                throw new Error(`Upload failed for ${file.name}`)
               }
               
               if (!uploadResult.success) {
-                throw new Error(uploadResult.message || 'Blob upload failed')
+                throw new Error(uploadResult.message || 'Upload failed')
               }
-            } else {
-              // Use regular upload for smaller files
-              const uploadEndpoint = isProduction ? '/api/media/production' : '/api/media'
-              
-              const formData = new FormData()
-              formData.append('file', file)
-              formData.append('alt', file.name)
-              
-              const uploadResponse = await fetch(uploadEndpoint, {
-                method: 'POST',
-                body: formData,
-              })
-              
-              if (!uploadResponse.ok) {
-                let errorMessage = `Failed to upload ${file.name}: ${uploadResponse.status}`
+                          } else {
+                // Use regular upload for smaller files
+                const uploadEndpoint = isProduction ? '/api/media/production' : '/api/media'
                 
-                try {
-                  const errorData = await uploadResponse.json()
-                  errorMessage = errorData.message || errorMessage
-                } catch (parseError) {
-                  const errorText = await uploadResponse.text()
-                  console.error(`❌ Upload failed for ${file.name}:`, errorText)
-                  errorMessage = `Upload failed: ${uploadResponse.status} - ${errorText.substring(0, 100)}`
+                const formData = new FormData()
+                formData.append('file', file)
+                formData.append('alt', file.name)
+                
+                const uploadResponse = await fetch(uploadEndpoint, {
+                  method: 'POST',
+                  body: formData,
+                })
+                
+                if (!uploadResponse.ok) {
+                  let errorMessage = `Failed to upload ${file.name}`
+                  
+                  try {
+                    const errorData = await uploadResponse.json()
+                    errorMessage = errorData.message || errorMessage
+                  } catch (parseError) {
+                    errorMessage = `Upload failed for ${file.name}`
+                  }
+                  
+                  throw new Error(errorMessage)
                 }
                 
-                throw new Error(errorMessage)
+                try {
+                  uploadResult = await uploadResponse.json()
+                } catch (parseError) {
+                  throw new Error(`Upload failed for ${file.name}`)
+                }
               }
-              
-              try {
-                uploadResult = await uploadResponse.json()
-              } catch (parseError) {
-                const errorText = await uploadResponse.text()
-                console.error(`❌ Failed to parse upload response for ${file.name}:`, errorText)
-                throw new Error(`Invalid response from server for ${file.name}`)
-              }
-            }
             
             if (uploadResult.id) {
               mediaIds.push(uploadResult.id)
-              console.log(`✅ Uploaded ${file.name}: ${uploadResult.id}`)
             } else {
-              throw new Error(`No media ID returned for ${file.name}`)
+              throw new Error(`Upload failed for ${file.name}`)
             }
             
             // Small delay between uploads
@@ -362,13 +346,10 @@ export default function MobilePostForm({
             }
             
           } catch (uploadError) {
-            console.error(`❌ Error uploading ${file.name}:`, uploadError)
             toast.error(`Failed to upload ${file.name}`)
             return
           }
         }
-        
-        console.log(`✅ All files uploaded successfully: ${mediaIds.length} media IDs`)
       }
       
       // Step 2: Create post with media IDs (not files)
@@ -392,20 +373,14 @@ export default function MobilePostForm({
       const payloadSize = JSON.stringify(postData).length
       const payloadSizeMB = payloadSize / 1024 / 1024
       
-      console.log(`📊 Post payload size: ${payloadSizeMB.toFixed(2)}MB`)
-      
       if (payloadSizeMB > 4.5) {
-        toast.error(`Post data too large (${payloadSizeMB.toFixed(2)}MB). Please reduce content or remove some media.`)
+        toast.error(`Post data too large. Please reduce content or remove some media.`)
         return
       }
-
-      console.log('📝 Creating post with data:', postData)
 
       // Use production endpoint if in production environment
       const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
       const endpoint = isProduction ? "/api/posts/create-production" : "/api/posts/create"
-      
-      console.log(`📝 Using endpoint: ${endpoint} (production: ${isProduction})`)
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -417,16 +392,19 @@ export default function MobilePostForm({
       })
 
       if (!response.ok) {
+        if (response.status === 401) {
+          toast.error("Please log in to create a post")
+          router.push("/login")
+          return
+        }
+        
         let errorMessage = "Failed to create post"
         
         try {
           const errorData = await response.json()
           errorMessage = errorData.message || errorMessage
         } catch (parseError) {
-          // If JSON parsing fails, try to get text
-          const errorText = await response.text()
-          console.error('❌ Response parsing failed:', errorText)
-          errorMessage = `Server error: ${response.status} - ${errorText.substring(0, 100)}`
+          errorMessage = "Server error occurred"
         }
         
         throw new Error(errorMessage)
@@ -445,7 +423,6 @@ export default function MobilePostForm({
       }
 
     } catch (error) {
-      console.error("❌ Error creating post:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create post")
     } finally {
       setIsSubmitting(false)
@@ -503,29 +480,11 @@ export default function MobilePostForm({
             </div>
           </div>
           
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDebugInfo(!showDebugInfo)}
-            className="text-gray-500"
-          >
-            <Info className="h-4 w-4" />
-          </Button>
+          <div></div>
         </div>
       </div>
 
-      {/* Debug Info */}
-      {showDebugInfo && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
-          <div className="text-sm text-blue-800">
-            <p><strong>Debug Info:</strong></p>
-            <p>Selected Files: {selectedFiles.length}</p>
-            <p>Uploaded Media IDs: {uploadedMediaIds.length}</p>
-            <p>Form Valid: {isValid ? 'Yes' : 'No'}</p>
-            <p>Errors: {errors.length}</p>
-          </div>
-        </div>
-      )}
+
 
       <form onSubmit={handleSubmit} className="p-4 space-y-6">
         {/* Content Input */}
@@ -561,25 +520,12 @@ export default function MobilePostForm({
               </TabsList>
               
               <TabsContent value="upload" className="mt-4">
-                {/* Live Photo Support Info - More Prominent */}
-                <Alert className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 text-amber-900 mb-6 shadow-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
-                        <Info className="h-5 w-5 text-amber-600" />
-                      </div>
-                    </div>
-                    <div className="flex-1">
-                      <AlertDescription className="text-base leading-relaxed">
-                        <strong className="text-amber-800 text-lg">📱 Live Photo Support</strong>
-                        <br />
-                        <span className="text-amber-700">
-                          We currently support <strong>1 Live Photo per post</strong>. 
-                          Additional Live Photos will be automatically converted to regular photos for better compatibility.
-                        </span>
-                      </AlertDescription>
-                    </div>
-                  </div>
+                {/* Live Photo Support Info - Mobile Friendly */}
+                <Alert className="bg-amber-50 border border-amber-200 text-amber-800 mb-4">
+                  <Info className="h-3 w-3 flex-shrink-0 mt-0.5" />
+                  <AlertDescription className="text-xs leading-relaxed">
+                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                  </AlertDescription>
                 </Alert>
                 
                 <HEICImageUpload
