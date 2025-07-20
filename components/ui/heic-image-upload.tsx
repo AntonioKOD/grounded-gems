@@ -101,7 +101,7 @@ export function HEICImageUpload({
 
   // Helper function for chunked file upload
   const uploadFileInChunks = async (file: File, endpoint: string) => {
-    const chunkSize = 5 * 1024 * 1024 // 5MB chunks
+    const chunkSize = 2 * 1024 * 1024 // 2MB chunks for better compatibility
     const totalChunks = Math.ceil(file.size / chunkSize)
     const uploadId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
     
@@ -339,7 +339,7 @@ export function HEICImageUpload({
         const fileSizeMB = (file?.size || 0) / 1024 / 1024
         let result
 
-        if (fileSizeMB > 10) {
+        if (fileSizeMB > 5) { // Reduced threshold to 5MB for more aggressive chunking
           addLog('info', `Large file detected (${fileSizeMB.toFixed(2)}MB), using chunked upload`)
           result = await uploadFileInChunks(file || new File([], ''), uploadEndpoint)
         } else {

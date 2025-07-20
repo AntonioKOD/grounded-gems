@@ -6,9 +6,28 @@ import payloadConfig from '@payload-config'
 export const runtime = 'nodejs'
 export const maxDuration = 300 // 5 minutes timeout
 
+// Additional configuration for large payloads
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function POST(request: NextRequest) {
   try {
     console.log('📝 Post creation API called - OPTIMIZED VERSION')
+    
+    // Check request size before processing
+    const contentLength = request.headers.get('content-length')
+    if (contentLength) {
+      const sizeMB = parseInt(contentLength) / 1024 / 1024
+      console.log(`📊 Request size: ${sizeMB.toFixed(2)}MB`)
+      
+      if (sizeMB > 4.5) {
+        console.error(`📝 Request too large: ${sizeMB.toFixed(2)}MB`)
+        return NextResponse.json(
+          { success: false, message: `Request too large (${sizeMB.toFixed(2)}MB). Please reduce content or use chunked upload.` },
+          { status: 413 }
+        )
+      }
+    }
     
     const payload = await getPayload({ config: payloadConfig })
     

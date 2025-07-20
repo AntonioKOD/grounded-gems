@@ -234,6 +234,17 @@ export default function MobilePostForm({
         postData.photos = regularImages
       }
 
+      // Check total payload size before sending
+      const payloadSize = JSON.stringify(postData).length
+      const payloadSizeMB = payloadSize / 1024 / 1024
+      
+      console.log(`📊 Post payload size: ${payloadSizeMB.toFixed(2)}MB`)
+      
+      if (payloadSizeMB > 4.5) { // Vercel has 4.5MB limit for serverless functions
+        toast.error(`Post data too large (${payloadSizeMB.toFixed(2)}MB). Please reduce content or remove some media.`)
+        return
+      }
+
       console.log('Submitting post with data:', postData)
 
       const response = await fetch("/api/posts/create", {
