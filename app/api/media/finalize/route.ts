@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         alt: fileName,
         uploadSource: 'mobile',
       },
-      file: file,
+      file: file as any,
     })
 
     // Clean up chunks
