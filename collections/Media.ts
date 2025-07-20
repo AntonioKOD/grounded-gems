@@ -37,42 +37,131 @@ const processConversionQueue = async () => {
   isProcessingQueue = false
 }
 
-// Helper function to safely load Sharp
+// Enhanced helper function to safely load Sharp with better error handling
 const loadSharp = async () => {
   try {
+    // Check if we're in a production environment
+    const isProduction = process.env.NODE_ENV === 'production'
+    console.log(`🔧 Environment: ${isProduction ? 'production' : 'development'}`)
+    
     // Try to load Sharp dynamically
     const sharp = await import('sharp')
+    console.log('✅ Sharp library loaded successfully')
     return sharp.default
   } catch (error) {
     console.error('❌ Failed to load Sharp library:', error)
+    
+    // In production, try alternative approaches
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔧 Attempting alternative Sharp loading methods...')
+      
+      try {
+        // Try requiring Sharp directly
+        const sharp = require('sharp')
+        console.log('✅ Sharp loaded via require()')
+        return sharp
+      } catch (requireError) {
+        console.error('❌ Sharp require() also failed:', requireError)
+      }
+      
+      try {
+        // Try with explicit path
+        const sharp = await import(process.cwd() + '/node_modules/sharp')
+        console.log('✅ Sharp loaded via explicit path')
+        return sharp.default
+      } catch (pathError) {
+        console.error('❌ Sharp explicit path also failed:', pathError)
+      }
+    }
+    
     return null
   }
 }
 
-// Helper function to convert HEIC to JPEG with fallback
+// Enhanced helper function to convert HEIC to JPEG with better error handling
 const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
   try {
+    console.log(`🔧 Starting HEIC conversion: ${filePath} -> ${outputPath}`)
+    
+    // Check if input file exists and is readable
+    if (!fs.existsSync(filePath)) {
+      console.error(`❌ Input file does not exist: ${filePath}`)
+      return false
+    }
+    
+    const stats = fs.statSync(filePath)
+    if (stats.size === 0) {
+      console.error(`❌ Input file is empty: ${filePath}`)
+      return false
+    }
+    
+    console.log(`📁 File stats: ${stats.size} bytes, readable: ${fs.constants.R_OK}`)
+    
+    // Check if output directory exists and is writable
+    const outputDir = path.dirname(outputPath)
+    if (!fs.existsSync(outputDir)) {
+      console.log(`📁 Creating output directory: ${outputDir}`)
+      fs.mkdirSync(outputDir, { recursive: true })
+    }
+    
+    // Test write permissions
+    try {
+      const testFile = path.join(outputDir, '.test-write')
+      fs.writeFileSync(testFile, 'test')
+      fs.unlinkSync(testFile)
+      console.log('✅ Output directory is writable')
+    } catch (writeError) {
+      console.error(`❌ Output directory not writable: ${outputDir}`, writeError)
+      return false
+    }
+    
     const sharp = await loadSharp()
     if (!sharp) {
       console.log('⚠️ Sharp not available, keeping original HEIC file')
       return false
     }
 
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      console.log('⚠️ Original file not found for conversion:', filePath)
-      return false
-    }
-
-    // Convert HEIC to JPEG
+    // Convert HEIC to JPEG with error handling
+    console.log('🔄 Converting HEIC to JPEG...')
     await sharp(filePath)
-      .jpeg({ quality: 90 })
+      .jpeg({ 
+        quality: 90,
+        progressive: true,
+        force: true
+      })
       .toFile(outputPath)
 
-    console.log('✅ HEIC converted to JPEG successfully')
+    // Verify the output file was created
+    if (!fs.existsSync(outputPath)) {
+      console.error('❌ Output file was not created')
+      return false
+    }
+    
+    const outputStats = fs.statSync(outputPath)
+    if (outputStats.size === 0) {
+      console.error('❌ Output file is empty')
+      return false
+    }
+    
+    console.log(`✅ HEIC converted to JPEG successfully: ${outputStats.size} bytes`)
     return true
   } catch (error) {
     console.error('❌ Error converting HEIC to JPEG:', error)
+    
+    // Log additional error details in production
+    if (process.env.NODE_ENV === 'production') {
+      console.error('🔧 Production error details:', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        filePath,
+        outputPath,
+        cwd: process.cwd(),
+        nodeVersion: process.version,
+        platform: process.platform,
+        arch: process.arch
+      })
+    }
+    
     return false
   }
 }
@@ -108,6 +197,21 @@ const generateUniqueFilename = (originalPath: string, baseDir: string): string =
   }
   
   return newPath
+}
+
+// Helper function to safely update media document
+const safeUpdateMediaDoc = async (req: any, docId: string, updateData: any) => {
+  try {
+    await req.payload.update({
+      collection: 'media',
+      id: docId,
+      data: updateData,
+    })
+    return true
+  } catch (error) {
+    console.error('❌ Error updating media document:', error)
+    return false
+  }
 }
 
 export const Media: CollectionConfig = {
@@ -315,10 +419,19 @@ export const Media: CollectionConfig = {
             const mediaDir = path.join(process.cwd(), 'media')
             const filePath = path.join(mediaDir, doc.filename)
             
+            // Check if media directory exists
+            if (!fs.existsSync(mediaDir)) {
+              console.error(`❌ Media directory does not exist: ${mediaDir}`)
+              await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
+              return doc
+            }
+            
             // Generate unique output path to prevent conflicts
             const baseName = path.basename(doc.filename, path.extname(doc.filename))
             const timestamp = Date.now()
             const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
+            
+            console.log(`📁 Conversion paths: ${filePath} -> ${uniqueOutputPath}`)
             
             // Queue the conversion to prevent conflicts with multiple uploads
             const conversionSuccess = await queueConversion(filePath, uniqueOutputPath)
@@ -327,61 +440,47 @@ export const Media: CollectionConfig = {
               // Update the document with new filename and MIME type
               const newFilename = path.basename(uniqueOutputPath)
               
-              try {
-                await req.payload.update({
-                  collection: 'media',
-                  id: doc.id,
-                  data: {
-                    filename: newFilename,
-                    mimeType: 'image/jpeg',
-                    conversionStatus: 'converted',
-                  },
-                })
-                
+              const updateSuccess = await safeUpdateMediaDoc(req, doc.id, {
+                filename: newFilename,
+                mimeType: 'image/jpeg',
+                conversionStatus: 'converted',
+              })
+              
+              if (updateSuccess) {
                 // Remove the original HEIC/HEIF file
-                if (fs.existsSync(filePath)) {
-                  fs.unlinkSync(filePath)
-                  console.log('📱 Original HEIC file removed')
+                try {
+                  if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath)
+                    console.log('📱 Original HEIC file removed')
+                  }
+                } catch (unlinkError) {
+                  console.error('❌ Error removing original file:', unlinkError)
                 }
                 
                 console.log('📱 Live Photo converted successfully to JPEG:', newFilename)
-              } catch (updateError) {
-                console.error('❌ Error updating document after conversion:', updateError)
-                // Mark as failed but keep the original
-                await req.payload.update({
-                  collection: 'media',
-                  id: doc.id,
-                  data: {
-                    conversionStatus: 'failed',
-                  },
-                })
+              } else {
+                console.error('❌ Failed to update document after successful conversion')
               }
             } else {
               // Conversion failed, mark as failed but keep the original
               console.log('⚠️ Live Photo conversion failed, keeping original HEIC file')
-              await req.payload.update({
-                collection: 'media',
-                id: doc.id,
-                data: {
-                  conversionStatus: 'failed',
-                },
-              })
+              await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
             }
             
           } catch (error) {
             console.error('📱 Error in Live Photo processing:', error)
+            
+            // Log detailed error information
+            console.error('🔧 Error details:', {
+              message: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+              docId: doc.id,
+              filename: doc.filename,
+              mimeType: doc.mimeType
+            })
+            
             // Mark as failed
-            try {
-              await req.payload.update({
-                collection: 'media',
-                id: doc.id,
-                data: {
-                  conversionStatus: 'failed',
-                },
-              })
-            } catch (updateError) {
-              console.error('❌ Error updating conversion status:', updateError)
-            }
+            await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
           }
         }
         
