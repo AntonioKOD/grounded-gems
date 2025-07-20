@@ -78,6 +78,99 @@ export function HEICImageUpload({
   const acceptTypes = accept || getSupportedImageTypes()
   const maxSizeBytes = maxSizeInMB * 1024 * 1024
 
+  // Helper function for direct file upload
+  const uploadFileDirect = async (file: File, endpoint: string) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('alt', file.name || '')
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      const errorMsg = error.error || `Upload failed for ${file.name}`
+      addLog('error', `Upload failed: ${errorMsg}`, `Response status: ${response.status}`)
+      throw new Error(errorMsg)
+    }
+
+    return await response.json()
+  }
+
+  // Helper function for chunked file upload
+  const uploadFileInChunks = async (file: File, endpoint: string) => {
+    const chunkSize = 5 * 1024 * 1024 // 5MB chunks
+    const totalChunks = Math.ceil(file.size / chunkSize)
+    const uploadId = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    
+    addLog('info', `Starting chunked upload: ${totalChunks} chunks of ${(chunkSize / 1024 / 1024).toFixed(1)}MB each`)
+
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+      const start = chunkIndex * chunkSize
+      const end = Math.min(start + chunkSize, file.size)
+      const chunk = file.slice(start, end)
+      
+      const progress = ((chunkIndex + 0.5) / totalChunks) * 100
+      setUploadState(prev => ({ 
+        ...prev, 
+        progress, 
+        message: `Uploading chunk ${chunkIndex + 1}/${totalChunks}...` 
+      }))
+
+      addLog('info', `Uploading chunk ${chunkIndex + 1}/${totalChunks}`)
+
+      const formData = new FormData()
+      formData.append('chunk', chunk)
+      formData.append('uploadId', uploadId)
+      formData.append('chunkIndex', chunkIndex.toString())
+      formData.append('totalChunks', totalChunks.toString())
+      formData.append('fileName', file.name)
+      formData.append('fileType', file.type)
+
+      const response = await fetch(`${endpoint}/chunked`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        const errorMsg = error.error || `Chunk upload failed`
+        addLog('error', `Chunk upload failed: ${errorMsg}`, `Chunk ${chunkIndex + 1}/${totalChunks}`)
+        throw new Error(errorMsg)
+      }
+
+      // Small delay between chunks to prevent overwhelming the server
+      if (chunkIndex < totalChunks - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    // Finalize the upload
+    addLog('info', 'Finalizing chunked upload...')
+    const finalizeResponse = await fetch(`${endpoint}/finalize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        uploadId,
+        fileName: file.name,
+        fileType: file.type,
+      }),
+    })
+
+    if (!finalizeResponse.ok) {
+      const error = await finalizeResponse.json()
+      const errorMsg = error.error || `Failed to finalize upload`
+      addLog('error', `Finalization failed: ${errorMsg}`)
+      throw new Error(errorMsg)
+    }
+
+    return await finalizeResponse.json()
+  }
+
   // Helper function to add log entries
   const addLog = useCallback((type: LogEntry['type'], message: string, details?: string) => {
     const logEntry: LogEntry = {
@@ -242,28 +335,20 @@ export function HEICImageUpload({
 
         addLog('info', `Uploading file ${i + 1}/${files.length}: ${file?.name || 'Unknown file'}`)
 
-        const formData = new FormData()
-        formData.append('file', file || new File([], ''))
-        formData.append('alt', file?.name || '')
+        // Check file size and use chunked upload for large files
+        const fileSizeMB = (file?.size || 0) / 1024 / 1024
+        let result
 
-        const uploadStartTime = Date.now()
-        const response = await fetch(uploadEndpoint, {
-          method: 'POST',
-          body: formData,
-        })
-        const uploadTime = Date.now() - uploadStartTime
-
-        if (!response.ok) {
-          const error = await response.json()
-          const errorMsg = error.error || `Upload failed for ${file?.name || 'Unknown file'}`
-          addLog('error', `Upload failed: ${errorMsg}`, `Response status: ${response.status}`)
-          throw new Error(errorMsg)
+        if (fileSizeMB > 10) {
+          addLog('info', `Large file detected (${fileSizeMB.toFixed(2)}MB), using chunked upload`)
+          result = await uploadFileInChunks(file || new File([], ''), uploadEndpoint)
+        } else {
+          result = await uploadFileDirect(file || new File([], ''), uploadEndpoint)
         }
 
-        const result = await response.json()
         uploadResults.push(result)
         
-        addLog('success', `Upload successful: ${file?.name || 'Unknown file'}`, `Upload time: ${uploadTime}ms, Server ID: ${result.id}`)
+        addLog('success', `Upload successful: ${file?.name || 'Unknown file'}`, `Server ID: ${result.id}`)
       }
 
       setUploadState({ 

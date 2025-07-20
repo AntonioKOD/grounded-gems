@@ -80,7 +80,7 @@ const nextConfig: NextConfig = {
   // Performance optimizations
   experimental: {
     serverActions: {
-      bodySizeLimit: '50mb',
+      bodySizeLimit: '100mb',
     },
     // Optimize static generation
     staleTimes: {

@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import payloadConfig from '@payload-config'
+
+// Configure larger payload limits for this route
+export const runtime = 'nodejs'
+export const maxDuration = 300 // 5 minutes timeout
 
 export async function POST(request: NextRequest) {
   try {
     console.log('📝 Post creation API called - OPTIMIZED VERSION')
     
-    const payload = await getPayload({ config })
+    const payload = await getPayload({ config: payloadConfig })
     
     let formData: FormData
     

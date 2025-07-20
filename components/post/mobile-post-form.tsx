@@ -113,12 +113,33 @@ export default function MobilePostForm({
 
   // Handle file selection from HEIC upload component
   const handleFileSelected = (file: File, conversionInfo?: any) => {
+    // Validate file size
+    const maxSizeMB = 50 // 50MB max per file
+    const maxSizeBytes = maxSizeMB * 1024 * 1024
+    
+    if (file.size > maxSizeBytes) {
+      toast.error(`${file.name} is too large. Maximum size is ${maxSizeMB}MB`)
+      return
+    }
+    
+    // Check total size of all selected files
+    const currentTotalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0)
+    const newTotalSize = currentTotalSize + file.size
+    const totalSizeMB = newTotalSize / 1024 / 1024
+    
+    if (totalSizeMB > 100) {
+      toast.error(`Total file size (${totalSizeMB.toFixed(1)}MB) would exceed 100MB limit`)
+      return
+    }
+    
     setSelectedFiles(prev => [...prev, file])
     
     if (conversionInfo) {
       console.log('HEIC conversion info:', conversionInfo)
       toast.success(`HEIC converted: ${conversionInfo.compressionRatio.toFixed(1)}% size reduction`)
     }
+    
+    toast.success(`Added ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
   }
 
   // Handle upload completion
