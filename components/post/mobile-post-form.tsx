@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { HEICImageUpload } from "@/components/ui/heic-image-upload"
 
 import { uploadFileInChunks, shouldUseChunkedUpload, getOptimalChunkSize } from "@/lib/chunked-upload"
+import { useUser } from "@/context/user-context"
 
 interface UserData {
   id: string
@@ -38,10 +39,9 @@ export default function MobilePostForm({
 }: MobilePostFormProps) {
   const router = useRouter()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { user, isLoading, isAuthenticated } = useUser()
 
-  // State for user data
-  const [user, setUser] = useState<UserData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  // State for form submission
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Form state
@@ -86,40 +86,13 @@ export default function MobilePostForm({
     setIsValid(newErrors.length === 0)
   }, [postContent, selectedFiles.length])
 
-  // Fetch user data on component mount
+  // Check authentication status
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("/api/users/me", {
-          method: "GET",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!res.ok) {
-          if (res.status === 401) {
-            toast.error("Please log in to create a post")
-            router.push("/login")
-            return
-          }
-          throw new Error("Failed to fetch user data")
-        }
-
-        const { user } = await res.json()
-        setUser(user)
-      } catch (error) {
-        console.error("Error fetching user:", error)
-        toast.error("Please log in to create a post")
-        router.push("/login")
-      } finally {
-        setIsLoading(false)
-      }
+    if (!isLoading && !isAuthenticated) {
+      toast.error("Please log in to create a post")
+      router.push("/login")
     }
-
-    fetchUser()
-  }, [router])
+  }, [isLoading, isAuthenticated, router])
 
   // Handle file selection from HEIC upload component
   const handleFileSelected = (file: File, conversionInfo?: any) => {
