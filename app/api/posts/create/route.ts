@@ -212,21 +212,34 @@ export async function POST(request: NextRequest) {
 
     // Add media if any - properly handle both images and videos
     if (mediaIds.length > 0) {
-      // Separate images and videos based on the files we processed
+      // Track which media IDs correspond to images vs videos
       const imageIds: string[] = []
       const videoIds: string[] = []
       
-      // We need to track which media IDs correspond to images vs videos
-      const imageCount = imageFiles.length
-      const videoCount = videoFiles.length
+      // Process mediaIds in the order they were uploaded
+      let currentIndex = 0
       
-      // First imageCount items are images, rest are videos
-      if (imageCount > 0) {
-        imageIds.push(...mediaIds.slice(0, imageCount))
+      // First, add Live Photos (they were uploaded first, sequentially)
+      const livePhotoCount = livePhotoFiles.length
+      if (livePhotoCount > 0) {
+        imageIds.push(...mediaIds.slice(currentIndex, currentIndex + livePhotoCount))
+        currentIndex += livePhotoCount
       }
+      
+      // Then add regular images (uploaded in parallel)
+      const regularImageCount = regularImageFiles.length
+      if (regularImageCount > 0) {
+        imageIds.push(...mediaIds.slice(currentIndex, currentIndex + regularImageCount))
+        currentIndex += regularImageCount
+      }
+      
+      // Finally add videos (uploaded in parallel)
+      const videoCount = videoFiles.length
       if (videoCount > 0) {
-        videoIds.push(...mediaIds.slice(imageCount))
+        videoIds.push(...mediaIds.slice(currentIndex, currentIndex + videoCount))
       }
+      
+      console.log(`📝 Media assignment: ${imageIds.length} images (${livePhotoCount} Live Photos + ${regularImageCount} regular), ${videoIds.length} videos`)
       
       // Set the first image as the main image
       if (imageIds.length > 0) {
