@@ -318,13 +318,30 @@ export default function MobilePostForm({
               throw new Error(`Upload failed for ${file.name}`)
             }
             
-            // Small delay between uploads
+            // Reduced delay between uploads for faster processing
             if (i < selectedFiles.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1000))
+              await new Promise(resolve => setTimeout(resolve, 200))
             }
             
           } catch (uploadError) {
-            toast.error(`Failed to upload ${file.name}`)
+            console.error(`❌ Error uploading ${file.name}:`, uploadError)
+            
+            // Handle specific error types with better user feedback
+            if (uploadError instanceof Error) {
+              if (uploadError.message.includes('WriteConflict') || 
+                  uploadError.message.includes('code: 112') ||
+                  uploadError.message.includes('Please retry your operation')) {
+                toast.error(`Upload conflict detected. Please try again in a moment.`)
+              } else if (uploadError.message.includes('413') || uploadError.message.includes('Payload Too Large')) {
+                toast.error(`File too large. Please compress or use a smaller file.`)
+              } else if (uploadError.message.includes('timeout')) {
+                toast.error(`Upload timed out. Please try again.`)
+              } else {
+                toast.error(`Failed to upload ${file.name}. Please try again.`)
+              }
+            } else {
+              toast.error(`Failed to upload ${file.name}. Please try again.`)
+            }
             return
           }
         }
@@ -334,12 +351,11 @@ export default function MobilePostForm({
       const postData: any = {
         content: postContent,
         type: "post",
-        location: selectedLocation ? selectedLocation.id : undefined,
+        locationId: selectedLocation ? selectedLocation.id : undefined,
       }
 
       // Add media IDs if uploaded
       if (mediaIds.length > 0) {
-        // All uploaded media goes to photos array
         postData.photos = mediaIds
       }
 
@@ -356,10 +372,17 @@ export default function MobilePostForm({
       const isProduction = typeof window !== 'undefined' && window.location.hostname !== 'localhost'
       const endpoint = isProduction ? "/api/posts/create-production" : "/api/posts/create"
 
+      if (!user) {
+        toast.error("User not found. Please log in again.")
+        router.push("/login")
+        return
+      }
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-user-id": user.id, // Add user ID to headers
         },
         credentials: "include",
         body: JSON.stringify(postData),

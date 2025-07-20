@@ -143,9 +143,9 @@ export function HEICImageUpload({
         throw new Error(errorMsg)
       }
 
-      // Small delay between chunks to prevent overwhelming the server
+      // Reduced delay between chunks for faster uploads
       if (chunkIndex < totalChunks - 1) {
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 50))
       }
     }
 

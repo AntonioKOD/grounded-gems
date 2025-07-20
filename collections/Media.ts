@@ -30,8 +30,8 @@ const processConversionQueue = async () => {
       task.reject(error as Error)
     }
     
-    // Small delay between conversions to prevent system overload
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Reduced delay between conversions for faster processing
+    await new Promise(resolve => setTimeout(resolve, 50))
   }
   
   isProcessingQueue = false
@@ -42,23 +42,18 @@ const loadSharp = async () => {
   try {
     // Check if we're in a production environment
     const isProduction = process.env.NODE_ENV === 'production'
-    console.log(`🔧 Environment: ${isProduction ? 'production' : 'development'}`)
     
     // Try to load Sharp dynamically
     const sharp = await import('sharp')
-    console.log('✅ Sharp library loaded successfully')
     return sharp.default
   } catch (error) {
     console.error('❌ Failed to load Sharp library:', error)
     
     // In production, try alternative approaches
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔧 Attempting alternative Sharp loading methods...')
-      
       try {
         // Try requiring Sharp directly
         const sharp = require('sharp')
-        console.log('✅ Sharp loaded via require()')
         return sharp
       } catch (requireError) {
         console.error('❌ Sharp require() also failed:', requireError)
@@ -67,7 +62,6 @@ const loadSharp = async () => {
       try {
         // Try with explicit path
         const sharp = await import(process.cwd() + '/node_modules/sharp')
-        console.log('✅ Sharp loaded via explicit path')
         return sharp.default
       } catch (pathError) {
         console.error('❌ Sharp explicit path also failed:', pathError)
@@ -81,8 +75,6 @@ const loadSharp = async () => {
 // Enhanced helper function to convert HEIC to JPEG with better error handling
 const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
   try {
-    console.log(`🔧 Starting HEIC conversion: ${filePath} -> ${outputPath}`)
-    
     // Check if input file exists and is readable
     if (!fs.existsSync(filePath)) {
       console.error(`❌ Input file does not exist: ${filePath}`)
@@ -95,12 +87,9 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
       return false
     }
     
-    console.log(`📁 File stats: ${stats.size} bytes, readable: ${fs.constants.R_OK}`)
-    
     // Check if output directory exists and is writable
     const outputDir = path.dirname(outputPath)
     if (!fs.existsSync(outputDir)) {
-      console.log(`📁 Creating output directory: ${outputDir}`)
       fs.mkdirSync(outputDir, { recursive: true })
     }
     
@@ -109,7 +98,6 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
       const testFile = path.join(outputDir, '.test-write')
       fs.writeFileSync(testFile, 'test')
       fs.unlinkSync(testFile)
-      console.log('✅ Output directory is writable')
     } catch (writeError) {
       console.error(`❌ Output directory not writable: ${outputDir}`, writeError)
       return false
@@ -122,7 +110,6 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
     }
 
     // Convert HEIC to JPEG with error handling
-    console.log('🔄 Converting HEIC to JPEG...')
     await sharp(filePath)
       .jpeg({ 
         quality: 90,
@@ -147,21 +134,6 @@ const convertHeicToJpeg = async (filePath: string, outputPath: string) => {
     return true
   } catch (error) {
     console.error('❌ Error converting HEIC to JPEG:', error)
-    
-    // Log additional error details in production
-    if (process.env.NODE_ENV === 'production') {
-      console.error('🔧 Production error details:', {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        filePath,
-        outputPath,
-        cwd: process.cwd(),
-        nodeVersion: process.version,
-        platform: process.platform,
-        arch: process.arch
-      })
-    }
-    
     return false
   }
 }
@@ -199,18 +171,117 @@ const generateUniqueFilename = (originalPath: string, baseDir: string): string =
   return newPath
 }
 
-// Helper function to safely update media document
-const safeUpdateMediaDoc = async (req: any, docId: string, updateData: any) => {
+// Optimized helper function to safely update media document with faster retry
+const safeUpdateMediaDoc = async (req: any, docId: string, updateData: any, maxRetries: number = 2) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await req.payload.update({
+        collection: 'media',
+        id: docId,
+        data: updateData,
+      })
+      return true
+    } catch (error) {
+      // Check if it's a WriteConflict error
+      const isWriteConflict = error instanceof Error && 
+        (error.message.includes('WriteConflict') || 
+         error.message.includes('code: 112') ||
+         error.message.includes('Please retry your operation'))
+      
+      if (isWriteConflict && attempt < maxRetries) {
+        // Faster retry with shorter delays
+        const delay = 200 * Math.pow(2, attempt - 1) + Math.random() * 300
+        await new Promise(resolve => setTimeout(resolve, delay))
+        continue
+      }
+      
+      // For non-retryable errors or max retries reached, return false
+      return false
+    }
+  }
+  
+  return false
+}
+
+// Async function to handle Live Photo conversion without blocking the upload
+const handleLivePhotoConversionAsync = async (doc: any, req: any) => {
   try {
-    await req.payload.update({
-      collection: 'media',
-      id: docId,
-      data: updateData,
-    })
-    return true
+    console.log('📱 Starting async Live Photo conversion:', doc.filename)
+    
+    // Reduced delay for faster processing
+    await new Promise(resolve => setTimeout(resolve, 500))
+    
+    const mediaDir = path.join(process.cwd(), 'media')
+    const filePath = path.join(mediaDir, doc.filename)
+    
+    // Check if media directory exists
+    if (!fs.existsSync(mediaDir)) {
+      console.error(`❌ Media directory does not exist: ${mediaDir}`)
+      await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
+      return
+    }
+    
+    // Generate unique output path to prevent conflicts
+    const baseName = path.basename(doc.filename, path.extname(doc.filename))
+    const timestamp = Date.now()
+    const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
+    
+    // Queue the conversion to prevent conflicts with multiple uploads
+    const conversionSuccess = await queueConversion(filePath, uniqueOutputPath)
+    
+    if (conversionSuccess) {
+      // Update the document with new filename and MIME type
+      const newFilename = path.basename(uniqueOutputPath)
+      
+      const updateSuccess = await safeUpdateMediaDoc(req, doc.id, {
+        filename: newFilename,
+        mimeType: 'image/jpeg',
+        conversionStatus: 'converted',
+      })
+      
+      if (updateSuccess) {
+        // Remove the original HEIC/HEIF file
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath)
+          }
+        } catch (unlinkError) {
+          console.error('❌ Error removing original file:', unlinkError)
+        }
+        
+        console.log('📱 Live Photo converted successfully to JPEG:', newFilename)
+      }
+    } else {
+      // Conversion failed, mark as failed but keep the original
+      await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
+    }
+    
   } catch (error) {
-    console.error('❌ Error updating media document:', error)
-    return false
+    console.error('📱 Error in async Live Photo processing:', error)
+    await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
+  }
+}
+
+// Async function to handle video thumbnail generation without blocking the upload
+const handleVideoThumbnailAsync = async (doc: any, req: any) => {
+  try {
+    console.log('🎬 Starting async video thumbnail generation:', doc.filename)
+    
+    // Reduced delay for faster processing
+    await new Promise(resolve => setTimeout(resolve, 200))
+    
+    // Generate thumbnail
+    const { generateVideoThumbnailManually } = await import('@/lib/video-thumbnail-generator')
+    const thumbnailId = await generateVideoThumbnailManually(doc, req.payload)
+    
+    if (thumbnailId) {
+      console.log('🎬 Video thumbnail created successfully:', thumbnailId)
+    } else {
+      console.log('🎬 Video thumbnail creation failed')
+    }
+    
+  } catch (error) {
+    console.error('🎬 Error in async video processing:', error)
   }
 }
 
@@ -410,107 +481,12 @@ export const Media: CollectionConfig = {
         
         // Handle Live Photo conversion to JPEG
         if (operation === 'create' && (doc.mimeType === 'image/heic' || doc.mimeType === 'image/heif')) {
-          try {
-            console.log('📱 Converting Live Photo to JPEG:', doc.filename)
-            
-            // Add a longer delay to ensure the file is fully saved and prevent conflicts
-            await new Promise(resolve => setTimeout(resolve, 3000))
-            
-            const mediaDir = path.join(process.cwd(), 'media')
-            const filePath = path.join(mediaDir, doc.filename)
-            
-            // Check if media directory exists
-            if (!fs.existsSync(mediaDir)) {
-              console.error(`❌ Media directory does not exist: ${mediaDir}`)
-              await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
-              return doc
-            }
-            
-            // Generate unique output path to prevent conflicts
-            const baseName = path.basename(doc.filename, path.extname(doc.filename))
-            const timestamp = Date.now()
-            const uniqueOutputPath = path.join(mediaDir, `${baseName}_${timestamp}.jpg`)
-            
-            console.log(`📁 Conversion paths: ${filePath} -> ${uniqueOutputPath}`)
-            
-            // Queue the conversion to prevent conflicts with multiple uploads
-            const conversionSuccess = await queueConversion(filePath, uniqueOutputPath)
-            
-            if (conversionSuccess) {
-              // Update the document with new filename and MIME type
-              const newFilename = path.basename(uniqueOutputPath)
-              
-              const updateSuccess = await safeUpdateMediaDoc(req, doc.id, {
-                filename: newFilename,
-                mimeType: 'image/jpeg',
-                conversionStatus: 'converted',
-              })
-              
-              if (updateSuccess) {
-                // Remove the original HEIC/HEIF file
-                try {
-                  if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath)
-                    console.log('📱 Original HEIC file removed')
-                  }
-                } catch (unlinkError) {
-                  console.error('❌ Error removing original file:', unlinkError)
-                }
-                
-                console.log('📱 Live Photo converted successfully to JPEG:', newFilename)
-              } else {
-                console.error('❌ Failed to update document after successful conversion')
-              }
-            } else {
-              // Conversion failed, mark as failed but keep the original
-              console.log('⚠️ Live Photo conversion failed, keeping original HEIC file')
-              await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
-            }
-            
-          } catch (error) {
-            console.error('📱 Error in Live Photo processing:', error)
-            
-            // Log detailed error information
-            console.error('🔧 Error details:', {
-              message: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-              docId: doc.id,
-              filename: doc.filename,
-              mimeType: doc.mimeType
-            })
-            
-            // Mark as failed
-            await safeUpdateMediaDoc(req, doc.id, { conversionStatus: 'failed' })
-          }
+          await handleLivePhotoConversionAsync(doc, req)
         }
         
         // Only process videos on create that don't already have a thumbnail
         if (operation === 'create' && doc.isVideo && !doc.videoThumbnail) {
-          try {
-            console.log('🎬 Processing video for thumbnail generation:', doc.filename)
-            
-            // Add a small delay to ensure the document is fully saved
-            await new Promise(resolve => setTimeout(resolve, 1000))
-            
-            // Generate thumbnail
-            try {
-              console.log('🎬 Importing video thumbnail generator...')
-              const { generateVideoThumbnailManually } = await import('@/lib/video-thumbnail-generator')
-              console.log('🎬 Calling generateVideoThumbnailManually...')
-              const thumbnailId = await generateVideoThumbnailManually(doc, req.payload)
-              
-              if (thumbnailId) {
-                console.log('🎬 Video thumbnail created successfully:', thumbnailId)
-              } else {
-                console.log('🎬 Video thumbnail creation failed')
-              }
-            } catch (thumbnailError) {
-              console.error('🎬 Error in thumbnail generation:', thumbnailError)
-            }
-            
-          } catch (error) {
-            console.error('🎬 Error in video processing:', error)
-          }
+          await handleVideoThumbnailAsync(doc, req)
         } else {
           console.log('🎬 Skipping thumbnail generation:', {
             reason: operation !== 'create' ? 'not create operation' : 

@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     // Parse JSON data (production expects JSON with media IDs)
     const jsonData = await request.json()
     
-    const { content, title, type = 'post', rating, locationId, livePhotos = [], photos = [], videos = [] } = jsonData
+    const { content, title, type = 'post', rating, locationId, photos = [] } = jsonData
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json(
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log(`🚀 Production media breakdown: ${livePhotos.length} live photos, ${photos.length} photos, ${videos.length} videos`)
+    console.log(`🚀 Production media breakdown: ${photos.length} photos`)
 
     // Create post data
     const postData: any = {
@@ -78,23 +78,14 @@ export async function POST(request: NextRequest) {
     if (rating) postData.rating = parseInt(rating)
     if (locationId) postData.location = locationId
 
-    // Add media IDs
-    const allMediaIds = [...livePhotos, ...photos, ...videos]
-    if (allMediaIds.length > 0) {
-      if (livePhotos.length > 0) {
-        postData.livePhotos = livePhotos
-      }
-      if (photos.length > 0) {
-        postData.photos = photos
-      }
-      if (videos.length > 0) {
-        postData.videos = videos
-      }
+    // Add media IDs to photos array (Posts collection only has photos field)
+    if (photos.length > 0) {
+      postData.photos = photos
     }
 
     console.log('🚀 Creating post with data:', {
       contentLength: content.length,
-      mediaCount: allMediaIds.length,
+      mediaCount: photos.length,
       hasLocation: !!locationId
     })
 
@@ -114,7 +105,7 @@ export async function POST(request: NextRequest) {
         content: post.content,
         type: post.type,
         createdAt: post.createdAt,
-        mediaCount: allMediaIds.length
+        mediaCount: photos.length
       }
     })
 

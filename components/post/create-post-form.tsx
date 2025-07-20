@@ -678,6 +678,22 @@ export default function CreatePostForm({
               </div>
             </div>
 
+            {/* Live Photo Support Warning */}
+            {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="mb-4"
+              >
+                <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                  </AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
+
             {/* Media Preview Grid */}
             {previewUrls.length > 0 && (
               <motion.div
@@ -888,28 +904,48 @@ export default function CreatePostForm({
 
             {/* Desktop Drag & Drop Area */}
             {!isMobileDevice && selectedFiles.length === 0 && (
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                  isDragging 
-                    ? 'border-blue-500 bg-blue-50 scale-105' 
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="text-gray-400">
-                    <ImageIcon className="h-8 w-8 mx-auto" />
+              <div className="space-y-4">
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
+                    isDragging 
+                      ? 'border-blue-500 bg-blue-50 scale-105' 
+                      : 'border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="text-gray-400">
+                      <ImageIcon className="h-8 w-8 mx-auto" />
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">
+                      {isDragging ? 'Drop your files here!' : 'Drag & drop photos/videos here'}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Or use the buttons below • Max 5 files • Images: 10MB, Videos: 50MB
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-500 font-medium">
-                    {isDragging ? 'Drop your files here!' : 'Drag & drop photos/videos here'}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Or use the buttons below • Max 5 files • Images: 10MB, Videos: 50MB
-                  </p>
                 </div>
+                
+                {/* Live Photo Support Info for Desktop */}
+                <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
+                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                  </AlertDescription>
+                </Alert>
               </div>
+            )}
+
+            {/* Mobile Live Photo Support Info */}
+            {isMobileDevice && selectedFiles.length === 0 && (
+              <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
+                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <AlertDescription className="text-sm leading-relaxed">
+                  <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* Actions Row */}

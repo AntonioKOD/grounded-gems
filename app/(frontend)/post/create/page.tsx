@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 import { Metadata } from "next"
-import MobilePostForm from "@/components/post/mobile-post-form"
+import CreatePostForm from "@/components/post/create-post-form"
 import { Loader2 } from "lucide-react"
 
 // Force dynamic rendering for this page since it requires authentication
@@ -34,7 +34,7 @@ export default function CreatePostPage() {
             </div>
           }
         >
-          <MobilePostForm className="bg-white rounded-lg shadow-sm" />
+          <CreatePostForm className="bg-white rounded-lg shadow-sm" />
         </Suspense>
       </div>
     </div>
