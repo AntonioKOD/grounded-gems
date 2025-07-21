@@ -233,7 +233,7 @@ export default function CreatePostForm({
               quality: 0.8,
             });
             const jpegFile = new File(
-              [jpegBlob],
+              [jpegBlob as BlobPart],
               file.name.replace(/\.(heic|heif)$/i, ".jpg"),
               { type: "image/jpeg" }
             );
