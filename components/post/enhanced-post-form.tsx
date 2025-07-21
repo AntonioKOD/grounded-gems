@@ -261,7 +261,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     const validFiles: File[] = []
     const validImages: File[] = []
     const validVideos: File[] = []
-    const livePhotoFiles: File[] = []
+
     
     for (const file of files) {
       console.log(`📝 Processing file: ${file.name}`, {
@@ -279,23 +279,24 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           toast.error(`${file.name} is too large. Max size: 10MB`)
           continue
         }
-        // Comprehensive image format support
+        // Comprehensive image format support (excluding Live Photos)
         const allowedImageTypes = [
           'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-          'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+          'image/avif', 'image/bmp', 'image/tiff', 'image/tif',
           'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
           'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
         ]
         if (!allowedImageTypes.includes(file.type.toLowerCase())) {
           console.log(`📝 Invalid image type: ${file.type}`)
-          toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
+          toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, BMP, TIFF, ICO, and more. Live Photos (HEIC/HEIF) are not yet supported.`)
           continue
         }
         
-        // Check for Live Photos
+        // Check for Live Photos - currently not supported
         if (file.type === 'image/heic' || file.type === 'image/heif') {
-          livePhotoFiles.push(file)
-          console.log(`📝 Live Photo detected: ${file.name}`)
+          console.log(`📝 Live Photo detected but not supported: ${file.name}`)
+          toast.error(`${file.name} is a Live Photo. Please convert to regular photo before uploading. Live Photo support is coming soon!`)
+          continue // Skip this file
         }
         
         validImages.push(file)
@@ -359,17 +360,14 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
       validFiles: validFiles.length,
       validImages: validImages.length,
       validVideos: validVideos.length,
-      livePhotos: livePhotoFiles.length,
+
       validFileTypes: validFiles.map(f => f.type),
       validFileNames: validFiles.map(f => f.name)
     })
     
     if (validFiles.length === 0) return
     
-    // Show Live Photo warning if multiple Live Photos are selected
-    if (livePhotoFiles.length > 1) {
-      toast.warning("Multiple Live Photos detected. Only the first Live Photo will be processed as a Live Photo. Additional photos will be converted to regular images.")
-    }
+
     
     // Add files and create previews
     setSelectedFiles(prev => [...prev, ...validImages])
@@ -674,22 +672,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           </motion.div>
         )}
         
-        {/* Live Photo Support Warning */}
-        {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="p-4"
-          >
-            <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
-              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <AlertDescription className="text-sm leading-relaxed">
-                <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
-              </AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
+
       </AnimatePresence>
 
       {/* Content Input */}

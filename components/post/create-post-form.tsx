@@ -81,9 +81,9 @@ export default function CreatePostForm({
   const [isCameraLoading, setIsCameraLoading] = useState(false)
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   
-  // Live photo upload state
+
   const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([])
-  const [isUploadingLivePhotos, setIsUploadingLivePhotos] = useState(false)
+
   const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({})
 
   // Validation state
@@ -171,58 +171,8 @@ export default function CreatePostForm({
     }
   }
 
-  // Handle live photo uploads using Vercel Blob
-  const uploadLivePhoto = async (file: File, index: number): Promise<string | null> => {
-    if (!user?.id) {
-      toast.error('User not authenticated')
-      return null
-    }
 
-    try {
-      console.log('📸 Uploading live photo via direct API:', {
-        fileName: file.name,
-        fileSize: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
-        fileType: file.type
-      })
 
-      setUploadProgress(prev => ({ ...prev, [index]: 0 }))
-
-      // Use direct API upload instead of Vercel Blob client
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('userId', user.id)
-
-      const response = await fetch('/api/posts/upload-live-photos-direct', {
-        method: 'POST',
-        headers: {
-          'x-user-id': user.id
-        },
-        body: formData
-      })
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      console.log('📸 Live photo upload result:', result)
-
-      setUploadProgress(prev => ({ ...prev, [index]: 100 }))
-
-      if (result.mediaId) {
-        console.log('📸 Media ID received:', result.mediaId)
-        return result.mediaId
-      } else {
-        throw new Error('No media ID received from upload')
-      }
-
-    } catch (error) {
-      console.error('❌ Live photo upload error:', error)
-      toast.error(`Failed to upload ${file.name}`)
-      setUploadProgress(prev => ({ ...prev, [index]: 0 }))
-      return null
-    }
-  }
 
   // Enhanced file handling with validation
   const processFiles = async (files: File[]) => {
@@ -264,24 +214,25 @@ export default function CreatePostForm({
           continue
         }
         
-              // Validate image format - comprehensive support for modern and legacy formats
+              // Validate image format - comprehensive support for modern and legacy formats (excluding Live Photos)
       const allowedImageTypes = [
         'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-        'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+        'image/avif', 'image/bmp', 'image/tiff', 'image/tif',
         'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
         'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
       ]
       if (!allowedImageTypes.includes(file.type.toLowerCase())) {
         console.log(`📝 Invalid image type: ${file.type}`)
-        toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
+        toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, BMP, TIFF, ICO, and more. Live Photos (HEIC/HEIF) are not yet supported.`)
         continue
       }
 
-      // Check if this is a HEIC/HEIF file that should be uploaded via Vercel Blob
+      // Check if this is a HEIC/HEIF file (Live Photos) - currently not supported
       const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
       if (isHeic) {
-        console.log(`📸 HEIC file detected: ${file.name} - will be uploaded via Vercel Blob`)
-        // We'll handle HEIC files separately in the form submission
+        console.log(`📸 Live Photo detected but not supported: ${file.name}`)
+        toast.error(`${file.name} is a Live Photo. Please convert to regular photo before uploading. Live Photo support is coming soon!`)
+        continue // Skip this file
       }
         
         console.log(`📝 Image file validated: ${file.name}`)
@@ -564,53 +515,14 @@ export default function CreatePostForm({
 
     setIsSubmitting(true)
 
-      // Separate HEIC files from regular files
-      const heicFiles = selectedFiles.filter(file => 
-        file.type === 'image/heic' || file.type === 'image/heif'
-      )
-      const regularFiles = selectedFiles.filter(file => 
-        file.type !== 'image/heic' && file.type !== 'image/heif'
-      )
+      // All files are regular files (Live Photos are filtered out during processing)
+      const regularFiles = selectedFiles
 
       console.log('📝 Form submission - file breakdown:', {
         totalFiles: selectedFiles.length,
-        heicFiles: heicFiles.length,
         regularFiles: regularFiles.length,
-        heicFileNames: heicFiles.map(f => f.name),
         regularFileNames: regularFiles.map(f => f.name)
       })
-
-      // Upload HEIC files first via Vercel Blob
-      let livePhotoMediaIds: string[] = []
-      if (heicFiles.length > 0) {
-        setIsUploadingLivePhotos(true)
-        console.log('📸 Starting HEIC file uploads...')
-        
-        const uploadPromises = heicFiles.map(async (file, index) => {
-          const originalIndex = selectedFiles.indexOf(file)
-          return await uploadLivePhoto(file, originalIndex)
-        })
-
-        const uploadResults = await Promise.all(uploadPromises)
-        const successfulUploads = uploadResults.filter(id => id !== null) as string[]
-        
-        console.log('📸 HEIC upload results:', {
-          attempted: heicFiles.length,
-          successful: successfulUploads.length,
-          mediaIds: successfulUploads
-        })
-
-        if (successfulUploads.length !== heicFiles.length) {
-          toast.error(`Failed to upload ${heicFiles.length - successfulUploads.length} live photo(s)`)
-          setIsUploadingLivePhotos(false)
-          setIsSubmitting(false)
-          return // Stop the submission if HEIC uploads failed
-        }
-
-        livePhotoMediaIds = successfulUploads
-        setIsUploadingLivePhotos(false)
-        console.log('📸 Live photo media IDs ready for post creation:', livePhotoMediaIds)
-      }
 
       try {
         const formData = new FormData()
@@ -649,19 +561,11 @@ export default function CreatePostForm({
         }
       })
 
-      // Add Live Photo media IDs to form data if we have any
-      if (livePhotoMediaIds.length > 0) {
-        console.log('📸 Adding live photo media IDs to form data:', livePhotoMediaIds)
-        livePhotoMediaIds.forEach(mediaId => {
-          formData.append('livePhotos', mediaId)
-        })
-      }
+
 
       // Debug info
       console.log('📝 CreatePostForm: Submitting post with files:', {
         totalFiles: regularFiles.length,
-        heicFiles: heicFiles.length,
-        livePhotoMediaIds: livePhotoMediaIds.length,
         imageFiles: regularFiles.filter(f => f.type.startsWith('image/')).length,
         videoFiles: regularFiles.filter(f => f.type.startsWith('video/')).length,
         fileTypes: regularFiles.map(f => f.type),
@@ -873,21 +777,7 @@ export default function CreatePostForm({
               </div>
             </div>
 
-            {/* Live Photo Support Warning */}
-            {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="mb-4"
-              >
-                <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
-                  <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  <AlertDescription className="text-sm leading-relaxed">
-                    <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
-                  </AlertDescription>
-                </Alert>
-              </motion.div>
-            )}
+
 
             {/* Media Preview Grid */}
             {previewUrls.length > 0 && (
@@ -974,14 +864,7 @@ export default function CreatePostForm({
                         </div>
                       )}
                       
-                      {/* Upload progress for HEIC files */}
-                      {(file?.type === 'image/heic' || file?.type === 'image/heif') && uploadProgress[index] !== undefined && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <div className="bg-white rounded-full p-2">
-                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                          </div>
-                        </div>
-                      )}
+
                     </motion.div>
                   )
                 })}
@@ -1137,25 +1020,11 @@ export default function CreatePostForm({
                   </div>
                 </div>
                 
-                {/* Live Photo Support Info for Desktop */}
-                <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
-                  <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                  <AlertDescription className="text-sm leading-relaxed">
-                    <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
-                  </AlertDescription>
-                </Alert>
+
               </div>
             )}
 
-            {/* Mobile Live Photo Support Info */}
-            {isMobileDevice && selectedFiles.length === 0 && (
-              <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
-                <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                <AlertDescription className="text-sm leading-relaxed">
-                  <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
-                </AlertDescription>
-              </Alert>
-            )}
+
 
             {/* Actions Row */}
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
@@ -1241,17 +1110,12 @@ export default function CreatePostForm({
               {/* Submit Button - Always visible and prominent on mobile */}
               <Button
                 type="submit"
-                disabled={isSubmitting || !isValid || isUploadingLivePhotos}
+                disabled={isSubmitting || !isValid}
                 size={isMobileDevice ? "sm" : "sm"}
                 className={`${isMobileDevice ? 'h-10 px-4 text-sm' : 'h-9 px-4'} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ml-2`}
                 style={{ minHeight: '40px', minWidth: isMobileDevice ? '80px' : '60px' }}
               >
-                {isUploadingLivePhotos ? (
-                  <>
-                    <Upload className="h-4 w-4 animate-spin mr-1" />
-                    {isMobileDevice ? "Uploading..." : "Uploading Live Photos..."}
-                  </>
-                ) : isSubmitting ? (
+                {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                     {isMobileDevice ? "..." : "Sharing..."}
