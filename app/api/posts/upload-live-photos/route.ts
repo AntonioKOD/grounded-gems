@@ -148,6 +148,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             finalPathname: finalBlob.pathname
           })
 
+          // Log the media ID for debugging
+          console.log('📸 Media ID available for post creation:', media.id)
+
         } catch (error) {
           console.error('❌ Error processing live photo upload:', error)
           throw new Error('Could not process live photo upload')

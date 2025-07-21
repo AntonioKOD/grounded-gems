@@ -179,7 +179,7 @@ export default function CreatePostForm({
     }
 
     try {
-      console.log('📸 Uploading live photo via Vercel Blob:', {
+      console.log('📸 Uploading live photo via direct API:', {
         fileName: file.name,
         fileSize: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
         fileType: file.type
@@ -187,26 +187,34 @@ export default function CreatePostForm({
 
       setUploadProgress(prev => ({ ...prev, [index]: 0 }))
 
-      const blob = await upload(file.name, file, {
-        access: 'public',
-        handleUploadUrl: '/api/posts/upload-live-photos',
+      // Use direct API upload instead of Vercel Blob client
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', user.id)
+
+      const response = await fetch('/api/posts/upload-live-photos-direct', {
+        method: 'POST',
         headers: {
           'x-user-id': user.id
-        }
+        },
+        body: formData
       })
 
-      console.log('📸 Live photo uploaded successfully:', {
-        blobUrl: blob.url,
-        blobPathname: blob.pathname,
-        fileName: file.name
-      })
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`)
+      }
+
+      const result = await response.json()
+      console.log('📸 Live photo upload result:', result)
 
       setUploadProgress(prev => ({ ...prev, [index]: 100 }))
-      
-      // Extract media ID from the blob URL or response
-      // The media ID will be available in the onUploadCompleted callback
-      // For now, we'll use the blob URL as a reference
-      return blob.url
+
+      if (result.mediaId) {
+        console.log('📸 Media ID received:', result.mediaId)
+        return result.mediaId
+      } else {
+        throw new Error('No media ID received from upload')
+      }
 
     } catch (error) {
       console.error('❌ Live photo upload error:', error)
@@ -573,6 +581,7 @@ export default function CreatePostForm({
       })
 
       // Upload HEIC files first via Vercel Blob
+      let livePhotoMediaIds: string[] = []
       if (heicFiles.length > 0) {
         setIsUploadingLivePhotos(true)
         console.log('📸 Starting HEIC file uploads...')
@@ -583,12 +592,12 @@ export default function CreatePostForm({
         })
 
         const uploadResults = await Promise.all(uploadPromises)
-        const successfulUploads = uploadResults.filter(url => url !== null)
+        const successfulUploads = uploadResults.filter(id => id !== null) as string[]
         
         console.log('📸 HEIC upload results:', {
           attempted: heicFiles.length,
           successful: successfulUploads.length,
-          results: uploadResults
+          mediaIds: successfulUploads
         })
 
         if (successfulUploads.length !== heicFiles.length) {
@@ -598,11 +607,9 @@ export default function CreatePostForm({
           return // Stop the submission if HEIC uploads failed
         }
 
+        livePhotoMediaIds = successfulUploads
         setIsUploadingLivePhotos(false)
-        
-        // Store the uploaded HEIC URLs for later use in post creation
-        // Note: The media IDs will be available in the onUploadCompleted callback
-        // For now, we'll proceed with the post creation and let the server handle the media
+        console.log('📸 Live photo media IDs ready for post creation:', livePhotoMediaIds)
       }
 
       try {
@@ -642,10 +649,19 @@ export default function CreatePostForm({
         }
       })
 
+      // Add Live Photo media IDs to form data if we have any
+      if (livePhotoMediaIds.length > 0) {
+        console.log('📸 Adding live photo media IDs to form data:', livePhotoMediaIds)
+        livePhotoMediaIds.forEach(mediaId => {
+          formData.append('livePhotos', mediaId)
+        })
+      }
+
       // Debug info
       console.log('📝 CreatePostForm: Submitting post with files:', {
         totalFiles: regularFiles.length,
         heicFiles: heicFiles.length,
+        livePhotoMediaIds: livePhotoMediaIds.length,
         imageFiles: regularFiles.filter(f => f.type.startsWith('image/')).length,
         videoFiles: regularFiles.filter(f => f.type.startsWith('video/')).length,
         fileTypes: regularFiles.map(f => f.type),
