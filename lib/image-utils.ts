@@ -13,18 +13,7 @@
 const isDevelopment = process.env.NODE_ENV === 'development'
 const isServer = typeof window === 'undefined'
 
-// Safely import Capacitor utilities only on client-side
-let getApiBaseUrlFromCapacitor: (() => Promise<string>) | null = null
 
-if (!isServer) {
-  // Dynamic import for client-side only
-  import('./capacitor-utils').then((module) => {
-    getApiBaseUrlFromCapacitor = module.getApiBaseUrl
-  }).catch(() => {
-    // Fallback if capacitor-utils fails to load
-    getApiBaseUrlFromCapacitor = null
-  })
-}
 
 /**
  * Get base URL safely for both server and client
@@ -38,7 +27,7 @@ function getBaseUrlSafely(): string {
   }
 
   // Client-side logic
-  // NOTE: getApiBaseUrlFromCapacitor is async, but getBaseUrlSafely is sync. For now, skip using it here.
+
   // If you need to support async, refactor getBaseUrlSafely to be async and handle accordingly.
 
   // Fallback for client-side

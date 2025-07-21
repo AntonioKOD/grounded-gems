@@ -3,8 +3,6 @@
  * Handles all URL resolution and environment detection
  */
 
-import { Capacitor } from '@capacitor/core';
-
 // Environment detection
 export const isProduction = process.env.NODE_ENV === 'production';
 export const isDevelopment = process.env.NODE_ENV === 'development';
@@ -14,23 +12,22 @@ export const isClient = typeof window !== 'undefined';
 // Platform detection
 export const isMobile = () => {
   if (isServer) return false;
-  return Capacitor.isNativePlatform();
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 };
 
 export const isIOS = () => {
   if (isServer) return false;
-  return Capacitor.getPlatform() === 'ios';
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
 };
 
 export const isAndroid = () => {
   if (isServer) return false;
-  return Capacitor.getPlatform() === 'android';
+  return /Android/.test(navigator.userAgent);
 };
 
 export const isCapacitor = () => {
   if (isServer) return false;
-  return Capacitor.isNativePlatform() || 
-         window.location.protocol === 'capacitor:' || 
+  return window.location.protocol === 'capacitor:' || 
          window.location.protocol === 'ionic:' ||
          window.navigator.userAgent.includes('Capacitor');
 };
@@ -121,7 +118,7 @@ export const NETWORK_CONFIG = {
     'X-Requested-With': 'Sacavia',
     ...(isMobile() && {
       'X-Mobile-App': 'true',
-      'X-Platform': Capacitor.getPlatform(),
+      'X-Platform': isIOS() ? 'ios' : isAndroid() ? 'android' : 'web',
     })
   })
 };

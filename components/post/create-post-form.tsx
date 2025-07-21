@@ -593,9 +593,16 @@ export default function CreatePostForm({
 
         if (successfulUploads.length !== heicFiles.length) {
           toast.error(`Failed to upload ${heicFiles.length - successfulUploads.length} live photo(s)`)
+          setIsUploadingLivePhotos(false)
+          setIsSubmitting(false)
+          return // Stop the submission if HEIC uploads failed
         }
 
         setIsUploadingLivePhotos(false)
+        
+        // Store the uploaded HEIC URLs for later use in post creation
+        // Note: The media IDs will be available in the onUploadCompleted callback
+        // For now, we'll proceed with the post creation and let the server handle the media
       }
 
       try {

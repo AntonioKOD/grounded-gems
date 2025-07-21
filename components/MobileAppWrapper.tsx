@@ -19,18 +19,7 @@ export default function MobileAppWrapper({ children }: MobileAppWrapperProps) {
       initRef.current = true
 
       try {
-        // Import capacitor utils dynamically to prevent SSR issues
-        const { isCapacitorApp, initializeCapacitorApp } = await import('../lib/capacitor-utils')
-        
-        const isCapacitorDevice = await isCapacitorApp()
-
-        console.log('🚀 [MobileApp] Initializing...', { isCapacitorDevice })
-
-        if (isCapacitorDevice) {
-          // Use the new Capacitor utilities
-          await initializeCapacitorApp()
-        }
-
+        console.log('🚀 [MobileApp] Initializing...')
         console.log('✅ [MobileApp] Ready')
 
       } catch (error) {

@@ -1,19 +1,24 @@
 import * as React from "react"
 import { useEffect, useState } from 'react'
-import { 
-  isNative, 
-  getPlatform, 
-  canUseCamera, 
-  canUseGeolocation, 
-  canUseHaptics,
-  takePicture,
-  pickImage,
-  getCurrentPosition,
-  shareContent,
-  showToast,
-  vibrate,
-  openUrl
-} from '@/lib/capacitor-utils'
+// Mobile utility functions (simplified without Capacitor)
+const isNative = () => false
+const getPlatform = () => 'web'
+const canUseCamera = () => false
+const canUseGeolocation = () => false
+const canUseHaptics = () => false
+const takePicture = async () => null
+const pickImage = async () => null
+const getCurrentPosition = async () => null
+const shareContent = async (options: any) => null
+const showToast = async (options: any) => null
+const vibrate = async (duration?: number) => {
+  if (navigator.vibrate) {
+    navigator.vibrate(duration || 100)
+  }
+}
+const openUrl = async (url: string) => {
+  window.open(url, '_blank')
+}
 
 const MOBILE_BREAKPOINT = 768
 const TABLET_BREAKPOINT = 1024
@@ -210,20 +215,18 @@ export function useMobile() {
     // Check if we're running in a native environment
     const checkMobile = async () => {
       try {
-        // Import functions dynamically to prevent SSR issues
-        const { isNative, getPlatform, canUseCamera, canUseGeolocation, canUseHaptics } = await import('@/lib/capacitor-utils')
-        
-        const mobile = await isNative()
-        const currentPlatform = await getPlatform()
+        // Use local functions instead of Capacitor
+        const mobile = isNative()
+        const currentPlatform = getPlatform()
         
         setIsMobile(mobile)
         setPlatform(currentPlatform)
         
         // Check features asynchronously
         const [camera, geolocation, haptics] = await Promise.all([
-          canUseCamera(),
-          canUseGeolocation(),
-          canUseHaptics(),
+          Promise.resolve(canUseCamera()),
+          Promise.resolve(canUseGeolocation()),
+          Promise.resolve(canUseHaptics()),
         ])
         
         setFeatures({
@@ -256,22 +259,16 @@ export function useMobile() {
     }
   }, [])
 
-  // Import actions dynamically to prevent SSR issues
+  // Get actions using local functions
   const getActions = async () => {
-    try {
-      const { takePicture, pickImage, getCurrentPosition, shareContent, showToast, vibrate, openUrl } = await import('@/lib/capacitor-utils')
-      return {
-        takePicture,
-        pickImage,
-        getCurrentPosition,
-        shareContent,
-        showToast,
-        vibrate,
-        openUrl,
-      }
-    } catch (error) {
-      console.error('Error loading mobile actions:', error)
-      return {}
+    return {
+      takePicture,
+      pickImage,
+      getCurrentPosition,
+      shareContent,
+      showToast,
+      vibrate,
+      openUrl,
     }
   }
 

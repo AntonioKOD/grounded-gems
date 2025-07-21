@@ -17,18 +17,17 @@ export async function POST(request: NextRequest) {
   try {
     console.log('📝 Post creation API called - OPTIMIZED VERSION')
     
-    // Check request size before processing
+    // Check request size before processing (only for legacy uploads)
     const contentLength = request.headers.get('content-length')
     if (contentLength) {
       const sizeMB = parseInt(contentLength) / 1024 / 1024
       console.log(`📊 Request size: ${sizeMB.toFixed(2)}MB`)
       
+      // Only enforce 4.5MB limit for legacy uploads (not Vercel Blob uploads)
+      // HEIC files are now uploaded via Vercel Blob and don't go through this route
       if (sizeMB > 4.5) {
-        console.error(`📝 Request too large: ${sizeMB.toFixed(2)}MB`)
-        return NextResponse.json(
-          { success: false, message: `Request too large (${sizeMB.toFixed(2)}MB). Please reduce content or use chunked upload.` },
-          { status: 413 }
-        )
+        console.warn(`📝 Large request detected: ${sizeMB.toFixed(2)}MB - but allowing for Vercel Blob compatibility`)
+        // Don't return 413 error - let it process and see if it's a valid request
       }
     }
     
