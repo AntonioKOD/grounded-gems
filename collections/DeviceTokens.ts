@@ -1,4 +1,4 @@
-import { CollectionConfig } from 'payload/types'
+import { CollectionConfig } from 'payload'
 
 const DeviceTokens: CollectionConfig = {
   slug: 'deviceTokens',
@@ -96,11 +96,9 @@ const DeviceTokens: CollectionConfig = {
   ],
   indexes: [
     {
-      name: 'deviceToken_user',
       fields: ['deviceToken', 'user']
     },
     {
-      name: 'user_active',
       fields: ['user', 'isActive']
     }
   ]

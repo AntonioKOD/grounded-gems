@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       const device = existingDevice.docs[0]
       await payload.update({
         collection: 'deviceTokens',
-        id: device.id,
+        id: device?.id || '',
         data: {
           platform: platform || 'ios',
           appVersion: appVersion || '1.0',
@@ -100,7 +100,7 @@ export async function DELETE(request: NextRequest) {
     if (existingDevice.docs.length > 0) {
       await payload.update({
         collection: 'deviceTokens',
-        id: existingDevice.docs[0].id,
+        id: existingDevice.docs[0]?.id || '',
         data: {
           isActive: false,
           unregisteredAt: new Date().toISOString()
