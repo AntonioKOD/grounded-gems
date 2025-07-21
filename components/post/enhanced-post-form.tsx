@@ -1171,20 +1171,23 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           {(previewUrls.length > 0 || videoPreviewUrls.length > 0) && (
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-gray-700">Media Preview</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-md mx-auto">
+              <div
+                className="grid grid-cols-3 gap-2 max-w-xs mx-auto overflow-y-auto bg-gray-50 rounded-2xl p-2"
+                style={{ maxHeight: '210px', minHeight: '96px' }}
+              >
                 {previewUrls.slice(0, 6).map((url, index) => (
-                  <div key={`preview-${index}`} className="aspect-square rounded-lg overflow-hidden bg-gray-100" style={{ maxHeight: '120px' }}>
+                  <div key={`preview-${index}`} className="aspect-square rounded-lg overflow-hidden bg-gray-100 relative" style={{ maxHeight: '96px', minHeight: '96px', minWidth: '96px', maxWidth: '96px' }}>
                     <Image 
                       src={url} 
                       alt={`Preview ${index + 1}`} 
                       fill 
                       className="object-cover" 
-                      sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 120px"
+                      sizes="96px"
                     />
                   </div>
                 ))}
                 {videoPreviewUrls.slice(0, 3).map((url, index) => (
-                  <div key={`video-preview-${index}`} className="aspect-square rounded-lg overflow-hidden relative bg-gray-100" style={{ maxHeight: '120px' }}>
+                  <div key={`video-preview-${index}`} className="aspect-square rounded-lg overflow-hidden relative bg-gray-100" style={{ maxHeight: '96px', minHeight: '96px', minWidth: '96px', maxWidth: '96px' }}>
                     <video src={url} className="w-full h-full object-cover" muted />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                       <Video className="h-6 w-6 text-white" />
