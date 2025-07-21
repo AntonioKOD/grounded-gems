@@ -115,14 +115,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      guides,
-      pagination: {
-        page: result.page,
-        limit: result.limit,
-        total: result.totalDocs,
-        totalPages: result.totalPages,
-        hasNext: result.hasNextPage,
-        hasPrev: result.hasPrevPage
+      data: {
+        guides,
+        pagination: {
+          page: result.page,
+          limit: result.limit,
+          total: result.totalDocs,
+          totalPages: result.totalPages,
+          hasNext: result.hasNextPage,
+          hasPrev: result.hasPrevPage
+        }
       }
     })
   } catch (error) {

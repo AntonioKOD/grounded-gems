@@ -12,6 +12,8 @@ import {
 } from '@/app/actions'
 import { getNearbyOrPopularLocations } from '@/app/(frontend)/home-page-actions/actions'
 import { getServerSideUser } from '@/lib/auth-server'
+import { getPayload } from 'payload'
+import config from '@/payload.config'
 
 // GET /api/v1/mobile/locations - Get locations with various filters
 export async function GET(request: NextRequest) {
@@ -193,41 +195,89 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/v1/mobile/locations - Create a new location
+// POST /api/mobile/locations - Add a new location (mobile)
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
-    
-    if (!user) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-
+    const payload = await getPayload({ config })
     const body = await request.json()
-    const locationData: LocationFormData = {
-      ...body,
-      createdBy: user.id,
-      status: 'review' // Default to review status for mobile submissions
+    // Accept all fields from the mobile/web form
+    const {
+      name,
+      slug,
+      description,
+      shortDescription,
+      categories,
+      tags,
+      featuredImage,
+      gallery,
+      address,
+      neighborhood,
+      coordinates,
+      contactInfo,
+      businessHours,
+      priceRange,
+      bestTimeToVisit,
+      insiderTips,
+      accessibility,
+      privacy,
+      privateAccess,
+      isFeatured,
+      isVerified,
+      hasBusinessPartnership,
+      partnershipDetails,
+      meta
+    } = body
+
+    // Basic validation
+    if (!name || !address || !coordinates || !coordinates.latitude || !coordinates.longitude) {
+      return NextResponse.json({
+        success: false,
+        error: 'Name, address, and coordinates (latitude, longitude) are required.'
+      }, { status: 400 })
     }
 
-    const location = await createLocation(locationData)
+    // Create the location with all fields
+    const location = await payload.create({
+      collection: 'locations',
+      data: {
+        name,
+        slug,
+        description: description || '',
+        shortDescription,
+        categories: categories || [],
+        tags: tags || [],
+        featuredImage,
+        gallery,
+        address,
+        neighborhood,
+        coordinates,
+        contactInfo,
+        businessHours,
+        priceRange,
+        bestTimeToVisit,
+        insiderTips,
+        accessibility,
+        privacy,
+        privateAccess,
+        isFeatured,
+        isVerified,
+        hasBusinessPartnership,
+        partnershipDetails,
+        meta
+      }
+    })
 
     return NextResponse.json({
       success: true,
-      message: 'Location created successfully',
-      data: { location }
-    })
+      message: 'Location added successfully',
+      data: location
+    }, { status: 201 })
   } catch (error) {
-    console.error('Mobile API: Error creating location:', error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to create location',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
+    console.error('Error adding location (mobile):', error)
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to add location',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 })
   }
 }
