@@ -251,7 +251,7 @@ export default function MediaCarousel({
           className="object-cover"
           sizes="(max-width: 768px) 100vw, 50vw"
           quality={85}
-          unoptimized={item.url.includes('/api/media/file/')}
+          unoptimized={typeof item.url === 'string' && item.url.includes('/api/media/file/')}
           onClick={() => onMediaClick?.(item, index)}
           onError={(e) => {
             console.error('🖼️ MediaCarousel image error:', {

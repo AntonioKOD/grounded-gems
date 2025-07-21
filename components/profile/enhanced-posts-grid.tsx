@@ -60,6 +60,15 @@ function PostModal({ post, isOpen, onClose, onLike, onSave }: PostModalProps) {
     })
   }
 
+  // Helper function to ensure URL is a string
+  const ensureStringUrl = (url: any): string => {
+    if (typeof url === 'string') return url
+    if (url && typeof url === 'object' && url.url) return String(url.url)
+    if (url && typeof url === 'object' && url.filename) return `/api/media/file/${url.filename}`
+    if (url && typeof url === 'object' && url.id) return `/api/media/file/${url.id}`
+    return String(url || '')
+  }
+
   // Helper function to get media for a post
   const getPostMedia = (post: Post) => {
     const media = []
@@ -283,6 +292,13 @@ function PostModal({ post, isOpen, onClose, onLike, onSave }: PostModalProps) {
                 <ImageIcon className="h-16 w-16 text-gray-400" />
               </div>
             )}
+            
+            {/* Enhanced video indicator for modal */}
+            {isVideo && (
+              <div className="absolute top-4 right-4 video-overlay text-white p-3 rounded-full shadow-lg z-10 video-indicator">
+                <Video className="h-5 w-5 fill-white" />
+              </div>
+            )}
           </div>
           
           {/* Content Section */}
@@ -360,6 +376,15 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
   const [imageLoadingStates, setImageLoadingStates] = useState<{ [key: string]: boolean }>({})
   const [hoveredPost, setHoveredPost] = useState<string | null>(null)
+
+  // Helper function to ensure URL is a string
+  const ensureStringUrl = (url: any): string => {
+    if (typeof url === 'string') return url
+    if (url && typeof url === 'object' && url.url) return String(url.url)
+    if (url && typeof url === 'object' && url.filename) return `/api/media/file/${url.filename}`
+    if (url && typeof url === 'object' && url.id) return `/api/media/file/${url.id}`
+    return String(url || '')
+  }
 
   const handleImageLoad = (postId: string) => {
     setImageLoadingStates(prev => ({ ...prev, [postId]: false }))
@@ -517,9 +542,20 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
       })
     }
     
-    // Add main image (only if no video)
-    if (!videoUrl && post.image) {
+    // Add main image (always add if it exists, regardless of video)
+    if (post.image) {
       const imageUrl = getImageUrl(post.image)
+      
+      // Debug logging for image processing
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 [EnhancedPostsGrid] Processing image:', {
+          postId: post.id,
+          postImage: post.image,
+          imageUrl,
+          isValidUrl: imageUrl !== '/placeholder.svg'
+        })
+      }
+      
       if (imageUrl !== '/placeholder.svg') {
         media.push({
           type: 'image' as const,
@@ -549,46 +585,123 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
   // Helper function to get primary display URL for grid thumbnail
   const getPrimaryDisplayUrl = (post: Post) => {
     const media = getPostMedia(post)
+    
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [EnhancedPostsGrid] getPrimaryDisplayUrl:', {
+        postId: post.id,
+        hasMedia: media.length > 0,
+        mediaLength: media.length,
+        firstMedia: media[0],
+        allMedia: media.map(m => ({ type: m.type, url: m.url })),
+        postImage: post.image,
+        postVideo: post.video,
+        postPhotos: post.photos?.length || 0
+      })
+    }
+    
     if (media.length > 0) {
-      // For videos, use thumbnail if available, otherwise use video URL
+      // Prioritize images over videos for grid thumbnails
+      const firstImage = media.find(item => item.type === 'image')
+      if (firstImage) {
+        // Ensure we have a string URL
+        const imageUrl = firstImage.url
+        if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
+          return imageUrl
+        } else if (typeof imageUrl === 'object' && imageUrl !== null) {
+          // If url is an object, extract the URL using getImageUrl
+          const extractedUrl = getImageUrl(imageUrl)
+          return extractedUrl !== '/placeholder.svg' ? extractedUrl : null
+        }
+        return null
+      }
+      
+      // If no image, use video thumbnail
       if (media[0]?.type === 'video') {
         // If video has a thumbnail, use it
         if (media[0]?.thumbnail && media[0].thumbnail !== '/placeholder.svg' && media[0].thumbnail !== '/api/media/placeholder-video-thumbnail') {
-          return media[0].thumbnail
+          return String(media[0].thumbnail)
         }
         // Otherwise, use placeholder thumbnail for videos
         return '/api/media/placeholder-video-thumbnail'
       }
-      return media[0]?.url
+      
+      // For videos, ensure we have a string URL
+      const videoUrl = media[0]?.url
+      if (typeof videoUrl === 'string' && videoUrl.trim() !== '') {
+        return videoUrl
+      } else if (typeof videoUrl === 'object' && videoUrl !== null) {
+        // If url is an object, extract the URL using getVideoUrl
+        const extractedUrl = getVideoUrl(videoUrl)
+        return extractedUrl || '/api/media/placeholder-video-thumbnail'
+      }
+      return null
     }
     
     // Fallback to legacy fields
     const imageUrl = getImageUrl(post.image)
-    return imageUrl !== '/placeholder.svg' ? imageUrl : null
+    const finalUrl = imageUrl !== '/placeholder.svg' ? imageUrl : null
+    
+    // Debug logging for fallback
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [EnhancedPostsGrid] getPrimaryDisplayUrl fallback:', {
+        postId: post.id,
+        imageUrl,
+        finalUrl,
+        postImage: post.image
+      })
+    }
+    
+    // If we still don't have a valid URL, return null to show placeholder
+    if (!finalUrl || finalUrl === '/placeholder.svg' || (typeof finalUrl === 'string' && finalUrl.trim() === '')) {
+      return null
+    }
+    
+    return finalUrl
   }
 
-  // Function to determine post size based on content and position
+  // Enhanced function to determine post size based on content and type
   const getPostSize = (post: Post, index: number) => {
     const hasHighEngagement = (post.likeCount || 0) > 10 || (post.commentCount || 0) > 5
     const isSpecialPost = post.rating && post.rating >= 4
     const isVideo = hasVideoContent(post)
+    const mediaCount = getPostMedia(post).length
     
-    // Create a pattern for variety
+    // Optimized sizing logic for better visual hierarchy
     if (gridType === 'masonry') {
-      if (index % 7 === 0 || hasHighEngagement) return 'large' // Full width
-      if ((index % 4 === 0 && index % 7 !== 0) || isSpecialPost) return 'tall' // 2x1
-      if (index % 6 === 0 || isVideo) return 'wide' // 1x2
-      return 'normal' // 1x1
+      // Videos get smaller size to reduce visual weight
+      if (isVideo) {
+        return index % 8 === 0 ? 'normal' : 'small' // Most videos are small, some normal
+      }
+      
+      // High engagement posts get larger size
+      if (hasHighEngagement && isSpecialPost) return 'large'
+      if (hasHighEngagement) return 'tall'
+      
+      // Multiple photos get wider display
+      if (mediaCount > 1) return 'wide'
+      
+      // Special posts (reviews, tips) get medium size
+      if (isSpecialPost) return 'medium'
+      
+      // Default to normal size
+      return 'normal'
     }
     
     if (gridType === 'alternating') {
+      // Videos are smaller in alternating layout
+      if (isVideo) return index % 4 === 0 ? 'normal' : 'small'
       return index % 3 === 0 ? (index % 6 === 0 ? 'large' : 'wide') : 'normal'
     }
     
-    // Dynamic sizing based on content
+    // Dynamic sizing - videos are smaller
+    if (isVideo) {
+      return hasHighEngagement ? 'normal' : 'small'
+    }
+    
     if (hasHighEngagement && isSpecialPost) return 'large'
-    if (hasHighEngagement || isVideo) return 'tall'
-    if (isSpecialPost) return 'wide'
+    if (hasHighEngagement || mediaCount > 1) return 'tall'
+    if (isSpecialPost) return 'medium'
     return 'normal'
   }
 
@@ -597,6 +710,8 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
       case 'large': return 'col-span-2 row-span-2' // 2x2
       case 'tall': return 'col-span-1 row-span-2' // 1x2
       case 'wide': return 'col-span-2 row-span-1' // 2x1
+      case 'medium': return 'col-span-1 row-span-1' // 1x1 (normal)
+      case 'small': return 'col-span-1 row-span-1' // 1x1 (smaller)
       default: return 'col-span-1 row-span-1' // 1x1
     }
   }
@@ -631,57 +746,97 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 auto-rows-[200px] gap-2 md:gap-3 lg:gap-4">
+      {/* Optimized grid with better spacing and responsive design */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 auto-rows-[120px] md:auto-rows-[140px] lg:auto-rows-[160px] gap-1 md:gap-2 lg:gap-3">
         {posts.map((post, index) => {
           const size = getPostSize(post, index)
           const isHovered = hoveredPost === post.id
           const primaryUrl = getPrimaryDisplayUrl(post)
           const isVideo = hasVideoContent(post)
+          const mediaCount = getPostMedia(post).length
+          
+          // Ensure we have a valid URL before rendering
+          const hasValidUrl = primaryUrl && 
+            typeof primaryUrl === 'string' && 
+            primaryUrl.trim() !== '' && 
+            primaryUrl !== '/placeholder.svg' &&
+            primaryUrl !== 'undefined' &&
+            primaryUrl !== 'null'
+          
+          // Debug logging for each post
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 [EnhancedPostsGrid] Rendering post:', {
+              postId: post.id,
+              primaryUrl,
+              primaryUrlType: typeof primaryUrl,
+              primaryUrlValue: primaryUrl,
+              hasValidUrl,
+              isVideo,
+              mediaCount,
+              postData: {
+                hasImage: !!post.image,
+                hasVideo: !!post.video,
+                hasPhotos: !!post.photos,
+                hasMedia: !!post.media,
+                imageType: typeof post.image,
+                videoType: typeof post.video,
+                photosLength: post.photos?.length || 0,
+                mediaLength: post.media?.length || 0
+              }
+            })
+          }
           
           return (
             <Card
               key={post.id}
-              className={`relative overflow-hidden cursor-pointer group border-0 shadow-sm hover:shadow-2xl transition-all duration-500 rounded-xl ${getGridClasses(size)} ${
+              className={`relative overflow-hidden cursor-pointer group border-0 shadow-sm hover:shadow-xl transition-all duration-300 rounded-lg ${getGridClasses(size)} ${
                 isHovered ? 'scale-[1.02] z-10' : ''
-              }`}
+              } ${isVideo ? 'video-card' : 'image-card'}`}
               onClick={() => setSelectedPost(post)}
               onMouseEnter={() => setHoveredPost(post.id)}
               onMouseLeave={() => setHoveredPost(null)}
             >
-              {primaryUrl ? (
+              {hasValidUrl ? (
                 <>
                   {imageLoadingStates[post.id] && (
                     <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 animate-pulse flex items-center justify-center">
-                      <ImageIcon className="h-12 w-12 text-gray-400" />
+                      <ImageIcon className="h-8 w-8 text-gray-400" />
                     </div>
                   )}
                   <Image
                     src={primaryUrl}
                     alt={post.title || "Post"}
                     fill
-                    className="object-cover transition-all duration-700 group-hover:scale-110"
-                    onLoadingComplete={() => handleImageLoad(post.id)}
-                    onLoadStart={() => handleImageLoadStart(post.id)}
+                    className={`object-cover transition-all duration-500 group-hover:scale-105 ${
+                      isVideo ? 'video-thumbnail' : 'image-thumbnail'
+                    }`}
+                    onLoad={() => handleImageLoad(post.id)}
+                    sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
                   />
                 </>
               ) : (
                 <div className="w-full h-full bg-gradient-to-br from-gray-100 via-gray-200 to-gray-300 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-400 transition-all duration-500">
-                  <ImageIcon className="h-12 w-12 text-gray-400 group-hover:text-gray-500 transition-colors group-hover:scale-110 transform duration-300" />
+                  <div className="text-center">
+                    <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-gray-500 transition-colors group-hover:scale-110 transform duration-300 mx-auto mb-2" />
+                    <p className="text-xs text-gray-500 hidden group-hover:block">
+                      {post.title || 'No media'}
+                    </p>
+                  </div>
                 </div>
               )}
 
-              {/* Enhanced overlay with gradient animation */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500">
-                <div className="absolute bottom-4 left-4 right-4">
-                  <div className="flex items-center justify-between text-white transform translate-y-6 group-hover:translate-y-0 transition-transform duration-500">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <Heart className="h-4 w-4 fill-white" />
-                        <span className="font-bold text-sm">{post.likeCount || 0}</span>
+              {/* Enhanced overlay with better contrast */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
+                <div className="absolute bottom-2 left-2 right-2">
+                  <div className="flex items-center justify-between text-white transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm rounded-full px-2 py-1">
+                        <Heart className="h-3 w-3 fill-white" />
+                        <span className="font-bold text-xs">{post.likeCount || 0}</span>
                       </div>
-                      <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5">
-                        <MessageCircle className="h-4 w-4 fill-white" />
-                        <span className="font-bold text-sm">{post.commentCount || 0}</span>
+                      <div className="flex items-center gap-1 bg-white/20 backdrop-blur-sm rounded-full px-2 py-1">
+                        <MessageCircle className="h-3 w-3 fill-white" />
+                        <span className="font-bold text-xs">{post.commentCount || 0}</span>
                       </div>
                     </div>
                     
@@ -695,52 +850,61 @@ export default function EnhancedPostsGrid({ posts, isCurrentUser, gridType = 'dy
                 </div>
               </div>
 
-              {/* Enhanced post indicators */}
+              {/* Optimized post indicators */}
               {isVideo && (
-                <div className="absolute top-3 right-3 z-10">
-                  <div className="bg-black/80 backdrop-blur-sm rounded-full p-2.5 shadow-lg animate-pulse">
-                    <Play className="h-4 w-4 text-white" />
+                <div className="absolute top-2 right-2 z-10">
+                  <div className="video-overlay rounded-full p-1.5 shadow-lg video-indicator bg-black/60 backdrop-blur-sm">
+                    <Play className="h-3 w-3 text-white fill-white" />
                   </div>
                 </div>
               )}
 
-              {post.type === "carousel" && (
-                <div className="absolute top-3 right-3 z-10">
-                  <div className="bg-black/80 backdrop-blur-sm rounded-full p-2.5 shadow-lg">
-                    <div className="grid grid-cols-2 gap-0.5 w-4 h-4">
+              {post.type === "carousel" && mediaCount > 1 && (
+                <div className="absolute top-2 right-2 z-10">
+                  <div className="bg-black/60 backdrop-blur-sm rounded-full p-1.5 shadow-lg">
+                    <div className="grid grid-cols-2 gap-0.5 w-3 h-3">
                       {[...Array(4)].map((_, i) => (
-                        <div key={i} className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                        <div key={i} className="w-1 h-1 bg-white rounded-full animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
                       ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Enhanced location badge */}
+              {/* Enhanced location badge - smaller and more subtle */}
               {post.location && typeof post.location === 'object' && post.location !== null && (
-                <div className="absolute bottom-3 left-3 z-10 transform group-hover:scale-105 transition-transform duration-300">
-                  <Badge className="bg-black/80 backdrop-blur-sm text-white text-xs px-3 py-2 border-0 shadow-lg rounded-full">
-                    <MapPin className="h-3 w-3 mr-1" />
+                <div className="absolute bottom-2 left-2 z-10 transform group-hover:scale-105 transition-transform duration-300">
+                  <Badge className="bg-black/60 backdrop-blur-sm text-white text-xs px-2 py-1 border-0 shadow-lg rounded-full">
+                    <MapPin className="h-2 w-2 mr-1" />
                     {post.location.name}
                   </Badge>
                 </div>
               )}
 
-              {/* Enhanced rating badge */}
+              {/* Enhanced rating badge - smaller and more prominent */}
               {post.rating && (
-                <div className="absolute top-3 left-3 z-10 transform group-hover:scale-105 transition-transform duration-300">
-                  <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 text-xs px-3 py-2 border-0 shadow-lg font-bold rounded-full animate-pulse">
-                    <Star className="h-3 w-3 mr-1 fill-current" />
+                <div className="absolute top-2 left-2 z-10 transform group-hover:scale-105 transition-transform duration-300">
+                  <Badge className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-yellow-900 text-xs px-2 py-1 border-0 shadow-lg font-bold rounded-full">
+                    <Star className="h-2 w-2 mr-1 fill-current" />
                     {post.rating}
                   </Badge>
                 </div>
               )}
 
-              {/* Special engagement indicator */}
+              {/* Special engagement indicator - only for very popular posts */}
               {(post.likeCount || 0) > 50 && (
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-                  <div className="bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] rounded-full p-3 shadow-xl animate-bounce">
-                    <Sparkles className="h-6 w-6 text-white" />
+                  <div className="bg-gradient-to-r from-[#FF6B6B] to-[#FF8E53] rounded-full p-2 shadow-xl animate-bounce">
+                    <Sparkles className="h-4 w-4 text-white" />
+                  </div>
+                </div>
+              )}
+
+              {/* Enhanced video play overlay - smaller and more subtle */}
+              {isVideo && (
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center">
+                  <div className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-xl video-play-button">
+                    <Play className="h-4 w-4 text-gray-800 fill-gray-800 ml-0.5" />
                   </div>
                 </div>
               )}

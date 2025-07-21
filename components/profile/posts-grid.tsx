@@ -410,8 +410,37 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
   // Helper function to get primary display URL for grid thumbnail
   const getPrimaryDisplayUrl = (post: Post) => {
     const media = getPostMedia(post)
+    
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [PostsGrid] getPrimaryDisplayUrl:', {
+        postId: post.id,
+        hasMedia: media.length > 0,
+        mediaLength: media.length,
+        firstMedia: media[0],
+        postImage: post.image,
+        postVideo: post.video,
+        postPhotos: post.photos?.length || 0
+      })
+    }
+    
     if (media.length > 0) {
-      // For videos, use thumbnail if available, otherwise use video URL
+      // Prioritize images over videos for grid thumbnails
+      const firstImage = media.find(item => item.type === 'image')
+      if (firstImage) {
+        // Ensure we have a string URL
+        const imageUrl = firstImage.url
+        if (typeof imageUrl === 'string' && imageUrl.trim() !== '') {
+          return imageUrl
+        } else if (typeof imageUrl === 'object' && imageUrl !== null) {
+          // If url is an object, extract the URL using getImageUrl
+          const extractedUrl = getImageUrl(imageUrl)
+          return extractedUrl !== '/placeholder.svg' ? extractedUrl : null
+        }
+        return null
+      }
+      
+      // If no image, use video thumbnail
       if (media[0]?.type === 'video') {
         // If video has a thumbnail, use it
         if (media[0]?.thumbnail && media[0].thumbnail !== '/placeholder.svg' && media[0].thumbnail !== '/api/media/placeholder-video-thumbnail') {
@@ -420,12 +449,38 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
         // Otherwise, use placeholder thumbnail for videos
         return '/api/media/placeholder-video-thumbnail'
       }
-      return media[0]?.url
+      // For videos, ensure we have a string URL
+      const videoUrl = media[0]?.url
+      if (typeof videoUrl === 'string' && videoUrl.trim() !== '') {
+        return videoUrl
+      } else if (typeof videoUrl === 'object' && videoUrl !== null) {
+        // If url is an object, extract the URL using getVideoUrl
+        const extractedUrl = getVideoUrl(videoUrl)
+        return extractedUrl || '/api/media/placeholder-video-thumbnail'
+      }
+      return null
     }
     
     // Fallback to legacy fields
     const imageUrl = getImageUrl(post.image)
-    return imageUrl !== '/placeholder.svg' ? imageUrl : null
+    const finalUrl = imageUrl !== '/placeholder.svg' ? imageUrl : null
+    
+    // Debug logging for fallback
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [PostsGrid] getPrimaryDisplayUrl fallback:', {
+        postId: post.id,
+        imageUrl,
+        finalUrl,
+        postImage: post.image
+      })
+    }
+    
+    // If we still don't have a valid URL, return null to show placeholder
+    if (!finalUrl || finalUrl === '/placeholder.svg' || (typeof finalUrl === 'string' && finalUrl.trim() === '')) {
+      return null
+    }
+    
+    return finalUrl
   }
 
   // Helper function to determine if post has video content
@@ -475,9 +530,32 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
   const getPostMedia = (post: Post) => {
     const media = []
     
+    // Debug logging
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 [PostsGrid] getPostMedia input:', {
+        postId: post.id,
+        hasMediaArray: !!post.media,
+        mediaArrayLength: post.media?.length || 0,
+        hasImage: !!post.image,
+        hasVideo: !!post.video,
+        hasPhotos: !!post.photos,
+        photosLength: post.photos?.length || 0
+      })
+    }
+    
     // If post already has media array, use it
     if (post.media && Array.isArray(post.media)) {
-      return post.media
+      const processedMedia = post.media.map(item => ({
+        ...item,
+        url: String(item.url || ''),
+        thumbnail: item.thumbnail ? String(item.thumbnail) : undefined
+      }))
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 [PostsGrid] Processed media array:', processedMedia)
+      }
+      
+      return processedMedia
     }
     
     // Otherwise, construct media array from individual fields
@@ -577,9 +655,20 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
       })
     }
     
-    // Add main image (only if no video)
-    if (!videoUrl && post.image) {
+    // Add main image (always add if it exists, regardless of video)
+    if (post.image) {
       const imageUrl = getImageUrl(post.image)
+      
+      // Debug logging for image processing
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 [PostsGrid] Processing image:', {
+          postId: post.id,
+          postImage: post.image,
+          imageUrl,
+          isValidUrl: imageUrl !== '/placeholder.svg'
+        })
+      }
+      
       if (imageUrl !== '/placeholder.svg') {
         media.push({
           type: 'image' as const,
@@ -637,49 +726,71 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Optimized grid with better spacing and responsive design */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
         {posts.map((post, index) => {
           const primaryUrl = getPrimaryDisplayUrl(post)
           const isVideo = hasVideoContent(post)
           const mediaCount = getMediaCount(post)
           
+          // Ensure we have a valid URL before rendering
+          const hasValidUrl = primaryUrl && 
+            typeof primaryUrl === 'string' && 
+            primaryUrl.trim() !== '' && 
+            primaryUrl !== '/placeholder.svg' &&
+            primaryUrl !== 'undefined' &&
+            primaryUrl !== 'null'
+          
+          // Debug logging for each post
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔍 [PostsGrid] Rendering post:', {
+              postId: post.id,
+              primaryUrl,
+              hasValidUrl,
+              isVideo,
+              mediaCount
+            })
+          }
+          
           return (
             <Card
               key={post.id}
-              className="relative overflow-hidden cursor-pointer group border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 bg-white"
+              className={`relative overflow-hidden cursor-pointer group border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 bg-white ${
+                isVideo ? 'video-card' : 'image-card'
+              }`}
               onClick={() => setSelectedPost(post)}
             >
-              {/* Media Section */}
+              {/* Media Section - Optimized for better display */}
               <div className="aspect-square relative overflow-hidden">
-                {primaryUrl ? (
+                {hasValidUrl ? (
                   <>
                     {imageLoadingStates[post.id] && (
                       <div className="absolute inset-0 bg-gray-100 animate-pulse flex items-center justify-center">
-                        <ImageIcon className="h-8 w-8 text-gray-400" />
+                        <ImageIcon className="h-6 w-6 text-gray-400" />
                       </div>
                     )}
                     
                     {isVideo ? (
                       <div className="relative w-full h-full">
-                        {/* Video thumbnail with play button */}
+                        {/* Video thumbnail with optimized play button */}
                         <Image
                           src={primaryUrl}
                           alt={post.title || "Post"}
                           fill
-                          className="object-cover transition-all duration-300 group-hover:scale-110"
-                          onLoadingComplete={() => handleImageLoad(post.id)}
-                          onLoadStart={() => handleImageLoadStart(post.id)}
+                          className="object-cover transition-all duration-300 group-hover:scale-105 video-thumbnail"
+                          onLoad={() => handleImageLoad(post.id)}
+                          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
                         />
                         
-                        {/* Video indicator */}
-                        <div className="absolute top-3 right-3 bg-black/70 text-white p-2 rounded-full">
-                          <Video className="h-4 w-4" />
+                        {/* Enhanced video indicator - smaller and more subtle */}
+                        <div className="absolute top-2 right-2 video-overlay text-white p-1.5 rounded-full shadow-lg video-indicator bg-black/60 backdrop-blur-sm">
+                          <Video className="h-3 w-3 fill-white" />
                         </div>
                         
-                        {/* Play button overlay */}
-                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <div className="w-16 h-16 bg-white/90 rounded-full flex items-center justify-center">
-                            <Play className="h-8 w-8 text-gray-800 ml-1" />
+                        {/* Enhanced play button overlay - smaller and more subtle */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="bg-white/90 backdrop-blur-sm rounded-full p-2 shadow-xl video-play-button">
+                            <Play className="h-4 w-4 text-gray-800 fill-gray-800 ml-0.5" />
                           </div>
                         </div>
                       </div>
@@ -688,51 +799,51 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                         src={primaryUrl}
                         alt={post.title || "Post"}
                         fill
-                        className="object-cover transition-all duration-300 group-hover:scale-110"
-                        onLoadingComplete={() => handleImageLoad(post.id)}
-                        onLoadStart={() => handleImageLoadStart(post.id)}
+                        className="object-cover transition-all duration-300 group-hover:scale-105 image-thumbnail"
+                        onLoad={() => handleImageLoad(post.id)}
+                        sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, (max-width: 1280px) 33vw, 25vw"
                       />
                     )}
                   </>
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group-hover:from-gray-200 group-hover:to-gray-300 transition-all duration-300">
-                    <ImageIcon className="h-12 w-12 text-gray-400 group-hover:text-gray-500 transition-colors" />
+                    <ImageIcon className="h-8 w-8 text-gray-400 group-hover:text-gray-500 transition-colors" />
                   </div>
                 )}
 
-                {/* Media count indicator */}
+                {/* Media count indicator - smaller and more subtle */}
                 {mediaCount > 1 && (
-                  <div className="absolute top-3 left-3 bg-black/70 text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
+                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded-full text-xs flex items-center gap-1">
                     <ImageIcon className="h-3 w-3" />
                     {mediaCount}
                   </div>
                 )}
 
-                {/* Post type badge */}
+                {/* Post type badge - smaller and more prominent */}
                 {post.type && post.type !== 'post' && (
-                  <div className="absolute top-3 left-3 bg-[#FF6B6B] text-white px-2 py-1 rounded-full text-xs font-medium">
+                  <div className="absolute top-2 left-2 bg-[#FF6B6B] text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">
                     {post.type.charAt(0).toUpperCase() + post.type.slice(1)}
                   </div>
                 )}
               </div>
 
-              {/* Content Section */}
-              <div className="p-4">
+              {/* Content Section - Optimized spacing */}
+              <div className="p-3 md:p-4">
                 {/* Title */}
                 {post.title && (
-                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#FF6B6B] transition-colors">
+                  <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 group-hover:text-[#FF6B6B] transition-colors text-sm md:text-base">
                     {post.title}
                   </h3>
                 )}
                 
-                {/* Content preview */}
+                {/* Content preview - optimized for better readability */}
                 {post.content && (
-                  <p className="text-gray-600 text-sm mb-3 line-clamp-3 leading-relaxed">
+                  <p className="text-gray-600 text-xs md:text-sm mb-3 line-clamp-3 leading-relaxed">
                     {post.content}
                   </p>
                 )}
 
-                {/* Location */}
+                {/* Location - smaller and more subtle */}
                 {post.location && (
                   <div className="flex items-center gap-1 text-xs text-gray-500 mb-2">
                     <MapPin className="h-3 w-3" />
@@ -740,14 +851,14 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                   </div>
                 )}
 
-                {/* Rating */}
+                {/* Rating - optimized display */}
                 {post.rating && (
                   <div className="flex items-center gap-1 mb-2">
                     <div className="flex">
                       {[...Array(5)].map((_, i) => (
                         <span
                           key={i}
-                          className={`text-sm ${
+                          className={`text-xs md:text-sm ${
                             i < post.rating! ? "text-yellow-400" : "text-gray-300"
                           }`}
                         >
@@ -759,7 +870,7 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                   </div>
                 )}
 
-                {/* Stats and Date */}
+                {/* Stats and Date - optimized layout */}
                 <div className="flex items-center justify-between text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
                   <div className="flex items-center gap-3">
                     {post.likeCount !== undefined && (
@@ -784,17 +895,17 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                 </div>
               </div>
 
-              {/* Hover overlay with quick actions */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <div className="flex items-center gap-4">
-                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
-                    <Heart className="h-6 w-6 text-gray-700" />
+              {/* Hover overlay with quick actions - optimized for better UX */}
+              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/90 rounded-full p-2 hover:bg-white transition-colors">
+                    <Heart className="h-4 w-4 text-gray-700" />
                   </div>
-                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
-                    <MessageCircle className="h-6 w-6 text-gray-700" />
+                  <div className="bg-white/90 rounded-full p-2 hover:bg-white transition-colors">
+                    <MessageCircle className="h-4 w-4 text-gray-700" />
                   </div>
-                  <div className="bg-white/90 rounded-full p-3 hover:bg-white transition-colors">
-                    <Share2 className="h-6 w-6 text-gray-700" />
+                  <div className="bg-white/90 rounded-full p-2 hover:bg-white transition-colors">
+                    <Share2 className="h-4 w-4 text-gray-700" />
                   </div>
                 </div>
               </div>
@@ -827,6 +938,13 @@ export default function PostsGrid({ posts, isCurrentUser }: PostsGridProps) {
                 ) : (
                   <div className="w-full h-full bg-gray-100 flex items-center justify-center">
                     <ImageIcon className="h-24 w-24 text-gray-400" />
+                  </div>
+                )}
+                
+                {/* Enhanced video indicator */}
+                {hasVideoContent(selectedPost) && (
+                  <div className="absolute top-4 right-4 video-overlay text-white p-3 rounded-full shadow-lg z-10 video-indicator">
+                    <Video className="h-5 w-5 fill-white" />
                   </div>
                 )}
               </div>

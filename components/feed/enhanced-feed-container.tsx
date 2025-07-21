@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 
 // Import our new card components
 import PeopleSuggestionCard from './cards/people-suggestion-card'
+import NoPeopleSuggestionsCard from './cards/no-people-suggestions-card'
 import PlaceRecommendationCard from './cards/place-recommendation-card'
 import WeeklyFeatureCard from './cards/weekly-feature-card'
 
@@ -75,6 +76,7 @@ export default function EnhancedFeedContainer({
   // Add refs to prevent duplicate API calls
   const lastRequestRef = useRef<string>('')
   const isRequestingRef = useRef(false)
+  const lastRequestTimeRef = useRef<number | null>(null)
 
   // Content type filters - redesigned for better UX
   const contentTypeFilters = [
@@ -87,19 +89,24 @@ export default function EnhancedFeedContainer({
     // Create a unique request key to prevent duplicate calls
     const requestKey = `${pageNum}-${activeFilters.join(',')}-${userId || user?.id}-${refresh}`
     
-    // Prevent duplicate requests
+    // Prevent duplicate requests with improved logic
     if (isRequestingRef.current) {
-      console.log('🔄 Skipping duplicate request:', requestKey)
+      console.log('🔄 Skipping duplicate request - request in progress:', requestKey)
       return
     }
     
+    // Check if this exact request was made recently (within 2 seconds)
     if (lastRequestRef.current === requestKey && !refresh) {
-      console.log('🔄 Skipping identical request:', requestKey)
-      return
+      const timeSinceLastRequest = Date.now() - (lastRequestTimeRef.current || 0)
+      if (timeSinceLastRequest < 2000) {
+        console.log('🔄 Skipping identical request (too recent):', requestKey)
+        return
+      }
     }
     
     isRequestingRef.current = true
     lastRequestRef.current = requestKey
+    lastRequestTimeRef.current = Date.now()
     
     try {
       if (refresh) {
@@ -178,37 +185,26 @@ export default function EnhancedFeedContainer({
         hasMore: hasMoreData,
         sampleItems: items.slice(0, 2).map((item: FeedItem) => ({
           id: item.id,
-          type: item.type,
-          hasPlaceData: item.type === 'place_recommendation' ? !!item.place : 'N/A',
-          hasPeopleData: item.type === 'people_suggestion' ? !!item.people : 'N/A',
-          hasFeatureData: item.type === 'weekly_feature' ? !!item.feature : 'N/A',
-          hasPostData: item.type === 'post' ? !!item.post : 'N/A'
+          type: item.type
         }))
       })
-      
+
       if (refresh || pageNum === 1) {
         setFeedItems(items)
+        setPage(1)
       } else {
         setFeedItems(prev => [...prev, ...items])
+        setPage(pageNum)
       }
       
       setHasMore(hasMoreData)
-      setPage(pageNum)
       setError(null)
       
     } catch (error) {
-      console.error('Error fetching feed:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load feed'
+      console.error('❌ Error fetching feed:', error)
+      setError(error instanceof Error ? error.message : 'Failed to load feed')
       
-      // Set user-friendly error messages
-      if (errorMessage.includes('Database connection') || errorMessage.includes('MongoDB')) {
-        setError('Unable to connect to the database. Please check your internet connection and try again.')
-      } else if (errorMessage.includes('Failed to fetch feed (500)')) {
-        setError('Server error. Our team has been notified and is working on a fix.')
-      } else {
-        setError(errorMessage)
-      }
-      
+      // Don't clear existing items on error, just show error state
       if (pageNum === 1) {
         setFeedItems([])
       }
@@ -217,7 +213,7 @@ export default function EnhancedFeedContainer({
       setIsRefreshing(false)
       isRequestingRef.current = false
     }
-  }, [userId, location, preferences, activeFilters, user?.id])
+  }, [userId, user?.id, location, preferences, activeFilters])
 
   // Define loadWeeklyChallenges before useEffect hooks that use it
   // const loadWeeklyChallenges = useCallback(async () => {
@@ -251,16 +247,27 @@ export default function EnhancedFeedContainer({
       }
       
       refetchWithFilters()
-    }, 300) // 300ms debounce
+    }, 500) // Increased from 300ms to 500ms for better debouncing
     
     return () => clearTimeout(timeoutId)
   }, [activeFilters]) // Removed fetchFeedItems from dependencies to prevent circular dependency
 
-  // Load initial feed data
+  // Load initial feed data - ONLY ONCE
   useEffect(() => {
-    console.log('🚀 Initial feed load for user:', userId || user?.id)
-    fetchFeedItems(1, false)
+    // Prevent multiple initial loads
+    if (isLoading && feedItems.length === 0) {
+      console.log('🚀 Initial feed load for user:', userId || user?.id)
+      fetchFeedItems(1, false)
+    }
   }, [userId, user?.id]) // Only depend on user changes, not fetchFeedItems
+
+  // Separate effect for user changes to prevent duplicate calls
+  useEffect(() => {
+    if (user?.id && feedItems.length === 0 && !isLoading) {
+      console.log('🔄 User changed, loading feed for:', user.id)
+      fetchFeedItems(1, false)
+    }
+  }, [user?.id])
 
   // Load weekly challenges separately to avoid blocking main feed
   // useEffect(() => {
@@ -405,6 +412,11 @@ export default function EnhancedFeedContainer({
             key={item.id}
             item={item as PeopleSuggestionItem}
           />
+        )
+      
+      case 'no_people_suggestions':
+        return (
+          <NoPeopleSuggestionsCard key={item.id} />
         )
       
       case 'place_recommendation':

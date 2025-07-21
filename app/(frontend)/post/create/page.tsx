@@ -1,15 +1,11 @@
+"use client"
+
 import { Suspense } from "react"
-import { Metadata } from "next"
-import CreatePostForm from "@/components/post/create-post-form"
+import EnhancedPostFormWrapper from "@/components/post/enhanced-post-form-wrapper"
 import { Loader2 } from "lucide-react"
 
 // Force dynamic rendering for this page since it requires authentication
 export const dynamic = 'force-dynamic'
-
-export const metadata: Metadata = {
-  title: "Share a Post | Sacavia",
-  description: "Share photos and reviews of places you've visited. Help others discover great restaurants, attractions, and hidden gems.",
-}
 
 export default function CreatePostPage() {
   return (
@@ -34,7 +30,9 @@ export default function CreatePostPage() {
             </div>
           }
         >
-          <CreatePostForm className="bg-white rounded-lg shadow-sm" />
+          <EnhancedPostFormWrapper 
+            className="bg-white rounded-lg shadow-sm" 
+          />
         </Suspense>
       </div>
     </div>

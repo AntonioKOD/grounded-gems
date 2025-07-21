@@ -205,7 +205,7 @@ export default function SignupForm() {
                 Resend verification email
               </Button>
             )}
-            <Link href="/login" passHref>
+            <Link href="/login">
               <Button className="w-full">Go to Login</Button>
             </Link>
           </CardFooter>

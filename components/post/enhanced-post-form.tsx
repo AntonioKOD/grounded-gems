@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react"
-import { Camera, ImageIcon, MapPin, Send, X, Loader2, Video, FileText, Plus, Star, Hash, Tag, Folder, Target, Globe, ArrowLeft, ArrowRight, Check, Upload, Smartphone, AlertCircle, CheckCircle } from "lucide-react"
+import { Camera, ImageIcon, MapPin, Send, X, Loader2, Video, FileText, Plus, Star, Hash, Tag, Folder, Target, Globe, ArrowLeft, ArrowRight, Check, Upload, Smartphone, AlertCircle, CheckCircle, Smile } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 
@@ -39,10 +39,8 @@ interface EnhancedPostFormProps {
 }
 
 const STEPS = [
-  { id: 1, title: "Capture", description: "Take or upload media", icon: Camera },
-  { id: 2, title: "Caption", description: "Write your story", icon: FileText },
-  { id: 3, title: "Details", description: "Add location & tags", icon: Tag },
-  { id: 4, title: "Share", description: "Review and publish", icon: Send }
+  { id: 1, title: "Content", description: "Add media & write your story", icon: Camera },
+  { id: 2, title: "Share", description: "Review and publish", icon: Send }
 ] as const
 
 // Enhanced mobile detection - memoized
@@ -67,62 +65,74 @@ const validateStep = (step: number, data: {
 }) => {
   const errors: string[] = []
   
-  switch (step) {
-    case 1:
-      if (data.selectedFiles.length === 0 && data.selectedVideos.length === 0) {
-        errors.push("Please add at least one photo or video")
-      }
-      break
-    case 2:
-      if (!data.content || data.content.trim().length === 0) {
-        errors.push("Please write a caption")
-      }
-      if (data.content && data.content.length > 500) {
-        errors.push("Caption cannot exceed 500 characters")
-      }
-      break
+  if (step === 1) {
+    // Step 1: Content - require either content or media
+    if (!data.content.trim() && data.selectedFiles.length === 0 && data.selectedVideos.length === 0) {
+      errors.push("Please add some content or media to share")
+    }
+    
+    if (data.content.length > 500) {
+      errors.push("Content cannot exceed 500 characters")
+    }
+  }
+  
+  if (step === 2) {
+    // Step 2: Share - final validation
+    if (!data.content.trim() && data.selectedFiles.length === 0 && data.selectedVideos.length === 0) {
+      errors.push("Please add some content or media to share")
+    }
+    
+    if (data.type === "review" && data.rating === 0) {
+      errors.push("Please add a rating for your review")
+    }
   }
   
   return errors
 }
 
 export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, className = "" }: EnhancedPostFormProps) {
-  // Step management
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // State
   const [currentStep, setCurrentStep] = useState(1)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [mediaUploadProgress, setMediaUploadProgress] = useState(0)
   const [isMobileDevice, setIsMobileDevice] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  
+  // Camera state
+  const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false)
 
   // Basic form state
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [type, setType] = useState<"post" | "review" | "recommendation">("post")
   const [rating, setRating] = useState<number>(0)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Media state
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [selectedVideos, setSelectedVideos] = useState<File[]>([])
   const [previewUrls, setPreviewUrls] = useState<string[]>([])
   const [videoPreviewUrls, setVideoPreviewUrls] = useState<string[]>([])
-  const [isDragging, setIsDragging] = useState(false)
-  const [mediaUploadProgress, setMediaUploadProgress] = useState<number>(0)
 
   // Location state (simplified - removing problematic location search hook)
   const [locationName, setLocationName] = useState("")
+  const [locationQuery, setLocationQuery] = useState("")
+  const [isSearchingLocations, setIsSearchingLocations] = useState(false)
+  const [showLocationResults, setShowLocationResults] = useState(false)
+  const [locationResults, setLocationResults] = useState<LocationResult[]>([])
 
   // Tags state
   const [tags, setTags] = useState<string[]>([])
   const [currentTag, setCurrentTag] = useState("")
-
-  // File input refs
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const videoInputRef = useRef<HTMLInputElement>(null)
-  const cameraInputRef = useRef<HTMLInputElement>(null)
-
-  // Camera state
-  const [isCameraLoading, setIsCameraLoading] = useState(false)
-  const [cameraError, setCameraError] = useState<string | null>(null)
 
   // Detect mobile device on mount only
   useEffect(() => {
@@ -167,7 +177,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     }
   }, [currentStep])
 
-  // Enhanced camera capture with better error handling
+  // Enhanced camera capture
   const handleCameraCapture = useCallback(async () => {
     if (!cameraInputRef.current) return
     
@@ -175,18 +185,15 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     setCameraError(null)
     
     try {
-      // Check if camera is available
+      // Check camera permissions
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        // Request camera permission first
         const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-        // Stop the stream immediately - we just wanted to check permission
         stream.getTracks().forEach(track => track.stop())
       }
       
-      // Trigger file input
       cameraInputRef.current.click()
       
-      // Add haptic feedback
+      // Haptic feedback
       if (navigator.vibrate) {
         navigator.vibrate(100)
       }
@@ -225,7 +232,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     const videoFiles = files.filter(file => file.type.startsWith('video/'))
     
     if (imageFiles.length > 0 || videoFiles.length > 0) {
-      processFiles([...imageFiles, ...videoFiles])
+      processFiles(files)
       toast.success(`Added ${imageFiles.length + videoFiles.length} file(s)`)
     } else {
       toast.error("Please drop image or video files only")
@@ -238,6 +245,13 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
     
+    console.log('📝 EnhancedPostForm: Starting file processing...', {
+      totalFiles: files.length,
+      currentFileCount: selectedFiles.length + selectedVideos.length,
+      fileTypes: files.map(f => f.type),
+      fileNames: files.map(f => f.name)
+    })
+    
     const currentFileCount = selectedFiles.length + selectedVideos.length
     if (currentFileCount + files.length > MAX_FILES) {
       toast.error(`Maximum ${MAX_FILES} files allowed`)
@@ -247,11 +261,21 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     const validFiles: File[] = []
     const validImages: File[] = []
     const validVideos: File[] = []
+    const livePhotoFiles: File[] = []
     
     for (const file of files) {
+      console.log(`📝 Processing file: ${file.name}`, {
+        type: file.type,
+        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        isImage: file.type.startsWith('image/'),
+        isVideo: file.type.startsWith('video/'),
+        isLivePhoto: file.type === 'image/heic' || file.type === 'image/heif'
+      })
+      
       // Validate file type
       if (file.type.startsWith('image/')) {
         if (file.size > MAX_IMAGE_SIZE) {
+          console.log(`📝 Image file too large: ${file.name}`)
           toast.error(`${file.name} is too large. Max size: 10MB`)
           continue
         }
@@ -263,26 +287,89 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
         ]
         if (!allowedImageTypes.includes(file.type.toLowerCase())) {
+          console.log(`📝 Invalid image type: ${file.type}`)
           toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
           continue
         }
+        
+        // Check for Live Photos
+        if (file.type === 'image/heic' || file.type === 'image/heif') {
+          livePhotoFiles.push(file)
+          console.log(`📝 Live Photo detected: ${file.name}`)
+        }
+        
         validImages.push(file)
         validFiles.push(file)
+        console.log(`📝 Image file validated: ${file.name}`)
       } else if (file.type.startsWith('video/')) {
+        console.log(`📝 Processing video file: ${file.name}`)
+        
         if (file.size > MAX_VIDEO_SIZE) {
+          console.log(`📝 Video file too large: ${file.name}`)
           toast.error(`${file.name} is too large. Max size: 50MB`)
           continue
         }
-        if (!['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/quicktime'].includes(file.type.toLowerCase())) {
-          toast.error(`${file.name} is not a supported video format`)
+        
+        // Enhanced video format support
+        const allowedVideoTypes = [
+          'video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/quicktime', 'video/avi',
+          'video/m4v', 'video/3gp', 'video/flv', 'video/wmv', 'video/mkv'
+        ]
+        if (!allowedVideoTypes.includes(file.type.toLowerCase())) {
+          console.log(`📝 Invalid video type: ${file.type}`)
+          toast.error(`${file.name} is not a supported video format. Please use MP4, WebM, OGG, MOV, AVI, or other common formats.`)
           continue
         }
+        
+        // Check video duration (optional - prevent extremely long videos)
+        const video = document.createElement('video')
+        video.src = URL.createObjectURL(file)
+        try {
+          await new Promise((resolve, reject) => {
+            video.onloadedmetadata = () => {
+              console.log(`📝 Video duration: ${video.duration} seconds`)
+              if (video.duration > 600) { // 10 minutes max
+                reject(new Error('Video too long'))
+              } else {
+                resolve(video.duration)
+              }
+            }
+            video.onerror = () => reject(new Error('Invalid video'))
+          })
+          console.log(`📝 Video duration check passed: ${file.name}`)
+        } catch (error) {
+          console.log(`📝 Video duration check failed: ${file.name}`, error)
+          toast.error(`${file.name} is invalid or too long (max 10 minutes).`)
+          URL.revokeObjectURL(video.src)
+          continue
+        }
+        
         validVideos.push(file)
         validFiles.push(file)
+        console.log(`📝 Video file validated: ${file.name}`)
+      } else {
+        console.log(`📝 Unsupported file type: ${file.type}`)
+        toast.error(`${file.name} is not a supported file type. Please choose images or videos only.`)
+        continue
       }
     }
     
+    console.log(`📝 File processing complete:`, {
+      totalFiles: files.length,
+      validFiles: validFiles.length,
+      validImages: validImages.length,
+      validVideos: validVideos.length,
+      livePhotos: livePhotoFiles.length,
+      validFileTypes: validFiles.map(f => f.type),
+      validFileNames: validFiles.map(f => f.name)
+    })
+    
     if (validFiles.length === 0) return
+    
+    // Show Live Photo warning if multiple Live Photos are selected
+    if (livePhotoFiles.length > 1) {
+      toast.warning("Multiple Live Photos detected. Only the first Live Photo will be processed as a Live Photo. Additional photos will be converted to regular images.")
+    }
     
     // Add files and create previews
     setSelectedFiles(prev => [...prev, ...validImages])
@@ -307,9 +394,15 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
   }, [processFiles])
 
   const handleVideoChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('📹 Video input change event triggered')
+    console.log('📹 Video input files:', e.target.files)
     const files = Array.from(e.target.files || [])
+    console.log('📹 Video files selected:', files.length)
     if (files.length > 0) {
+      console.log('📹 Video file details:', files.map(f => ({ name: f.name, type: f.type, size: f.size })))
       processFiles(files)
+    } else {
+      console.log('📹 No video files selected')
     }
     // Reset input to allow same file selection
     e.target.value = ''
@@ -400,6 +493,14 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     setMediaUploadProgress(0)
 
     try {
+      console.log('📝 EnhancedPostForm: Starting form submission...', {
+        contentLength: content.length,
+        imageFiles: selectedFiles.length,
+        videoFiles: selectedVideos.length,
+        fileTypes: [...selectedFiles.map(f => f.type), ...selectedVideos.map(f => f.type)],
+        fileNames: [...selectedFiles.map(f => f.name), ...selectedVideos.map(f => f.name)]
+      })
+      
       const formData = new FormData()
       formData.append("userId", user.id)
       formData.append("content", content.trim())
@@ -411,17 +512,22 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
       
       tags.forEach(tag => formData.append("tags[]", tag))
       
-      // Add media files
+      // Add media files with enhanced debugging
+      console.log('📝 Adding image files to FormData...')
       selectedFiles.forEach((file, index) => {
-        formData.append(`media`, file)
+        console.log(`📝 Adding image ${index + 1}: ${file.name} (${file.type})`)
+        formData.append(`images`, file)
         setMediaUploadProgress((index + 1) / (selectedFiles.length + selectedVideos.length) * 50)
       })
       
+      console.log('📝 Adding video files to FormData...')
       selectedVideos.forEach((file, index) => {
+        console.log(`📝 Adding video ${index + 1}: ${file.name} (${file.type})`)
         formData.append(`videos`, file)
         setMediaUploadProgress(50 + ((index + 1) / selectedVideos.length) * 50)
       })
 
+      console.log('📝 Submitting to API...')
       // Use API route instead of server action
       const response = await fetch('/api/posts/create', {
         method: 'POST',
@@ -431,13 +537,25 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
         body: formData,
       })
 
+      console.log('📝 API response received:', {
+        status: response.status,
+        statusText: response.statusText
+      })
+
       const result = await response.json()
+      console.log('📝 API result:', result)
 
       if (!response.ok) {
+        console.error('📝 API response error:', {
+          status: response.status,
+          statusText: response.statusText,
+          result: result
+        })
         throw new Error(result.message || 'Failed to create post')
       }
 
       if (result.success) {
+        console.log('📝 Post created successfully:', result)
         toast.success("Post shared successfully!")
         
         // Reset form
@@ -460,8 +578,13 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           navigator.vibrate([100, 50, 100])
         }
         
+        // Call onPostCreated callback
         onPostCreated?.()
+        
+        // Redirect to feed
+        window.location.href = "/feed"
       } else {
+        console.error('📝 API returned success: false:', result)
         throw new Error(result.message || "Failed to create post")
       }
     } catch (error) {
@@ -496,8 +619,19 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
     return user.name.substring(0, 2).toUpperCase()
   }, [user.name])
 
-  // Mobile-first capture step with enhanced UX - memoized
-  const renderCaptureStep = useCallback(() => (
+  // Enhanced location search hook
+  const { searchLocations, isLoading: isSearching } = useLocationSearch()
+
+  // Handle location selection
+  const handleLocationSelect = useCallback((location: LocationResult) => {
+    setLocationName(location.name)
+    setLocationQuery("")
+    setShowLocationResults(false)
+    setIsSearchingLocations(false)
+  }, [])
+
+  // Mobile-first content step with enhanced UX - memoized
+  const renderContentStep = useCallback(() => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -539,224 +673,289 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
             </Alert>
           </motion.div>
         )}
+        
+        {/* Live Photo Support Warning */}
+        {selectedFiles.some(f => f.type === 'image/heic' || f.type === 'image/heif') && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4"
+          >
+            <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
+              <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <AlertDescription className="text-sm leading-relaxed">
+                <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
       </AnimatePresence>
 
-      {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center space-y-6 p-4">
-        {(previewUrls.length > 0 || videoPreviewUrls.length > 0) ? (
-          // Show previews with enhanced mobile grid
-          <div className="w-full space-y-4">
-            <div className="text-center">
-              <h2 className="text-xl font-bold text-gray-900">
-                Your Media ({selectedFiles.length + selectedVideos.length} files)
-              </h2>
-              <p className="text-gray-600 text-sm">
-                {selectedFiles.length + selectedVideos.length < 10 ? 'Tap + to add more' : 'Maximum files reached'}
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {previewUrls.map((url, index) => (
-                <motion.div
-                  key={`image-${index}`}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative aspect-square rounded-2xl overflow-hidden group"
-                >
-                  <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removeFile(index, 'image')}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
-                    style={{ minHeight: '44px', minWidth: '44px' }}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                    IMG
-                  </div>
-                </motion.div>
-              ))}
-              
-              {videoPreviewUrls.map((url, index) => (
-                <motion.div
-                  key={`video-${index}`}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative aspect-square rounded-2xl overflow-hidden group"
-                >
-                  <video src={url} className="w-full h-full object-cover" muted playsInline />
-                  <button
-                    type="button"
-                    onClick={() => removeFile(index, 'video')}
-                    className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
-                    style={{ minHeight: '44px', minWidth: '44px' }}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <Video className="h-8 w-8 text-white" />
-                  </div>
-                  <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                    VID
-                  </div>
-                </motion.div>
-              ))}
-              
-              {/* Add more button */}
-              {selectedFiles.length + selectedVideos.length < 10 && (
-                <motion.button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
-                  style={{ minHeight: '44px' }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Plus className="h-8 w-8 text-gray-400" />
-                  <span className="text-xs text-gray-500 mt-1">Add</span>
-                </motion.button>
+      {/* Content Input */}
+      <div className="flex-1 p-4 space-y-4">
+        {/* Content Textarea */}
+        <div className="space-y-2">
+          <Label htmlFor="content" className="text-sm font-medium text-gray-700">
+            What's on your mind?
+          </Label>
+          <Textarea
+            id="content"
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Share your thoughts, experiences, or discoveries..."
+            className="min-h-[120px] resize-none text-base"
+            maxLength={500}
+          />
+          <div className="flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2">
+              {content.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  <Smile className="h-3 w-3 mr-1" />
+                  Looking good!
+                </Badge>
               )}
             </div>
+            <span className={`text-xs ${
+              content.length > 450 ? 'text-red-500 font-medium' : 'text-gray-400'
+            }`}>
+              {content.length}/500
+            </span>
           </div>
-        ) : (
-          // Show capture interface with improved mobile UX
-          <div className="w-full text-center space-y-6">
-            <motion.div
-              animate={{ scale: isCameraLoading ? [1, 1.1, 1] : [1, 1.05, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="mx-auto w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center"
-            >
-              {isCameraLoading ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                  className="h-16 w-16 border-4 border-white border-t-transparent rounded-full"
-                />
-              ) : (
-                <Camera className="h-16 w-16 text-white" />
-              )}
-            </motion.div>
-            
-            <div>
-              <h2 className="text-2xl font-bold mb-2 text-gray-900">
-                {isCameraLoading 
-                  ? "Opening Camera..." 
-                  : isMobileDevice 
-                    ? "Add Your Photos & Videos" 
-                    : "Add Your Media"
-                }
-              </h2>
-              <p className="text-gray-600">
-                {isCameraLoading 
-                  ? "Please allow camera permissions when prompted" 
-                  : isMobileDevice 
-                    ? "Take photos/videos or choose from gallery" 
-                    : "Upload photos and videos to share"
-                }
-              </p>
-            </div>
+        </div>
 
-            {/* Mobile-optimized action buttons */}
-            <div className="flex flex-col gap-3 w-full max-w-sm mx-auto">
-              {/* Camera Button - Primary on mobile */}
-              <Button
-                type="button"
-                onClick={handleCameraCapture}
-                disabled={isCameraLoading}
-                className="h-14 text-lg font-semibold rounded-2xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+        {/* Media Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <Label className="text-sm font-medium text-gray-700">
+              Add Media (Optional)
+            </Label>
+            <span className="text-xs text-gray-500">
+              {selectedFiles.length + selectedVideos.length}/10
+            </span>
+          </div>
+
+          {(previewUrls.length > 0 || videoPreviewUrls.length > 0) ? (
+            // Show previews with enhanced mobile grid
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {previewUrls.map((url, index) => (
+                  <motion.div
+                    key={`image-${index}`}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative aspect-square rounded-2xl overflow-hidden group"
+                  >
+                    <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index, 'image')}
+                      className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
+                      style={{ minHeight: '44px', minWidth: '44px' }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                      IMG
+                    </div>
+                  </motion.div>
+                ))}
+                
+                {videoPreviewUrls.map((url, index) => (
+                  <motion.div
+                    key={`video-${index}`}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative aspect-square rounded-2xl overflow-hidden group"
+                  >
+                    <video src={url} className="w-full h-full object-cover" muted playsInline />
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index, 'video')}
+                      className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity touch:opacity-100"
+                      style={{ minHeight: '44px', minWidth: '44px' }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <Video className="h-8 w-8 text-white" />
+                    </div>
+                    <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                      VID
+                    </div>
+                  </motion.div>
+                ))}
+                
+                {/* Add more button */}
+                {selectedFiles.length + selectedVideos.length < 10 && (
+                  <motion.button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
+                    style={{ minHeight: '44px' }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Plus className="h-8 w-8 text-gray-400" />
+                    <span className="text-xs text-gray-500 mt-1">Add</span>
+                  </motion.button>
+                )}
+              </div>
+            </div>
+          ) : (
+            // Show capture interface with improved mobile UX
+            <div className="text-center space-y-4">
+              <motion.div
+                animate={{ scale: isCameraLoading ? [1, 1.1, 1] : [1, 1.05, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="mx-auto w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center"
               >
                 {isCameraLoading ? (
-                  <Loader2 className="h-6 w-6 animate-spin mr-3" />
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="h-12 w-12 border-4 border-white border-t-transparent rounded-full"
+                  />
                 ) : (
-                  <Camera className="h-6 w-6 mr-3" />
+                  <Camera className="h-12 w-12 text-white" />
                 )}
-                {isCameraLoading ? "Opening Camera..." : "Take Photo/Video"}
-              </Button>
-
-              {/* Gallery Button */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="h-14 text-lg font-semibold rounded-2xl border-2 border-gray-300 hover:border-gray-400"
-              >
-                <ImageIcon className="h-6 w-6 mr-3" />
-                Choose from Gallery
-              </Button>
-
-              {/* Video Button */}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => videoInputRef.current?.click()}
-                className="h-14 text-lg font-semibold rounded-2xl border-2 border-gray-300 hover:border-gray-400"
-              >
-                <Video className="h-6 w-6 mr-3" />
-                Choose Videos
-              </Button>
-            </div>
-
-            {/* Desktop drag and drop area */}
-            {!isMobileDevice && (
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all ${
-                  isDragging 
-                    ? 'border-blue-500 bg-blue-50 scale-105' 
-                    : 'border-gray-300 hover:border-gray-400'
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="text-gray-400">
-                    <ImageIcon className="h-8 w-8 mx-auto" />
-                  </div>
-                  <p className="text-sm text-gray-500 font-medium">
-                    {isDragging ? 'Drop your files here!' : 'Drag & drop photos/videos here'}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Or use the buttons above • Max 10 files, 10MB each
-                  </p>
-                </div>
+              </motion.div>
+              
+              <div>
+                <h3 className="text-lg font-semibold mb-1 text-gray-900">
+                  {isCameraLoading 
+                    ? "Opening Camera..." 
+                    : "Add Photos & Videos"
+                  }
+                </h3>
+                <p className="text-gray-600 text-sm">
+                  {isCameraLoading 
+                    ? "Please allow camera permissions when prompted" 
+                    : "Take photos/videos or choose from gallery"
+                  }
+                </p>
               </div>
+
+              {/* Mobile-optimized action buttons */}
+              <div className="flex gap-3 justify-center">
+                {/* Camera Button */}
+                <Button
+                  type="button"
+                  onClick={handleCameraCapture}
+                  disabled={isCameraLoading}
+                  className="h-12 px-4 text-sm font-semibold rounded-xl bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                  style={{ minHeight: '48px', minWidth: '80px' }}
+                >
+                  {isCameraLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4 mr-2" />
+                      Camera
+                    </>
+                  )}
+                </Button>
+
+                {/* Gallery Button */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size={isMobileDevice ? "sm" : "sm"}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isProcessingFiles}
+                  className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-green-600 hover:text-green-700 hover:bg-green-50 transition-all flex-shrink-0 disabled:opacity-50`}
+                  style={{ minHeight: '40px', minWidth: '60px' }}
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  {!isMobileDevice && <span className="ml-1">Media</span>}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Location Section */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium text-gray-700">
+            Location (Optional)
+          </Label>
+          <div className="relative">
+            <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500" />
+            <Input
+              value={locationQuery}
+              onChange={(e) => setLocationQuery(e.target.value)}
+              placeholder="Search for a location..."
+              className="pl-10 h-12 rounded-xl border-gray-200 focus:border-blue-500"
+            />
+            {isSearchingLocations && (
+              <Loader2 className="absolute right-12 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
             )}
           </div>
-        )}
-      </div>
+          
+          {/* Location Results */}
+          {showLocationResults && locationResults.length > 0 && (
+            <div className="absolute top-full left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-60 overflow-y-auto">
+              {locationResults.map((location) => (
+                <button
+                  key={location.id}
+                  type="button"
+                  onClick={() => handleLocationSelect(location)}
+                  className="w-full text-left p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-gray-900">{location.name}</p>
+                      <p className="text-sm text-gray-600">{location.address}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-      {/* Hidden inputs with enhanced mobile attributes */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*,video/*"
-        capture="environment"
-        multiple={false}
-        onChange={handleFileChange}
-        className="hidden"
-        aria-label="Capture photo or video"
-      />
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={handleFileChange}
-        className="hidden"
-        aria-label="Choose photos from gallery"
-      />
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/*"
-        multiple
-        onChange={handleVideoChange}
-        className="hidden"
-        aria-label="Choose videos from gallery"
-      />
+        {/* Post Type and Rating */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-gray-700">
+              Post Type
+            </Label>
+            <Select value={type} onValueChange={(value: "post" | "review" | "recommendation") => setType(value)}>
+              <SelectTrigger className="h-12 rounded-xl">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="post">Post</SelectItem>
+                <SelectItem value="review">Review</SelectItem>
+                <SelectItem value="recommendation">Recommendation</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {type === "review" && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-700">
+                Rating
+              </Label>
+              <Select value={rating.toString()} onValueChange={(value) => setRating(parseInt(value))}>
+                <SelectTrigger className="h-12 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">⭐ 1 Star</SelectItem>
+                  <SelectItem value="2">⭐⭐ 2 Stars</SelectItem>
+                  <SelectItem value="3">⭐⭐⭐ 3 Stars</SelectItem>
+                  <SelectItem value="4">⭐⭐⭐⭐ 4 Stars</SelectItem>
+                  <SelectItem value="5">⭐⭐⭐⭐⭐ 5 Stars</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      </div>
     </motion.div>
-  ), [errors, cameraError, previewUrls, videoPreviewUrls, selectedFiles.length, selectedVideos.length, isCameraLoading, isMobileDevice, handleCameraCapture, removeFile, isDragging, handleDragOver, handleDragLeave, handleDrop, handleFileChange, handleVideoChange])
+  ), [content, selectedFiles, selectedVideos, previewUrls, videoPreviewUrls, errors, cameraError, isCameraLoading, isProcessingFiles, locationQuery, showLocationResults, locationResults, type, rating, isSearchingLocations, handleCameraCapture, removeFile, handleLocationSelect, handleFileChange, handleVideoChange])
 
   // Caption step - memoized
   const renderCaptionStep = useCallback(() => (
@@ -1104,10 +1303,8 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
       {/* Step content */}
       <div className="flex-1 overflow-auto">
         <AnimatePresence mode="wait">
-          {currentStep === 1 && renderCaptureStep()}
-          {currentStep === 2 && renderCaptionStep()}
-          {currentStep === 3 && renderDetailsStep()}
-          {currentStep === 4 && renderReviewStep()}
+          {currentStep === 1 && renderContentStep()}
+          {currentStep === 2 && renderReviewStep()}
         </AnimatePresence>
       </div>
 
@@ -1160,6 +1357,36 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           )}
         </div>
       </div>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*,video/*"
+        capture="environment"
+        multiple={false}
+        onChange={handleFileChange}
+        className="hidden"
+        aria-label="Capture photo or video"
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*,.mp4,.webm,.ogg,.mov,.avi,.m4v,.3gp,.flv,.wmv,.mkv"
+        multiple
+        onChange={handleFileChange}
+        className="hidden"
+        aria-label="Choose photos and videos from gallery"
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*,.mp4,.webm,.ogg,.mov,.avi,.m4v,.3gp,.flv,.wmv,.mkv"
+        multiple
+        onChange={handleVideoChange}
+        className="hidden"
+        aria-label="Choose videos from gallery"
+      />
     </div>
   )
 }

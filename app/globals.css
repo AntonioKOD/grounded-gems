@@ -2025,3 +2025,147 @@ html {
     scroll-padding-top: 5rem; /* 80px for desktop navbar height */
   }
 } 
+
+/* Enhanced Video Animations */
+.video-play-button {
+  transition: transform 1000ms linear(0, 0.1262, 0.4133, 0.7368, 1.0078, 1.1812, 1.2506, 1.2366, 1.1719, 1.0896, 1.0154, 0.9638, 0.9389, 0.9372, 0.9509, 0.9713, 0.9912, 1.0062, 1.0144, 1.0163, 1.0137, 1.0088, 1.0036, 0.9993, 0.9968, 1, 0.9962, 0.9974, 0.9987, 0.9999, 1.0007, 1, 1);
+}
+
+.video-play-button:hover {
+  transform: scale(1.1);
+}
+
+.video-indicator {
+  animation: videoPulse 2s ease-in-out infinite;
+}
+
+@keyframes videoPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+}
+
+.video-overlay {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(236, 72, 153, 0.9) 100%);
+  backdrop-filter: blur(8px);
+}
+
+.video-thumbnail {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.video-thumbnail:hover {
+  transform: scale(1.02);
+  filter: brightness(1.1);
+} 
+
+/* Profile Posts Grid Optimizations */
+.video-card {
+  /* Smaller, more subtle styling for video cards */
+  transition: all 0.3s ease;
+}
+
+.video-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.image-card {
+  /* Enhanced styling for image cards */
+  transition: all 0.3s ease;
+}
+
+.image-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.video-thumbnail {
+  /* Optimized video thumbnail display */
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.image-thumbnail {
+  /* Optimized image thumbnail display */
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.video-indicator {
+  /* Smaller, more subtle video indicator */
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.video-play-button {
+  /* Smaller, more subtle play button */
+  transition: all 0.2s ease;
+}
+
+.video-play-button:hover {
+  transform: scale(1.1);
+  background-color: rgba(255, 255, 255, 0.95);
+}
+
+/* Enhanced grid responsiveness */
+@media (max-width: 640px) {
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .md\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .xl\:grid-cols-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Optimized loading states */
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Enhanced hover effects */
+.group:hover .group-hover\:scale-105 {
+  transform: scale(1.05);
+}
+
+.group:hover .group-hover\:opacity-100 {
+  opacity: 1;
+}
+
+/* Better contrast for badges and indicators */
+.bg-black\/60 {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.bg-white\/20 {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Optimized backdrop blur */
+.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+}
+
+.backdrop-blur-md {
+  backdrop-filter: blur(8px);
+} 

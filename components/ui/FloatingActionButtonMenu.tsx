@@ -24,7 +24,6 @@ const FloatingActionButtonMenu: React.FC = () => {
     { id: "my-library", label: "My Library", icon: LibraryBig, href: "/library", bgColor: "bg-[#6366F1]", textColor: "text-white" },
     { id: "browse-guides", label: "Browse Guides", icon: BookOpen, href: "/guides", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
     { id: "create-guide", label: "Create Guide & Earn", icon: BookOpen, href: "/guides/create", bgColor: "bg-gradient-to-r from-[#FF6B6B] to-[#4ECDC4]", textColor: "text-white" },
-    { id: "bucket-list", label: "My Local Legends", icon: Crown, href: "/bucket-list", bgColor: "bg-[#FFD93D]", textColor: "text-gray-800" },
     { id: "add-location", label: "Add Location", icon: PlusSquare, href: "/add-location", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
     { id: "notifications", label: "Notifications", icon: Bell, href: "/notifications", bgColor: "bg-[#FFE66D]", textColor: "text-gray-800" },
     { id: "search", label: "Search", icon: Search, href: "/search", bgColor: "bg-[#4ECDC4]", textColor: "text-white" },
@@ -77,17 +76,16 @@ const FloatingActionButtonMenu: React.FC = () => {
                 <span className="bg-white text-gray-800 text-xs px-2 py-1 rounded-md shadow-lg border border-gray-200 order-1">
                   {button.label}
                 </span>
-                <Link href={button.href} passHref legacyBehavior>
-                  <a
-                    onClick={() => setIsOpen(false)}
-                    className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-all duration-200 hover:scale-105 order-2",
-                      button.bgColor,
-                      button.textColor
-                    )}
-                  >
-                    <button.icon className="w-6 h-6" />
-                  </a>
+                <Link
+                  href={button.href}
+                  onClick={() => setIsOpen(false)}
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center shadow-lg hover:opacity-90 transition-all duration-200 hover:scale-105 order-2",
+                    button.bgColor,
+                    button.textColor
+                  )}
+                >
+                  <button.icon className="w-6 h-6" />
                 </Link>
               </motion.div>
             ))}

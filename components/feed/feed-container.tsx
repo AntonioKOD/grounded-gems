@@ -12,9 +12,9 @@ import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import type { Post } from "@/types/feed"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { fetchFeedPosts, loadMorePosts, setFeedType, setSortBy, setCategory, setUserId, updatePost } from "@/lib/features/feed/feedSlice"
-import { fetchUser } from "@/lib/features/user/userSlice"
+import { loadMorePosts, updatePost } from "@/lib/features/feed/feedSlice"
 import { initializeLikedPosts, initializeSavedPosts, initializeLikedComments } from "@/lib/features/posts/postsSlice"
+import { feedManager, setupGlobalFeedListeners } from "@/lib/features/feed/feedManager"
 
 interface FeedContainerProps {
   userId?: string
@@ -50,12 +50,43 @@ export default function FeedContainer({
   const isMounted = useRef<boolean>(true)
   const initialLoadComplete = useRef<boolean>(false)
 
-  // Initialize feed settings
+  // Setup global feed listeners (only once)
   useEffect(() => {
-    if (feedType) dispatch(setFeedType(feedType))
-    if (sortBy) dispatch(setSortBy(sortBy))
-    if (userId) dispatch(setUserId(userId))
-  }, [dispatch, feedType, sortBy, userId])
+    setupGlobalFeedListeners()
+  }, [])
+
+  // Initialize feed with centralized manager
+  useEffect(() => {
+    if (!isUserLoading && !initialLoadComplete.current) {
+      console.log("FeedContainer: Initializing feed with manager")
+      feedManager.initializeFeed({
+        feedType,
+        sortBy,
+        userId,
+        currentUserId: user?.id,
+        force: false
+      })
+      initialLoadComplete.current = true
+    }
+  }, [feedType, sortBy, userId, user?.id, isUserLoading])
+
+  // Initialize posts slice with user's liked and saved posts
+  useEffect(() => {
+    if (user?.id) {
+      const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
+      const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
+      const likedCommentIds: string[] = []
+      
+      console.log('FeedContainer: Initializing posts state with:', { 
+        likedPostIds: likedPostIds.length, 
+        savedPostIds: savedPostIds.length,
+        likedCommentIds: likedCommentIds.length
+      })
+      dispatch(initializeLikedPosts(likedPostIds))
+      dispatch(initializeSavedPosts(savedPostIds))
+      dispatch(initializeLikedComments(likedCommentIds))
+    }
+  }, [dispatch, user?.id, user?.savedPosts, user?.likedPosts])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -64,94 +95,16 @@ export default function FeedContainer({
     }
   }, [])
 
-  // Note: User data is already initialized in StoreProvider from server-side data
-  // No need to fetch user data on mount as it causes unnecessary refetching
-
-  // Initialize posts slice with user's liked and saved posts
-  useEffect(() => {
-    if (user?.id) {
-      // Initialize with user's actual liked and saved posts
-      const likedPostIds = Array.isArray(user.likedPosts) ? user.likedPosts : []
-      const savedPostIds = Array.isArray(user.savedPosts) ? user.savedPosts : []
-      // For now, initialize liked comments as empty array - will be populated from server
-      const likedCommentIds: string[] = []
-      
-      console.log('FeedContainer: Initializing posts state with:', { 
-        likedPostIds: likedPostIds.length, 
-        savedPostIds: savedPostIds.length,
-        likedCommentIds: likedCommentIds.length,
-        likedPosts: likedPostIds,
-        savedPosts: savedPostIds,
-        likedComments: likedCommentIds
-      })
-      dispatch(initializeLikedPosts(likedPostIds))
-      dispatch(initializeSavedPosts(savedPostIds))
-      dispatch(initializeLikedComments(likedCommentIds))
-    }
-  }, [dispatch, user?.id, user?.savedPosts, user?.likedPosts])
-
-  // Listen for user updates to refresh posts with correct like/save states
-  useEffect(() => {
-    const handleUserUpdate = async (event: CustomEvent) => {
-      console.log("FeedContainer: User update detected, refreshing posts immediately");
-      if (event.detail && isMounted.current) {
-        // Refresh posts with new user context
-        dispatch(fetchFeedPosts({ 
-          feedType, 
-          sortBy, 
-          currentUserId: event.detail.id,
-          force: true 
-        }))
-      }
-    };
-
-    const handleUserLogin = async (event: CustomEvent) => {
-      console.log("FeedContainer: User login detected, refreshing posts immediately");
-      if (event.detail && isMounted.current) {
-        // Refresh posts with new user context
-        dispatch(fetchFeedPosts({ 
-          feedType, 
-          sortBy, 
-          currentUserId: event.detail.id,
-          force: true 
-        }))
-      }
-    };
-
-    window.addEventListener("user-updated", handleUserUpdate as any);
-    window.addEventListener("user-login", handleUserLogin as any);
-
-    return () => {
-      window.removeEventListener("user-updated", handleUserUpdate as any);
-      window.removeEventListener("user-login", handleUserLogin as any);
-    };
-  }, [dispatch, feedType, sortBy]);
-
-  // Initial data loading
-  useEffect(() => {
-    if (!isUserLoading && !initialLoadComplete.current) {
-      console.log("FeedContainer: Initial load, fetching posts")
-      dispatch(fetchFeedPosts({ 
-        feedType, 
-        sortBy, 
-        userId,
-        currentUserId: user?.id,
-        force: true 
-      }))
-      initialLoadComplete.current = true
-    }
-  }, [dispatch, feedType, sortBy, userId, user?.id, isUserLoading])
-
   // Refresh posts
   const refreshPosts = async () => {
     try {
-      await dispatch(fetchFeedPosts({ 
+      await feedManager.fetchPosts({ 
         feedType, 
         sortBy, 
         userId,
         currentUserId: user?.id,
         force: true 
-      })).unwrap()
+      })
       toast.success("Feed refreshed")
     } catch (error) {
       console.error("Error refreshing posts:", error)
@@ -162,7 +115,7 @@ export default function FeedContainer({
   // Load more posts
   const handleLoadMore = async () => {
     try {
-      await dispatch(loadMorePosts({ currentUserId: user?.id })).unwrap()
+      await feedManager.loadMore(user?.id)
     } catch (error) {
       console.error("Error loading more posts:", error)
       toast.error("Error loading more posts")

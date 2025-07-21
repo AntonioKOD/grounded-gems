@@ -57,6 +57,77 @@ export default function RootLayout({
             }
           `}
         </Script>
+        
+        {/* API Call Monitor - Development Only */}
+        {process.env.NODE_ENV === 'development' && (
+          <Script id="api-monitor" strategy="afterInteractive">
+            {`
+              // Monitor API calls to identify redundant requests
+              console.log('🔍 API Call Monitor Started')
+              
+              // Track API calls
+              const apiCalls = new Map()
+              const duplicateCalls = []
+              
+              // Intercept fetch calls
+              const originalFetch = window.fetch
+              window.fetch = function(...args) {
+                const url = args[0]
+                const timestamp = Date.now()
+                
+                // Only track feed-related API calls
+                if (typeof url === 'string' && (url.includes('/api/feed') || url.includes('/api/mobile/posts'))) {
+                  const callKey = \`\${url}-\${JSON.stringify(args[1] || {})}\`
+                  
+                  if (apiCalls.has(callKey)) {
+                    const previousCall = apiCalls.get(callKey)
+                    const timeDiff = timestamp - previousCall.timestamp
+                    
+                    duplicateCalls.push({
+                      url,
+                      timeDiff,
+                      previousCall: previousCall.timestamp,
+                      currentCall: timestamp
+                    })
+                    
+                    console.warn('🔄 DUPLICATE API CALL DETECTED:', {
+                      url,
+                      timeDiff: \`\${timeDiff}ms\`,
+                      previousCall: new Date(previousCall.timestamp).toLocaleTimeString(),
+                      currentCall: new Date(timestamp).toLocaleTimeString()
+                    })
+                  } else {
+                    apiCalls.set(callKey, { timestamp, url })
+                    console.log('📡 API Call:', url)
+                  }
+                }
+                
+                return originalFetch.apply(this, args)
+              }
+              
+              // Log summary every 30 seconds
+              setInterval(() => {
+                console.log('📊 API Call Summary:', {
+                  totalCalls: apiCalls.size,
+                  duplicateCalls: duplicateCalls.length,
+                  duplicates: duplicateCalls.slice(-5) // Last 5 duplicates
+                })
+              }, 30000)
+              
+              // Export for debugging
+              window.apiCallMonitor = {
+                apiCalls,
+                duplicateCalls,
+                clear: () => {
+                  apiCalls.clear()
+                  duplicateCalls.length = 0
+                }
+              }
+              
+              console.log('✅ API Call Monitor Ready - Check console for duplicate calls')
+            `}
+          </Script>
+        )}
       </body>
     </html>
   );

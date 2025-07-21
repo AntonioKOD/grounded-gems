@@ -19,7 +19,10 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
-  Clock
+  Clock,
+  Star,
+  Lightbulb,
+  ThumbsUp
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -469,9 +472,35 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="text-white font-semibold text-sm drop-shadow-lg">
-                  {post.author.name}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-white font-semibold text-sm drop-shadow-lg">
+                    {post.author.name}
+                  </p>
+                  
+                  {/* Enhanced Post Type Badges */}
+                  {post.type && post.type !== "post" && (
+                    <div className="flex items-center gap-1">
+                      {post.type === "review" && (
+                        <Badge className="bg-gradient-to-r from-yellow-400/90 to-orange-500/90 text-white border-0 text-xs px-2 py-0.5 flex items-center gap-1 backdrop-blur-sm">
+                          <Star className="h-3 w-3 fill-current" />
+                          Review
+                        </Badge>
+                      )}
+                      {post.type === "tip" && (
+                        <Badge className="bg-gradient-to-r from-blue-500/90 to-purple-600/90 text-white border-0 text-xs px-2 py-0.5 flex items-center gap-1 backdrop-blur-sm">
+                          <Lightbulb className="h-3 w-3 fill-current" />
+                          Tip
+                        </Badge>
+                      )}
+                      {post.type === "recommendation" && (
+                        <Badge className="bg-gradient-to-r from-green-500/90 to-emerald-600/90 text-white border-0 text-xs px-2 py-0.5 flex items-center gap-1 backdrop-blur-sm">
+                          <ThumbsUp className="h-3 w-3 fill-current" />
+                          Rec
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <p className="text-white/70 text-xs drop-shadow-lg">
                   {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}
                 </p>
@@ -610,6 +639,29 @@ export const EnhancedFeedPost = memo(function EnhancedFeedPost({
         {/* Bottom Content - Now in dedicated space, not overlaying media */}
         <div className="absolute bottom-0 left-0 right-0 bg-black z-10" style={{ height: '120px' }}>
           <div className="h-full p-4 flex flex-col justify-center">
+            {/* Rating Display for Reviews */}
+            {post.type === "review" && post.rating && (
+              <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-1">
+                  {[...Array(5)].map((_, i) => (
+                    <Star
+                      key={i}
+                      className={`h-3 w-3 ${
+                        i < Math.floor(post.rating!) 
+                          ? 'text-yellow-400 fill-current' 
+                          : i < post.rating! 
+                            ? 'text-yellow-400 fill-current opacity-50' 
+                            : 'text-gray-500'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <span className="text-white/80 text-xs font-medium">
+                  {post.rating.toFixed(1)} out of 5
+                </span>
+              </div>
+            )}
+
             {/* Post Content */}
             {post.content && (
               <p className="text-white text-sm leading-relaxed font-light mb-2 line-clamp-2">

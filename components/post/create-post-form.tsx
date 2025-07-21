@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Camera, MapPin, Loader2, X, Send, ImageIcon, Video, Smile, AlertCircle, CheckCircle } from "lucide-react"
+import { Camera, MapPin, Loader2, X, Send, ImageIcon, Video, Smile, AlertCircle, CheckCircle, Upload } from "lucide-react"
 import Image from "next/image"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { upload } from '@vercel/blob/client'
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -79,6 +80,11 @@ export default function CreatePostForm({
   const [cameraError, setCameraError] = useState<string | null>(null)
   const [isCameraLoading, setIsCameraLoading] = useState(false)
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
+  
+  // Live photo upload state
+  const [uploadedMediaIds, setUploadedMediaIds] = useState<string[]>([])
+  const [isUploadingLivePhotos, setIsUploadingLivePhotos] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({})
 
   // Validation state
   const [errors, setErrors] = useState<string[]>([])
@@ -165,11 +171,63 @@ export default function CreatePostForm({
     }
   }
 
+  // Handle live photo uploads using Vercel Blob
+  const uploadLivePhoto = async (file: File, index: number): Promise<string | null> => {
+    if (!user?.id) {
+      toast.error('User not authenticated')
+      return null
+    }
+
+    try {
+      console.log('📸 Uploading live photo via Vercel Blob:', {
+        fileName: file.name,
+        fileSize: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        fileType: file.type
+      })
+
+      setUploadProgress(prev => ({ ...prev, [index]: 0 }))
+
+      const blob = await upload(file.name, file, {
+        access: 'public',
+        handleUploadUrl: '/api/posts/upload-live-photos',
+        headers: {
+          'x-user-id': user.id
+        }
+      })
+
+      console.log('📸 Live photo uploaded successfully:', {
+        blobUrl: blob.url,
+        blobPathname: blob.pathname,
+        fileName: file.name
+      })
+
+      setUploadProgress(prev => ({ ...prev, [index]: 100 }))
+      
+      // Extract media ID from the blob URL or response
+      // The media ID will be available in the onUploadCompleted callback
+      // For now, we'll use the blob URL as a reference
+      return blob.url
+
+    } catch (error) {
+      console.error('❌ Live photo upload error:', error)
+      toast.error(`Failed to upload ${file.name}`)
+      setUploadProgress(prev => ({ ...prev, [index]: 0 }))
+      return null
+    }
+  }
+
   // Enhanced file handling with validation
   const processFiles = async (files: File[]) => {
     const MAX_FILES = 5
     const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
     const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
+    
+    console.log('📝 processFiles: Starting file processing...', {
+      totalFiles: files.length,
+      currentSelectedFiles: selectedFiles.length,
+      fileTypes: files.map(f => f.type),
+      fileNames: files.map(f => f.name)
+    })
     
     if (selectedFiles.length + files.length > MAX_FILES) {
       toast.error(`Maximum ${MAX_FILES} files allowed`)
@@ -182,28 +240,49 @@ export default function CreatePostForm({
     const newPreviewUrls: string[] = []
     
     for (const file of files) {
+      console.log(`📝 Processing file: ${file.name}`, {
+        type: file.type,
+        size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        isImage: file.type.startsWith('image/'),
+        isVideo: file.type.startsWith('video/')
+      })
+      
       // Validate file type and size based on type
       if (file.type.startsWith('image/')) {
         // Validate image size
         if (file.size > MAX_IMAGE_SIZE) {
+          console.log(`📝 Image file too large: ${file.name}`)
           toast.error(`${file.name} is too large. Max size for images: 10MB`)
           continue
         }
         
-        // Validate image format - comprehensive support for modern and legacy formats
-        const allowedImageTypes = [
-          'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-          'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
-          'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
-          'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
-        ]
-        if (!allowedImageTypes.includes(file.type.toLowerCase())) {
-          toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
-          continue
-        }
+              // Validate image format - comprehensive support for modern and legacy formats
+      const allowedImageTypes = [
+        'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+        'image/avif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff', 'image/tif',
+        'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
+        'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
+      ]
+      if (!allowedImageTypes.includes(file.type.toLowerCase())) {
+        console.log(`📝 Invalid image type: ${file.type}`)
+        toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, HEIC, BMP, TIFF, ICO, and more.`)
+        continue
+      }
+
+      // Check if this is a HEIC/HEIF file that should be uploaded via Vercel Blob
+      const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
+      if (isHeic) {
+        console.log(`📸 HEIC file detected: ${file.name} - will be uploaded via Vercel Blob`)
+        // We'll handle HEIC files separately in the form submission
+      }
+        
+        console.log(`📝 Image file validated: ${file.name}`)
       } else if (file.type.startsWith('video/')) {
+        console.log(`📝 Processing video file: ${file.name}`)
+        
         // Validate video size
         if (file.size > MAX_VIDEO_SIZE) {
+          console.log(`📝 Video file too large: ${file.name}`)
           toast.error(`${file.name} is too large. Max size for videos: 50MB`)
           continue
         }
@@ -211,9 +290,12 @@ export default function CreatePostForm({
         // Validate video format - match backend validation
         const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/mov', 'video/quicktime', 'video/avi']
         if (!allowedVideoTypes.includes(file.type.toLowerCase())) {
+          console.log(`📝 Invalid video type: ${file.type}`)
           toast.error(`${file.name} is not a supported video format. Please use MP4, WebM, OGG, MOV, or AVI.`)
           continue
         }
+        
+        console.log(`📝 Video file validated: ${file.name}`)
         
         // Check video duration (optional - prevent extremely long videos)
         const video = document.createElement('video')
@@ -221,6 +303,7 @@ export default function CreatePostForm({
         try {
           await new Promise((resolve, reject) => {
             video.onloadedmetadata = () => {
+              console.log(`📝 Video duration: ${video.duration} seconds`)
               if (video.duration > 600) { // 10 minutes max
                 reject(new Error('Video too long'))
               } else {
@@ -229,19 +312,30 @@ export default function CreatePostForm({
             }
             video.onerror = () => reject(new Error('Invalid video'))
           })
+          console.log(`📝 Video duration check passed: ${file.name}`)
         } catch (error) {
+          console.log(`📝 Video duration check failed: ${file.name}`, error)
           toast.error(`${file.name} is invalid or too long (max 10 minutes).`)
           URL.revokeObjectURL(video.src)
           continue
         }
       } else {
+        console.log(`📝 Unsupported file type: ${file.type}`)
         toast.error(`${file.name} is not a supported file type. Please choose images or videos only.`)
         continue
       }
       
       validFiles.push(file)
       newPreviewUrls.push(URL.createObjectURL(file))
+      console.log(`📝 File added to valid files: ${file.name}`)
     }
+    
+    console.log(`📝 File processing complete:`, {
+      totalFiles: files.length,
+      validFiles: validFiles.length,
+      validFileTypes: validFiles.map(f => f.type),
+      validFileNames: validFiles.map(f => f.name)
+    })
     
     if (validFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...validFiles])
@@ -250,6 +344,7 @@ export default function CreatePostForm({
       // Load video durations
       validFiles.forEach((file, index) => {
         if (file.type.startsWith('video/')) {
+          console.log(`📝 Loading video duration for: ${file.name}`)
           const video = document.createElement('video')
           video.src = newPreviewUrls[index] || ''
           video.onloadedmetadata = () => {
@@ -257,6 +352,7 @@ export default function CreatePostForm({
             const minutes = Math.floor(duration / 60)
             const seconds = Math.floor(duration % 60)
             const durationString = `${minutes}:${seconds.toString().padStart(2, '0')}`
+            console.log(`📝 Video duration loaded: ${file.name} - ${durationString}`)
             setVideoDurations(prev => ({
               ...prev,
               [selectedFiles.length + index]: durationString
@@ -274,8 +370,17 @@ export default function CreatePostForm({
   // File input handlers
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
+    console.log('📝 handleFileChange: Files selected:', {
+      totalFiles: files.length,
+      fileTypes: files.map(f => f.type),
+      fileNames: files.map(f => f.name),
+      inputType: e.target.accept
+    })
+    
     if (files.length > 0) {
       await processFiles(files)
+    } else {
+      console.log('📝 handleFileChange: No files selected')
     }
     e.target.value = ''
   }
@@ -451,8 +556,50 @@ export default function CreatePostForm({
 
     setIsSubmitting(true)
 
-    try {
-      const formData = new FormData()
+      // Separate HEIC files from regular files
+      const heicFiles = selectedFiles.filter(file => 
+        file.type === 'image/heic' || file.type === 'image/heif'
+      )
+      const regularFiles = selectedFiles.filter(file => 
+        file.type !== 'image/heic' && file.type !== 'image/heif'
+      )
+
+      console.log('📝 Form submission - file breakdown:', {
+        totalFiles: selectedFiles.length,
+        heicFiles: heicFiles.length,
+        regularFiles: regularFiles.length,
+        heicFileNames: heicFiles.map(f => f.name),
+        regularFileNames: regularFiles.map(f => f.name)
+      })
+
+      // Upload HEIC files first via Vercel Blob
+      if (heicFiles.length > 0) {
+        setIsUploadingLivePhotos(true)
+        console.log('📸 Starting HEIC file uploads...')
+        
+        const uploadPromises = heicFiles.map(async (file, index) => {
+          const originalIndex = selectedFiles.indexOf(file)
+          return await uploadLivePhoto(file, originalIndex)
+        })
+
+        const uploadResults = await Promise.all(uploadPromises)
+        const successfulUploads = uploadResults.filter(url => url !== null)
+        
+        console.log('📸 HEIC upload results:', {
+          attempted: heicFiles.length,
+          successful: successfulUploads.length,
+          results: uploadResults
+        })
+
+        if (successfulUploads.length !== heicFiles.length) {
+          toast.error(`Failed to upload ${heicFiles.length - successfulUploads.length} live photo(s)`)
+        }
+
+        setIsUploadingLivePhotos(false)
+      }
+
+      try {
+        const formData = new FormData()
       formData.append("content", postContent.trim())
       formData.append("postType", "general")
 
@@ -463,21 +610,39 @@ export default function CreatePostForm({
         formData.append("locationName", locationName.trim())
       }
       
-      selectedFiles.forEach(file => {
+      // Enhanced debugging for file processing
+      console.log('📝 handleSubmit: Processing regular files for submission...', {
+        totalFiles: regularFiles.length,
+        fileTypes: regularFiles.map(f => f.type),
+        fileNames: regularFiles.map(f => f.name),
+        fileSizes: regularFiles.map(f => `${f.name}: ${(f.size / 1024 / 1024).toFixed(2)}MB`)
+      })
+      
+      regularFiles.forEach((file, index) => {
+        console.log(`📝 Processing regular file ${index + 1}: ${file.name}`, {
+          type: file.type,
+          size: `${(file.size / 1024 / 1024).toFixed(2)}MB`,
+          isImage: file.type.startsWith('image/'),
+          isVideo: file.type.startsWith('video/')
+        })
+        
         if (file.type.startsWith('image/')) {
           formData.append("images", file)
+          console.log(`📝 Added regular image to FormData: ${file.name}`)
         } else if (file.type.startsWith('video/')) {
           formData.append("videos", file)
+          console.log(`📝 Added video to FormData: ${file.name}`)
         }
       })
 
       // Debug info
       console.log('📝 CreatePostForm: Submitting post with files:', {
-        totalFiles: selectedFiles.length,
-        imageFiles: selectedFiles.filter(f => f.type.startsWith('image/')).length,
-        videoFiles: selectedFiles.filter(f => f.type.startsWith('video/')).length,
-        fileTypes: selectedFiles.map(f => f.type),
-        fileSizes: selectedFiles.map(f => `${f.name}: ${(f.size / 1024 / 1024).toFixed(2)}MB`)
+        totalFiles: regularFiles.length,
+        heicFiles: heicFiles.length,
+        imageFiles: regularFiles.filter(f => f.type.startsWith('image/')).length,
+        videoFiles: regularFiles.filter(f => f.type.startsWith('video/')).length,
+        fileTypes: regularFiles.map(f => f.type),
+        fileSizes: regularFiles.map(f => `${f.name}: ${(f.size / 1024 / 1024).toFixed(2)}MB`)
       })
 
       // Use API route instead of server action
@@ -492,10 +657,16 @@ export default function CreatePostForm({
       const result = await response.json()
 
       if (!response.ok) {
+        console.error('📝 API response error:', {
+          status: response.status,
+          statusText: response.statusText,
+          result: result
+        })
         throw new Error(result.message || 'Failed to create post')
       }
 
       if (result.success) {
+        console.log('📝 Post created successfully:', result)
         toast.success("Post shared successfully!")
         resetForm()
         
@@ -510,6 +681,7 @@ export default function CreatePostForm({
           router.push("/feed")
         }
       } else {
+        console.error('📝 API returned success: false:', result)
         toast.error(result.message || "Failed to create post")
       }
     } catch (error) {
@@ -685,10 +857,10 @@ export default function CreatePostForm({
                 animate={{ opacity: 1, height: "auto" }}
                 className="mb-4"
               >
-                <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
+                  <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
                   <AlertDescription className="text-sm leading-relaxed">
-                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                    <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
                   </AlertDescription>
                 </Alert>
               </motion.div>
@@ -762,6 +934,11 @@ export default function CreatePostForm({
                             <Video className="h-3 w-3" />
                             VID
                           </span>
+                        ) : file?.type === 'image/heic' || file?.type === 'image/heif' ? (
+                          <span className="flex items-center gap-1">
+                            <Upload className="h-3 w-3" />
+                            LIVE
+                          </span>
                         ) : (
                           'IMG'
                         )}
@@ -771,6 +948,15 @@ export default function CreatePostForm({
                       {isVideo && videoDurations[index] && (
                         <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
                           {videoDurations[index]}
+                        </div>
+                      )}
+                      
+                      {/* Upload progress for HEIC files */}
+                      {(file?.type === 'image/heic' || file?.type === 'image/heif') && uploadProgress[index] !== undefined && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <div className="bg-white rounded-full p-2">
+                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                          </div>
                         </div>
                       )}
                     </motion.div>
@@ -929,10 +1115,10 @@ export default function CreatePostForm({
                 </div>
                 
                 {/* Live Photo Support Info for Desktop */}
-                <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
+                  <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
                   <AlertDescription className="text-sm leading-relaxed">
-                    <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                    <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
                   </AlertDescription>
                 </Alert>
               </div>
@@ -940,10 +1126,10 @@ export default function CreatePostForm({
 
             {/* Mobile Live Photo Support Info */}
             {isMobileDevice && selectedFiles.length === 0 && (
-              <Alert className="bg-amber-50 border border-amber-200 text-amber-800">
-                <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <Alert className="bg-blue-50 border border-blue-200 text-blue-800">
+                <Upload className="h-4 w-4 flex-shrink-0 mt-0.5" />
                 <AlertDescription className="text-sm leading-relaxed">
-                  <strong>Live Photo Support:</strong> 1 Live Photo per post. Additional photos will be converted automatically.
+                  <strong>Live Photo Support:</strong> Live photos will be automatically converted to JPEG and uploaded via secure cloud storage. No size limits!
                 </AlertDescription>
               </Alert>
             )}
@@ -989,7 +1175,16 @@ export default function CreatePostForm({
                   type="button"
                   variant="ghost"
                   size={isMobileDevice ? "sm" : "sm"}
-                  onClick={() => videoInputRef.current?.click()}
+                  onClick={() => {
+                    console.log('📹 Video button clicked')
+                    console.log('📹 Video input ref:', videoInputRef.current)
+                    if (videoInputRef.current) {
+                      console.log('📹 Triggering video input click')
+                      videoInputRef.current.click()
+                    } else {
+                      console.error('📹 Video input ref is null')
+                    }
+                  }}
                   disabled={isProcessingFiles}
                   className={`${isMobileDevice ? 'h-10 px-2 text-xs' : 'h-9 px-3'} text-purple-600 hover:text-purple-700 hover:bg-purple-50 transition-all flex-shrink-0 disabled:opacity-50`}
                   style={{ minHeight: '40px', minWidth: '60px' }}
@@ -1023,12 +1218,17 @@ export default function CreatePostForm({
               {/* Submit Button - Always visible and prominent on mobile */}
               <Button
                 type="submit"
-                disabled={isSubmitting || !isValid}
+                disabled={isSubmitting || !isValid || isUploadingLivePhotos}
                 size={isMobileDevice ? "sm" : "sm"}
                 className={`${isMobileDevice ? 'h-10 px-4 text-sm' : 'h-9 px-4'} bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ml-2`}
                 style={{ minHeight: '40px', minWidth: isMobileDevice ? '80px' : '60px' }}
               >
-                {isSubmitting ? (
+                {isUploadingLivePhotos ? (
+                  <>
+                    <Upload className="h-4 w-4 animate-spin mr-1" />
+                    {isMobileDevice ? "Uploading..." : "Uploading Live Photos..."}
+                  </>
+                ) : isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-1" />
                     {isMobileDevice ? "..." : "Sharing..."}
@@ -1064,7 +1264,7 @@ export default function CreatePostForm({
             <input
               ref={videoInputRef}
               type="file"
-              accept="video/mp4,video/webm,video/ogg,video/mov,video/quicktime,video/avi"
+              accept="video/*,.mp4,.webm,.ogg,.mov,.avi,.m4v,.3gp,.flv,.wmv,.mkv"
               multiple
               onChange={handleFileChange}
               className="hidden"

@@ -1,40 +1,40 @@
 
 "use client"
 
-import { useState, memo, useCallback, useEffect, useRef, useMemo } from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { formatDistanceToNow } from "date-fns"
-import {
-  MessageCircle,
-  Share2,
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { 
+  Heart, 
+  MessageCircle, 
+  Share2, 
+  Bookmark, 
   MoreHorizontal,
-  MapPin,
-  Star,
-  ChevronDown,
-  ChevronUp,
-  Heart,
-  Bookmark,
-  ImageIcon,
-  Flag,
-  X,
   Play,
   Pause,
   Volume2,
   VolumeX,
-  ExternalLink,
-  SkipForward,
-  SkipBack,
-  Calendar,
+  Star,
+  MapPin,
   Clock,
-} from "lucide-react"
-import { toast } from "sonner"
-import { motion, AnimatePresence } from "framer-motion"
-
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+  Lightbulb,
+  ThumbsUp,
+  Award,
+  Sparkles,
+  Flag
+} from 'lucide-react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
+import { useAppSelector, useAppDispatch } from '@/lib/hooks'
+import type { Post } from '@/types/feed'
+import { getImageUrl, getVideoUrl } from '@/lib/image-utils'
+import CommentsModal from './comments-modal'
+import VideoPlayer from './video-player'
+import { formatDistanceToNow } from "date-fns"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,15 +49,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { likePost, sharePost, savePost } from "@/app/actions"
-import { CommentSystemLight } from "@/components/post/comment-system-light"
-import VideoPlayer from "./video-player"
-import type { Post } from "@/types/feed"
-import { useAppDispatch, useAppSelector } from "@/lib/hooks"
 import { likePostAsync, savePostAsync, sharePostAsync } from "@/lib/features/posts/postsSlice"
-import CommentsModal from './comments-modal'
-import { getImageUrl, getVideoUrl } from "@/lib/image-utils"
+import { CommentSystemLight } from "@/components/post/comment-system-light"
 import MediaCarousel from "@/components/ui/media-carousel"
+import { ChevronUp, ChevronDown, X } from 'lucide-react'
 
 interface FeedPostProps {
   post: Post
@@ -492,10 +487,50 @@ export const FeedPost = memo(function FeedPost({
                   <span className="font-semibold text-gray-900 group-hover:text-[#FF6B6B] transition-colors text-lg truncate">
                     {author.name}
                   </span>
-                  {postData.type !== "post" && (
-                    <Badge variant="outline" className="text-xs px-2 py-1 text-[#FF6B6B] border-[#FF6B6B]/30 bg-[#FF6B6B]/5 flex-shrink-0">
-                      {postData.type === "review" ? "Review" : "Tip"}
-                    </Badge>
+                  
+                  {/* Enhanced Post Type Badges */}
+                  {postData.type && postData.type !== "post" && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {postData.type === "review" && (
+                        <Badge className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-0 text-xs px-2 py-1 flex items-center gap-1">
+                          <Star className="h-3 w-3 fill-current" />
+                          Review
+                        </Badge>
+                      )}
+                      {postData.type === "tip" && (
+                        <Badge className="bg-gradient-to-r from-blue-500 to-purple-600 text-white border-0 text-xs px-2 py-1 flex items-center gap-1">
+                          <Lightbulb className="h-3 w-3 fill-current" />
+                          Tip
+                        </Badge>
+                      )}
+                      {postData.type === "recommendation" && (
+                        <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0 text-xs px-2 py-1 flex items-center gap-1">
+                          <ThumbsUp className="h-3 w-3 fill-current" />
+                          Recommendation
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Rating Display for Reviews */}
+                  {postData.type === "review" && postData.rating && (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-4 w-4 ${
+                            i < Math.floor(postData.rating!) 
+                              ? 'text-yellow-400 fill-current' 
+                              : i < postData.rating! 
+                                ? 'text-yellow-400 fill-current opacity-50' 
+                                : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                      <span className="text-sm font-medium text-gray-600 ml-1">
+                        {postData.rating.toFixed(1)}
+                      </span>
+                    </div>
                   )}
                 </div>
                 <p className="text-sm text-gray-500 font-medium">
@@ -529,7 +564,7 @@ export const FeedPost = memo(function FeedPost({
 
         {/* Post Content */}
         <CardContent className="px-6 pb-4">
-          {/* Location Tag */}
+          {/* Enhanced Location Tag with Post Type Context */}
           {postData.location && (
             <Link 
               href={typeof postData.location === 'string' 
@@ -538,7 +573,15 @@ export const FeedPost = memo(function FeedPost({
                   ? `/locations/${postData.location.slug}` 
                   : `/locations/${postData.location.id}`
               }
-              className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-[#FF6B6B] mb-4 transition-colors bg-gray-50 px-3 py-1.5 rounded-full"
+              className={`inline-flex items-center gap-2 text-sm mb-4 transition-colors px-3 py-1.5 rounded-full ${
+                postData.type === "review" 
+                  ? "text-orange-700 hover:text-orange-800 bg-orange-50 hover:bg-orange-100" 
+                  : postData.type === "tip"
+                  ? "text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100"
+                  : postData.type === "recommendation"
+                  ? "text-green-700 hover:text-green-800 bg-green-50 hover:bg-green-100"
+                  : "text-gray-600 hover:text-[#FF6B6B] bg-gray-50"
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
               <MapPin className="h-4 w-4" />
@@ -546,35 +589,104 @@ export const FeedPost = memo(function FeedPost({
             </Link>
           )}
 
-          {/* Post Text */}
+          {/* Post Type Specific Header */}
+          {postData.type === "review" && postData.rating && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl border border-yellow-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-100 rounded-full">
+                  <Star className="h-5 w-5 text-yellow-600 fill-current" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Review</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`h-4 w-4 ${
+                            i < Math.floor(postData.rating!) 
+                              ? 'text-yellow-400 fill-current' 
+                              : i < postData.rating! 
+                                ? 'text-yellow-400 fill-current opacity-50' 
+                                : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm font-medium text-gray-600">
+                      {postData.rating.toFixed(1)} out of 5
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {postData.type === "tip" && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-full">
+                  <Lightbulb className="h-5 w-5 text-blue-600 fill-current" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Pro Tip</h3>
+                  <p className="text-sm text-gray-600 mt-1">Insider knowledge to enhance your experience</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {postData.type === "recommendation" && (
+            <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <ThumbsUp className="h-5 w-5 text-green-600 fill-current" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Recommendation</h3>
+                  <p className="text-sm text-gray-600 mt-1">Highly recommended by the community</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Post Text with Enhanced Styling */}
           {displayContent && (
-            <div className="mb-6">
-              <p className="text-gray-900 whitespace-pre-wrap leading-relaxed text-base">
+            <div className={`mb-6 ${
+              postData.type === "review" 
+                ? "text-gray-800" 
+                : postData.type === "tip"
+                ? "text-gray-800"
+                : postData.type === "recommendation"
+                ? "text-gray-800"
+                : "text-gray-900"
+            }`}>
+              <p className="whitespace-pre-wrap leading-relaxed text-base">
                 {displayContent}
               </p>
-            {isLongContent && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setExpanded(!expanded)
-                }}
-                className="mt-3 p-0 h-auto text-[#FF6B6B] hover:text-[#FF6B6B]/80 hover:bg-transparent font-medium"
-              >
-                {expanded ? (
-                  <>
-                    <ChevronUp className="h-4 w-4 mr-1" />
-                    Show less
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-4 w-4 mr-1" />
-                    Show more
-                  </>
-                )}
-              </Button>
-            )}
+              {isLongContent && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setExpanded(!expanded)
+                  }}
+                  className="mt-3 p-0 h-auto text-[#FF6B6B] hover:text-[#FF6B6B]/80 hover:bg-transparent font-medium"
+                >
+                  {expanded ? (
+                    <>
+                      <ChevronUp className="h-4 w-4 mr-1" />
+                      Show less
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4 mr-1" />
+                      Show more
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           )}
 
@@ -606,7 +718,15 @@ export const FeedPost = memo(function FeedPost({
         </CardContent>
 
         {/* Post Actions */}
-        <CardFooter className="px-6 py-4 bg-gray-50/50 border-t border-gray-100">
+        <CardFooter className={`px-6 py-4 border-t ${
+          postData.type === "review" 
+            ? "bg-gradient-to-r from-yellow-50/50 to-orange-50/50 border-yellow-200" 
+            : postData.type === "tip"
+            ? "bg-gradient-to-r from-blue-50/50 to-purple-50/50 border-blue-200"
+            : postData.type === "recommendation"
+            ? "bg-gradient-to-r from-green-50/50 to-emerald-50/50 border-green-200"
+            : "bg-gray-50/50 border-gray-100"
+        }`}>
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-8">
               {/* Like Button */}
@@ -629,7 +749,7 @@ export const FeedPost = memo(function FeedPost({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{isLiked ? 'Unlike' : 'Like'} this post</p>
+                    <p>{isLiked ? 'Unlike' : 'Like'} this {postData.type || 'post'}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -663,7 +783,7 @@ export const FeedPost = memo(function FeedPost({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Share this post</p>
+                    <p>Share this {postData.type || 'post'}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -686,10 +806,40 @@ export const FeedPost = memo(function FeedPost({
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{isSaved ? 'Remove from saved' : 'Save'} this post</p>
+                    <p>{isSaved ? 'Remove from' : 'Add to'} saved {postData.type === 'review' ? 'reviews' : postData.type === 'tip' ? 'tips' : 'posts'}</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+            </div>
+
+            {/* Post Type Specific Action */}
+            <div className="flex items-center gap-2">
+              {postData.type === "review" && postData.rating && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 rounded-full">
+                  <Star className="h-4 w-4 text-yellow-600 fill-current" />
+                  <span className="text-sm font-medium text-yellow-800">
+                    {postData.rating.toFixed(1)}
+                  </span>
+                </div>
+              )}
+              
+              {postData.type === "tip" && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 rounded-full">
+                  <Lightbulb className="h-4 w-4 text-blue-600 fill-current" />
+                  <span className="text-sm font-medium text-blue-800">
+                    Pro Tip
+                  </span>
+                </div>
+              )}
+              
+              {postData.type === "recommendation" && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded-full">
+                  <ThumbsUp className="h-4 w-4 text-green-600 fill-current" />
+                  <span className="text-sm font-medium text-green-800">
+                    Recommended
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </CardFooter>

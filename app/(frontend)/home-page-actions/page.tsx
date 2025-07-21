@@ -3,7 +3,7 @@
 // Force dynamic rendering to prevent SSR issues
 export const dynamic = 'force-dynamic'
 
-import { Compass, Plus, MapPin, Calendar, Crown, Search, Bell, Star } from "lucide-react"
+import { Compass, Plus, MapPin, Calendar, Crown, Search, Bell, Star, BookOpen } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,14 +36,7 @@ export default function HomePageActions() {
       color: "from-[#FFE66D] to-[#FFD93D]",
       bgColor: "bg-gradient-to-br from-[#FFE66D]/10 to-[#FFD93D]/10"
     },
-    {
-      title: "Bucket Lists",
-      description: "Track your local adventures",
-      icon: Crown,
-      href: "/bucket-list",
-      color: "from-[#FF6B6B] to-[#4ECDC4]",
-      bgColor: "bg-gradient-to-br from-[#FF6B6B]/10 to-[#4ECDC4]/10"
-    }
+
   ]
 
   const recentActivities = [
@@ -60,10 +53,10 @@ export default function HomePageActions() {
       icon: Calendar
     },
     {
-      title: "5 new reviews on your bucket list",
+      title: "New local guide published",
       time: "1 day ago",
-      type: "review",
-      icon: Star
+      type: "guide",
+      icon: BookOpen
     }
   ]
 

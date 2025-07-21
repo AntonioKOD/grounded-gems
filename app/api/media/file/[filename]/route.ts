@@ -18,9 +18,12 @@ export async function GET(
     if (process.env.BLOB_READ_WRITE_TOKEN) {
       console.log(`📦 Using blob storage for: ${filename}`)
       
-      // Construct blob URL
-      const blobHostname = 'lkmjfsdfkqqgxv8z.public.blob.vercel-storage.com' // Your blob hostname
+      // Construct blob URL - extract hostname from blob token
+      const blobToken = process.env.BLOB_READ_WRITE_TOKEN
+      const blobHostname = blobToken?.split('_')[3]?.toLowerCase() + '.public.blob.vercel-storage.com'
       const blobUrl = `https://${blobHostname}/${filename}`
+      
+      console.log(`📦 Blob URL: ${blobUrl}`)
       
       try {
         const fileResponse = await fetch(blobUrl)

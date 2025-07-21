@@ -67,6 +67,7 @@ export interface User {
   export type FeedContentType = 
     | 'post' 
     | 'people_suggestion' 
+    | 'no_people_suggestions'
     | 'place_recommendation' 
     | 'guide_spotlight' 
     | 'weekly_feature'
@@ -114,6 +115,11 @@ export interface User {
       reviewCount?: number
       distance?: string
     }
+  }
+
+  export interface NoPeopleSuggestionsItem extends BaseFeedItem {
+    type: 'no_people_suggestions'
+    message: string
   }
   
   export interface PlaceRecommendationItem extends BaseFeedItem {
@@ -301,13 +307,14 @@ export interface User {
     }
   }
   
-  export type FeedItem = 
+    export type FeedItem = 
     | PostFeedItem 
     | PeopleSuggestionItem 
+    | NoPeopleSuggestionsItem
     | PlaceRecommendationItem 
     | GuideSpotlightItem 
     | WeeklyFeatureItem
-    | ChallengeCardItem
+    | ChallengeCardItem 
     | MiniBlogCardItem
   
   // Feed algorithm configuration

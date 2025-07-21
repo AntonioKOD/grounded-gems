@@ -6,6 +6,7 @@ import type {
   FeedAlgorithmParams as OriginalFeedAlgorithmParams,
   PostFeedItem,
   PeopleSuggestionItem,
+  NoPeopleSuggestionsItem,
   PlaceRecommendationItem,
   GuideSpotlightItem,
   WeeklyFeatureItem,
@@ -515,7 +516,7 @@ export class FeedAlgorithm {
     userData: any,
     limit: number = 1,
     socialCircle: string[] = []
-  ): Promise<PeopleSuggestionItem[]> {
+  ): Promise<(PeopleSuggestionItem | NoPeopleSuggestionsItem)[]> {
     if (!this.payload) await this.initializePayload()
 
     try {
@@ -559,10 +560,11 @@ export class FeedAlgorithm {
               return null
             }
 
-            // Skip if current user is already following this user
-            if (userData?.following && userData.following.includes(user.id)) {
-              return null
-            }
+                  // Skip if current user is already following this user
+      if (userData?.following && userData.following.includes(user.id)) {
+        console.log(`Skipping user ${user.id} - already being followed`)
+        return null
+      }
 
             // Get user's recent posts count
             const postsResult = await this.payload.find({
@@ -669,6 +671,19 @@ export class FeedAlgorithm {
       const sortedUsers = validUsers
         .sort((a, b) => b.relevanceScore - a.relevanceScore)
         .slice(0, maxSuggestions)
+
+      // If no valid suggestions found, return a fallback message
+      if (sortedUsers.length === 0) {
+        console.log('No people suggestions available - user may be following everyone')
+        return [{
+          id: 'no_people_suggestions',
+          type: 'no_people_suggestions',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          priority: 60,
+          message: 'You\'re following everyone! New suggestions will appear as more users join.'
+        }]
+      }
 
       return sortedUsers.map(({ user, postsCount, followersCount, mutualConnections, distance }) => ({
         id: `people_${user.id}`,

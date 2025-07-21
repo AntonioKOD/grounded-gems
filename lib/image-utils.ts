@@ -175,19 +175,31 @@ export function getImageUrl(image: any): string {
 }
 
 /**
- * Simple function to get video URL from PayloadCMS media object
+ * Enhanced function to get video URL from PayloadCMS media object with better debugging
  */
 export function getVideoUrl(video: any): string | null {
-  if (!video) return null
+  if (!video) {
+    console.log('🎬 getVideoUrl: No video provided')
+    return null
+  }
+
+  console.log('🎬 getVideoUrl: Processing video object:', {
+    type: typeof video,
+    isString: typeof video === 'string',
+    isObject: typeof video === 'object',
+    video: video
+  })
 
   // Handle string URLs
   if (typeof video === "string" && video.trim() !== "") {
     let url = video.trim()
+    console.log('🎬 getVideoUrl: Processing string URL:', url)
     
     // Fix CORS issues by ensuring URLs use the same domain as the current site
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
+      console.log('🎬 getVideoUrl: Added base URL:', url)
     } else if (url.startsWith('http')) {
       // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
       // or vice versa to match the current domain
@@ -201,8 +213,10 @@ export function getVideoUrl(video: any): string | null {
         urlObj.hostname = 'www.sacavia.com'
         url = urlObj.toString()
       }
+      console.log('🎬 getVideoUrl: Fixed CORS URL:', url)
     }
     
+    console.log('🎬 getVideoUrl: Returning string URL:', url)
     return url
   }
   
@@ -210,25 +224,40 @@ export function getVideoUrl(video: any): string | null {
   if (typeof video === "object" && video !== null) {
     let url: string | null = null
     
+    console.log('🎬 getVideoUrl: Processing video object with keys:', Object.keys(video))
+    
     // Try different URL sources in order of preference
     if (video.url) {
       url = video.url
+      console.log('🎬 getVideoUrl: Found URL in video.url:', url)
     } else if (video.filename) {
       url = `/api/media/file/${video.filename}`
+      console.log('🎬 getVideoUrl: Constructed URL from filename:', url)
     } else if (video.sizes?.card?.url) {
       url = video.sizes.card.url
+      console.log('🎬 getVideoUrl: Found URL in video.sizes.card.url:', url)
     } else if (video.sizes?.thumbnail?.url) {
       url = video.sizes.thumbnail.url
+      console.log('🎬 getVideoUrl: Found URL in video.sizes.thumbnail.url:', url)
     } else if (video.thumbnailURL) {
       url = video.thumbnailURL
+      console.log('🎬 getVideoUrl: Found URL in video.thumbnailURL:', url)
+    } else if (video.id) {
+      // If we have an ID but no URL, construct the URL
+      url = `/api/media/file/${video.id}`
+      console.log('🎬 getVideoUrl: Constructed URL from ID:', url)
     }
     
-    if (!url) return null
+    if (!url) {
+      console.log('🎬 getVideoUrl: No URL found in video object')
+      return null
+    }
     
     // Fix CORS issues by ensuring URLs use the same domain as the current site
     if (url.startsWith('/') && !url.startsWith('http')) {
       const baseUrl = getBaseUrlSafely()
       url = `${baseUrl}${url}`
+      console.log('🎬 getVideoUrl: Added base URL to object URL:', url)
     } else if (url.startsWith('http')) {
       // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
       // or vice versa to match the current domain
@@ -242,11 +271,14 @@ export function getVideoUrl(video: any): string | null {
         urlObj.hostname = 'www.sacavia.com'
         url = urlObj.toString()
       }
+      console.log('🎬 getVideoUrl: Fixed CORS URL for object:', url)
     }
     
+    console.log('🎬 getVideoUrl: Returning object URL:', url)
     return url
   }
   
+  console.log('🎬 getVideoUrl: No valid video format found')
   return null
 }
 
@@ -412,8 +444,21 @@ export async function testMediaUrl(url: string): Promise<boolean> {
  */
 function transformToBlobUrl(url: string): string {
   // Don't transform if not in development or if it's not an API media URL
-  if (!isDevelopment || !url.includes('/api/media/file/')) {
+  if (!isDevelopment && !url.includes('/api/media/file/')) {
     return url
+  }
+  
+  // Transform old domain references to local URLs
+  if (url.includes('groundedgems.com/api/media/file/')) {
+    const filename = url.split('/api/media/file/')[1]
+    const localUrl = `/api/media/file/${filename}`
+    if (isDevelopment) {
+      console.log('📸 Transforming old domain URL:', {
+        from: url,
+        to: localUrl
+      })
+    }
+    return localUrl
   }
   
   // For now, just return the original URL since we're using local file serving
@@ -432,6 +477,19 @@ function transformToBlobUrl(url: string): string {
 export function getPayloadImageUrl(imageUrl: string | undefined | null): string {
   if (!imageUrl) {
     return '/placeholder-image.svg'
+  }
+
+  // Transform old domain references to local URLs
+  if (imageUrl.includes('groundedgems.com/api/media/file/')) {
+    const filename = imageUrl.split('/api/media/file/')[1]
+    const localUrl = `/api/media/file/${filename}`
+    if (isDevelopment) {
+      console.log('📸 Transforming old domain URL in getPayloadImageUrl:', {
+        from: imageUrl,
+        to: localUrl
+      })
+    }
+    imageUrl = localUrl
   }
 
   // If it's already a full URL, return as is

@@ -266,9 +266,17 @@ const handleLivePhotoConversionAsync = async (doc: any, req: any) => {
 const handleVideoThumbnailAsync = async (doc: any, req: any) => {
   try {
     console.log('🎬 Starting async video thumbnail generation:', doc.filename)
+    console.log('🎬 Video document details:', {
+      id: doc.id,
+      filename: doc.filename,
+      mimeType: doc.mimeType,
+      isVideo: doc.isVideo,
+      url: doc.url,
+      hasThumbnail: !!doc.videoThumbnail
+    })
     
     // Reduced delay for faster processing
-    await new Promise(resolve => setTimeout(resolve, 200))
+    await new Promise(resolve => setTimeout(resolve, 500))
     
     // Generate thumbnail
     const { generateVideoThumbnailManually } = await import('@/lib/video-thumbnail-generator')
@@ -276,12 +284,130 @@ const handleVideoThumbnailAsync = async (doc: any, req: any) => {
     
     if (thumbnailId) {
       console.log('🎬 Video thumbnail created successfully:', thumbnailId)
+      
+      // Update the video document with the thumbnail reference
+      try {
+        await req.payload.update({
+          collection: 'media',
+          id: doc.id,
+          data: {
+            videoThumbnail: thumbnailId,
+          },
+        })
+        console.log('🎬 Video document updated with thumbnail reference')
+      } catch (updateError) {
+        console.error('🎬 Error updating video document with thumbnail:', updateError)
+      }
     } else {
       console.log('🎬 Video thumbnail creation failed')
+      
+      // Create a placeholder thumbnail if generation fails
+      try {
+        const placeholderId = await createPlaceholderThumbnail(doc, req.payload)
+        if (placeholderId) {
+          console.log('🎬 Placeholder thumbnail created:', placeholderId)
+          await req.payload.update({
+            collection: 'media',
+            id: doc.id,
+            data: {
+              videoThumbnail: placeholderId,
+            },
+          })
+        }
+      } catch (placeholderError) {
+        console.error('🎬 Error creating placeholder thumbnail:', placeholderError)
+      }
     }
     
   } catch (error) {
     console.error('🎬 Error in async video processing:', error)
+    
+    // Try to create a placeholder thumbnail as fallback
+    try {
+      const placeholderId = await createPlaceholderThumbnail(doc, req.payload)
+      if (placeholderId) {
+        console.log('🎬 Fallback placeholder thumbnail created:', placeholderId)
+        await req.payload.update({
+          collection: 'media',
+          id: doc.id,
+          data: {
+            videoThumbnail: placeholderId,
+          },
+        })
+      }
+    } catch (fallbackError) {
+      console.error('🎬 Error creating fallback placeholder thumbnail:', fallbackError)
+    }
+  }
+}
+
+// Helper function to create a placeholder thumbnail
+const createPlaceholderThumbnail = async (doc: any, payload: any): Promise<string | null> => {
+  try {
+    console.log('🎬 Creating placeholder thumbnail for video:', doc.filename)
+    
+    // Create a simple placeholder image
+    const canvas = require('canvas')
+    const { createCanvas } = canvas
+    
+    const width = 400
+    const height = 300
+    const canvasInstance = createCanvas(width, height)
+    const ctx = canvasInstance.getContext('2d')
+    
+    // Draw a gradient background
+    const gradient = ctx.createLinearGradient(0, 0, width, height)
+    gradient.addColorStop(0, '#667eea')
+    gradient.addColorStop(1, '#764ba2')
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+    
+    // Draw a play button
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.beginPath()
+    ctx.arc(width / 2, height / 2, 40, 0, 2 * Math.PI)
+    ctx.fill()
+    
+    ctx.fillStyle = '#667eea'
+    ctx.beginPath()
+    ctx.moveTo(width / 2 + 10, height / 2 - 15)
+    ctx.lineTo(width / 2 + 10, height / 2 + 15)
+    ctx.lineTo(width / 2 + 25, height / 2)
+    ctx.closePath()
+    ctx.fill()
+    
+    // Add text
+    ctx.fillStyle = 'white'
+    ctx.font = '16px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('Video', width / 2, height - 30)
+    
+    const buffer = canvasInstance.toBuffer('image/png')
+    const thumbnailFilename = `placeholder_${doc.filename?.replace(/\.[^/.]+$/, '') || 'video'}.png`
+    
+    // Create thumbnail media document
+    const thumbnailDoc = await payload.create({
+      collection: 'media',
+      data: {
+        alt: `Placeholder thumbnail for ${doc.alt || doc.filename || 'video'}`,
+        uploadedBy: doc.uploadedBy,
+        uploadSource: 'system',
+        folder: 'thumbnails',
+      },
+      file: {
+        data: buffer,
+        mimetype: 'image/png',
+        name: thumbnailFilename,
+        size: buffer.length,
+      },
+    })
+    
+    console.log('🎬 Placeholder thumbnail created successfully:', thumbnailDoc.id)
+    return thumbnailDoc.id
+    
+  } catch (error) {
+    console.error('🎬 Error creating placeholder thumbnail:', error)
+    return null
   }
 }
 
@@ -450,6 +576,13 @@ export const Media: CollectionConfig = {
   hooks: {
     beforeChange: [
       async ({ data, operation }) => {
+        console.log('🎬 Media beforeChange:', {
+          operation,
+          mimeType: data.mimeType,
+          filename: data.filename,
+          isVideo: data.isVideo
+        })
+        
         // Mark videos as isVideo during creation
         if (operation === 'create' && data.mimeType?.startsWith('video/')) {
           console.log('🎬 Media beforeChange: Marking as video:', data.filename)
@@ -484,11 +617,12 @@ export const Media: CollectionConfig = {
           await handleLivePhotoConversionAsync(doc, req)
         }
         
-        // Only process videos on create that don't already have a thumbnail
+        // Process videos on create that don't already have a thumbnail
         if (operation === 'create' && doc.isVideo && !doc.videoThumbnail) {
+          console.log('🎬 Media afterChange: Processing video for thumbnail generation')
           await handleVideoThumbnailAsync(doc, req)
         } else {
-          console.log('🎬 Skipping thumbnail generation:', {
+          console.log('🎬 Media afterChange: Skipping thumbnail generation:', {
             reason: operation !== 'create' ? 'not create operation' : 
                    !doc.isVideo ? 'not a video' : 
                    doc.videoThumbnail ? 'already has thumbnail' : 'unknown'

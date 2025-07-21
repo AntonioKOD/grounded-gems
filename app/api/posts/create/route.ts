@@ -11,6 +11,9 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function POST(request: NextRequest) {
+  let postData: any = null
+  let cleanedPostData: any = null
+  
   try {
     console.log('📝 Post creation API called - OPTIMIZED VERSION')
     
@@ -70,6 +73,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate userId is a valid ObjectId
+    if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
+      console.error('📝 Invalid userId format:', userId)
+      return NextResponse.json(
+        { success: false, message: 'Invalid user ID format' },
+        { status: 400 }
+      )
+    }
+
+    console.log('📝 Validating user ID:', userId)
+
     // Find the user
     const user = await payload.findByID({
       collection: 'users',
@@ -77,11 +91,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user) {
+      console.error('📝 User not found for ID:', userId)
       return NextResponse.json(
         { success: false, message: 'User not found' },
         { status: 404 }
       )
     }
+
+    console.log('📝 User found:', { id: user.id, name: user.name })
 
     // Extract form data
     const content = formData.get('content') as string
@@ -112,23 +129,34 @@ export async function POST(request: NextRequest) {
     // Check if we have media IDs (from separate upload) or files to upload
     const livePhotos = formData.getAll('livePhotos') as string[]
     const photos = formData.getAll('photos') as string[]
-    const videos = formData.getAll('videos') as string[]
+    const videos = formData.getAll('videos') as (string | File)[]
     
     // Process media files if any (legacy support)
     const imageFiles = [
       ...(formData.getAll('images') as File[]),
       ...(formData.getAll('media') as File[])
     ].filter(file => file.type.startsWith('image/'))
-    const videoFiles = formData.getAll('videos') as File[]
     
-    console.log(`📝 Media breakdown: ${livePhotos.length} live photo IDs, ${photos.length} photo IDs, ${videos.length} video IDs`)
+    // Separate video files from video IDs
+    const videoFiles: File[] = []
+    const videoIds: string[] = []
+    
+    videos.forEach(item => {
+      if (item instanceof File) {
+        videoFiles.push(item)
+      } else if (typeof item === 'string' && item.length > 0) {
+        videoIds.push(item)
+      }
+    })
+    
+    console.log(`📝 Media breakdown: ${livePhotos.length} live photo IDs, ${photos.length} photo IDs, ${videoIds.length} video IDs`)
     console.log(`📝 Files to upload: ${imageFiles.length} images, ${videoFiles.length} videos`)
 
     let mediaIds: string[] = []
     
-    // If we have media IDs (from separate upload), use those
-    if (livePhotos.length > 0 || photos.length > 0 || videos.length > 0) {
-      mediaIds = [...livePhotos, ...photos, ...videos]
+    // If we have pre-uploaded media IDs, use those
+    if (livePhotos.length > 0 || photos.length > 0 || videoIds.length > 0) {
+      mediaIds = [...livePhotos, ...photos, ...videoIds]
       console.log(`📝 Using pre-uploaded media IDs: ${mediaIds.length} total`)
     } else if (imageFiles.length > 0 || videoFiles.length > 0) {
       // Legacy: Upload files with the post
@@ -190,11 +218,18 @@ export async function POST(request: NextRequest) {
         // Process results
         for (const result of uploadResults) {
           if (result.status === 'fulfilled' && result.value) {
+            console.log(`📝 Upload successful, adding to mediaIds: ${result.value}`)
             mediaIds.push(result.value)
           } else if (result.status === 'rejected') {
             console.error('📝 Upload failed:', result.reason)
             return NextResponse.json(
               { success: false, message: `Upload failed: ${result.reason}` },
+              { status: 500 }
+            )
+          } else if (result.status === 'fulfilled' && !result.value) {
+            console.error('📝 Upload returned null/undefined ID')
+            return NextResponse.json(
+              { success: false, message: 'Upload failed: No ID returned' },
               { status: 500 }
             )
           }
@@ -205,7 +240,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare post data
-    const postData: any = {
+    postData = {
       content: content.trim(),
       type: type,
       author: userId,
@@ -233,39 +268,66 @@ export async function POST(request: NextRequest) {
     // Add location if provided
     if (locationId) {
       try {
-        const location = await payload.findByID({
-          collection: 'locations',
-          id: locationId,
-        })
-        if (location) {
-          postData.location = locationId
+        // Validate locationId is a valid ObjectId
+        if (!/^[0-9a-fA-F]{24}$/.test(locationId)) {
+          console.log('📝 Invalid locationId format, skipping location')
+        } else {
+          const location = await payload.findByID({
+            collection: 'locations',
+            id: locationId,
+          })
+          if (location) {
+            postData.location = locationId
+            console.log('📝 Location set:', locationId)
+          } else {
+            console.log('📝 Location not found in database, skipping')
+          }
         }
       } catch (error) {
-        console.log('Location not found, continuing without location')
+        console.log('📝 Error validating location, skipping:', error)
       }
     } else if (locationName && locationName.trim()) {
-      // If no location ID but location name provided, store it as a string
-      postData.location = locationName.trim()
+      // For now, skip location name since Posts collection expects ObjectId
+      // TODO: Create location record or handle string locations differently
+      console.log('📝 Location name provided but no ID, skipping location assignment')
     }
 
     // Add media if any - properly handle both images and videos
     if (mediaIds.length > 0) {
       // If we have pre-uploaded media IDs, use the original arrays
-      if (livePhotos.length > 0 || photos.length > 0 || videos.length > 0) {
-        if (livePhotos.length > 0) {
-          postData.livePhotos = livePhotos
+      if (livePhotos.length > 0 || photos.length > 0 || videoIds.length > 0) {
+        // Filter out any File objects that might have been left in the arrays
+        const validLivePhotos = livePhotos.filter(id => typeof id === 'string' && id.length > 0)
+        const validPhotos = photos.filter(id => typeof id === 'string' && id.length > 0)
+        const validVideos = videoIds.filter(id => typeof id === 'string' && id.length > 0)
+        
+        console.log(`📝 Valid pre-uploaded media: ${validLivePhotos.length} live photos, ${validPhotos.length} photos, ${validVideos.length} videos`)
+        
+        if (validLivePhotos.length > 0) {
+          postData.livePhotos = validLivePhotos
         }
-        if (photos.length > 0) {
-          postData.photos = photos
+        if (validPhotos.length > 0) {
+          postData.photos = validPhotos
         }
-        if (videos.length > 0) {
-          postData.videos = videos
+        if (validVideos.length > 0) {
+          postData.video = validVideos[0] // Only use first video since Posts collection only has 'video' field
+          if (validVideos.length > 1) {
+            console.log(`📝 Warning: ${validVideos.length - 1} additional videos will be ignored (Posts collection only supports one video)`)
+          }
         }
-        console.log(`📝 Assigned pre-uploaded media: ${livePhotos.length} live photos, ${photos.length} photos, ${videos.length} videos`)
+        console.log(`📝 Assigned pre-uploaded media: ${validLivePhotos.length} live photos, ${validPhotos.length} photos, ${validVideos.length} videos (using first video only)`)
       } else {
         // Legacy: Track which media IDs correspond to images vs videos
         const imageIds: string[] = []
-        const videoIds: string[] = []
+        const legacyVideoIds: string[] = []
+        
+        console.log(`📝 Processing mediaIds for assignment:`, {
+          totalMediaIds: mediaIds.length,
+          mediaIds: mediaIds,
+          livePhotoFiles: imageFiles.filter(file => file.type === 'image/heic' || file.type === 'image/heif').length,
+          regularImageFiles: imageFiles.filter(file => file.type !== 'image/heic' && file.type !== 'image/heif').length,
+          videoFiles: videoFiles.length
+        })
         
         // Process mediaIds in the order they were uploaded
         let currentIndex = 0
@@ -293,10 +355,14 @@ export async function POST(request: NextRequest) {
         // Finally add videos (uploaded in parallel)
         const videoCount = videoFiles.length
         if (videoCount > 0) {
-          videoIds.push(...mediaIds.slice(currentIndex, currentIndex + videoCount))
+          console.log(`📝 Adding ${videoCount} videos starting at index ${currentIndex}`)
+          const videoIdsToAdd = mediaIds.slice(currentIndex, currentIndex + videoCount)
+          console.log(`📝 Video IDs to add:`, videoIdsToAdd)
+          legacyVideoIds.push(...videoIdsToAdd)
+          console.log(`📝 Total video IDs after adding:`, legacyVideoIds)
         }
         
-        console.log(`📝 Media assignment: ${imageIds.length} images (${livePhotoCount} Live Photos + ${regularImageCount} regular), ${videoIds.length} videos`)
+        console.log(`📝 Media assignment: ${imageIds.length} images (${livePhotoCount} Live Photos + ${regularImageCount} regular), ${legacyVideoIds.length} videos`)
         
         // Set the first image as the main image
         if (imageIds.length > 0) {
@@ -308,12 +374,31 @@ export async function POST(request: NextRequest) {
         }
         
         // Set videos if any
-        if (videoIds.length > 0) {
-          postData.video = videoIds[0] // First video as main video
-          // Set remaining videos as additional videos array if needed
-          if (videoIds.length > 1) {
-            postData.videos = videoIds.slice(1)
+        if (legacyVideoIds.length > 0) {
+          console.log(`📝 Setting video for post:`, {
+            videoIds: legacyVideoIds,
+            firstVideoId: legacyVideoIds[0],
+            totalVideos: legacyVideoIds.length
+          })
+          
+          // Validate video ID before setting
+          if (legacyVideoIds[0] && typeof legacyVideoIds[0] === 'string' && legacyVideoIds[0].length > 0) {
+            postData.video = legacyVideoIds[0] // First video as main video
+            console.log(`📝 Set main video: ${legacyVideoIds[0]}`)
+          } else {
+            console.error(`📝 Invalid video ID: ${legacyVideoIds[0]}`)
+            return NextResponse.json(
+              { success: false, message: 'Invalid video ID generated' },
+              { status: 400 }
+            )
           }
+          
+          // Note: Posts collection only has 'video' field, not 'videos' array
+          if (legacyVideoIds.length > 1) {
+            console.log(`📝 Warning: ${legacyVideoIds.length - 1} additional videos will be ignored (Posts collection only supports one video)`)
+          }
+        } else {
+          console.log(`📝 No videos to set for post`)
         }
       }
     }
@@ -356,13 +441,90 @@ export async function POST(request: NextRequest) {
       hasImage: !!postData.image,
       hasVideo: !!postData.video,
       photosCount: postData.photos?.length || 0,
-      hasLocation: !!postData.location
+      hasLocation: !!postData.location,
+      videoData: postData.video, // Log the actual video data
+      imageData: postData.image, // Log the actual image data
+      photosData: postData.photos // Log the actual photos data
     })
 
+    // Validate video ID exists in media collection before creating post
+    if (postData.video) {
+      // Check if video is a valid string ID, not a File object
+      if (typeof postData.video !== 'string' || postData.video.length === 0) {
+        console.error('📝 Invalid video data type:', typeof postData.video, postData.video)
+        return NextResponse.json(
+          { success: false, message: 'Invalid video data provided' },
+          { status: 400 }
+        )
+      }
+      
+      try {
+        console.log('📝 Validating video ID:', postData.video)
+        const videoDoc = await payload.findByID({
+          collection: 'media',
+          id: postData.video,
+        })
+        console.log('📝 Video document found:', {
+          id: videoDoc?.id,
+          filename: videoDoc?.filename,
+          isVideo: videoDoc?.isVideo,
+          mimeType: videoDoc?.mimeType
+        })
+      } catch (error) {
+        console.error('📝 Error validating video ID:', error)
+        return NextResponse.json(
+          { success: false, message: 'Invalid video ID provided' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Create the post
+    console.log('📝 Creating post with final data:', {
+      content: postData.content?.substring(0, 100) + '...',
+      type: postData.type,
+      author: postData.author,
+      hasImage: !!postData.image,
+      hasVideo: !!postData.video,
+      hasLocation: !!postData.location,
+      hasRating: !!postData.rating,
+      authorType: typeof postData.author,
+      authorLength: postData.author?.length || 'N/A'
+    })
+
+    // Detailed field-by-field validation for BSON errors
+    console.log('📝 Detailed field validation:')
+    Object.entries(postData).forEach(([key, value]) => {
+      console.log(`📝 Field: ${key}`, {
+        value: value,
+        type: typeof value,
+        isArray: Array.isArray(value),
+        length: typeof value === 'string' ? value.length : 'N/A',
+        isValidObjectId: typeof value === 'string' ? /^[0-9a-fA-F]{24}$/.test(value) : 'N/A'
+      })
+    })
+
+    // Clean up postData to ensure no invalid values
+    cleanedPostData = {}
+    Object.entries(postData).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        // Ensure arrays don't contain invalid values
+        if (Array.isArray(value)) {
+          const cleanedArray = value.filter(item => item !== null && item !== undefined)
+          if (cleanedArray.length > 0) {
+            cleanedPostData[key] = cleanedArray
+          }
+        } else {
+          cleanedPostData[key] = value
+        }
+      }
+    })
+
+    console.log('📝 Cleaned postData:', Object.keys(cleanedPostData))
+
     const post = await payload.create({
       collection: 'posts',
-      data: postData,
+      data: cleanedPostData,
     })
 
     console.log('📝 Post created successfully:', post.id)
@@ -383,6 +545,29 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Error creating post:', error);
+    
+    // Provide more specific error information
+    if (error instanceof Error) {
+      if (error.message.includes('BSONError') || error.message.includes('ObjectId')) {
+        console.error('📝 BSON/ObjectId error details:', {
+          message: error.message,
+          stack: error.stack,
+          postData: {
+            author: postData?.author,
+            authorType: typeof postData?.author,
+            hasVideo: !!postData?.video,
+            videoType: typeof cleanedPostData?.video,
+            hasImage: !!cleanedPostData?.image,
+            imageType: typeof cleanedPostData?.image
+          }
+        })
+        return NextResponse.json(
+          { success: false, message: 'Invalid data format. Please check your input and try again.' },
+          { status: 400 }
+        )
+      }
+    }
+    
     return NextResponse.json(
       { success: false, message: 'Failed to create post' },
       { status: 500 }
@@ -445,16 +630,19 @@ async function uploadVideoFile(file: File, payload: any): Promise<string | null>
       throw new Error(`Invalid video type: ${file.type}`)
     }
 
-    console.log(`📝 Uploading video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+    console.log(`📝 Uploading video: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, type: ${file.type})`)
 
     // OPTIMIZATION: Use streaming for large files
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    console.log(`📝 Creating video media document...`)
     const videoDoc = await payload.create({
       collection: 'media',
       data: {
         alt: file.name,
+        isVideo: true, // Explicitly mark as video
+        uploadSource: 'web',
       },
       file: {
         data: buffer,
@@ -464,17 +652,53 @@ async function uploadVideoFile(file: File, payload: any): Promise<string | null>
       },
     })
 
+    console.log(`📝 Video upload result:`, {
+      success: !!videoDoc.id,
+      id: videoDoc.id,
+      filename: videoDoc.filename,
+      mimeType: videoDoc.mimeType,
+      isVideo: videoDoc.isVideo,
+      url: videoDoc.url,
+      hasThumbnail: !!videoDoc.videoThumbnail
+    })
+
     if (videoDoc.id) {
       console.log(`📝 Video uploaded successfully: ${videoDoc.id}`)
+      console.log(`📝 Video document details:`, {
+        id: videoDoc.id,
+        filename: videoDoc.filename,
+        mimeType: videoDoc.mimeType,
+        isVideo: videoDoc.isVideo,
+        url: videoDoc.url,
+        hasThumbnail: !!videoDoc.videoThumbnail
+      })
       
       // Video uploaded successfully - thumbnail will be generated by Media hook
       console.log(`📝 API: Video uploaded successfully - ID: ${videoDoc.id}`)
       console.log(`📝 API: Thumbnail will be generated by Media collection hook`)
       
+      // Wait a moment for the Media hook to process the video
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      // Check if the video was properly processed
+      const updatedVideoDoc = await payload.findByID({
+        collection: 'media',
+        id: videoDoc.id,
+      })
+      
+      console.log(`📝 API: Video processing check:`, {
+        id: updatedVideoDoc?.id,
+        isVideo: updatedVideoDoc?.isVideo,
+        hasThumbnail: !!updatedVideoDoc?.videoThumbnail,
+        url: updatedVideoDoc?.url
+      })
+      
       return videoDoc.id as string
+    } else {
+      console.error(`📝 Video upload failed: No ID returned`)
+      return null
     }
     
-    return null
   } catch (error) {
     console.error(`📝 Error uploading video ${file.name}:`, error)
     throw error

@@ -14,6 +14,9 @@ interface FeedState {
   category?: string
   userId?: string
   lastFetched: number | null
+  // Add request tracking to prevent duplicate calls (serializable)
+  pendingRequests: Record<string, number>
+  cacheKey: string | null
 }
 
 const initialState: FeedState = {
@@ -27,6 +30,20 @@ const initialState: FeedState = {
   feedType: 'all',
   sortBy: 'recent',
   lastFetched: null,
+  pendingRequests: {},
+  cacheKey: null,
+}
+
+// Helper function to generate cache key
+const generateCacheKey = (params: {
+  feedType?: string
+  sortBy?: string
+  page?: number
+  category?: string
+  userId?: string
+  currentUserId?: string
+}) => {
+  return `${params.feedType}-${params.sortBy}-${params.page}-${params.category}-${params.userId}-${params.currentUserId}`
 }
 
 // Async thunk for fetching feed posts using mobile API
@@ -56,11 +73,26 @@ export const fetchFeedPosts = createAsyncThunk(
         force = false
       } = params
 
+      // Generate cache key for this request
+      const cacheKey = generateCacheKey({ feedType, sortBy, page, category, userId, currentUserId })
+      
+      // Check if this exact request is already pending
+      if (state.feed.pendingRequests[cacheKey]) {
+        console.log('🔄 Feed request already pending, skipping:', cacheKey)
+        return { posts: state.feed.posts, hasMore: state.feed.hasMore, skipped: true }
+      }
+
       // Skip fetch if we have recent data and not forcing
       const now = Date.now()
-      if (!force && state.feed.posts.length > 0 && state.feed.lastFetched && (now - state.feed.lastFetched) < 30000) {
-        return { posts: state.feed.posts, hasMore: state.feed.hasMore }
+      const cacheAge = state.feed.lastFetched ? now - state.feed.lastFetched : Infinity
+      const cacheValid = cacheAge < 30000 // 30 seconds cache
+      
+      if (!force && state.feed.posts.length > 0 && cacheValid && state.feed.cacheKey === cacheKey) {
+        console.log('📦 Using cached feed data, age:', cacheAge, 'ms')
+        return { posts: state.feed.posts, hasMore: state.feed.hasMore, cached: true }
       }
+
+      console.log('🚀 Fetching feed data:', { feedType, sortBy, page, category, force })
 
       // Fetch posts using mobile API endpoint with proper media URL processing
       const apiParams = new URLSearchParams({
@@ -88,6 +120,7 @@ export const fetchFeedPosts = createAsyncThunk(
         sortBy,
         category,
         userId,
+        cacheKey,
       }
     } catch (error) {
       console.error('Error fetching feed posts:', error)
@@ -107,19 +140,34 @@ export const loadMorePosts = createAsyncThunk(
   ) => {
     try {
       const state = getState() as { feed: FeedState }
-      const { feedType, sortBy, category, userId, page } = state.feed
       const { currentUserId } = params
-      const nextPage = page + 1
+      
+      const nextPage = state.feed.page + 1
+      const cacheKey = generateCacheKey({
+        feedType: state.feed.feedType,
+        sortBy: state.feed.sortBy,
+        page: nextPage,
+        category: state.feed.category,
+        userId: state.feed.userId,
+        currentUserId
+      })
 
-      // Fetch more posts using mobile API endpoint with proper media URL processing
+      // Check if this request is already pending
+      if (state.feed.pendingRequests[cacheKey]) {
+        console.log('🔄 Load more request already pending, skipping')
+        return { posts: [], hasMore: false, skipped: true }
+      }
+
+      console.log('📄 Loading more posts, page:', nextPage)
+
       const apiParams = new URLSearchParams({
-        feedType: feedType === 'all' ? 'personalized' : feedType,
-        sortBy: sortBy === 'recent' ? 'createdAt' : sortBy,
+        feedType: state.feed.feedType === 'all' ? 'personalized' : state.feed.feedType,
+        sortBy: state.feed.sortBy === 'recent' ? 'createdAt' : state.feed.sortBy,
         page: nextPage.toString(),
         limit: '10'
       })
       
-      if (category) apiParams.append('category', category)
+      if (state.feed.category) apiParams.append('category', state.feed.category)
 
       const response = await fetch(`/api/v1/mobile/posts/feed?${apiParams}`)
       if (!response.ok) {
@@ -127,11 +175,11 @@ export const loadMorePosts = createAsyncThunk(
       }
       
       const data = await response.json()
-      const morePosts: Post[] = data.data?.posts || data.posts || []
+      const posts: Post[] = data.data?.posts || data.posts || []
 
       return {
-        posts: morePosts,
-        hasMore: morePosts.length >= 10,
+        posts,
+        hasMore: posts.length >= 10,
         page: nextPage,
       }
     } catch (error) {
@@ -151,6 +199,7 @@ const feedSlice = createSlice({
       state.page = 1
       state.hasMore = true
       state.lastFetched = null
+      state.cacheKey = null
     },
     setSortBy: (state, action: PayloadAction<'recent' | 'popular' | 'trending'>) => {
       state.sortBy = action.payload
@@ -158,6 +207,7 @@ const feedSlice = createSlice({
       state.page = 1
       state.hasMore = true
       state.lastFetched = null
+      state.cacheKey = null
     },
     setCategory: (state, action: PayloadAction<string | undefined>) => {
       state.category = action.payload
@@ -165,6 +215,7 @@ const feedSlice = createSlice({
       state.page = 1
       state.hasMore = true
       state.lastFetched = null
+      state.cacheKey = null
     },
     setUserId: (state, action: PayloadAction<string | undefined>) => {
       state.userId = action.payload
@@ -172,6 +223,7 @@ const feedSlice = createSlice({
       state.page = 1
       state.hasMore = true
       state.lastFetched = null
+      state.cacheKey = null
     },
     updatePost: (state, action: PayloadAction<Post>) => {
       const index = state.posts.findIndex(post => post.id === action.payload.id)
@@ -195,9 +247,18 @@ const feedSlice = createSlice({
       state.hasMore = true
       state.lastFetched = null
       state.error = null
+      state.cacheKey = null
+      state.pendingRequests = {}
     },
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload
+    },
+    // Add request tracking
+    addPendingRequest: (state, action: PayloadAction<string>) => {
+      state.pendingRequests[action.payload] = Date.now()
+    },
+    removePendingRequest: (state, action: PayloadAction<string>) => {
+      delete state.pendingRequests[action.payload]
     },
   },
   extraReducers: (builder) => {
@@ -208,10 +269,23 @@ const feedSlice = createSlice({
           state.isLoading = true
         }
         state.error = null
+        
+        // Track pending request
+        const cacheKey = generateCacheKey(action.meta.arg)
+        state.pendingRequests[cacheKey] = Date.now()
       })
       .addCase(fetchFeedPosts.fulfilled, (state, action) => {
         state.isLoading = false
         state.isRefreshing = false
+        
+        // Remove pending request
+        const cacheKey = generateCacheKey(action.meta.arg)
+        delete state.pendingRequests[cacheKey]
+        
+        // Skip if this was a duplicate request
+        if (action.payload.skipped) {
+          return
+        }
         
         // Deduplicate posts to ensure unique entries
         const uniquePosts = action.payload.posts.filter(
@@ -226,11 +300,17 @@ const feedSlice = createSlice({
         state.category = action.payload.category
         state.userId = action.payload.userId
         state.lastFetched = Date.now()
+        state.cacheKey = action.payload.cacheKey || null
         state.error = null
       })
       .addCase(fetchFeedPosts.rejected, (state, action) => {
         state.isLoading = false
         state.isRefreshing = false
+        
+        // Remove pending request
+        const cacheKey = generateCacheKey(action.meta.arg)
+        delete state.pendingRequests[cacheKey]
+        
         state.error = action.payload as string
       })
       // Load more posts cases
@@ -241,13 +321,18 @@ const feedSlice = createSlice({
       .addCase(loadMorePosts.fulfilled, (state, action) => {
         state.isLoadingMore = false
         
+        // Skip if this was a duplicate request
+        if (action.payload.skipped) {
+          return
+        }
+        
         // Deduplicate posts to prevent duplicate keys
         const existingPostIds = new Set(state.posts.map(post => post.id))
         const newPosts = action.payload.posts.filter(post => !existingPostIds.has(post.id))
         
         state.posts = [...state.posts, ...newPosts]
         state.hasMore = action.payload.hasMore
-        state.page = action.payload.page
+        state.page = action.payload.page || 1
         state.error = null
       })
       .addCase(loadMorePosts.rejected, (state, action) => {
@@ -257,16 +342,18 @@ const feedSlice = createSlice({
   },
 })
 
-export const {
-  setFeedType,
-  setSortBy,
-  setCategory,
-  setUserId,
-  updatePost,
-  addPost,
-  removePost,
-  clearFeed,
+export const { 
+  setFeedType, 
+  setSortBy, 
+  setCategory, 
+  setUserId, 
+  updatePost, 
+  addPost, 
+  removePost, 
+  clearFeed, 
   setError,
+  addPendingRequest,
+  removePendingRequest
 } = feedSlice.actions
 
 export default feedSlice.reducer 

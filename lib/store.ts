@@ -35,13 +35,16 @@ export const makeStore = () => {
           // Ignore these field paths in all actions
           ignoredActionsPaths: ['meta.arg', 'payload.timestamp'],
           // Ignore these paths in the state
-          ignoredPaths: ['posts.loadingLikes', 'posts.loadingSaves', 'posts.loadingShares', 'posts.loadingComments'],
+          ignoredPaths: ['posts.loadingLikes', 'posts.loadingSaves', 'posts.loadingShares', 'posts.loadingComments', 'feed.pendingRequests'],
         },
       }),
   })
   
   return store
 }
+
+// Create and export store instance for global access
+export const store = makeStore()
 
 // Infer the type of makeStore
 export type AppStore = ReturnType<typeof makeStore>

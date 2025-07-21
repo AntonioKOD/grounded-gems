@@ -223,46 +223,88 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         const processMediaUrl = (mediaItem: any): string | null => {
           if (!mediaItem) return null
           
+          console.log('📹 processMediaUrl: Processing media item:', {
+            type: typeof mediaItem,
+            isString: typeof mediaItem === 'string',
+            isObject: typeof mediaItem === 'object',
+            mediaItem: mediaItem
+          })
+          
           let url: string | null = null
           
-          if (typeof mediaItem === 'string') {
-            url = mediaItem
-          } else if (typeof mediaItem === 'object') {
+          // Handle string URLs
+          if (typeof mediaItem === 'string' && mediaItem.trim() !== '') {
+            url = mediaItem.trim()
+            console.log('📹 processMediaUrl: String URL:', url)
+          }
+          // Handle PayloadCMS media objects
+          else if (typeof mediaItem === 'object' && mediaItem !== null) {
+            console.log('📹 processMediaUrl: Object keys:', Object.keys(mediaItem))
+            
             // Try different URL sources in order of preference
-            url = mediaItem.url || 
-                  mediaItem.sizes?.card?.url || 
-                  mediaItem.sizes?.thumbnail?.url || 
-                  mediaItem.thumbnailURL ||
-                  (mediaItem.filename ? `/api/media/file/${mediaItem.filename}` : null)
+            if (mediaItem.url) {
+              url = mediaItem.url
+              console.log('📹 processMediaUrl: Found URL in mediaItem.url:', url)
+            } else if (mediaItem.filename) {
+              url = `/api/media/file/${mediaItem.filename}`
+              console.log('📹 processMediaUrl: Constructed URL from filename:', url)
+            } else if (mediaItem.sizes?.card?.url) {
+              url = mediaItem.sizes.card.url
+              console.log('📹 processMediaUrl: Found URL in mediaItem.sizes.card.url:', url)
+            } else if (mediaItem.sizes?.thumbnail?.url) {
+              url = mediaItem.sizes.thumbnail.url
+              console.log('📹 processMediaUrl: Found URL in mediaItem.sizes.thumbnail.url:', url)
+            } else if (mediaItem.thumbnailURL) {
+              url = mediaItem.thumbnailURL
+              console.log('📹 processMediaUrl: Found URL in mediaItem.thumbnailURL:', url)
+            } else if (mediaItem.id) {
+              // If we have an ID but no URL, construct the URL
+              url = `/api/media/file/${mediaItem.id}`
+              console.log('📹 processMediaUrl: Constructed URL from ID:', url)
+            }
           }
           
-          if (!url) return null
+          if (!url) {
+            console.log('📹 processMediaUrl: No URL found')
+            return null
+          }
           
-          // Fix CORS issues by ensuring URLs use the same domain as the current site
+          // Fix CORS issues by ensuring URLs use the same domain
           if (url.startsWith('/') && !url.startsWith('http')) {
-            // For relative URLs, ensure they're properly formatted
-            if (!url.startsWith('/api/media/')) {
-              url = `/api/media/file/${url.replace(/^\/+/, '')}`
-            }
+            const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+            url = `${baseUrl}${url}`
+            console.log('📹 processMediaUrl: Added base URL:', url)
           } else if (url.startsWith('http')) {
-            // Fix cross-origin issues by replacing www.sacavia.com with sacavia.com
-            // or vice versa to match the current domain
             try {
-              const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'sacavia.com'
+              const currentDomain = 'sacavia.com' // Default domain
               const urlObj = new URL(url)
               
               if (urlObj.hostname === 'www.sacavia.com' && currentDomain === 'sacavia.com') {
-                urlObj.hostname = 'sacavia.com'
-                url = urlObj.toString()
-              } else if (urlObj.hostname === 'sacavia.com' && currentDomain === 'www.sacavia.com') {
-                urlObj.hostname = 'www.sacavia.com'
-                url = urlObj.toString()
+                // Fix CORS issues by normalizing www/non-www between sacavia.com and www.sacavia.com
+                // Always match the base domain (from NEXT_PUBLIC_SITE_URL if available)
+                const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://sacavia.com';
+                try {
+                  const baseDomain = new URL(baseUrl).hostname.replace(/^www\./, '');
+                  const urlDomain = urlObj.hostname.replace(/^www\./, '');
+                  if (urlDomain === baseDomain) {
+                    // Make sure www matches base
+                    if (/^www\./.test(new URL(baseUrl).hostname)) {
+                      urlObj.hostname = `www.${baseDomain}`;
+                    } else {
+                      urlObj.hostname = baseDomain;
+                    }
+                    url = urlObj.toString();
+                  }
+                } catch (e) {
+                  // fallback: do nothing
+                }
+                console.log('📹 processMediaUrl: Fixed CORS URL:', url)
               }
             } catch (error) {
-              console.warn('Error processing media URL:', error)
+              console.warn('📹 processMediaUrl: Error processing media URL:', error)
             }
           }
-          
+          console.log('📹 processMediaUrl: Final URL:', url)
           return url
         }
         
@@ -283,7 +325,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         // Add video if exists - reels-style (no thumbnail)
         let videoItem = null
         if (post.video) {
+          console.log(`📹 Processing video for post ${post.id}:`, {
+            videoType: typeof post.video,
+            videoKeys: typeof post.video === 'object' ? Object.keys(post.video) : 'N/A',
+            video: post.video
+          })
+          
           const videoUrl = processMediaUrl(post.video)
+          console.log(`📹 Video URL for post ${post.id}:`, videoUrl)
+          
           if (videoUrl) {
             videoItem = {
               type: 'video',
@@ -294,7 +344,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
               alt: 'Post video'
             }
             console.log(`📹 Added video to post ${post.id}:`, videoItem)
+          } else {
+            console.log(`📹 Failed to process video URL for post ${post.id}`)
           }
+        } else {
+          console.log(`📹 No video found for post ${post.id}`)
         }
 
         // Add photos array if exists, skipping duplicates
