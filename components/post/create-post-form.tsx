@@ -818,70 +818,63 @@ export default function CreatePostForm({
                 className="space-y-3"
               >
                 <h4 className="text-sm font-medium text-gray-700">Media Preview</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-2xl max-w-lg mx-auto">
+                <div
+                  className="grid grid-cols-3 gap-2 p-2 bg-gray-50 rounded-2xl max-w-xs mx-auto overflow-y-auto"
+                  style={{ maxHeight: '210px', minHeight: '96px' }}
+                >
                   {previewUrls.map((url, index) => {
                     const file = selectedFiles[index]
                     const isVideo = file?.type.startsWith('video/')
-                    
                     return (
                       <motion.div
                         key={index}
                         initial={{ opacity: 0, scale: 0.8 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="relative aspect-square rounded-xl overflow-hidden group bg-gray-100"
-                        style={{ maxHeight: '140px' }}
+                        className="relative aspect-square rounded-lg overflow-hidden group bg-gray-100"
+                        style={{ maxHeight: '96px', minHeight: '96px', minWidth: '96px', maxWidth: '96px' }}
                       >
-                              {isVideo ? (
-          <>
-            <video 
-              src={url} 
-              className="w-full h-full object-cover" 
-              autoPlay
-              muted 
-              loop
-              playsInline
-              preload="auto"
-              onClick={(e) => {
-                e.stopPropagation()
-                const video = e.currentTarget
-                if (video.muted) {
-                  video.muted = false
-                } else {
-                  video.muted = true
-                }
-              }}
-            />
-            {/* Sound indicator - tap to unmute */}
-            <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-              <Video className="h-3 w-3" />
-              <span className="text-[10px]">TAP</span>
-            </div>
-          </>
-        ) : (
+                        {isVideo ? (
+                          <>
+                            <video 
+                              src={url} 
+                              className="w-full h-full object-cover" 
+                              autoPlay
+                              muted 
+                              loop
+                              playsInline
+                              preload="auto"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const video = e.currentTarget
+                                video.muted = !video.muted
+                              }}
+                            />
+                            <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 py-0.5 rounded flex items-center gap-1">
+                              <Video className="h-3 w-3" />
+                              <span className="text-[10px]">TAP</span>
+                            </div>
+                          </>
+                        ) : (
                           <Image 
                             src={url} 
                             alt={`Preview ${index + 1}`} 
                             fill 
                             className="object-cover" 
-                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 140px"
+                            sizes="96px"
                           />
                         )}
-                        
-                        {/* Remove button - larger for mobile */}
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             removeFile(index)
                           }}
-                          className="absolute top-2 right-2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ minHeight: '32px', minWidth: '32px' }}
+                          className="absolute top-1 right-1 w-6 h-6 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ minHeight: '24px', minWidth: '24px' }}
                         >
-                          <X className="h-4 w-4" />
+                          <X className="h-3 w-3" />
                         </button>
-                        
-                        {/* File type indicator */}
-                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                        <div className="absolute bottom-1 left-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded-full">
                           {isVideo ? (
                             <span className="flex items-center gap-1">
                               <Video className="h-3 w-3" />
@@ -896,15 +889,11 @@ export default function CreatePostForm({
                             'IMG'
                           )}
                         </div>
-                        
-                        {/* Video duration */}
                         {isVideo && videoDurations[index] && (
-                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                          <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 py-0.5 rounded-full">
                             {videoDurations[index]}
                           </div>
                         )}
-                        
-
                       </motion.div>
                     )
                   })}
