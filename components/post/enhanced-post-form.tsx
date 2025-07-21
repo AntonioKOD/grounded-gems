@@ -675,6 +675,21 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
 
       </AnimatePresence>
 
+      {/* Live Photo Warning */}
+      <motion.div
+        initial={{ opacity: 0, height: 0 }}
+        animate={{ opacity: 1, height: "auto" }}
+        exit={{ opacity: 0, height: 0 }}
+        className="p-4"
+      >
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertCircle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
+            <strong>Live Photos Not Supported:</strong> iPhone Live Photos (HEIC/HEIF format) are not yet supported. Please convert to regular photos before uploading. Support coming soon!
+          </AlertDescription>
+        </Alert>
+      </motion.div>
+
       {/* Content Input */}
       <div className="flex-1 p-4 space-y-4">
         {/* Content Textarea */}
@@ -721,15 +736,22 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
           {(previewUrls.length > 0 || videoPreviewUrls.length > 0) ? (
             // Show previews with enhanced mobile grid
             <div className="space-y-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-w-2xl mx-auto">
                 {previewUrls.map((url, index) => (
                   <motion.div
                     key={`image-${index}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="relative aspect-square rounded-2xl overflow-hidden group"
+                    className="relative aspect-square rounded-2xl overflow-hidden group bg-gray-100"
+                    style={{ maxHeight: '160px' }}
                   >
-                    <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
+                    <Image 
+                      src={url} 
+                      alt={`Preview ${index + 1}`} 
+                      fill 
+                      className="object-cover" 
+                      sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 160px"
+                    />
                     <button
                       type="button"
                       onClick={() => removeFile(index, 'image')}
@@ -749,7 +771,8 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
                     key={`video-${index}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="relative aspect-square rounded-2xl overflow-hidden group"
+                    className="relative aspect-square rounded-2xl overflow-hidden group bg-gray-100"
+                    style={{ maxHeight: '160px' }}
                   >
                     <video src={url} className="w-full h-full object-cover" muted playsInline />
                     <button
@@ -774,8 +797,8 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
                   <motion.button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-gray-400 transition-colors"
-                    style={{ minHeight: '44px' }}
+                    className="aspect-square rounded-2xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center hover:border-gray-400 transition-colors bg-gray-50"
+                    style={{ minHeight: '44px', maxHeight: '160px' }}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
@@ -1146,20 +1169,29 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
 
           {/* Media preview */}
           {(previewUrls.length > 0 || videoPreviewUrls.length > 0) && (
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {previewUrls.slice(0, 4).map((url, index) => (
-                <div key={`preview-${index}`} className="aspect-square rounded-lg overflow-hidden">
-                  <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
-                </div>
-              ))}
-              {videoPreviewUrls.slice(0, 2).map((url, index) => (
-                <div key={`video-preview-${index}`} className="aspect-square rounded-lg overflow-hidden relative">
-                  <video src={url} className="w-full h-full object-cover" muted />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                    <Video className="h-8 w-8 text-white" />
+            <div className="space-y-3">
+              <h4 className="text-sm font-medium text-gray-700">Media Preview</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-w-md mx-auto">
+                {previewUrls.slice(0, 6).map((url, index) => (
+                  <div key={`preview-${index}`} className="aspect-square rounded-lg overflow-hidden bg-gray-100" style={{ maxHeight: '120px' }}>
+                    <Image 
+                      src={url} 
+                      alt={`Preview ${index + 1}`} 
+                      fill 
+                      className="object-cover" 
+                      sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 120px"
+                    />
                   </div>
-                </div>
-              ))}
+                ))}
+                {videoPreviewUrls.slice(0, 3).map((url, index) => (
+                  <div key={`video-preview-${index}`} className="aspect-square rounded-lg overflow-hidden relative bg-gray-100" style={{ maxHeight: '120px' }}>
+                    <video src={url} className="w-full h-full object-cover" muted />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                      <Video className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1345,7 +1377,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
       <input
         ref={cameraInputRef}
         type="file"
-        accept="image/*,video/*"
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/bmp,image/tiff,image/tif,image/ico,image/x-icon,image/vnd.microsoft.icon,image/jp2,image/jpx,image/jpm,image/psd,image/raw,image/x-portable-bitmap,image/x-portable-pixmap,video/*"
         capture="environment"
         multiple={false}
         onChange={handleFileChange}
@@ -1355,7 +1387,7 @@ export function EnhancedPostForm({ user, onPostCreated, onCancel, onClose, class
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*,video/*,.mp4,.webm,.ogg,.mov,.avi,.m4v,.3gp,.flv,.wmv,.mkv"
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/bmp,image/tiff,image/tif,image/ico,image/x-icon,image/vnd.microsoft.icon,image/jp2,image/jpx,image/jpm,image/psd,image/raw,image/x-portable-bitmap,image/x-portable-pixmap,video/*,.mp4,.webm,.ogg,.mov,.avi,.m4v,.3gp,.flv,.wmv,.mkv"
         multiple
         onChange={handleFileChange}
         className="hidden"

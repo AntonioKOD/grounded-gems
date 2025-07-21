@@ -60,7 +60,7 @@ import type {
   BucketList, 
   LocationDetailMobileProps,
   WriteReviewModalProps,
-  AddToBucketListModalProps,
+
   Media
 } from "./location-detail-types"
 import {
@@ -236,15 +236,11 @@ function ImageGallery({
 function LocationInfo({ 
   location, 
   onWriteReview, 
-  onAddToBucketList,
-  onAddPhoto,
-  isLoadingBucketLists 
+  onAddPhoto
 }: { 
   location: Location
   onWriteReview: () => void
-  onAddToBucketList: () => void
   onAddPhoto: () => void
-  isLoadingBucketLists: boolean
 }) {
   // Using shared utility functions for formatting
 
@@ -369,18 +365,7 @@ function LocationInfo({
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Button
-          onClick={onAddToBucketList}
-          disabled={isLoadingBucketLists}
-          className="h-14 rounded-xl bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 border-0"
-        >
-          {isLoadingBucketLists ? (
-            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-          ) : (
-            <Crown className="h-5 w-5 mr-2" />
-          )}
-          <span className="text-sm">Add to List</span>
-        </Button>
+
         <Button
           onClick={onAddPhoto}
           variant="outline"
@@ -1362,298 +1347,11 @@ function CommunityPhotosTab({
   )
 }
 
-function AddToBucketListModal({
-  isOpen,
-  onClose,
-  location,
-  userBucketLists,
-  onSuccess,
-}: AddToBucketListModalProps) {
-  const [selectedListId, setSelectedListId] = useState<string>('')
-  const [goal, setGoal] = useState('')
-  const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium')
-  const [isAdding, setIsAdding] = useState(false)
 
-  // Reset form when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setSelectedListId('')
-      setGoal('')
-      setPriority('medium')
-      setIsAdding(false)
-    }
-  }, [isOpen])
-
-  if (!isOpen) return null
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    console.log('Bucket list form submission started (mobile)')
-    console.log('Selected list ID (mobile):', selectedListId)
-    console.log('Location (mobile):', location)
-    console.log('Goal (mobile):', goal)
-    console.log('Priority (mobile):', priority)
-    console.log('Available bucket lists (mobile):', userBucketLists)
-    
-    if (!selectedListId || !location) {
-      toast.error('Please select a bucket list')
-      return
-    }
-
-    setIsAdding(true)
-    try {
-      const requestBody = {
-        location: location.id,
-        goal: goal.trim() || `Visit ${location.name}`,
-        priority,
-        status: 'not_started'
-      }
-      
-      console.log('Sending request to (mobile):', `/api/bucket-lists/${selectedListId}/items`)
-      console.log('Request body (mobile):', requestBody)
-      
-      const response = await fetch(`/api/bucket-lists/${selectedListId}/items`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(requestBody),
-      })
-
-      console.log('Response status (mobile):', response.status)
-      const data = await response.json()
-      console.log('Response data (mobile):', data)
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to add to bucket list')
-      }
-
-      toast.success(`Added "${location.name}" to your bucket list!`)
-      onSuccess()
-      onClose()
-    } catch (error) {
-      console.error('Error adding to bucket list (mobile):', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to add to bucket list')
-    } finally {
-      setIsAdding(false)
-    }
-  }
-
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Responsive Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100000] flex items-center justify-center p-4"
-            onClick={onClose}
-            style={{ zIndex: 100000 }}
-          >
-            {/* Responsive Modal Container */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto border border-[#4ecdc4]/20 bucket-list-modal"
-              style={{ zIndex: 100001 }}
-              onClick={(e) => e.stopPropagation()} // Prevent backdrop click when clicking inside modal
-            >
-              <div className="p-6">
-                {/* Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-[#ff6b6b]">
-                    <Crown className="h-5 w-5 text-[#ffe66d]" />
-                    <h2 className="text-lg font-semibold">Add to Bucket List</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onClose}
-                    className="hover:bg-gray-100 text-gray-600 rounded-full h-8 w-8"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {location && (
-                  <p className="text-sm text-gray-600 mb-6">
-                    Adding "{location.name}" to your bucket list
-                  </p>
-                )}
-
-                {userBucketLists.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Crown className="h-16 w-16 mx-auto text-[#ff6b6b]/50 mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No Bucket Lists Yet</h3>
-                    <p className="text-gray-600 mb-6">Create your first bucket list to start collecting amazing places!</p>
-                    <Button
-                      onClick={() => {
-                        onClose()
-                        try {
-                          if (typeof window !== 'undefined') {
-                            const newWindow = window.open('/bucket-list', '_blank')
-                            if (!newWindow) {
-                              // Fallback to same window if popup blocked
-                              window.location.href = '/bucket-list'
-                            }
-                          }
-                        } catch (error) {
-                          console.error('Error navigating to bucket list:', error)
-                          toast.error('Unable to open bucket list page')
-                        }
-                      }}
-                      className="bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white px-6 py-3 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-200"
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Your First Bucket List
-                    </Button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    {/* Bucket List Selection */}
-                    <div>
-                      <Label htmlFor="bucket-list" className="text-gray-700 font-medium mb-2 block">
-                        Choose Bucket List ({userBucketLists.length} available)
-                      </Label>
-                      <Select value={selectedListId} onValueChange={setSelectedListId}>
-                        <SelectTrigger className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 h-12 rounded-xl">
-                          <SelectValue placeholder="Select a bucket list..." />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-60 z-[100002]" style={{ zIndex: 100002 }}>
-                          {userBucketLists.map((list) => (
-                            <SelectItem key={list.id} value={list.id} className="py-3">
-                              <div className="flex items-center gap-3 w-full">
-                                <Target className="h-4 w-4 text-[#4ecdc4] flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-gray-900">{list.name}</div>
-                                  <div className="text-xs text-gray-500 mt-1 flex items-center gap-2">
-                                    <span>{list.stats.completedItems}/{list.stats.totalItems} completed</span>
-                                    {list.type && (
-                                      <>
-                                        <span>•</span>
-                                        <span className="capitalize">{list.type}</span>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="text-xs text-[#4ecdc4] font-medium">
-                                  {Math.round((list.stats.completedItems / list.stats.totalItems) * 100) || 0}%
-                                </div>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Goal Input */}
-                    <div>
-                      <Label htmlFor="goal" className="text-gray-700 font-medium mb-2 block">
-                        Personal Goal (Optional)
-                      </Label>
-                      <Textarea
-                        id="goal"
-                        value={goal}
-                        onChange={(e) => setGoal(e.target.value)}
-                        placeholder={`e.g., Try their famous burger, Visit during sunset, Take photos with friends`}
-                        rows={3}
-                        className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 rounded-xl resize-none"
-                      />
-                    </div>
-
-                    {/* Priority Selection */}
-                    <div>
-                      <Label htmlFor="priority" className="text-gray-700 font-medium mb-2 block">
-                        Priority Level
-                      </Label>
-                      <Select value={priority} onValueChange={(value: 'low' | 'medium' | 'high') => setPriority(value)}>
-                        <SelectTrigger className="w-full border-[#4ecdc4]/30 focus:border-[#4ecdc4] focus:ring-[#4ecdc4]/20 h-12 rounded-xl">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent className="z-[100002]" style={{ zIndex: 100002 }}>
-                          <SelectItem value="low" className="py-3">
-                            <span className="flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                              <div>
-                                <div className="font-medium">Low Priority</div>
-                                <div className="text-xs text-gray-500">Visit when convenient</div>
-                              </div>
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="medium" className="py-3">
-                            <span className="flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full bg-[#ffe66d]"></div>
-                              <div>
-                                <div className="font-medium">Medium Priority</div>
-                                <div className="text-xs text-gray-500">Plan to visit soon</div>
-                              </div>
-                            </span>
-                          </SelectItem>
-                          <SelectItem value="high" className="py-3">
-                            <span className="flex items-center gap-3">
-                              <div className="w-3 h-3 rounded-full bg-[#ff6b6b]"></div>
-                              <div>
-                                <div className="font-medium">High Priority</div>
-                                <div className="text-xs text-gray-500">Must visit ASAP!</div>
-                              </div>
-                            </span>
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-3 pt-4">
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        onClick={onClose} 
-                        disabled={isAdding}
-                        className="flex-1 border-gray-300 text-gray-700 hover:bg-gray-50 h-12 rounded-xl font-medium"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={isAdding || !selectedListId}
-                        className="flex-1 bg-gradient-to-r from-[#ff6b6b] to-[#4ecdc4] hover:from-[#ff5555] hover:to-[#3dbdb4] text-white border-0 shadow-lg hover:shadow-xl transition-all duration-200 h-12 rounded-xl font-medium"
-                      >
-                        {isAdding ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add to List
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
-    document.body
-  )
-}
 
 export default function LocationDetailMobile({ location, isOpen, onClose }: LocationDetailMobileProps) {
   const [user, setUser] = useState<User | null>(null)
-  const [userBucketLists, setUserBucketLists] = useState<BucketList[]>([])
-  const [isBucketModalOpen, setIsBucketModalOpen] = useState(false)
-  const [isLoadingBucketLists, setIsLoadingBucketLists] = useState(false)
+
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([])
   const [isLoadingReviews, setIsLoadingReviews] = useState(false)
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false)
@@ -1682,17 +1380,13 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
   }, [isOpen, location, mounted])
 
-  useEffect(() => {
-    if (user) {
-      loadUserBucketLists()
-    }
-  }, [user])
+
 
   // Handle cleanup when modal closes
   useEffect(() => {
     if (!isOpen) {
       setError(null)
-      setIsBucketModalOpen(false)
+
       setIsWriteReviewModalOpen(false)
       setIsSubmitTipModalOpen(false)
     }
@@ -1705,14 +1399,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     }
   }
 
-  const loadUserBucketLists = async () => {
-    if (!user) return
-    
-    setIsLoadingBucketLists(true)
-    const bucketLists = await fetchUserBucketLists(user.id)
-    setUserBucketLists(bucketLists)
-    setIsLoadingBucketLists(false)
-  }
+
 
   const loadReviews = async () => {
     if (!location) return
@@ -1753,19 +1440,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
     setIsWriteReviewModalOpen(true)
   }
 
-  const handleAddToBucketList = () => {
-    if (!user) {
-      toast.error('Please log in to add to bucket list')
-      return
-    }
-    
-    if (isLoadingBucketLists) {
-      toast.info('Loading your bucket lists...')
-      return
-    }
-    
-    setIsBucketModalOpen(true)
-  }
+
 
   const handleAddPhoto = () => {
     if (!user) {
@@ -1995,9 +1670,9 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
                 <LocationInfo 
                   location={location} 
                   onWriteReview={handleWriteReview}
-                  onAddToBucketList={handleAddToBucketList}
+          
                   onAddPhoto={handleAddPhoto}
-                  isLoadingBucketLists={isLoadingBucketLists}
+                  
                 />
 
                 {/* Action buttons are already included in LocationInfo component - no duplicate needed */}
@@ -2290,17 +1965,7 @@ export default function LocationDetailMobile({ location, isOpen, onClose }: Loca
             }}
           />
 
-          {/* Add to Bucket List Modal */}
-          <AddToBucketListModal
-            isOpen={isBucketModalOpen}
-            onClose={() => setIsBucketModalOpen(false)}
-            location={location}
-            userBucketLists={userBucketLists}
-            onSuccess={() => {
-              loadUserBucketLists()
-              setIsBucketModalOpen(false)
-            }}
-          />
+
 
           {/* Photo Submission Modal */}
           <PhotoSubmissionModal

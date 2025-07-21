@@ -714,6 +714,21 @@ export default function CreatePostForm({
             )}
           </AnimatePresence>
 
+          {/* Live Photo Warning */}
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4"
+          >
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800">
+                <strong>Live Photos Not Supported:</strong> iPhone Live Photos (HEIC/HEIF format) are not yet supported. Please convert to regular photos before uploading. Support coming soon!
+              </AlertDescription>
+            </Alert>
+          </motion.div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* User Header */}
             <div className="flex items-center gap-3">
@@ -784,90 +799,100 @@ export default function CreatePostForm({
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-2xl"
+                className="space-y-3"
               >
-                {previewUrls.map((url, index) => {
-                  const file = selectedFiles[index]
-                  const isVideo = file?.type.startsWith('video/')
-                  
-                  return (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="relative aspect-square rounded-xl overflow-hidden group"
-                    >
-                            {isVideo ? (
-        <>
-          <video 
-            src={url} 
-            className="w-full h-full object-cover" 
-            autoPlay
-            muted 
-            loop
-            playsInline
-            preload="auto"
-            onClick={(e) => {
-              e.stopPropagation()
-              const video = e.currentTarget
-              if (video.muted) {
-                video.muted = false
-              } else {
-                video.muted = true
-              }
-            }}
-          />
-          {/* Sound indicator - tap to unmute */}
-          <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-            <Video className="h-3 w-3" />
-            <span className="text-[10px]">TAP</span>
-          </div>
-        </>
-      ) : (
-                        <Image src={url} alt={`Preview ${index + 1}`} fill className="object-cover" />
-                      )}
-                      
-                      {/* Remove button - larger for mobile */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          removeFile(index)
-                        }}
-                        className="absolute top-2 right-2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ minHeight: '32px', minWidth: '32px' }}
+                <h4 className="text-sm font-medium text-gray-700">Media Preview</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 bg-gray-50 rounded-2xl max-w-lg mx-auto">
+                  {previewUrls.map((url, index) => {
+                    const file = selectedFiles[index]
+                    const isVideo = file?.type.startsWith('video/')
+                    
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="relative aspect-square rounded-xl overflow-hidden group bg-gray-100"
+                        style={{ maxHeight: '140px' }}
                       >
-                        <X className="h-4 w-4" />
-                      </button>
-                      
-                      {/* File type indicator */}
-                      <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                        {isVideo ? (
-                          <span className="flex items-center gap-1">
-                            <Video className="h-3 w-3" />
-                            VID
-                          </span>
-                        ) : file?.type === 'image/heic' || file?.type === 'image/heif' ? (
-                          <span className="flex items-center gap-1">
-                            <Upload className="h-3 w-3" />
-                            LIVE
-                          </span>
-                        ) : (
-                          'IMG'
+                              {isVideo ? (
+          <>
+            <video 
+              src={url} 
+              className="w-full h-full object-cover" 
+              autoPlay
+              muted 
+              loop
+              playsInline
+              preload="auto"
+              onClick={(e) => {
+                e.stopPropagation()
+                const video = e.currentTarget
+                if (video.muted) {
+                  video.muted = false
+                } else {
+                  video.muted = true
+                }
+              }}
+            />
+            {/* Sound indicator - tap to unmute */}
+            <div className="absolute top-2 right-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+              <Video className="h-3 w-3" />
+              <span className="text-[10px]">TAP</span>
+            </div>
+          </>
+        ) : (
+                          <Image 
+                            src={url} 
+                            alt={`Preview ${index + 1}`} 
+                            fill 
+                            className="object-cover" 
+                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 140px"
+                          />
                         )}
-                      </div>
-                      
-                      {/* Video duration */}
-                      {isVideo && videoDurations[index] && (
-                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
-                          {videoDurations[index]}
+                        
+                        {/* Remove button - larger for mobile */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            removeFile(index)
+                          }}
+                          className="absolute top-2 right-2 w-8 h-8 bg-black/70 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ minHeight: '32px', minWidth: '32px' }}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                        
+                        {/* File type indicator */}
+                        <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                          {isVideo ? (
+                            <span className="flex items-center gap-1">
+                              <Video className="h-3 w-3" />
+                              VID
+                            </span>
+                          ) : file?.type === 'image/heic' || file?.type === 'image/heif' ? (
+                            <span className="flex items-center gap-1">
+                              <Upload className="h-3 w-3" />
+                              LIVE
+                            </span>
+                          ) : (
+                            'IMG'
+                          )}
                         </div>
-                      )}
-                      
+                        
+                        {/* Video duration */}
+                        {isVideo && videoDurations[index] && (
+                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+                            {videoDurations[index]}
+                          </div>
+                        )}
+                        
 
-                    </motion.div>
-                  )
-                })}
+                      </motion.div>
+                    )
+                  })}
+                </div>
               </motion.div>
             )}
 
@@ -1133,7 +1158,7 @@ export default function CreatePostForm({
             <input
               ref={cameraInputRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/bmp,image/tiff,image/tif,image/ico,image/x-icon,image/vnd.microsoft.icon,image/jp2,image/jpx,image/jpm,image/psd,image/raw,image/x-portable-bitmap,image/x-portable-pixmap,video/*"
               capture="environment"
               onChange={handleFileChange}
               className="hidden"
@@ -1142,7 +1167,7 @@ export default function CreatePostForm({
             <input
               ref={imageInputRef}
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif,image/svg+xml,image/avif,image/bmp,image/tiff,image/tif,image/ico,image/x-icon,image/vnd.microsoft.icon,image/jp2,image/jpx,image/jpm,image/psd,image/raw,image/x-portable-bitmap,image/x-portable-pixmap"
               multiple
               onChange={handleFileChange}
               className="hidden"
