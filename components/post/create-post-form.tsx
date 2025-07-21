@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { upload } from '@vercel/blob/client'
+import heic2any from "heic2any";
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -214,27 +215,42 @@ export default function CreatePostForm({
           continue
         }
         
-              // Validate image format - comprehensive support for modern and legacy formats (excluding Live Photos)
-      const allowedImageTypes = [
-        'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-        'image/avif', 'image/bmp', 'image/tiff', 'image/tif',
-        'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
-        'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
-      ]
-      if (!allowedImageTypes.includes(file.type.toLowerCase())) {
-        console.log(`📝 Invalid image type: ${file.type}`)
-        toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, BMP, TIFF, ICO, and more. Live Photos (HEIC/HEIF) are not yet supported.`)
-        continue
-      }
-
-      // Check if this is a HEIC/HEIF file (Live Photos) - currently not supported
-      const isHeic = file.type === 'image/heic' || file.type === 'image/heif'
-      if (isHeic) {
-        console.log(`📸 Live Photo detected but not supported: ${file.name}`)
-        toast.error(`${file.name} is a Live Photo. Please convert to regular photo before uploading. Live Photo support is coming soon!`)
-        continue // Skip this file
-      }
-        
+        // Validate image format - comprehensive support for modern and legacy formats (excluding Live Photos)
+        const allowedImageTypes = [
+          'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+          'image/avif', 'image/bmp', 'image/tiff', 'image/tif',
+          'image/ico', 'image/x-icon', 'image/vnd.microsoft.icon', 'image/jp2', 'image/jpx',
+          'image/jpm', 'image/psd', 'image/raw', 'image/x-portable-bitmap', 'image/x-portable-pixmap'
+        ]
+        // Check if this is a HEIC/HEIF file (Live Photos)
+        const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif');
+        if (isHeic) {
+          try {
+            toast.info(`Converting ${file.name} to JPEG...`);
+            const jpegBlob = await heic2any({
+              blob: file,
+              toType: "image/jpeg",
+              quality: 0.8,
+            });
+            const jpegFile = new File(
+              [jpegBlob],
+              file.name.replace(/\.(heic|heif)$/i, ".jpg"),
+              { type: "image/jpeg" }
+            );
+            validFiles.push(jpegFile);
+            newPreviewUrls.push(URL.createObjectURL(jpegFile));
+            toast.success(`${file.name} converted to JPEG!`);
+          } catch (err) {
+            toast.error(`Failed to convert ${file.name}: ${err instanceof Error ? err.message : err}`);
+            continue;
+          }
+          continue; // Skip the rest of the image logic for this file
+        }
+        if (!allowedImageTypes.includes(file.type.toLowerCase())) {
+          console.log(`📝 Invalid image type: ${file.type}`)
+          toast.error(`${file.name} is not a supported image format. Supported formats: JPEG, PNG, WebP, GIF, SVG, AVIF, BMP, TIFF, ICO, and more.`)
+          continue
+        }
         console.log(`📝 Image file validated: ${file.name}`)
       } else if (file.type.startsWith('video/')) {
         console.log(`📝 Processing video file: ${file.name}`)
