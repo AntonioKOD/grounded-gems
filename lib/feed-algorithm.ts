@@ -404,7 +404,15 @@ export class FeedAlgorithm {
         return []
       }
 
-      return posts.docs.map((post: any) => {
+      // Filter out posts with private locations
+      const filteredPosts = posts.docs.filter((post: any) => {
+        if (post.location && post.location.privacy && post.location.privacy.toLowerCase() === 'private') {
+          return false
+        }
+        return true
+      })
+
+      return filteredPosts.map((post: any) => {
         // Check if user has liked or saved this post
         const isLiked = userLikedPosts.includes(post.id)
         const isSaved = userSavedPosts.includes(post.id)
@@ -788,9 +796,17 @@ export class FeedAlgorithm {
         return []
       }
 
+      // Filter out private locations
+      const filteredLocations = locations.docs.filter((location: any) => {
+        if (location.privacy && location.privacy.toLowerCase() === 'private') {
+          return false
+        }
+        return true
+      })
+
       const theme = this.getPlaceTheme(timeOfDay, weather)
 
-      return locations.docs.map((location: any) => ({
+      return filteredLocations.map((location: any) => ({
         id: `place_${location.id}`,
         type: 'place_recommendation',
         createdAt: location.createdAt,

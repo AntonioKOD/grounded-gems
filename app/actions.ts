@@ -44,32 +44,47 @@ export async function getReviewsbyId(id: string) {
 
 
 
-export async function getLocations() {
+export async function getLocations(userId?: string) {
   try {
     const payload = await getPayload({ config: config })
 
+    // Build access-aware where clause
+    let where: any = {
+      or: [
+        { privacy: { equals: 'public' }, status: { equals: 'published' } },
+      ]
+    }
+
+    // If userId is provided, allow access to their private/created locations
+    if (userId) {
+      // Get user to check role
+      const user = await payload.findByID({ collection: 'users', id: userId })
+      if (user && user.role === 'admin') {
+        // Admins can see all
+        where = {}
+      } else {
+        where.or.push(
+          { privacy: { equals: 'private' }, privateAccess: { in: [userId] } },
+          { createdBy: { equals: userId } }
+        )
+      }
+    }
+
     // Fetch locations with categories and other related fields
     const result = await payload.find({
-      collection: "locations",
+      collection: 'locations',
       depth: 2, // Increase depth to get related fields like categories
       limit: 100,
-      overrideAccess: true,
+      where,
     })
 
-    console.log(`Fetched ${result.docs?.length || 0} locations from Payload CMS`)
+    console.log(`Fetched ${result.docs?.length || 0} locations from Payload CMS (filtered)`)
 
     // Process the locations to ensure they have the required fields
     const processedLocations = result.docs.map((location) => {
       // Extract coordinates
       const latitude = location.coordinates?.latitude || null
       const longitude = location.coordinates?.longitude || null
-
-      // Log coordinates for debugging
-      if (latitude && longitude) {
-        console.log(`Location "${location.name}" coordinates: [${latitude}, ${longitude}]`)
-      } else {
-        console.warn(`Location "${location.name}" is missing coordinates`)
-      }
 
       // Format the address
       let formattedAddress = ""
@@ -114,7 +129,7 @@ export async function getLocations() {
         !!loc.status
     )
 
-    console.log(`Returning ${validLocations.length} valid locations`)
+    console.log(`Returning ${validLocations.length} valid locations (filtered)`)
 
     return validLocations
   } catch (error) {

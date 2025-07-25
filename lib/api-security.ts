@@ -363,17 +363,5 @@ export async function validateContent(content: string): Promise<{ isValid: boole
   }
 }
 
-export default {
-  withRateLimit,
-  withAuth,
-  withValidation,
-  withCORS,
-  withSecurityHeaders,
-  withErrorHandling,
-  withAdminAccess,
-  createSecureHandler,
-  trackLoginAttempt,
-  isIPLockedOut,
-  validateContent,
-  getClientIP
-} 
+// Removed default export to fix "use server" compatibility
+// Use named imports instead: import { functionName } from '@/lib/api-security' 

@@ -107,14 +107,39 @@ export async function POST(
     // Add user to likes array
     const newLikes = [...currentLikes.map((like: any) => typeof like === 'string' ? like : like.id), user.id]
     
-    // Update the post with new likes
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: {
-        likes: newLikes,
-      },
-    })
+    // Update the post with new likes - with retry logic for write conflicts
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount < maxRetries) {
+      try {
+        await payload.update({
+          collection: 'posts',
+          id: postId,
+          data: {
+            likes: newLikes,
+          },
+        })
+        break // Success, exit retry loop
+      } catch (error: any) {
+        retryCount++
+        console.log(`Like update attempt ${retryCount} failed:`, error.message)
+        
+        // Check if it's a write conflict
+        if (error.code === 112 || error.codeName === 'WriteConflict') {
+          if (retryCount >= maxRetries) {
+            console.error('Max retries reached for like operation')
+            throw error
+          }
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+          continue
+        } else {
+          // Not a write conflict, don't retry
+          throw error
+        }
+      }
+    }
 
     const newLikeCount = newLikes.length
 
@@ -242,14 +267,39 @@ export async function DELETE(
       .map((like: any) => typeof like === 'string' ? like : like.id)
       .filter((likeId: string) => likeId !== user.id)
     
-    // Update the post with new likes
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: {
-        likes: newLikes,
-      },
-    })
+    // Update the post with new likes - with retry logic for write conflicts
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount < maxRetries) {
+      try {
+        await payload.update({
+          collection: 'posts',
+          id: postId,
+          data: {
+            likes: newLikes,
+          },
+        })
+        break // Success, exit retry loop
+      } catch (error: any) {
+        retryCount++
+        console.log(`Unlike update attempt ${retryCount} failed:`, error.message)
+        
+        // Check if it's a write conflict
+        if (error.code === 112 || error.codeName === 'WriteConflict') {
+          if (retryCount >= maxRetries) {
+            console.error('Max retries reached for unlike operation')
+            throw error
+          }
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+          continue
+        } else {
+          // Not a write conflict, don't retry
+          throw error
+        }
+      }
+    }
 
     const newLikeCount = newLikes.length
 

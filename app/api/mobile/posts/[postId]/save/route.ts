@@ -107,15 +107,40 @@ export async function POST(
     // Add user to savedBy array
     const newSaves = [...currentSaves.map((save: any) => typeof save === 'string' ? save : save.id), user.id]
     
-    // Update the post with new saves
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: {
-        savedBy: newSaves,
-        saveCount: newSaves.length, // Update the count field as well
-      },
-    })
+    // Update the post with new saves - with retry logic for write conflicts
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount < maxRetries) {
+      try {
+        await payload.update({
+          collection: 'posts',
+          id: postId,
+          data: {
+            savedBy: newSaves,
+            saveCount: newSaves.length, // Update the count field as well
+          },
+        })
+        break // Success, exit retry loop
+      } catch (error: any) {
+        retryCount++
+        console.log(`Save update attempt ${retryCount} failed:`, error.message)
+        
+        // Check if it's a write conflict
+        if (error.code === 112 || error.codeName === 'WriteConflict') {
+          if (retryCount >= maxRetries) {
+            console.error('Max retries reached for save operation')
+            throw error
+          }
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+          continue
+        } else {
+          // Not a write conflict, don't retry
+          throw error
+        }
+      }
+    }
 
     const newSaveCount = newSaves.length
 
@@ -243,15 +268,40 @@ export async function DELETE(
       .map((save: any) => typeof save === 'string' ? save : save.id)
       .filter((saveId: string) => saveId !== user.id)
     
-    // Update the post with new saves
-    await payload.update({
-      collection: 'posts',
-      id: postId,
-      data: {
-        savedBy: newSaves,
-        saveCount: newSaves.length, // Update the count field as well
-      },
-    })
+    // Update the post with new saves - with retry logic for write conflicts
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount < maxRetries) {
+      try {
+        await payload.update({
+          collection: 'posts',
+          id: postId,
+          data: {
+            savedBy: newSaves,
+            saveCount: newSaves.length, // Update the count field as well
+          },
+        })
+        break // Success, exit retry loop
+      } catch (error: any) {
+        retryCount++
+        console.log(`Unsave update attempt ${retryCount} failed:`, error.message)
+        
+        // Check if it's a write conflict
+        if (error.code === 112 || error.codeName === 'WriteConflict') {
+          if (retryCount >= maxRetries) {
+            console.error('Max retries reached for unsave operation')
+            throw error
+          }
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 100))
+          continue
+        } else {
+          // Not a write conflict, don't retry
+          throw error
+        }
+      }
+    }
 
     const newSaveCount = newSaves.length
 

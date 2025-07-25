@@ -216,6 +216,15 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
                    })
         }
 
+        console.log(`📊 Post ${post.id} engagement state:`, {
+          likeCount,
+          commentCount,
+          saveCount,
+          isLiked,
+          isSaved,
+          currentUserId: currentUser?.id
+        })
+
         // Enhanced media handling with better video support and proper URL processing
         let media: any[] = []
         
@@ -501,6 +510,21 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
         updatedAt: user.updatedAt
       }))
     }
+
+    // Filter out private posts (location.privacy === 'private')
+    posts = posts.filter((post: any) => {
+      if (post.location && post.location.privacy && post.location.privacy.toLowerCase() === 'private') {
+        return false
+      }
+      return true
+    })
+    // Filter out private places (privacy === 'private')
+    places = places.filter((place: any) => {
+      if (place.privacy && place.privacy.toLowerCase() === 'private') {
+        return false
+      }
+      return true
+    })
 
     // Mixing algorithm: 2 posts, 1 place, 1 person, repeat
     let i = 0, j = 0, k = 0

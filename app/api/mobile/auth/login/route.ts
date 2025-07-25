@@ -219,7 +219,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
               ? result.user.profileImage 
               : '' // Fallback for unexpected types
           } : null,
-          location: result.user.location,
+          location: result.user.location?.coordinates ? {
+            coordinates: {
+              latitude: result.user.location.coordinates.latitude,
+              longitude: result.user.location.coordinates.longitude
+            }
+          } : undefined,
           role: result.user.role || 'user',
           preferences: {
             categories: result.user.interests || [],

@@ -78,37 +78,53 @@ export async function GET(request: NextRequest) {
         break
         
       default: // 'all'
-        const allLocations = await getLocations()
-        
-        // Apply filters
-        let filteredLocations = allLocations
-        
-        if (category) {
-          filteredLocations = allLocations.filter(location =>
-            Array.isArray((location as any).categories) &&
-            (location as any).categories.some((cat: any) =>
-              typeof cat === 'string'
-                ? cat === category
-                : typeof cat === 'object' && typeof cat.name === 'string' && cat.name === category
-            )
-          )
-        }
-        
-        if (search) {
-          const searchLower = search.toLowerCase()
-          filteredLocations = filteredLocations.filter(location => {
-            const hasName = typeof (location as any).name === 'string' && (location as any).name.toLowerCase().includes(searchLower);
-            const hasDescription = typeof (location as any).description === 'string' && (location as any).description.toLowerCase().includes(searchLower);
-            const hasAddress = typeof location.address === 'string' && location.address.toLowerCase().includes(searchLower);
-            return hasName || hasDescription || hasAddress;
+        const allLocations = await getLocations(currentUserId)
+        // Use the same formatting as the web API
+        locations = allLocations
+          .map((loc: any) => {
+            // Extract coordinates properly
+            let latitude = loc.latitude
+            let longitude = loc.longitude
+            if (loc.coordinates) {
+              latitude = loc.coordinates.latitude || latitude
+              longitude = loc.coordinates.longitude || longitude
+            }
+            return {
+              ...loc,
+              latitude: typeof latitude === 'number' ? latitude : parseFloat(latitude || '0'),
+              longitude: typeof longitude === 'number' ? longitude : parseFloat(longitude || '0'),
+              name: loc.name || "Unnamed Location",
+              // Format address
+              address: typeof loc.address === 'string' 
+                ? loc.address 
+                : loc.address 
+                  ? Object.values(loc.address).filter(Boolean).join(', ')
+                  : '',
+              // Extract image URL
+              imageUrl: typeof loc.featuredImage === 'string' 
+                ? loc.featuredImage 
+                : loc.featuredImage?.url || loc.imageUrl || '/placeholder.svg'
+            }
           })
-        }
-        
-        // Apply pagination
-        const startIndex = (page - 1) * limit
-        const endIndex = startIndex + limit
-        locations = filteredLocations.slice(startIndex, endIndex)
-        hasMore = endIndex < filteredLocations.length
+          .filter((loc: any) => 
+            typeof loc.latitude === 'number' && 
+            typeof loc.longitude === 'number' && 
+            !isNaN(loc.latitude) && 
+            !isNaN(loc.longitude) &&
+            loc.latitude !== 0 && 
+            loc.longitude !== 0
+          )
+        hasMore = false // Not paginated for now
+        break
+    }
+
+    // For 'all', return the same structure as the web API
+    if (type === 'all') {
+      return NextResponse.json({
+        success: true,
+        locations: locations,
+        count: locations.length
+      })
     }
 
     // Get user's saved and subscribed locations for interaction state
@@ -229,11 +245,130 @@ export async function POST(request: NextRequest) {
     } = body
 
     // Basic validation
-    if (!name || !address || !coordinates || !coordinates.latitude || !coordinates.longitude) {
+    if (!name || !address) {
       return NextResponse.json({
         success: false,
-        error: 'Name, address, and coordinates (latitude, longitude) are required.'
+        error: 'Name and address are required.'
       }, { status: 400 })
+    }
+
+    // Handle coordinates - if not provided, try to geocode from address
+    let finalCoordinates = coordinates
+    if (!coordinates || !coordinates.latitude || !coordinates.longitude) {
+      try {
+        // Build full address string
+        const addressParts = [
+          address.street,
+          address.city,
+          address.state,
+          address.zip,
+          address.country
+        ].filter(Boolean)
+        const fullAddress = addressParts.join(', ')
+        
+        console.log('Geocoding address:', fullAddress)
+        
+        // Use a simple geocoding service (you might want to use Google Maps, Mapbox, etc.)
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullAddress)}&limit=1`
+        const geocodeResponse = await fetch(geocodeUrl, {
+          headers: { 'User-Agent': 'SacaviaApp/1.0 (contact@sacavia.com)' }
+        })
+        const geocodeData = await geocodeResponse.json()
+        
+        if (geocodeData && geocodeData.length > 0) {
+          finalCoordinates = {
+            latitude: parseFloat(geocodeData[0].lat),
+            longitude: parseFloat(geocodeData[0].lon)
+          }
+          console.log('Geocoded coordinates:', finalCoordinates)
+        } else {
+          console.warn('Could not geocode address:', fullAddress)
+          // Set default coordinates (you might want to handle this differently)
+          finalCoordinates = {
+            latitude: 0,
+            longitude: 0
+          }
+        }
+      } catch (geocodeError) {
+        console.error('Geocoding error:', geocodeError)
+        // Set default coordinates
+        finalCoordinates = {
+          latitude: 0,
+          longitude: 0
+        }
+      }
+    }
+
+    // Validate and filter categories to ensure they are valid ObjectIds
+    let validCategories: string[] = []
+    if (categories && Array.isArray(categories) && categories.length > 0) {
+      // Filter out invalid ObjectIds and validate they exist
+      const validCategoryIds = categories.filter(catId => {
+        // Check if it's a valid 24-character hex string (MongoDB ObjectId format)
+        return typeof catId === 'string' && /^[0-9a-fA-F]{24}$/.test(catId)
+      })
+      
+      if (validCategoryIds.length > 0) {
+        // Verify these categories actually exist in the database
+        try {
+          const existingCategories = await payload.find({
+            collection: 'categories',
+            where: {
+              id: {
+                in: validCategoryIds
+              }
+            },
+            limit: 100
+          })
+          
+          validCategories = existingCategories.docs.map(cat => String(cat.id))
+          console.log('Valid categories found:', validCategories.length, 'out of', categories.length)
+        } catch (categoryError) {
+          console.error('Error validating categories:', categoryError)
+          validCategories = []
+        }
+      }
+    }
+
+    // Validate featuredImage
+    let validFeaturedImage = undefined
+    if (featuredImage && typeof featuredImage === 'string' && /^[0-9a-fA-F]{24}$/.test(featuredImage)) {
+      try {
+        const mediaDoc = await payload.findByID({
+          collection: 'media',
+          id: featuredImage
+        })
+        if (mediaDoc) {
+          validFeaturedImage = featuredImage
+          console.log('Valid featured image found:', featuredImage)
+        }
+      } catch (mediaError) {
+        console.error('Invalid featured image ID:', featuredImage, mediaError)
+      }
+    }
+
+    // Validate gallery images
+    let validGallery: any[] = []
+    if (gallery && Array.isArray(gallery) && gallery.length > 0) {
+      for (const galleryItem of gallery) {
+        if (galleryItem.image && typeof galleryItem.image === 'string' && /^[0-9a-fA-F]{24}$/.test(galleryItem.image)) {
+          try {
+            const mediaDoc = await payload.findByID({
+              collection: 'media',
+              id: galleryItem.image
+            })
+            if (mediaDoc) {
+              validGallery.push({
+                image: galleryItem.image,
+                caption: galleryItem.caption || undefined
+              })
+            }
+          } catch (mediaError) {
+            console.error('Invalid gallery image ID:', galleryItem.image, mediaError)
+          }
+        }
+      }
+      console.log('Valid gallery images found:', validGallery.length, 'out of', gallery.length)
     }
 
     // Create the location with all fields
@@ -244,13 +379,13 @@ export async function POST(request: NextRequest) {
         slug,
         description: description || '',
         shortDescription,
-        categories: categories || [],
+        categories: validCategories, // Use validated categories
         tags: tags || [],
-        featuredImage,
-        gallery,
+        featuredImage: validFeaturedImage, // Use validated featuredImage
+        gallery: validGallery, // Use validated gallery
         address,
         neighborhood,
-        coordinates,
+        coordinates: finalCoordinates,
         contactInfo,
         businessHours,
         priceRange,
@@ -262,8 +397,13 @@ export async function POST(request: NextRequest) {
         isFeatured,
         isVerified,
         hasBusinessPartnership,
-        partnershipDetails,
-        meta
+        partnershipDetails: hasBusinessPartnership && partnershipDetails ? {
+          partnerName: partnershipDetails.partnerName || undefined,
+          partnerContact: partnershipDetails.partnerContact || undefined,
+          details: partnershipDetails.details || undefined,
+        } : undefined,
+        meta,
+        status: 'review', // Always set status to review for mobile
       }
     })
 

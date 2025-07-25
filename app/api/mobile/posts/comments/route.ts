@@ -1,6 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { addComment, getCommentsWithReplies } from '@/app/actions'
 import { getServerSideUser } from '@/lib/auth-server'
+import { getPayload } from 'payload'
+import config from '@payload-config'
+
+// Helper function to get user from either cookies or Bearer token
+async function getCurrentUser(request: NextRequest) {
+  try {
+    // First try Bearer token (for mobile apps)
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const payload = await getPayload({ config })
+      const { user } = await payload.auth({ headers: request.headers })
+      if (user) {
+        return user
+      }
+    }
+    
+    // Fallback to cookie-based auth (for web apps)
+    return await getServerSideUser()
+  } catch (error) {
+    console.log('Authentication failed:', error)
+    return null
+  }
+}
 
 // GET /api/v1/mobile/posts/comments?postId=... - Get comments for a post
 export async function GET(request: NextRequest) {
@@ -15,8 +38,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get current user for personalization
-    const user = await getServerSideUser()
+    // Get current user for personalization (supports both mobile and web auth)
+    const user = await getCurrentUser(request)
     const currentUserId = user?.id
 
     console.log(`Mobile API: Getting comments for post ${postId}`)
@@ -46,7 +69,7 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/mobile/posts/comments - Add a comment to a post
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    const user = await getCurrentUser(request)
     
     if (!user) {
       return NextResponse.json(

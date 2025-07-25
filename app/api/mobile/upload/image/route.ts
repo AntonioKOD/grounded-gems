@@ -312,11 +312,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
     const caption = formData.get('caption') as string | undefined
     const category = (formData.get('category') as string) || 'other'
     console.log('[UPLOAD] Submission info:', { locationId, caption, category })
-    if (!locationId) {
-      console.error('[UPLOAD] No locationId provided in formData')
-      return NextResponse.json({ success: false, message: 'locationId is required', error: 'No locationId', code: 'NO_LOCATION_ID' }, { status: 400 })
-    }
-
+    
     // Get user from auth
     let user
     try {
@@ -329,24 +325,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       return NextResponse.json({ success: false, message: 'Authentication required', error: 'No user', code: 'NO_USER' }, { status: 401 })
     }
 
-    // Create LocationPhotoSubmissions document
-    let submissionDoc
-    try {
-      submissionDoc = await payload.create({
-        collection: 'locationPhotoSubmissions',
-        data: {
-          location: locationId,
-          submittedBy: user.id,
-          photo: mediaDoc.id,
-          caption,
-          category,
-          status: 'pending'
-        }
-      })
-      console.log('[UPLOAD] LocationPhotoSubmission created:', submissionDoc.id)
-    } catch (submissionError) {
-      console.error('[UPLOAD] Failed to create LocationPhotoSubmission:', submissionError)
-      return NextResponse.json({ success: false, message: 'Failed to submit photo for review', error: submissionError instanceof Error ? submissionError.message : String(submissionError), code: 'SUBMISSION_ERROR' }, { status: 500 })
+    // If locationId is provided, create LocationPhotoSubmissions document
+    let submissionDoc = null
+    if (locationId) {
+      try {
+        submissionDoc = await payload.create({
+          collection: 'locationPhotoSubmissions',
+          data: {
+            location: locationId,
+            submittedBy: user.id,
+            photo: mediaDoc.id,
+            caption,
+            category,
+            status: 'pending'
+          }
+        })
+        console.log('[UPLOAD] LocationPhotoSubmission created:', submissionDoc.id)
+      } catch (submissionError) {
+        console.error('[UPLOAD] Failed to create LocationPhotoSubmission:', submissionError)
+        return NextResponse.json({ success: false, message: 'Failed to submit photo for review', error: submissionError instanceof Error ? submissionError.message : String(submissionError), code: 'SUBMISSION_ERROR' }, { status: 500 })
+      }
     }
 
     // Return the submission info (not just the media)
@@ -357,14 +355,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       mimeType: file.type,
       filesize: file.size,
       alt: alt,
-      submissionId: String(submissionDoc.id),
-      status: submissionDoc.status,
-      caption: submissionDoc.caption,
-      category: submissionDoc.category
+      submissionId: submissionDoc ? String(submissionDoc.id) : undefined,
+      status: submissionDoc ? submissionDoc.status : undefined,
+      caption: submissionDoc ? submissionDoc.caption : undefined,
+      category: submissionDoc ? submissionDoc.category : undefined
     }
     console.log('[UPLOAD] Success response data:', responseData)
     console.log('--- [UPLOAD] /api/mobile/upload/image handler END ---')
-    return NextResponse.json({ success: true, message: 'Photo submitted for review', data: responseData })
+    const successMessage = locationId ? 'Photo submitted for review' : 'Image uploaded successfully'
+    return NextResponse.json({ success: true, message: successMessage, data: responseData })
   } catch (error) {
     console.error('❌ [UPLOAD] Error in image upload:', error)
     return NextResponse.json({ success: false, message: 'Failed to upload image', error: error instanceof Error ? error.message : String(error), code: 'SERVER_ERROR' }, { status: 500 })

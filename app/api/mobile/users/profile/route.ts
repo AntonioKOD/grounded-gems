@@ -462,13 +462,25 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
               : ''
           } : null,
           bio: targetUser.bio,
-          location: targetUser.location ? {
-            coordinates: targetUser.location.coordinates,
-            address: targetUser.location.address,
-            city: targetUser.location.city,
-            state: targetUser.location.state,
-            country: targetUser.location.country,
-          } : undefined,
+          location: targetUser.location && targetUser.location.coordinates && typeof targetUser.location.coordinates.latitude === 'number' && typeof targetUser.location.coordinates.longitude === 'number'
+            ? {
+                coordinates: {
+                  latitude: targetUser.location.coordinates.latitude,
+                  longitude: targetUser.location.coordinates.longitude
+                },
+                address: targetUser.location.address,
+                city: targetUser.location.city,
+                state: targetUser.location.state,
+                country: targetUser.location.country,
+              }
+            : targetUser.location && (targetUser.location.address || targetUser.location.city || targetUser.location.state || targetUser.location.country)
+            ? {
+                address: targetUser.location.address,
+                city: targetUser.location.city,
+                state: targetUser.location.state,
+                country: targetUser.location.country,
+              }
+            : undefined,
           role: targetUser.role || 'user',
           isCreator: targetUser.isCreator || false,
           creatorLevel: targetUser.creatorLevel,

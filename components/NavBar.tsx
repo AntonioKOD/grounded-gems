@@ -362,6 +362,14 @@ export default function NavBar({ initialUser }: NavBarProps) {
                             <span className="font-medium">Saved</span>
                           </Link>
                         </DropdownMenuItem>
+                        {(user?.role === 'admin' || user?.email === 'antonio_kodheli@icloud.com') && (
+                          <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+                            <Link href="/admin/dashboard" className="flex items-center p-3 text-gray-700 hover:text-[#FF6B6B] hover:bg-gradient-to-r hover:from-[#FF6B6B]/10 hover:to-[#4ECDC4]/10 transition-all duration-300 rounded-xl">
+                              <BookOpen className="mr-3 h-4 w-4" />
+                              <span className="font-medium">Admin Dashboard</span>
+                            </Link>
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuGroup>
                       <DropdownMenuSeparator className="bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
                       <DropdownMenuItem 

@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getLocations } from "@/app/actions"
+import { getServerSideUser } from '@/lib/auth-server'
 
 export async function GET(request: NextRequest) {
   try {
     console.log("📍 [API] /api/locations/all - Fetching all locations...")
     
-    // Call the server action to get locations
-    const locations = await getLocations()
+    // Get current user for access filtering
+    const user = await getServerSideUser()
+    const userId = user?.id
+    
+    // Call the server action to get locations with access filtering
+    const locations = await getLocations(userId)
     
     console.log(`📍 [API] Retrieved ${locations.length} locations from database`)
     

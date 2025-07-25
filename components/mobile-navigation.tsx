@@ -211,6 +211,17 @@ export default function MobileNavigation({ initialUser }: MobileNavigationProps)
                     Become a Creator
                   </button>
                 )}
+                {/* Admin Dashboard for admin users */}
+                {(initialUser?.role === 'admin' || initialUser?.email === 'antonio_kodheli@icloud.com') && (
+                  <button
+                    onClick={() => safeNavigate('/admin/dashboard', true)}
+                    disabled={navigating === '/admin/dashboard'}
+                    className="flex items-center w-full p-3 text-gray-700 hover:text-white hover:bg-gradient-to-r hover:from-[#8B5CF6] hover:to-[#6366F1] transition-all duration-300 rounded-xl font-medium disabled:opacity-50"
+                  >
+                    <BookOpen className="w-4 h-4 mr-3" />
+                    Admin Dashboard
+                  </button>
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
