@@ -150,30 +150,30 @@ export async function GET(request: NextRequest) {
     // Format events for mobile
     const formattedEvents = events.map((event: any) => {
       // Check if user is attending
-      let userParticipation = null
+      let userRsvpStatus = null
       if (currentUserId && event.participants) {
         const participation = event.participants.find((p: any) => 
           (typeof p.user === 'string' ? p.user : p.user?.id) === currentUserId
         )
-        userParticipation = participation ? {
-          status: participation.status,
-          joinedAt: participation.joinedAt
-        } : null
+        userRsvpStatus = participation ? participation.status : null
       }
 
       return {
         id: event.id,
-        title: event.name, // Events collection uses 'name' field
+        name: event.name, // Events collection uses 'name' field
         description: event.description,
         slug: event.slug,
         eventType: event.eventType,
         category: event.category,
         startDate: event.startDate,
         endDate: event.endDate,
-        featuredImage: event.image?.url, // Events collection uses 'image' field
+        image: event.image ? {
+          url: event.image.url,
+          alt: event.image.alt
+        } : null, // Events collection uses 'image' field
         gallery: event.gallery?.map((item: any) => ({
-          image: item.image?.url,
-          caption: item.caption
+          url: item.image?.url,
+          alt: item.caption
         })) || [],
         location: event.location ? {
           id: typeof event.location === 'object' ? event.location.id : event.location,
@@ -186,16 +186,21 @@ export async function GET(request: NextRequest) {
           name: typeof event.organizer === 'object' ? event.organizer.name : 'Unknown Organizer',
           avatar: typeof event.organizer === 'object' ? event.organizer.profileImage?.url : undefined
         } : null,
-        maxParticipants: event.capacity, // Events collection uses 'capacity' field
-        participantCount: event.attendeeCount || 0, // Events collection uses 'attendeeCount'
+        capacity: event.capacity, // Events collection uses 'capacity' field
+        attendeeCount: event.attendeeCount || 0, // Events collection uses 'attendeeCount'
         interestedCount: event.interestedCount || 0,
         goingCount: event.goingCount || 0,
+        invitedCount: event.invitedCount || 0,
+        isFree: event.isFree !== false, // Default to true if not specified
+        price: event.price,
+        currency: event.currency,
+        status: event.status || 'published',
         isMatchmaking: event.isMatchmaking || false,
         matchmakingSettings: event.matchmakingSettings,
         ageRestriction: event.ageRestriction,
         requiresApproval: event.requiresApproval || false,
         tags: event.tags?.map((tag: any) => typeof tag === 'string' ? tag : tag.tag) || [],
-        userParticipation,
+        userRsvpStatus,
         createdAt: event.createdAt,
         updatedAt: event.updatedAt
       }
@@ -407,6 +412,13 @@ export async function POST(request: NextRequest) {
       tags: body.tags || [],
       privacy: body.privacy || 'public',
       privateAccess: body.privateAccess || [],
+      isFree: body.isFree !== false, // Default to true
+      price: body.price,
+      currency: body.currency || 'USD',
+      requiresApproval: body.requiresApproval || false,
+      ageRestriction: body.ageRestriction || 'all',
+      isMatchmaking: body.isMatchmaking || false,
+      matchmakingSettings: body.matchmakingSettings,
       meta: body.meta || {
         title: title,
         description: body.description?.substring(0, 160) || ''

@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
     }
+    
+    console.log(`Mobile notifications: Fetching notifications for user ${user.id}`);
+    
     // Fetch only notifications for the current user
     const result = await payload.find({
       collection: 'notifications',
@@ -23,17 +26,25 @@ export async function GET(request: NextRequest) {
       sort: '-createdAt',
       depth: 1
     })
-    const notifications = result.docs.map((n: any) => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      message: n.message,
-      read: n.read,
-      createdAt: n.createdAt,
-      metadata: n.metadata || {},
-      actionBy: n.actionBy || null,
-      relatedTo: n.relatedTo || null
-    }))
+    
+    console.log(`Mobile notifications: Found ${result.docs.length} notifications for user ${user.id}`);
+    
+    const notifications = result.docs.map((n: any) => {
+      const notification = {
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        read: n.read,
+        createdAt: n.createdAt,
+        metadata: n.metadata || {},
+        actionBy: n.actionBy || null,
+        relatedTo: n.relatedTo || null
+      };
+      console.log(`Mobile notifications: Returning notification ID: ${notification.id}, recipient: ${n.recipient} (type: ${typeof n.recipient}), read: ${n.read} (type: ${typeof n.read})`);
+      return notification;
+    })
+    
     return NextResponse.json({
       success: true,
       data: {
@@ -49,6 +60,7 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
+    console.error('Mobile notifications GET error:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch notifications' }, { status: 500 })
   }
 }

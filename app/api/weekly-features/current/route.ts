@@ -162,7 +162,7 @@ function calculateDistanceInMiles(lat1: number, lon1: number, lat2: number, lon2
       Math.sin(dLon/2) * Math.sin(dLon/2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
     const distance = R * c
-    return Math.round(distance * 10) / 10 // Round to 1 decimal place
+    return Math.round(distance * 100) / 100 // Round to 2 decimal places to avoid Swift JSON decoding issues
   } catch (error) {
     console.error('Error calculating distance:', error)
     return null

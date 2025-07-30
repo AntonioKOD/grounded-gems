@@ -489,6 +489,38 @@ export const Events: CollectionConfig = {
       },
     },
 
+    // Pricing information
+    {
+      name: 'isFree',
+      type: 'checkbox',
+      defaultValue: true,
+      admin: { description: 'Is this event free to attend?' },
+    },
+    {
+      name: 'price',
+      type: 'number',
+      admin: { 
+        description: 'Event price (only used if event is not free)',
+        condition: (data) => !data.isFree
+      },
+    },
+    {
+      name: 'currency',
+      type: 'select',
+      defaultValue: 'USD',
+      options: [
+        { label: 'USD ($)', value: 'USD' },
+        { label: 'EUR (€)', value: 'EUR' },
+        { label: 'GBP (£)', value: 'GBP' },
+        { label: 'CAD ($)', value: 'CAD' },
+        { label: 'AUD ($)', value: 'AUD' },
+      ],
+      admin: { 
+        description: 'Currency for event price',
+        condition: (data) => !data.isFree
+      },
+    },
+
     // RSVP status counts (calculated)
     {
       name: 'interestedCount',
@@ -587,7 +619,60 @@ export const Events: CollectionConfig = {
       ],
     },
 
-
+    // Event settings
+    {
+      name: 'requiresApproval',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'Require organizer approval for attendees' },
+    },
+    {
+      name: 'ageRestriction',
+      type: 'select',
+      options: [
+        { label: 'All Ages', value: 'all' },
+        { label: '18+', value: '18+' },
+        { label: '21+', value: '21+' },
+        { label: '16+', value: '16+' },
+        { label: '13+', value: '13+' },
+      ],
+      defaultValue: 'all',
+      admin: { description: 'Age restriction for this event' },
+    },
+    {
+      name: 'isMatchmaking',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { description: 'Is this a matchmaking event?' },
+    },
+    {
+      name: 'matchmakingSettings',
+      type: 'group',
+      admin: { 
+        description: 'Settings for matchmaking events',
+        condition: (data) => data.isMatchmaking
+      },
+      fields: [
+        {
+          name: 'maxMatches',
+          type: 'number',
+          defaultValue: 10,
+          admin: { description: 'Maximum number of matches per person' },
+        },
+        {
+          name: 'matchCriteria',
+          type: 'select',
+          options: [
+            { label: 'Random', value: 'random' },
+            { label: 'Interests', value: 'interests' },
+            { label: 'Location', value: 'location' },
+            { label: 'Age', value: 'age' },
+          ],
+          defaultValue: 'random',
+          admin: { description: 'How to match people' },
+        },
+      ],
+    },
 
     // SEO metadata
     {

@@ -23,9 +23,11 @@ interface MobileLoginResponse {
       id: string
       name: string
       email: string
+      username?: string
       profileImage?: {
         url: string
       } | null
+      bio?: string
       location?: {
         coordinates?: {
           latitude: number
@@ -33,6 +35,8 @@ interface MobileLoginResponse {
         }
       }
       role: string
+      isVerified: boolean
+      followerCount: number
       preferences?: {
         categories: string[]
         notifications: boolean
@@ -212,6 +216,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
           id: result.user.id as string,
           name: result.user.name || '',
           email: result.user.email as string,
+          username: result.user.username,
           profileImage: result.user.profileImage ? {
             url: typeof result.user.profileImage === 'object' && result.user.profileImage.url
               ? result.user.profileImage.url
@@ -219,6 +224,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
               ? result.user.profileImage 
               : '' // Fallback for unexpected types
           } : null,
+          bio: result.user.bio,
           location: result.user.location?.coordinates ? {
             coordinates: {
               latitude: result.user.location.coordinates.latitude,
@@ -226,6 +232,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileLog
             }
           } : undefined,
           role: result.user.role || 'user',
+          isVerified: result.user.isVerified || result.user.creatorProfile?.verification?.isVerified || false,
+          followerCount: result.user.followerCount || 0,
           preferences: {
             categories: result.user.interests || [],
             notifications: result.user.notificationSettings?.enabled || true,

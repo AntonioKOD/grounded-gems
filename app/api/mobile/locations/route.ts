@@ -15,11 +15,308 @@ import { getServerSideUser } from '@/lib/auth-server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-// GET /api/v1/mobile/locations - Get locations with various filters
+// Enhanced recommendation algorithm
+interface LocationScore {
+  location: any
+  score: number
+  factors: {
+    categoryMatch: number
+    distanceScore: number
+    popularityScore: number
+    ratingScore: number
+    timeRelevance: number
+    userBehaviorScore: number
+    diversityScore: number
+  }
+}
+
+interface UserPreferences {
+  categories: string[]
+  radius: number
+  location?: {
+    coordinates?: {
+      latitude: number
+      longitude: number
+    }
+  }
+  savedLocations: string[]
+  visitedLocations: string[]
+  interactionHistory: Array<{
+    locationId: string
+    action: 'save' | 'visit' | 'like' | 'review'
+    timestamp: Date
+  }>
+}
+
+// Calculate distance between two coordinates
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371 // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLon = (lon2 - lon1) * Math.PI / 180
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  const distance = R * c
+  // Round to 2 decimal places to avoid Swift JSON decoding issues
+  return Math.round(distance * 100) / 100
+}
+
+// Get time-based relevance score
+function getTimeRelevanceScore(location: any): number {
+  const now = new Date()
+  const hour = now.getHours()
+  const dayOfWeek = now.getDay()
+  
+  // Check if location is currently open
+  if (location.businessHours && location.businessHours.length > 0) {
+    const todayHours = location.businessHours.find((h: any) => 
+      h.day?.toLowerCase() === ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek]
+    )
+    
+    if (todayHours && !todayHours.closed) {
+      const openHour = parseInt(todayHours.open?.split(':')[0] || '0')
+      const closeHour = parseInt(todayHours.close?.split(':')[0] || '23')
+      
+      if (hour >= openHour && hour <= closeHour) {
+        return 1.2 // Boost for currently open locations
+      }
+    }
+  }
+  
+  // Time-based category relevance
+  const firstCategory = location.categories?.[0]
+  const category = typeof firstCategory === 'string'
+    ? firstCategory.toLowerCase()
+    : firstCategory?.name?.toLowerCase() || ''
+  if (hour >= 6 && hour <= 11 && (category.includes('coffee') || category.includes('breakfast'))) {
+    return 1.1
+  }
+  if (hour >= 11 && hour <= 15 && (category.includes('restaurant') || category.includes('lunch'))) {
+    return 1.1
+  }
+  if (hour >= 17 && hour <= 22 && (category.includes('restaurant') || category.includes('dinner') || category.includes('bar'))) {
+    return 1.1
+  }
+  if (hour >= 22 || hour <= 2 && category.includes('bar') || category.includes('nightlife')) {
+    return 1.1
+  }
+  
+  return 1.0
+}
+
+// Calculate user behavior score based on interaction history
+function calculateUserBehaviorScore(location: any, userPrefs: UserPreferences): number {
+  let score = 1.0
+  
+  // Check if user has interacted with similar locations
+  const firstCategory = location.categories?.[0]
+  const locationCategory = typeof firstCategory === 'string' 
+    ? firstCategory.toLowerCase() 
+    : firstCategory?.name?.toLowerCase() || ''
+  
+  const similarInteractions = userPrefs.interactionHistory.filter(interaction => {
+    // This would need to be enhanced with actual location data lookup
+    return interaction.action === 'save' || interaction.action === 'visit'
+  })
+  
+  if (similarInteractions.length > 0) {
+    score += 0.3
+  }
+  
+  // Check if user has saved this specific location
+  if (userPrefs.savedLocations.includes(location.id)) {
+    score += 0.5
+  }
+  
+  // Check if user has visited this location
+  if (userPrefs.visitedLocations.includes(location.id)) {
+    score -= 0.2 // Slightly reduce score for already visited locations
+  }
+  
+  return score
+}
+
+// Calculate diversity score to avoid showing too many similar locations
+function calculateDiversityScore(location: any, recommendedLocations: any[]): number {
+  const firstCategory = location.categories?.[0]
+  const locationCategory = typeof firstCategory === 'string'
+    ? firstCategory.toLowerCase()
+    : firstCategory?.name?.toLowerCase() || ''
+  const similarCount = recommendedLocations.filter(rec => {
+    const recFirstCategory = rec.categories?.[0]
+    const recCategory = typeof recFirstCategory === 'string'
+      ? recFirstCategory.toLowerCase()
+      : recFirstCategory?.name?.toLowerCase() || ''
+    return recCategory === locationCategory
+  }).length
+  
+  // Reduce score if we already have many locations of this category
+  return Math.max(0.5, 1.0 - (similarCount * 0.1))
+}
+
+// Main recommendation algorithm
+async function getRecommendedLocations(
+  allLocations: any[], 
+  userPrefs: UserPreferences, 
+  limit: number = 20
+): Promise<any[]> {
+  const scoredLocations: LocationScore[] = []
+  const userLat = userPrefs.location?.coordinates?.latitude
+  const userLng = userPrefs.location?.coordinates?.longitude
+  
+  for (const location of allLocations) {
+    let categoryMatch = 0
+    let distanceScore = 1.0
+    let popularityScore = 1.0
+    let ratingScore = 1.0
+    
+    // Category matching
+    if (userPrefs.categories.length > 0 && location.categories) {
+      const locationCategories = location.categories.map((cat: any) => 
+        typeof cat === 'string' ? cat.toLowerCase() : cat.name?.toLowerCase()
+      )
+      const matches = userPrefs.categories.filter(userCat => 
+        locationCategories.some((locCat: string) => locCat.includes(userCat.toLowerCase()))
+      )
+      categoryMatch = matches.length / userPrefs.categories.length
+    }
+    
+    // Distance scoring
+    if (userLat && userLng && location.coordinates) {
+      const distance = calculateDistance(
+        userLat, userLng, 
+        location.coordinates.latitude, location.coordinates.longitude
+      )
+      // Exponential decay based on distance
+      distanceScore = Math.exp(-distance / userPrefs.radius)
+    }
+    
+    // Popularity scoring (based on visit count, review count, etc.)
+    const visitCount = location.visitCount || 0
+    const reviewCount = location.reviewCount || 0
+    popularityScore = Math.min(2.0, 1.0 + (visitCount / 100) + (reviewCount / 50))
+    
+    // Rating scoring
+    const rating = location.rating || 0
+    ratingScore = rating >= 4.0 ? 1.3 : rating >= 3.5 ? 1.1 : 1.0
+    
+    // Time relevance
+    const timeRelevance = getTimeRelevanceScore(location)
+    
+    // User behavior
+    const userBehavior = calculateUserBehaviorScore(location, userPrefs)
+    
+    // Calculate total score
+    const totalScore = (
+      categoryMatch * 0.3 +
+      distanceScore * 0.25 +
+      popularityScore * 0.15 +
+      ratingScore * 0.15 +
+      timeRelevance * 0.1 +
+      userBehavior * 0.05
+    )
+    
+    scoredLocations.push({
+      location,
+      score: totalScore,
+      factors: {
+        categoryMatch,
+        distanceScore,
+        popularityScore,
+        ratingScore,
+        timeRelevance,
+        userBehaviorScore: userBehavior,
+        diversityScore: 1.0 // Will be calculated later
+      }
+    })
+  }
+  
+  // Sort by score and apply diversity
+  scoredLocations.sort((a, b) => b.score - a.score)
+  
+  const recommended: any[] = []
+  for (const scored of scoredLocations) {
+    // Apply diversity score
+    scored.factors.diversityScore = calculateDiversityScore(scored.location, recommended)
+    scored.score *= scored.factors.diversityScore
+    
+    recommended.push(scored.location)
+    if (recommended.length >= limit) break
+  }
+  
+  // Re-sort with diversity applied
+  recommended.sort((a, b) => {
+    const scoreA = scoredLocations.find(s => s.location.id === a.id)?.score || 0
+    const scoreB = scoredLocations.find(s => s.location.id === b.id)?.score || 0
+    return scoreB - scoreA
+  })
+  
+  return recommended
+}
+
+// Get user preferences and interaction history
+async function getUserPreferences(userId: string): Promise<UserPreferences> {
+  const payload = await getPayload({ config })
+  
+  try {
+    const user = await payload.findByID({
+      collection: 'users',
+      id: userId,
+      depth: 2
+    })
+    
+    // Get user's saved locations
+    const savedLocationsResult = await payload.find({
+      collection: 'savedLocations',
+      where: {
+        user: { equals: userId }
+      },
+      limit: 100
+    })
+    
+    // Get user's interaction history (this would need to be implemented)
+    const interactionHistory: Array<{
+      locationId: string
+      action: 'save' | 'visit' | 'like' | 'review'
+      timestamp: Date
+    }> = []
+    
+    // For now, we'll use saved locations as a proxy for interaction history
+    savedLocationsResult.docs.forEach(saved => {
+      interactionHistory.push({
+        locationId: saved.location?.id || '',
+        action: 'save',
+        timestamp: new Date(saved.createdAt)
+      })
+    })
+    
+    return {
+      categories: user.preferences?.categories || [],
+      radius: user.preferences?.radius || 25,
+      location: user.location,
+      savedLocations: savedLocationsResult.docs.map(saved => saved.location?.id || ''),
+      visitedLocations: [], // Would need to be implemented
+      interactionHistory
+    }
+  } catch (error) {
+    console.error('Error fetching user preferences:', error)
+    return {
+      categories: [],
+      radius: 25,
+      savedLocations: [],
+      visitedLocations: [],
+      interactionHistory: []
+    }
+  }
+}
+
+// GET /api/v1/mobile/locations - Get locations with smart recommendations
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type') || 'all' // all, nearby, popular, saved, created
+    const type = searchParams.get('type') || 'recommended' // recommended, nearby, popular, saved, created, all
     const limit = parseInt(searchParams.get('limit') || '20')
     const page = parseInt(searchParams.get('page') || '1')
     const category = searchParams.get('category')
@@ -32,12 +329,28 @@ export async function GET(request: NextRequest) {
     const user = await getServerSideUser()
     const currentUserId = user?.id
 
-    console.log(`Mobile API: Getting ${type} locations`)
+    console.log(`Mobile API: Getting ${type} locations for user ${currentUserId}`)
 
     let locations: any[] = []
     let hasMore = false
 
     switch (type) {
+      case 'recommended':
+        if (currentUserId) {
+          // Get all locations first
+          const allLocations = await getLocations(currentUserId)
+          const userPrefs = await getUserPreferences(currentUserId)
+          
+          // Apply smart recommendations
+          locations = await getRecommendedLocations(allLocations, userPrefs, limit)
+          
+          console.log(`Generated ${locations.length} recommended locations for user ${currentUserId}`)
+        } else {
+          // Fallback to popular locations for non-authenticated users
+          locations = await getNearbyOrPopularLocations(undefined, limit, radius)
+        }
+        break
+        
       case 'nearby':
       case 'popular':
         if (lat && lng) {
@@ -194,7 +507,13 @@ export async function GET(request: NextRequest) {
           type,
           category,
           search,
-          coordinates: lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null
+          coordinates: lat && lng ? { lat: parseFloat(lat), lng: parseFloat(lng) } : null,
+          recommendationFactors: type === 'recommended' ? {
+            userPreferences: currentUserId ? 'applied' : 'not_available',
+            timeRelevance: 'applied',
+            diversity: 'applied',
+            popularity: 'applied'
+          } : undefined
         }
       }
     })

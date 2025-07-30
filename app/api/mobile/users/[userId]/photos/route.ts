@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 // Query parameters validation
 const photosQuerySchema = z.object({
-  type: z.enum(['all', 'posts', 'reviews', 'locations']).optional().default('all'),
+  type: z.enum(['all', 'posts', 'locations']).optional().default('all'),
   limit: z.string().optional().transform(val => parseInt(val || '20')),
   page: z.string().optional().transform(val => parseInt(val || '1')),
   sort: z.enum(['newest', 'oldest', 'popular']).optional().default('newest'),
@@ -17,7 +17,7 @@ interface MobileUserPhotosResponse {
   data?: {
     photos: Array<{
       id: string
-      type: 'post' | 'review' | 'location'
+      type: 'post' | 'location'
       url: string
       thumbnail?: string
       alt?: string
@@ -26,7 +26,6 @@ interface MobileUserPhotosResponse {
       height?: number
       filesize?: number
       postId?: string
-      reviewId?: string
       locationId?: string
       createdAt: string
       likeCount?: number
@@ -138,88 +137,100 @@ export async function GET(
           where: {
             author: { equals: userId },
             status: { equals: 'published' },
-            featuredImage: { exists: true }
+            or: [
+              { image: { exists: true } },
+              { photos: { exists: true } }
+            ]
           },
           sort: sortOrder,
           limit: type === 'posts' ? limit : 100,
           depth: 2
         })
+        
+        console.log(`[Photos API] Found ${postsResult.docs.length} posts for user ${userId}`)
+        postsResult.docs.forEach((post: any, index: number) => {
+          console.log(`[Photos API] Post ${index + 1}:`, {
+            id: post.id,
+            author: post.author,
+            status: post.status,
+            hasImage: !!post.image,
+            hasPhotos: !!post.photos
+          })
+        })
 
-        const postPhotos = postsResult.docs.map((post: any) => ({
-          id: `post-${post.id}`,
-          type: 'post' as const,
-          url: typeof post.featuredImage === 'object' && post.featuredImage.url
-            ? post.featuredImage.url 
-            : typeof post.featuredImage === 'string'
-            ? post.featuredImage
-            : '',
-          thumbnail: typeof post.featuredImage === 'object' && post.featuredImage.sizes?.thumbnail?.url
-            ? post.featuredImage.sizes.thumbnail.url
-            : undefined,
-          alt: typeof post.featuredImage === 'object' ? post.featuredImage.alt : undefined,
-          caption: post.title || post.content?.substring(0, 100),
-          width: typeof post.featuredImage === 'object' ? post.featuredImage.width : undefined,
-          height: typeof post.featuredImage === 'object' ? post.featuredImage.height : undefined,
-          filesize: typeof post.featuredImage === 'object' ? post.featuredImage.filesize : undefined,
-          postId: post.id,
-          createdAt: post.createdAt,
-          likeCount: post.likeCount || 0,
-          commentCount: post.commentCount || 0,
-          location: post.location ? {
-            id: typeof post.location === 'object' ? post.location.id : post.location,
-            name: typeof post.location === 'object' ? post.location.name : 'Unknown Location',
-            address: typeof post.location === 'object' ? post.location.address : undefined
-          } : undefined
-        })).filter(photo => photo.url)
+        const postPhotos = postsResult.docs.flatMap((post: any) => {
+          const photos: any[] = []
+          
+          // Add main image if exists
+          if (post.image) {
+            photos.push({
+              id: `post-${post.id}-main`,
+              type: 'post' as const,
+              url: typeof post.image === 'object' && post.image.url
+                ? post.image.url 
+                : typeof post.image === 'string'
+                ? post.image
+                : '',
+              thumbnail: typeof post.image === 'object' && post.image.sizes?.thumbnail?.url
+                ? post.image.sizes.thumbnail.url
+                : undefined,
+              alt: typeof post.image === 'object' ? post.image.alt : undefined,
+              caption: post.title || post.content?.substring(0, 100),
+              width: typeof post.image === 'object' ? post.image.width : undefined,
+              height: typeof post.image === 'object' ? post.image.height : undefined,
+              filesize: typeof post.image === 'object' ? post.image.filesize : undefined,
+              postId: post.id,
+              createdAt: post.createdAt,
+              likeCount: post.likeCount || 0,
+              commentCount: post.commentCount || 0,
+              location: post.location ? {
+                id: typeof post.location === 'object' ? post.location.id : post.location,
+                name: typeof post.location === 'object' ? post.location.name : 'Unknown Location',
+                address: typeof post.location === 'object' ? post.location.address : undefined
+              } : undefined
+            })
+          }
+          
+          // Add additional photos if exists
+          if (post.photos && Array.isArray(post.photos)) {
+            post.photos.forEach((photo: any, index: number) => {
+              photos.push({
+                id: `post-${post.id}-photo-${index}`,
+                type: 'post' as const,
+                url: typeof photo === 'object' && photo.url
+                  ? photo.url 
+                  : typeof photo === 'string'
+                  ? photo
+                  : '',
+                thumbnail: typeof photo === 'object' && photo.sizes?.thumbnail?.url
+                  ? photo.sizes.thumbnail.url
+                  : undefined,
+                alt: typeof photo === 'object' ? photo.alt : undefined,
+                caption: post.title || post.content?.substring(0, 100),
+                width: typeof photo === 'object' ? photo.width : undefined,
+                height: typeof photo === 'object' ? photo.height : undefined,
+                filesize: typeof photo === 'object' ? photo.filesize : undefined,
+                postId: post.id,
+                createdAt: post.createdAt,
+                likeCount: post.likeCount || 0,
+                commentCount: post.commentCount || 0,
+                location: post.location ? {
+                  id: typeof post.location === 'object' ? post.location.id : post.location,
+                  name: typeof post.location === 'object' ? post.location.name : 'Unknown Location',
+                  address: typeof post.location === 'object' ? post.location.address : undefined
+                } : undefined
+              })
+            })
+          }
+          
+          return photos.filter(photo => photo.url)
+        })
 
         allPhotos.push(...postPhotos)
       }
 
-      // Get photos from reviews
-      if (type === 'all' || type === 'reviews') {
-        const reviewsResult = await payload.find({
-          collection: 'reviews',
-          where: {
-            author: { equals: userId },
-            status: { equals: 'published' },
-            images: { exists: true }
-          },
-          sort: sortOrder,
-          limit: type === 'reviews' ? limit : 100,
-          depth: 2
-        })
-
-        const reviewPhotos = reviewsResult.docs.flatMap((review: any) => {
-          if (!review.images || !Array.isArray(review.images)) return []
-          
-          return review.images.map((image: any, index: number) => ({
-            id: `review-${review.id}-${index}`,
-            type: 'review' as const,
-            url: typeof image === 'object' && image.url
-              ? image.url 
-              : typeof image === 'string'
-              ? image
-              : '',
-            thumbnail: typeof image === 'object' && image.sizes?.thumbnail?.url
-              ? image.sizes.thumbnail.url
-              : undefined,
-            alt: typeof image === 'object' ? image.alt : undefined,
-            caption: review.title || review.content?.substring(0, 100),
-            width: typeof image === 'object' ? image.width : undefined,
-            height: typeof image === 'object' ? image.height : undefined,
-            filesize: typeof image === 'object' ? image.filesize : undefined,
-            reviewId: review.id,
-            createdAt: review.createdAt,
-            location: review.location ? {
-              id: typeof review.location === 'object' ? review.location.id : review.location,
-              name: typeof review.location === 'object' ? review.location.name : 'Unknown Location',
-              address: typeof review.location === 'object' ? review.location.address : undefined
-            } : undefined
-          })).filter((photo: any) => photo.url)
-        })
-
-        allPhotos.push(...reviewPhotos)
-      }
+      // Reviews don't have images, so skip this section
+      // Reviews are text-based only in the current schema
 
       // Get photos from location submissions
       if (type === 'all' || type === 'locations') {
@@ -299,23 +310,17 @@ export async function GET(
         where: {
           author: { equals: userId },
           status: { equals: 'published' },
-          featuredImage: { exists: true }
+          or: [
+            { image: { exists: true } },
+            { photos: { exists: true } }
+          ]
         },
         limit: 0,
       })
       stats.totalPostPhotos = postPhotosCount.totalDocs
 
-      // Count review photos
-      const reviewPhotosCount = await payload.find({
-        collection: 'reviews',
-        where: {
-          author: { equals: userId },
-          status: { equals: 'published' },
-          images: { exists: true }
-        },
-        limit: 0,
-      })
-      stats.totalReviewPhotos = reviewPhotosCount.totalDocs
+      // Reviews don't have images, so set to 0
+      stats.totalReviewPhotos = 0
 
       // Count location photos
       const locationPhotosCount = await payload.find({

@@ -7,7 +7,7 @@ import {
   toggleSubscribeLocationAction,
   getLocationSpecials
 } from '@/app/actions'
-import { getServerSideUser } from '@/lib/auth-server'
+import { getMobileUser } from '@/lib/auth-server'
 
 // GET /api/v1/mobile/locations/[locationId] - Get location details
 export async function GET(
@@ -22,8 +22,16 @@ export async function GET(
     const reviewsLimit = parseInt(searchParams.get('reviewsLimit') || '10')
 
     // Get current user for personalization
-    const user = await getServerSideUser()
-    const currentUserId = user?.id
+    let currentUserId = null
+    
+    try {
+      const user = await getMobileUser(request)
+      currentUserId = user?.id
+      console.log('🔍 [Location GET] getMobileUser result:', !!user)
+      console.log('🔍 [Location GET] User ID:', currentUserId)
+    } catch (authError) {
+      console.error('🔍 [Location GET] getMobileUser error:', authError)
+    }
 
     console.log(`Mobile API: Getting location details for ${locationId}`)
 
@@ -186,11 +194,70 @@ export async function POST(
 ) {
   try {
     const { locationId } = await params
-    const user = await getServerSideUser()
+    
+    // Direct Bearer token authentication using the same method as /api/mobile/users/me
+    let user = null
+    
+    const authHeader = request.headers.get('authorization')
+    const cookieHeader = request.headers.get('cookie')
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      
+      try {
+        // Use the same authentication method as /api/mobile/users/me
+        const { getPayload } = await import('payload')
+        const config = (await import('@payload-config')).default
+        const payload = await getPayload({ config })
+        
+        // Create headers object with the Bearer token (same as /api/mobile/users/me)
+        const authHeaders = new Headers()
+        authHeaders.set('Authorization', `Bearer ${token}`)
+        
+        const userAuthResult = await payload.auth({ headers: authHeaders })
+        console.log('🔍 [Location POST] payload.auth result:', userAuthResult)
+        
+        if (userAuthResult && userAuthResult.user) {
+          user = userAuthResult.user
+          console.log('🔍 [Location POST] Direct auth result:', !!user)
+          console.log('🔍 [Location POST] User ID:', user?.id)
+        }
+      } catch (authError) {
+        console.error('🔍 [Location POST] Direct auth error:', authError)
+      }
+    }
+    // Check for payload-token in Cookie header (fallback for mobile apps)
+    else if (cookieHeader?.includes('payload-token=')) {
+      try {
+        // Use the same authentication method as /api/mobile/users/me
+        const { getPayload } = await import('payload')
+        const config = (await import('@payload-config')).default
+        const payload = await getPayload({ config })
+        
+        // Create headers object with the cookie (same as /api/mobile/users/me)
+        const authHeaders = new Headers()
+        authHeaders.set('Cookie', cookieHeader)
+        
+        const userAuthResult = await payload.auth({ headers: authHeaders })
+        console.log('🔍 [Location POST] payload.auth (cookie) result:', userAuthResult)
+        
+        if (userAuthResult && userAuthResult.user) {
+          user = userAuthResult.user
+          console.log('🔍 [Location POST] Cookie auth result:', !!user)
+          console.log('🔍 [Location POST] User ID:', user?.id)
+        }
+      } catch (authError) {
+        console.error('🔍 [Location POST] Cookie auth error:', authError)
+      }
+    }
     
     if (!user) {
       return NextResponse.json(
-        { success: false, error: 'Authentication required' },
+        { 
+          success: false, 
+          error: 'Authentication required',
+          message: 'Please log in to save locations'
+        },
         { status: 401 }
       )
     }
@@ -215,7 +282,7 @@ export async function POST(
     switch (action) {
       case 'save':
       case 'unsave':
-        result = await toggleSaveLocationAction(locationId)
+        result = await toggleSaveLocationAction(locationId, user)
         break
         
       case 'subscribe':
@@ -266,7 +333,17 @@ export async function PUT(
 ) {
   try {
     const { locationId } = await params
-    const user = await getServerSideUser()
+    
+    // Direct Bearer token authentication
+    let user = null
+    
+    try {
+      user = await getMobileUser(request)
+      console.log('🔍 [Location PUT] getMobileUser result:', !!user)
+      console.log('🔍 [Location PUT] User ID:', user?.id)
+    } catch (authError) {
+      console.error('🔍 [Location PUT] getMobileUser error:', authError)
+    }
     
     if (!user) {
       return NextResponse.json(

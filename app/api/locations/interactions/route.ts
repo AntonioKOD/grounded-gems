@@ -418,7 +418,9 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
           Math.sin(Δλ/2) * Math.sin(Δλ/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-  return R * c; // Distance in meters
+  const distance = R * c; // Distance in meters
+  // Round to 2 decimal places to avoid Swift JSON decoding issues
+  return Math.round(distance * 100) / 100;
 }
 
 // Helper function to notify users who have saved a location about activity

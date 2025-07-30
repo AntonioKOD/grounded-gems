@@ -231,6 +231,17 @@ export interface EventFormData {
   // Capacity
   capacity?: number
 
+  // Pricing
+  isFree?: boolean
+  price?: number
+  currency?: string
+
+  // Event Settings
+  requiresApproval?: boolean
+  ageRestriction?: string
+  isMatchmaking?: boolean
+  matchmakingSettings?: any
+
   // Privacy
   privacy?: "public" | "private"
   privateAccess?: string[]

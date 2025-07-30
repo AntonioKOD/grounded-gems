@@ -296,7 +296,9 @@ export async function GET(request: NextRequest) {
               Math.cos(parseFloat(latitude) * Math.PI / 180) * Math.cos(location.coordinates.latitude * Math.PI / 180) * 
               Math.sin(dLon/2) * Math.sin(dLon/2)
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-            distance = R * c
+            const rawDistance = R * c
+            // Round to 2 decimal places to avoid Swift JSON decoding issues
+            distance = Math.round(rawDistance * 100) / 100
             
             // Boost score for nearby locations
             if (distance <= 5) score += 20

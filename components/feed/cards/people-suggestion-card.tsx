@@ -23,10 +23,21 @@ export default function PeopleSuggestionCard({ item }: PeopleSuggestionCardProps
     
     setIsLoading(true)
     try {
+      // Get the payload token from cookies
+      const cookies = document.cookie.split(';')
+      const payloadTokenCookie = cookies.find(cookie => cookie.trim().startsWith('payload-token='))
+      const payloadToken = payloadTokenCookie ? payloadTokenCookie.split('=')[1] : null
+
+      if (!payloadToken) {
+        toast.error('Authentication required. Please log in.')
+        return
+      }
+
       const response = await fetch('/api/users/follow', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cookie': `payload-token=${payloadToken}`,
         },
         body: JSON.stringify({
           userId: user.id,
@@ -41,6 +52,7 @@ export default function PeopleSuggestionCard({ item }: PeopleSuggestionCardProps
         toast.error(error.message || 'Failed to follow user')
       }
     } catch (error) {
+      console.error('Follow error:', error)
       toast.error('Failed to follow user')
     } finally {
       setIsLoading(false)

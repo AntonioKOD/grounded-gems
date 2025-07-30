@@ -3158,14 +3158,17 @@ export async function getLocationSubscriptions(userId: string): Promise<string[]
 /**
  * Toggle save status for a location
  */
-export async function toggleSaveLocationAction(locationId: string): Promise<{ success: boolean; isSaved: boolean; message: string }> {
+export async function toggleSaveLocationAction(locationId: string, user?: any): Promise<{ success: boolean; isSaved: boolean; message: string }> {
   'use server'
   
   try {
-    // Get the current user from cookies or auth
-    const user = await getServerSideUser();
+    // Get the current user from parameter or cookies
+    let currentUser = user;
+    if (!currentUser) {
+      currentUser = await getServerSideUser();
+    }
     
-    if (!user) {
+    if (!currentUser) {
       return {
         success: false,
         isSaved: false,
@@ -3174,18 +3177,18 @@ export async function toggleSaveLocationAction(locationId: string): Promise<{ su
     }
     
     // Check if already saved
-    const savedLocations = await getSavedLocations(user.id);
+    const savedLocations = await getSavedLocations(currentUser.id);
     const isSaved = savedLocations.includes(locationId);
     
     if (isSaved) {
-      const success = await unsaveLocation(user.id, locationId);
+      const success = await unsaveLocation(currentUser.id, locationId);
       return {
         success,
         isSaved: false,
         message: success ? "Location removed from saved" : "Failed to unsave location"
       };
     } else {
-      const success = await saveLocation(user.id, locationId);
+      const success = await saveLocation(currentUser.id, locationId);
       return {
         success,
         isSaved: true,

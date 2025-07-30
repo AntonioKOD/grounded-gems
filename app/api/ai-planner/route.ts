@@ -203,7 +203,7 @@ ${locationDescriptions}
 3. **EXACT NAMING**: Reference verified locations by their EXACT NAMES as listed, followed by "(Verified Sacavia Location)".
 4. **LOCATION PRIORITY**: Always prioritize verified locations over generic suggestions.
 5. **REALISTIC LOGISTICS**: Consider timing, travel between locations, and realistic scheduling.
-6. **COMPLETE DETAILS**: Include specific addresses (for verified locations), estimated costs, and timing.
+6. **COMPLETE DETAILS**: Include specific addresses (for verified locations) and timing.
 7. **INSIDER VALUE**: Use insider tips and specific recommendations when available from verified locations.
 8. **FALLBACK LABELING**: Only if you suggest a type of place not in the verified list, label it as "(Find a local spot for this)".
 9. **QUALITY OVER QUANTITY**: Better to have fewer steps with verified locations than many generic ones.
@@ -251,10 +251,10 @@ ${planningInstructions}
 {
   "title": "Engaging, specific plan title (include location names if using verified locations)",
   "summary": "Brief, exciting description (mention real places by name if used)",
-  "steps": [
-    "Step 1: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified, cost estimate]",
-    "Step 2: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified, cost estimate]"
-  ],
+      "steps": [
+      "Step 1: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified]",
+      "Step 2: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified]"
+    ],
   "context": "${context}",
   "usedRealLocations": ${usedRealLocations},
   "locationIds": ${JSON.stringify(referencedLocationIds)},

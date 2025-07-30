@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSideUser } from '@/lib/auth-server'
-import { getReviewsbyId } from '@/app/actions'
+import { getMobileUser } from '@/lib/auth-server'
 
 // GET /api/mobile/locations/[locationId]/reviews - List reviews for a location
 export async function GET(request: NextRequest, { params }: { params: Promise<{ locationId: string }> }) {
   try {
     const { locationId } = await params
-    const reviewsResult = await getReviewsbyId(locationId)
+    
+    // Get reviews using Payload CMS
+    const { getPayload } = await import('payload')
+    const config = (await import('@payload-config')).default
+    const payload = await getPayload({ config })
+    
+    const reviewsResult = await payload.find({
+      collection: 'reviews',
+      where: {
+        location: { equals: locationId }
+      },
+      depth: 2, // Include author and location data
+      sort: '-createdAt'
+    })
+    
     const reviews = reviewsResult.docs.map((review: any) => ({
       id: review.id,
       title: review.title,
@@ -25,11 +38,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       helpfulCount: review.helpfulCount || 0,
       createdAt: review.createdAt
     }))
+    
     const numReviews = reviews.length;
-    const averageRating = reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / numReviews;
+    const averageRating = numReviews > 0 
+      ? reviews.reduce((sum: number, review: any) => sum + review.rating, 0) / numReviews 
+      : 0;
 
     return NextResponse.json({ success: true, data: { reviews, numReviews, averageRating } })
   } catch (error) {
+    console.error('[REVIEWS] Error in GET:', error);
     return NextResponse.json({ success: false, error: 'Failed to fetch reviews' }, { status: 500 })
   }
 }
@@ -41,13 +58,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { locationId } = await params;
     console.log('[REVIEWS] locationId:', locationId);
 
-    // Get current user
+    // Get current user using mobile authentication
     let user;
     try {
-      user = await getServerSideUser();
+      user = await getMobileUser(request);
       console.log('[REVIEWS] user:', user);
     } catch (userError) {
-      console.error('[REVIEWS] Error in getServerSideUser:', userError);
+      console.error('[REVIEWS] Error in getMobileUser:', userError);
       return NextResponse.json({ error: 'User auth error', details: userError instanceof Error ? userError.message : userError }, { status: 500 });
     }
 
@@ -70,10 +87,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!title || !content || !rating) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
     }
+    
     // Create a new review in the reviews collection
     const { getPayload } = await import('payload')
     const config = (await import('@payload-config')).default
     const payload = await getPayload({ config })
+    
     const reviewData = {
       title,
       content,

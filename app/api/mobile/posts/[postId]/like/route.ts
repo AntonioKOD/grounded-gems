@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
+// Helper function to authenticate user with fallback support
+async function authenticateUser(request: NextRequest, payload: any) {
+  const authHeader = request.headers.get('Authorization')
+  const cookieHeader = request.headers.get('Cookie')
+  
+  let user = null
+  
+  // Try Authorization header first (Bearer token)
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+    } catch (error) {
+      console.log('Authorization header auth failed:', error)
+    }
+  }
+  
+  // Fallback to cookie-based auth if Authorization header failed
+  if (!user && cookieHeader?.includes('payload-token=')) {
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+    } catch (error) {
+      console.log('Cookie auth failed:', error)
+    }
+  }
+  
+  return user
+}
+
 interface MobileLikeResponse {
   success: boolean
   message: string
@@ -26,28 +56,15 @@ export async function POST(
     const { postId } = await params
     const payload = await getPayload({ config })
 
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    const { user } = await payload.auth({ headers: request.headers })
+    // Verify authentication using helper function
+    const user = await authenticateUser(request, payload)
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
+          message: 'Authentication required',
+          error: 'No valid authentication token provided',
+          code: 'NO_TOKEN'
         },
         { status: 401 }
       )
@@ -184,28 +201,15 @@ export async function DELETE(
     const { postId } = await params
     const payload = await getPayload({ config })
 
-    // Verify authentication
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Authentication required',
-          error: 'No authentication token provided',
-          code: 'NO_TOKEN'
-        },
-        { status: 401 }
-      )
-    }
-
-    const { user } = await payload.auth({ headers: request.headers })
+    // Verify authentication using helper function
+    const user = await authenticateUser(request, payload)
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Invalid token',
-          error: 'Authentication token is invalid or expired',
-          code: 'INVALID_TOKEN'
+          message: 'Authentication required',
+          error: 'No valid authentication token provided',
+          code: 'NO_TOKEN'
         },
         { status: 401 }
       )

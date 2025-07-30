@@ -3,6 +3,32 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
 
+// Helper function to convert interest IDs to names
+async function getInterestNames(interestIds: string[], payload: any): Promise<string[]> {
+  if (!interestIds || interestIds.length === 0) {
+    return []
+  }
+  
+  try {
+    // Fetch categories by IDs
+    const categoriesResult = await payload.find({
+      collection: 'categories',
+      where: {
+        id: { in: interestIds }
+      },
+      limit: 100,
+      depth: 0
+    })
+    
+    // Extract category names
+    return categoriesResult.docs.map((category: any) => category.name || category.title || 'Unknown')
+  } catch (error) {
+    console.warn('Failed to fetch interest names:', error)
+    // Return the IDs as fallback
+    return interestIds
+  }
+}
+
 // Query parameters validation
 const profileQuerySchema = z.object({
   userId: z.string().optional(), // User ID to fetch, defaults to current user
@@ -11,6 +37,7 @@ const profileQuerySchema = z.object({
   postsLimit: z.string().optional().transform(val => parseInt(val || '10')),
   includeFollowers: z.string().optional().transform(val => val === 'true'),
   includeFollowing: z.string().optional().transform(val => val === 'true'),
+  includeFullData: z.string().optional().transform(val => val === 'true'), // Include all data for complete web app parity
 })
 
 interface MobileProfileResponse {
@@ -77,40 +104,64 @@ interface MobileProfileResponse {
       joinedAt: string
       lastLogin?: string
       website?: string
+      // Additional fields for complete web app parity
+      following?: string[] // Array of user IDs
+      followers?: string[] // Array of user IDs
     }
     recentPosts?: Array<{
       id: string
       title?: string
       content: string
+      caption?: string
       featuredImage?: {
         url: string
       } | null
+      image?: any
+      video?: any
+      videoThumbnail?: any
+      photos?: any[]
+      videos?: any[]
+      media?: any[]
       likeCount: number
       commentCount: number
+      shareCount: number
+      saveCount: number
+      rating?: number
+      tags?: string[]
+      location?: {
+        id: string
+        name: string
+      }
       createdAt: string
+      updatedAt: string
       type?: string
+      mimeType?: string
     }>
     followers?: Array<{
       id: string
       name: string
       username?: string
+      email: string
       profileImage?: {
         url: string
       } | null
       bio?: string
       location?: string
       isVerified: boolean
+      followerCount?: number
     }>
     following?: Array<{
       id: string
       name: string
       username?: string
+      email: string
       profileImage?: {
         url: string
       } | null
       bio?: string
       location?: string
       isVerified: boolean
+      followerCount?: number
     }>
   }
   error?: string
@@ -143,17 +194,27 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
       includePosts = false, 
       postsLimit = 10,
       includeFollowers = false,
-      includeFollowing = false
+      includeFollowing = false,
+      includeFullData = false
     } = queryValidation.data
 
     // Get current authenticated user
     let currentUser = null
     try {
       const authHeader = request.headers.get('Authorization')
+      const cookieHeader = request.headers.get('Cookie')
+      
+      // Check for Bearer token in Authorization header
       if (authHeader?.startsWith('Bearer ')) {
         const { user } = await payload.auth({ headers: request.headers })
         currentUser = user
-        console.log('🔐 [Profile API] Authenticated user:', user?.id)
+        console.log('🔐 [Profile API] Authenticated user via Bearer token:', user?.id)
+      }
+      // Check for payload-token in Cookie header (fallback for mobile apps)
+      else if (cookieHeader?.includes('payload-token=')) {
+        const { user } = await payload.auth({ headers: request.headers })
+        currentUser = user
+        console.log('🔐 [Profile API] Authenticated user via cookie:', user?.id)
       }
     } catch (authError) {
       console.log('🔐 [Profile API] Auth error:', authError)
@@ -188,11 +249,14 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
       )
     }
 
-    // Get detailed user information
+    console.log('🔍 [Profile API] Fetching profile for user:', targetUserId)
+    console.log('🔍 [Profile API] Is own profile:', isOwnProfile)
+
+    // Get detailed user information with full depth
     const targetUser = await payload.findByID({
       collection: 'users',
       id: targetUserId,
-      depth: 2,
+      depth: 3, // Increased depth to get all related data
     })
 
     if (!targetUser) {
@@ -206,6 +270,10 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
         { status: 404 }
       )
     }
+
+    console.log('🔍 [Profile API] User found:', targetUser.name)
+    console.log('🔍 [Profile API] User interests:', targetUser.interests)
+    console.log('🔍 [Profile API] User social links:', targetUser.socialLinks)
 
     // Get user statistics
     let stats = {
@@ -222,15 +290,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
 
     if (includeStats) {
       try {
-        // Get posts count
+        // Get posts count for this specific user
         const postsResult = await payload.find({
           collection: 'posts',
           where: {
-            author: { equals: targetUserId }
+            author: { equals: targetUserId },
+            status: { equals: 'published' }
           },
-          limit: 0,
+          limit: 0, // Just get the count
         })
+        
         stats.postsCount = postsResult.totalDocs
+        console.log('🔍 [Profile API] Posts count:', stats.postsCount)
 
         // Get locations count (if user has created locations)
         const locationsResult = await payload.find({
@@ -253,24 +324,39 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
         stats.reviewCount = reviewsResult.totalDocs
 
         // Get saved posts count
-        if (targetUser.savedPosts && Array.isArray(targetUser.savedPosts)) {
-          stats.savedPostsCount = targetUser.savedPosts.length
-        }
-
-        // Get liked posts count  
-        if (targetUser.likedPosts && Array.isArray(targetUser.likedPosts)) {
-          stats.likedPostsCount = targetUser.likedPosts.length
-        }
-
-        // Get followers count
-        const followersResult = await payload.find({
-          collection: 'users',
+        const savedPostsResult = await payload.find({
+          collection: 'posts',
           where: {
-            following: { contains: targetUserId }
+            'savedBy': { contains: targetUserId }
           },
           limit: 0,
         })
-        stats.followersCount = followersResult.totalDocs
+        stats.savedPostsCount = savedPostsResult.totalDocs
+
+        // Get liked posts count
+        const likedPostsResult = await payload.find({
+          collection: 'posts',
+          where: {
+            'likes': { contains: targetUserId }
+          },
+          limit: 0,
+        })
+        stats.likedPostsCount = likedPostsResult.totalDocs
+
+        // Get followers count - use the user's followers array if available
+        if (targetUser.followers && Array.isArray(targetUser.followers)) {
+          stats.followersCount = targetUser.followers.length
+        } else {
+          // Fallback to querying all users
+          const followersResult = await payload.find({
+            collection: 'users',
+            where: {
+              following: { contains: targetUserId }
+            },
+            limit: 0,
+          })
+          stats.followersCount = followersResult.totalDocs
+        }
 
         // Get following count
         if (targetUser.following && Array.isArray(targetUser.following)) {
@@ -297,6 +383,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           }
         }
 
+        console.log('🔍 [Profile API] Stats calculated:', stats)
+
       } catch (statsError) {
         console.warn('Failed to fetch user stats:', statsError)
       }
@@ -310,12 +398,26 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
       try {
         // Check if current user follows target user
         if (currentUser.following && Array.isArray(currentUser.following)) {
-          isFollowing = currentUser.following.includes(targetUserId)
+          isFollowing = currentUser.following.some((item: any) => {
+            if (typeof item === 'string') {
+              return item === targetUserId
+            } else if (item && typeof item === 'object' && item.id) {
+              return item.id === targetUserId
+            }
+            return false
+          })
         }
 
         // Check if target user follows current user
         if (targetUser.following && Array.isArray(targetUser.following)) {
-          isFollowedBy = targetUser.following.includes(currentUser.id)
+          isFollowedBy = targetUser.following.some((item: any) => {
+            if (typeof item === 'string') {
+              return item === currentUser.id
+            } else if (item && typeof item === 'object' && item.id) {
+              return item.id === currentUser.id
+            }
+            return false
+          })
         }
       } catch (followError) {
         console.warn('Failed to check follow relationship:', followError)
@@ -324,8 +426,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
 
     // Get recent posts if requested
     let recentPosts: any[] = []
-    if (includePosts) {
+    if (includePosts || includeFullData) {
       try {
+        console.log('🔍 [Profile API] Fetching posts for user:', targetUserId)
+        console.log('🔍 [Profile API] includePosts:', includePosts, 'includeFullData:', includeFullData)
+        
         const postsResult = await payload.find({
           collection: 'posts',
           where: {
@@ -334,36 +439,189 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           },
           sort: 'createdAt-desc',
           limit: postsLimit,
-          depth: 1
+          depth: 2
         })
 
-        recentPosts = postsResult.docs.map((post: any) => ({
-          id: post.id,
-          title: post.title,
-          content: post.content?.length > 150 
-            ? post.content.substring(0, 150) + '...' 
-            : post.content,
-          featuredImage: post.featuredImage ? {
-            url: typeof post.featuredImage === 'object' && post.featuredImage.url
-              ? post.featuredImage.url 
-              : typeof post.featuredImage === 'string'
-              ? post.featuredImage
-              : ''
-          } : null,
-          likeCount: post.likeCount || 0,
-          commentCount: post.commentCount || 0,
-          createdAt: post.createdAt,
-          type: post.type
-        }))
+        console.log('🔍 [Profile API] Found posts:', postsResult.docs.length)
+        console.log('🔍 [Profile API] Posts query result:', {
+          totalDocs: postsResult.totalDocs,
+          limit: postsLimit,
+          hasNextPage: postsResult.hasNextPage,
+          hasPrevPage: postsResult.hasPrevPage
+        })
+
+        // Debug each post
+        postsResult.docs.forEach((post: any, index: number) => {
+          console.log(`🔍 [Profile API] Post ${index + 1}:`, {
+            id: post.id,
+            title: post.title,
+            content: post.content?.substring(0, 100) + '...',
+            type: post.type,
+            status: post.status,
+            author: post.author,
+            featuredImage: post.featuredImage,
+            media: post.media?.length || 0,
+            video: post.video,
+            videoThumbnail: post.videoThumbnail,
+            videos: post.videos,
+            mimeType: post.mimeType,
+            createdAt: post.createdAt
+          })
+        })
+
+        recentPosts = postsResult.docs.map((post: any) => {
+          // Process featured image
+          let featuredImageUrl = null
+          if (post.featuredImage) {
+            if (typeof post.featuredImage === 'object' && post.featuredImage.url) {
+              featuredImageUrl = post.featuredImage.url
+            } else if (typeof post.featuredImage === 'string') {
+              featuredImageUrl = post.featuredImage
+            }
+          }
+
+          // Process media array
+          let mediaArray = []
+          if (post.media && Array.isArray(post.media)) {
+            mediaArray = post.media.map((mediaItem: any) => {
+              if (typeof mediaItem === 'object' && mediaItem.url) {
+                return mediaItem.url
+              } else if (typeof mediaItem === 'string') {
+                return mediaItem
+              }
+              return null
+            }).filter(Boolean)
+          }
+
+          // Process photos array - convert complex objects to simple URLs
+          let photosArray = []
+          if (post.photos && Array.isArray(post.photos)) {
+            photosArray = post.photos.map((photoItem: any) => {
+              if (typeof photoItem === 'object' && photoItem.url) {
+                return photoItem.url
+              } else if (typeof photoItem === 'string') {
+                return photoItem
+              }
+              return null
+            }).filter(Boolean)
+          }
+
+          // Process video field - convert complex objects to simple URLs
+          let videoUrl = null
+          if (post.video) {
+            if (typeof post.video === 'object' && post.video.url) {
+              videoUrl = post.video.url
+            } else if (typeof post.video === 'string') {
+              videoUrl = post.video
+            }
+          }
+
+          // Process videoThumbnail field
+          let videoThumbnailUrl = null
+          if (post.videoThumbnail) {
+            if (typeof post.videoThumbnail === 'object' && post.videoThumbnail.url) {
+              videoThumbnailUrl = post.videoThumbnail.url
+            } else if (typeof post.videoThumbnail === 'string') {
+              videoThumbnailUrl = post.videoThumbnail
+            }
+          }
+
+          // Process videos array - convert complex objects to simple URLs
+          let videosArray = []
+          if (post.videos && Array.isArray(post.videos)) {
+            videosArray = post.videos.map((videoItem: any) => {
+              if (typeof videoItem === 'object' && videoItem.url) {
+                return videoItem.url
+              } else if (typeof videoItem === 'string') {
+                return videoItem
+              }
+              return null
+            }).filter(Boolean)
+          }
+
+          // Debug video processing
+          console.log(`🔍 [Profile API] Video processing for post ${post.id}:`, {
+            originalVideo: post.video,
+            processedVideo: videoUrl,
+            originalVideoThumbnail: post.videoThumbnail,
+            processedVideoThumbnail: videoThumbnailUrl,
+            originalVideos: post.videos,
+            processedVideos: videosArray,
+            type: post.type,
+            mimeType: post.mimeType
+          })
+
+          const processedPost = {
+            id: post.id,
+            title: post.title,
+            content: post.content?.length > 150 
+              ? post.content.substring(0, 150) + '...' 
+              : post.content,
+            caption: post.caption || post.content,
+            featuredImage: featuredImageUrl ? { url: featuredImageUrl } : null,
+            image: post.image,
+            video: videoUrl,
+            videoThumbnail: videoThumbnailUrl,
+            photos: photosArray.length > 0 ? photosArray : undefined,
+            videos: videosArray.length > 0 ? videosArray : undefined,
+            media: mediaArray.length > 0 ? mediaArray : undefined,
+            likeCount: post.likeCount || (Array.isArray(post.likes) ? post.likes.length : 0),
+            commentCount: post.commentCount || (Array.isArray(post.comments) ? post.comments.length : 0),
+            shareCount: post.shareCount || 0,
+            saveCount: post.saveCount || 0,
+            rating: post.rating,
+            tags: post.tags || [],
+            location: post.location ? {
+              id: typeof post.location === 'object' ? post.location.id : post.location,
+              name: typeof post.location === 'object' ? post.location.name : 'Unknown Location'
+            } : undefined,
+            createdAt: post.createdAt,
+            updatedAt: post.updatedAt,
+            type: post.type || 'post',
+            mimeType: post.mimeType
+          }
+
+
+
+          console.log(`🔍 [Profile API] Processed post ${post.id}:`, {
+            id: processedPost.id,
+            content: processedPost.content?.substring(0, 50) + '...',
+            featuredImage: processedPost.featuredImage?.url,
+            video: processedPost.video,
+            videoThumbnail: processedPost.videoThumbnail,
+            videos: processedPost.videos,
+            type: processedPost.type,
+            mimeType: processedPost.mimeType,
+            likeCount: processedPost.likeCount,
+            commentCount: processedPost.commentCount
+          })
+
+          return processedPost
+        })
+
+        console.log('🔍 [Profile API] Processed posts:', recentPosts.length)
+        console.log('🔍 [Profile API] Final posts array:', recentPosts.map(p => ({ 
+          id: p.id, 
+          type: p.type, 
+          content: p.content?.substring(0, 30),
+          video: p.video,
+          videos: p.videos,
+          mimeType: p.mimeType
+        })))
+
       } catch (postsError) {
-        console.warn('Failed to fetch user posts:', postsError)
+        console.error('🔍 [Profile API] Failed to fetch user posts:', postsError)
+        console.error('🔍 [Profile API] Posts error stack:', postsError instanceof Error ? postsError.stack : 'No stack trace')
       }
+    } else {
+      console.log('🔍 [Profile API] Skipping posts fetch - includePosts:', includePosts, 'includeFullData:', includeFullData)
     }
 
     // Get followers list if requested
     let followers: any[] = []
-    if (includeFollowers) {
+    if (includeFollowers || includeFullData) {
       try {
+        console.log('🔍 [Profile API] Fetching followers for user:', targetUserId)
         const followersResult = await payload.find({
           collection: 'users',
           where: {
@@ -373,10 +631,13 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           depth: 1
         })
 
+        console.log('🔍 [Profile API] Found followers:', followersResult.docs.length)
+
         followers = followersResult.docs.map((user: any) => ({
           id: user.id,
           name: user.name,
           username: user.username,
+          email: user.email || '', // Add email field for iOS compatibility
           profileImage: user.profileImage ? {
             url: typeof user.profileImage === 'object' && user.profileImage.url
               ? user.profileImage.url 
@@ -388,7 +649,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           location: user.location ? 
             [user.location.city, user.location.state, user.location.country].filter(Boolean).join(', ') 
             : undefined,
-          isVerified: user.isVerified || false
+          isVerified: user.isVerified || false,
+          followerCount: user.followerCount || 0 // Add followerCount for iOS compatibility
         }))
       } catch (followersError) {
         console.warn('Failed to fetch followers:', followersError)
@@ -397,9 +659,25 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
 
     // Get following list if requested
     let following: any[] = []
-    if (includeFollowing && targetUser.following && Array.isArray(targetUser.following)) {
+    if ((includeFollowing || includeFullData) && targetUser.following && Array.isArray(targetUser.following)) {
       try {
-        const followingIds = targetUser.following.slice(0, 50)
+        console.log('🔍 [Profile API] Fetching following for user:', targetUserId)
+        console.log('🔍 [Profile API] Following array:', targetUser.following)
+        
+        // Extract user IDs from the following array, handling both string IDs and full user objects
+        const followingIds = targetUser.following.slice(0, 50).map((item: any) => {
+          if (typeof item === 'string') {
+            return item
+          } else if (item && typeof item === 'object' && item.id) {
+            return item.id
+          } else {
+            console.warn('Invalid following item:', item)
+            return null
+          }
+        }).filter(Boolean) // Remove null values
+        
+        console.log('🔍 [Profile API] Following IDs:', followingIds)
+        
         const followingUsers = await Promise.all(
           followingIds.map(async (followingId: string) => {
             try {
@@ -412,6 +690,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
                 id: user.id,
                 name: user.name,
                 username: user.username,
+                email: user.email || '', // Add email field for iOS compatibility
                 profileImage: user.profileImage ? {
                   url: typeof user.profileImage === 'object' && user.profileImage.url
                     ? user.profileImage.url 
@@ -423,7 +702,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
                 location: user.location ? 
                   [user.location.city, user.location.state, user.location.country].filter(Boolean).join(', ') 
                   : undefined,
-                isVerified: user.isVerified || false
+                isVerified: user.isVerified || false,
+                followerCount: user.followerCount || 0 // Add followerCount for iOS compatibility
               }
             } catch (error) {
               console.warn(`Failed to fetch following user ${followingId}:`, error)
@@ -432,10 +712,21 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           })
         )
         following = followingUsers.filter(user => user !== null)
+        console.log('🔍 [Profile API] Processed following users:', following.length)
       } catch (followingError) {
         console.warn('Failed to fetch following:', followingError)
       }
     }
+
+    // Get interest names for better display
+    const interestNames = await getInterestNames(targetUser.interests || [], payload)
+    console.log('🔍 [Profile API] Interest names:', interestNames)
+    console.log('🔍 [Profile API] Raw interests from user:', targetUser.interests)
+
+    // Debug social links
+    console.log('🔍 [Profile API] Raw social links from user:', targetUser.socialLinks)
+    console.log('🔍 [Profile API] Social links type:', typeof targetUser.socialLinks)
+    console.log('🔍 [Profile API] Social links is array:', Array.isArray(targetUser.socialLinks))
 
     // Prepare mobile-optimized response
     const response: MobileProfileResponse = {
@@ -483,8 +774,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
             : undefined,
           role: targetUser.role || 'user',
           isCreator: targetUser.isCreator || false,
-          creatorLevel: targetUser.creatorLevel,
-          isVerified: targetUser.isVerified || false,
+          creatorLevel: targetUser.creatorProfile?.creatorLevel || targetUser.creatorLevel,
+          isVerified: targetUser.isVerified || targetUser.creatorProfile?.verification?.isVerified || false,
           preferences: {
             categories: targetUser.interests || [],
             notifications: targetUser.notificationSettings?.enabled ?? true,
@@ -495,7 +786,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           },
           stats,
           socialLinks: targetUser.socialLinks || [],
-          interests: targetUser.interests || [],
+          interests: interestNames,
           deviceInfo: isOwnProfile ? (targetUser.deviceInfo ? {
             platform: targetUser.deviceInfo.platform,
             appVersion: targetUser.deviceInfo.appVersion,
@@ -505,13 +796,55 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
           isFollowedBy: !isOwnProfile ? isFollowedBy : undefined,
           joinedAt: targetUser.createdAt,
           lastLogin: isOwnProfile ? targetUser.lastLogin : undefined, // Only show last login for own profile
-          website: targetUser.website,
+          website: targetUser.website || targetUser.creatorProfile?.website,
+          // Add following and followers arrays for complete web app parity
+          following: Array.isArray(targetUser.following) ? targetUser.following.map((item: any) => {
+            if (typeof item === 'string') {
+              return item
+            } else if (item && typeof item === 'object' && item.id) {
+              return item.id
+            } else {
+              console.warn('Invalid following item in response mapping:', item)
+              return null
+            }
+          }).filter(Boolean) : [],
+          followers: Array.isArray(targetUser.followers) ? targetUser.followers.map((item: any) => {
+            if (typeof item === 'string') {
+              return item
+            } else if (item && typeof item === 'object' && item.id) {
+              return item.id
+            } else {
+              console.warn('Invalid follower item in response mapping:', item)
+              return null
+            }
+          }).filter(Boolean) : [],
         },
         recentPosts: recentPosts.length > 0 ? recentPosts : undefined,
         followers: followers.length > 0 ? followers : undefined,
         following: following.length > 0 ? following : undefined,
       },
     }
+
+    console.log('🔍 [Profile API] Response prepared successfully')
+    console.log('🔍 [Profile API] User data included:', {
+      name: response.data?.user.name,
+      postsCount: response.data?.user.stats.postsCount,
+      interestsCount: response.data?.user.interests?.length,
+      socialLinksCount: response.data?.user.socialLinks?.length,
+      recentPostsCount: response.data?.recentPosts?.length
+    })
+    
+    // Debug the final response structure
+    console.log('🔍 [Profile API] Final response structure:', {
+      success: response.success,
+      hasUser: !!response.data?.user,
+      hasPosts: !!response.data?.recentPosts,
+      postsLength: response.data?.recentPosts?.length || 0,
+      userInterests: response.data?.user.interests,
+      userSocialLinks: response.data?.user.socialLinks,
+      userBio: response.data?.user.bio,
+      userStats: response.data?.user.stats
+    })
 
     return NextResponse.json(response, {
       status: 200,

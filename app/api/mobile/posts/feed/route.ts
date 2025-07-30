@@ -489,26 +489,198 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileFeed
       })
     }
 
-    // Fetch people suggestions (users)
+    // Fetch people suggestions (users) - Enhanced with Instagram/Facebook-like organization
     let people: any[] = []
     if (typesToFetch.includes('people_suggestion')) {
-      const usersResult = await payload.find({
-        collection: 'users',
-        // Removed invalid _status filter
-        sort: '-createdAt',
-        page,
-        limit,
-        depth: 1,
-      })
-      people = usersResult.docs.map((user: any) => ({
-        type: 'people_suggestion',
-        id: user.id,
-        name: user.name,
-        bio: user.bio || '',
-        profileImage: user.profileImage ? (typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage) : null,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
-      }))
+      try {
+        // Get current user's location and following list for better suggestions
+        const currentUserLocation = currentUser?.location?.coordinates
+        const currentUserFollowing = currentUser?.following || []
+        const currentUserFollowers = currentUser?.followers || []
+        
+        // Build query to exclude current user and get nearby users
+        const whereConditions: any[] = [
+          { id: { not_equals: currentUser?.id } } // Exclude current user
+        ]
+        
+        // Get users with location data for nearby suggestions
+        const usersResult = await payload.find({
+          collection: 'users',
+          where: {
+            and: whereConditions
+          },
+          sort: '-createdAt',
+          page,
+          limit: limit * 3, // Get more to filter and organize
+          depth: 2,
+        })
+        
+        // Process and categorize users
+        const processedUsers = usersResult.docs.map((user: any) => {
+          // Calculate mutual followers
+          const userFollowing = user.following || []
+          const userFollowers = user.followers || []
+          const mutualFollowers = currentUserFollowing.filter((id: string) => 
+            userFollowers.includes(id)
+          )
+          
+          // Calculate distance if both users have location
+          let distance: number | null = null
+          if (currentUserLocation && user.location?.coordinates) {
+            const userLat = user.location.coordinates.latitude
+            const userLng = user.location.coordinates.longitude
+            if (userLat && userLng) {
+              distance = calculateDistance(
+                currentUserLocation.latitude,
+                currentUserLocation.longitude,
+                userLat,
+                userLng
+              )
+            }
+          }
+          
+          // Calculate suggestion score based on various factors
+          let suggestionScore = 0
+          
+          // Mutual followers boost
+          suggestionScore += mutualFollowers.length * 10
+          
+          // Nearby users boost (within 25 miles)
+          if (distance && distance <= 25) {
+            suggestionScore += Math.max(0, 25 - distance) * 2
+          }
+          
+          // Active users boost (recent activity)
+          if (user.lastLogin) {
+            const daysSinceLastLogin = (Date.now() - new Date(user.lastLogin).getTime()) / (1000 * 60 * 60 * 24)
+            if (daysSinceLastLogin <= 7) suggestionScore += 5
+            else if (daysSinceLastLogin <= 30) suggestionScore += 2
+          }
+          
+          // Profile completeness boost
+          if (user.profileImage) suggestionScore += 3
+          if (user.bio) suggestionScore += 2
+          if (user.username) suggestionScore += 1
+          
+          return {
+            type: 'people_suggestion',
+            id: user.id,
+            name: user.name,
+            username: user.username || null,
+            bio: user.bio || '',
+            profileImage: user.profileImage ? (typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage) : null,
+            location: user.location?.coordinates ? {
+              latitude: user.location.coordinates.latitude,
+              longitude: user.location.coordinates.longitude
+            } : null,
+            distance: distance,
+            mutualFollowers: mutualFollowers.length,
+            mutualFollowersList: mutualFollowers.slice(0, 3), // Show first 3 mutual followers
+            followersCount: userFollowers.length,
+            followingCount: userFollowing.length,
+            isFollowing: currentUserFollowing.includes(user.id),
+            isFollowedBy: currentUserFollowers.includes(user.id),
+            suggestionScore,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+            lastLogin: user.lastLogin
+          }
+        })
+        
+        // Sort by suggestion score and organize into categories
+        const sortedUsers = processedUsers.sort((a, b) => b.suggestionScore - a.suggestionScore)
+        
+        // Organize into Instagram/Facebook-like categories
+        const nearbyUsers = sortedUsers.filter(user => user.distance && user.distance <= 25)
+        const mutualConnectionUsers = sortedUsers.filter(user => user.mutualFollowers > 0 && (!user.distance || user.distance > 25))
+        const otherUsers = sortedUsers.filter(user => user.mutualFollowers === 0 && (!user.distance || user.distance > 25))
+        
+        // Create categorized people suggestions
+        people = []
+        
+        // Add nearby users first (if any)
+        if (nearbyUsers.length > 0) {
+          people.push({
+            type: 'people_suggestion',
+            category: 'nearby',
+            title: 'People Near You',
+            subtitle: `${nearbyUsers.length} people nearby`,
+            users: nearbyUsers.slice(0, 5)
+          })
+        }
+        
+        // Add mutual connection users
+        if (mutualConnectionUsers.length > 0) {
+          people.push({
+            type: 'people_suggestion',
+            category: 'mutual',
+            title: 'People You May Know',
+            subtitle: `${mutualConnectionUsers.length} people with mutual connections`,
+            users: mutualConnectionUsers.slice(0, 5)
+          })
+        }
+        
+        // Add other users as individual suggestions
+        const remainingUsers = otherUsers.slice(0, 3)
+        remainingUsers.forEach(user => {
+          people.push({
+            type: 'people_suggestion',
+            category: 'suggested',
+            title: 'Suggested for You',
+            subtitle: 'Based on your activity',
+            users: [user]
+          })
+        })
+        
+        console.log(`📱 People suggestions organized: ${nearbyUsers.length} nearby, ${mutualConnectionUsers.length} mutual, ${remainingUsers.length} other`)
+        
+      } catch (error) {
+        console.error('Error fetching people suggestions:', error)
+        // Fallback to simple user list if enhanced suggestions fail
+        const fallbackUsers = await payload.find({
+          collection: 'users',
+          where: { id: { not_equals: currentUser?.id } },
+          limit: 3,
+          depth: 1,
+        })
+        
+        people = fallbackUsers.docs.map((user: any) => ({
+          type: 'people_suggestion',
+          category: 'suggested',
+          title: 'Suggested for You',
+          subtitle: 'People you might like',
+          users: [{
+            id: user.id,
+            name: user.name,
+            username: user.username || null,
+            bio: user.bio || '',
+            profileImage: user.profileImage ? (typeof user.profileImage === 'object' ? user.profileImage.url : user.profileImage) : null,
+            mutualFollowers: 0,
+            followersCount: 0,
+            followingCount: 0,
+            isFollowing: false,
+            isFollowedBy: false,
+            suggestionScore: 0,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+          }]
+        }))
+      }
+    }
+    
+    // Helper function to calculate distance between two points
+    function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+      const R = 3959 // Earth's radius in miles
+      const dLat = (lat2 - lat1) * Math.PI / 180
+      const dLon = (lon2 - lon1) * Math.PI / 180
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      const distance = R * c
+      // Round to 2 decimal places to avoid Swift JSON decoding issues
+      return Math.round(distance * 100) / 100
     }
 
     // Filter out private posts (location.privacy === 'private')

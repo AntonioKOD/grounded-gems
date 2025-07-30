@@ -26,9 +26,17 @@ export async function POST(
     const { userId: targetUserId } = await params
     const payload = await getPayload({ config })
 
-    // Verify authentication
+    // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const cookieHeader = request.headers.get('Cookie')
+    
+    // Check for Bearer token in Authorization header
+    const hasBearerToken = authHeader?.startsWith('Bearer ')
+    
+    // Check for payload-token in Cookie header
+    const hasPayloadToken = cookieHeader?.includes('payload-token=')
+    
+    if (!hasBearerToken && !hasPayloadToken) {
       return NextResponse.json(
         {
           success: false,
@@ -208,9 +216,17 @@ export async function DELETE(
     const { userId: targetUserId } = await params
     const payload = await getPayload({ config })
 
-    // Verify authentication
+    // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
+    const cookieHeader = request.headers.get('Cookie')
+    
+    // Check for Bearer token in Authorization header
+    const hasBearerToken = authHeader?.startsWith('Bearer ')
+    
+    // Check for payload-token in Cookie header
+    const hasPayloadToken = cookieHeader?.includes('payload-token=')
+    
+    if (!hasBearerToken && !hasPayloadToken) {
       return NextResponse.json(
         {
           success: false,

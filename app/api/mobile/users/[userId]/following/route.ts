@@ -33,6 +33,13 @@ export async function GET(
 
     // Extract Bearer token and authenticate directly
     const authHeader = request.headers.get('authorization')
+    const cookieHeader = request.headers.get('Cookie')
+    
+    // Debug logging
+    console.log('🔍 [Following API] Authorization header:', authHeader)
+    console.log('🔍 [Following API] Cookie header:', cookieHeader)
+    console.log('🔍 [Following API] Cookie includes payload-token:', cookieHeader?.includes('payload-token='))
+    
     let currentUser = null
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -54,6 +61,26 @@ export async function GET(
         }
       } catch (authError) {
         console.error('Mobile following - Authentication error:', authError)
+      }
+    }
+    // Check for payload-token in Cookie header (fallback for mobile apps)
+    else if (cookieHeader?.includes('payload-token=')) {
+      try {
+        // Call mobile users/me directly for authentication with cookie
+        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
+          method: 'GET',
+          headers: {
+            'Cookie': cookieHeader,
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (meResponse.ok) {
+          const meData = await meResponse.json()
+          currentUser = meData.user
+        }
+      } catch (authError) {
+        console.error('Mobile following - Cookie authentication error:', authError)
       }
     }
     

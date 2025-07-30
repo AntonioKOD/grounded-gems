@@ -4,39 +4,44 @@ import config from '@payload-config'
 import { z } from 'zod'
 
 // Query parameters validation
-const postsQuerySchema = z.object({
-  type: z.enum(['all', 'posts', 'reviews', 'recommendations']).optional().default('all'),
-  limit: z.string().optional().transform(val => parseInt(val || '20')),
+const userPostsQuerySchema = z.object({
   page: z.string().optional().transform(val => parseInt(val || '1')),
-  sort: z.enum(['newest', 'oldest', 'popular']).optional().default('newest'),
+  limit: z.string().optional().transform(val => parseInt(val || '20')),
+  sortBy: z.enum(['createdAt-desc', 'createdAt-asc', 'likeCount-desc', 'commentCount-desc']).optional().default('createdAt-desc'),
 })
 
-interface MobileUserPostsResponse {
+interface UserPostsResponse {
   success: boolean
   message: string
   data?: {
     posts: Array<{
       id: string
-      type: 'post' | 'review' | 'recommendation'
       title?: string
       content: string
+      caption?: string
       featuredImage?: {
         url: string
       } | null
+      image?: string
+      video?: string
+      videoThumbnail?: string
+      photos?: string[]
+      videos?: string[]
+      media?: string[]
       likeCount: number
       commentCount: number
       shareCount: number
       saveCount: number
       rating?: number
+      tags?: string[]
       location?: {
         id: string
         name: string
-        address?: string
       }
       createdAt: string
       updatedAt: string
-      isLiked?: boolean
-      isSaved?: boolean
+      type?: string
+      mimeType?: string
     }>
     pagination: {
       page: number
@@ -46,11 +51,15 @@ interface MobileUserPostsResponse {
       hasNext: boolean
       hasPrev: boolean
     }
-    stats: {
-      totalPosts: number
-      totalReviews: number
-      totalRecommendations: number
-      averageRating?: number
+    user: {
+      id: string
+      name: string
+      username?: string
+      profileImage?: {
+        url: string
+      } | null
+      isVerified: boolean
+      followerCount: number
     }
   }
   error?: string
@@ -60,14 +69,14 @@ interface MobileUserPostsResponse {
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ userId: string }> }
-): Promise<NextResponse<MobileUserPostsResponse>> {
+): Promise<NextResponse<UserPostsResponse>> {
   try {
-    const { userId } = await params
     const payload = await getPayload({ config })
     const { searchParams } = new URL(request.url)
+    const { userId } = await params
     
     // Validate query parameters
-    const queryValidation = postsQuerySchema.safeParse(Object.fromEntries(searchParams))
+    const queryValidation = userPostsQuerySchema.safeParse(Object.fromEntries(searchParams))
     if (!queryValidation.success) {
       return NextResponse.json(
         {
@@ -80,243 +89,196 @@ export async function GET(
       )
     }
 
-    const { type, limit, page, sort } = queryValidation.data
+    const { page = 1, limit = 20, sortBy = 'createdAt-desc' } = queryValidation.data
 
-    // Get current authenticated user for context
-    let currentUser = null
-    try {
-      const authHeader = request.headers.get('Authorization')
-      if (authHeader?.startsWith('Bearer ')) {
-        const { user } = await payload.auth({ headers: request.headers })
-        currentUser = user
-      }
-    } catch (authError) {
-      // Continue without authentication for public posts
-    }
+    console.log('🔍 [User Posts API] Fetching posts for user:', userId)
+    console.log('🔍 [User Posts API] Page:', page, 'Limit:', limit, 'Sort:', sortBy)
 
-    // Validate user ID
-    if (!userId || typeof userId !== 'string') {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Invalid user ID',
-          error: 'User ID is required and must be a valid string',
-          code: 'INVALID_USER_ID'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Check if target user exists
-    const targetUser = await payload.findByID({
+    // Get user information
+    const user = await payload.findByID({
       collection: 'users',
       id: userId,
+      depth: 1,
     })
 
-    if (!targetUser) {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
           message: 'User not found',
-          error: 'The specified user does not exist',
+          error: 'User account does not exist',
           code: 'USER_NOT_FOUND'
         },
         { status: 404 }
       )
     }
 
-    // Build query based on type
-    let collection = 'posts'
-    let whereClause: any = {
-      author: { equals: userId },
-      status: { equals: 'published' }
-    }
-
-    // Add type-specific filters
-    if (type === 'reviews') {
-      collection = 'reviews'
-      whereClause = {
+    // Get all posts from this user
+    const postsResult = await payload.find({
+      collection: 'posts',
+      where: {
         author: { equals: userId },
         status: { equals: 'published' }
-      }
-    } else if (type === 'recommendations') {
-      collection = 'posts'
-      whereClause = {
-        author: { equals: userId },
-        status: { equals: 'published' },
-        type: { equals: 'recommendation' }
-      }
-    } else if (type === 'posts') {
-      collection = 'posts'
-      whereClause = {
-        author: { equals: userId },
-        status: { equals: 'published' },
-        type: { not_equals: 'recommendation' }
-      }
-    }
-
-    // Determine sort order
-    let sortOrder: string
-    switch (sort) {
-      case 'oldest':
-        sortOrder = 'createdAt'
-        break
-      case 'popular':
-        sortOrder = 'likeCount-desc'
-        break
-      case 'newest':
-      default:
-        sortOrder = 'createdAt-desc'
-        break
-    }
-
-    // Get posts with pagination
-    const postsResult = await payload.find({
-      collection,
-      where: whereClause,
-      sort: sortOrder,
-      limit,
+      },
+      sort: sortBy,
       page,
+      limit,
       depth: 2
     })
 
-    // Get user's liked and saved posts for context
-    let userLikedPosts: string[] = []
-    let userSavedPosts: string[] = []
-    
-    if (currentUser) {
-      try {
-        if (currentUser.likedPosts && Array.isArray(currentUser.likedPosts)) {
-          userLikedPosts = currentUser.likedPosts.map((post: any) => 
-            typeof post === 'string' ? post : post.id
-          )
-        }
-        if (currentUser.savedPosts && Array.isArray(currentUser.savedPosts)) {
-          userSavedPosts = currentUser.savedPosts.map((post: any) => 
-            typeof post === 'string' ? post : post.id
-          )
-        }
-      } catch (error) {
-        console.warn('Failed to get user liked/saved posts:', error)
-      }
-    }
+    console.log('🔍 [User Posts API] Found posts:', postsResult.docs.length)
+    console.log('🔍 [User Posts API] Total posts:', postsResult.totalDocs)
 
-    // Format posts for mobile
-    const formattedPosts = postsResult.docs.map((post: any) => ({
-      id: post.id,
-      type: (collection === 'reviews' ? 'review' : (post.type === 'recommendation' ? 'recommendation' : 'post')) as 'post' | 'review' | 'recommendation',
-      title: post.title,
-      content: post.content?.length > 200 
-        ? post.content.substring(0, 200) + '...' 
-        : post.content,
-      featuredImage: post.featuredImage ? {
-        url: typeof post.featuredImage === 'object' && post.featuredImage.url
-          ? post.featuredImage.url 
-          : typeof post.featuredImage === 'string'
-          ? post.featuredImage
-          : ''
-      } : null,
-      likeCount: post.likeCount || 0,
-      commentCount: post.commentCount || 0,
-      shareCount: post.shareCount || 0,
-      saveCount: post.saveCount || 0,
-      rating: post.rating,
-      location: post.location ? {
-        id: typeof post.location === 'object' ? post.location.id : post.location,
-        name: typeof post.location === 'object' ? post.location.name : 'Unknown Location',
-        address: typeof post.location === 'object' ? post.location.address : undefined
-      } : undefined,
-      createdAt: post.createdAt,
-      updatedAt: post.updatedAt,
-      isLiked: userLikedPosts.includes(post.id),
-      isSaved: userSavedPosts.includes(post.id)
-    }))
-
-    // Get statistics for all user content
-    let stats = {
-      totalPosts: 0,
-      totalReviews: 0,
-      totalRecommendations: 0,
-      averageRating: undefined as number | undefined,
-    }
-
-    try {
-      // Get posts count
-      const allPostsResult = await payload.find({
-        collection: 'posts',
-        where: {
-          author: { equals: userId },
-          status: { equals: 'published' },
-          type: { not_equals: 'recommendation' }
-        },
-        limit: 0,
-      })
-      stats.totalPosts = allPostsResult.totalDocs
-
-      // Get recommendations count
-      const recommendationsResult = await payload.find({
-        collection: 'posts',
-        where: {
-          author: { equals: userId },
-          status: { equals: 'published' },
-          type: { equals: 'recommendation' }
-        },
-        limit: 0,
-      })
-      stats.totalRecommendations = recommendationsResult.totalDocs
-
-      // Get reviews count
-      const reviewsResult = await payload.find({
-        collection: 'reviews',
-        where: {
-          author: { equals: userId },
-          status: { equals: 'published' }
-        },
-        limit: 0,
-      })
-      stats.totalReviews = reviewsResult.totalDocs
-
-      // Calculate average rating from reviews
-      if (stats.totalReviews > 0) {
-        const reviewsWithRatings = await payload.find({
-          collection: 'reviews',
-          where: {
-            author: { equals: userId },
-            status: { equals: 'published' },
-            rating: { exists: true }
-          },
-          limit: 100,
-        })
-        
-        const totalRating = reviewsWithRatings.docs.reduce((sum: number, review: any) => {
-          return sum + (review.rating || 0)
-        }, 0)
-        
-        if (reviewsWithRatings.docs.length > 0) {
-          stats.averageRating = totalRating / reviewsWithRatings.docs.length
+    // Process posts
+    const posts = postsResult.docs.map((post: any) => {
+      // Process featured image
+      let featuredImageUrl = null
+      if (post.featuredImage) {
+        if (typeof post.featuredImage === 'object' && post.featuredImage.url) {
+          featuredImageUrl = post.featuredImage.url
+        } else if (typeof post.featuredImage === 'string') {
+          featuredImageUrl = post.featuredImage
         }
       }
 
-    } catch (statsError) {
-      console.warn('Failed to fetch user content stats:', statsError)
-    }
+      // Process media array
+      let mediaArray = []
+      if (post.media && Array.isArray(post.media)) {
+        mediaArray = post.media.map((mediaItem: any) => {
+          if (typeof mediaItem === 'object' && mediaItem.url) {
+            return mediaItem.url
+          } else if (typeof mediaItem === 'string') {
+            return mediaItem
+          }
+          return null
+        }).filter(Boolean)
+      }
 
-    const response: MobileUserPostsResponse = {
+      // Process photos array - convert complex objects to simple URLs
+      let photosArray = []
+      if (post.photos && Array.isArray(post.photos)) {
+        photosArray = post.photos.map((photoItem: any) => {
+          if (typeof photoItem === 'object' && photoItem.url) {
+            return photoItem.url
+          } else if (typeof photoItem === 'string') {
+            return photoItem
+          }
+          return null
+        }).filter(Boolean)
+      }
+
+      // Process video field - convert complex objects to simple URLs
+      let videoUrl = null
+      if (post.video) {
+        if (typeof post.video === 'object' && post.video.url) {
+          videoUrl = post.video.url
+        } else if (typeof post.video === 'string') {
+          videoUrl = post.video
+        }
+      }
+
+      // Process videoThumbnail field
+      let videoThumbnailUrl = null
+      if (post.videoThumbnail) {
+        if (typeof post.videoThumbnail === 'object' && post.videoThumbnail.url) {
+          videoThumbnailUrl = post.videoThumbnail.url
+        } else if (typeof post.videoThumbnail === 'string') {
+          videoThumbnailUrl = post.videoThumbnail
+        }
+      }
+
+      // Process videos array - convert complex objects to simple URLs
+      let videosArray = []
+      if (post.videos && Array.isArray(post.videos)) {
+        videosArray = post.videos.map((videoItem: any) => {
+          if (typeof videoItem === 'object' && videoItem.url) {
+            return videoItem.url
+          } else if (typeof videoItem === 'string') {
+            return videoItem
+          }
+          return null
+        }).filter(Boolean)
+      }
+
+      // Debug video processing
+      console.log(`🔍 [User Posts API] Video processing for post ${post.id}:`, {
+        originalVideo: post.video,
+        processedVideo: videoUrl,
+        originalVideoThumbnail: post.videoThumbnail,
+        processedVideoThumbnail: videoThumbnailUrl,
+        originalVideos: post.videos,
+        processedVideos: videosArray,
+        type: post.type,
+        mimeType: post.mimeType
+      })
+
+      return {
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        caption: post.caption || post.content,
+        featuredImage: featuredImageUrl ? { url: featuredImageUrl } : null,
+        image: post.image,
+        video: videoUrl,
+        videoThumbnail: videoThumbnailUrl,
+        photos: photosArray.length > 0 ? photosArray : undefined,
+        videos: videosArray.length > 0 ? videosArray : undefined,
+        media: mediaArray.length > 0 ? mediaArray : undefined,
+        likeCount: post.likeCount || (Array.isArray(post.likes) ? post.likes.length : 0),
+        commentCount: post.commentCount || (Array.isArray(post.comments) ? post.comments.length : 0),
+        shareCount: post.shareCount || 0,
+        saveCount: post.saveCount || 0,
+        rating: post.rating,
+        tags: post.tags || [],
+        location: post.location ? {
+          id: typeof post.location === 'object' ? post.location.id : post.location,
+          name: typeof post.location === 'object' ? post.location.name : 'Unknown Location'
+        } : undefined,
+        createdAt: post.createdAt,
+        updatedAt: post.updatedAt,
+        type: post.type || 'post',
+        mimeType: post.mimeType
+      }
+    })
+
+    // Calculate pagination
+    const totalPages = Math.ceil(postsResult.totalDocs / limit)
+    const hasNext = page < totalPages
+    const hasPrev = page > 1
+
+    const response: UserPostsResponse = {
       success: true,
       message: 'User posts retrieved successfully',
       data: {
-        posts: formattedPosts,
+        posts,
         pagination: {
           page,
           limit,
           total: postsResult.totalDocs,
-          totalPages: Math.ceil(postsResult.totalDocs / limit),
-          hasNext: postsResult.hasNextPage,
-          hasPrev: postsResult.hasPrevPage,
+          totalPages,
+          hasNext,
+          hasPrev,
         },
-        stats
+        user: {
+          id: String(user.id),
+          name: user.name || '',
+          username: user.username,
+          profileImage: user.profileImage ? {
+            url: typeof user.profileImage === 'object' && user.profileImage.url
+              ? user.profileImage.url 
+              : typeof user.profileImage === 'string'
+              ? user.profileImage
+              : ''
+          } : null,
+          isVerified: user.isVerified || user.creatorProfile?.verification?.isVerified || false,
+          followerCount: user.followerCount || 0,
+        }
       }
     }
+
+    console.log('🔍 [User Posts API] Response prepared successfully')
+    console.log('🔍 [User Posts API] Posts returned:', posts.length)
+    console.log('🔍 [User Posts API] Pagination:', response.data?.pagination)
 
     return NextResponse.json(response, {
       status: 200,
@@ -327,13 +289,14 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('Mobile user posts error:', error)
+    console.error('User posts API error:', error)
+    console.error('User posts API error stack:', error instanceof Error ? error.stack : 'No stack trace')
     
     return NextResponse.json(
       {
         success: false,
         message: 'Internal server error',
-        error: 'Posts service unavailable',
+        error: error instanceof Error ? error.message : 'User posts service unavailable',
         code: 'SERVER_ERROR'
       },
       { status: 500 }
@@ -341,7 +304,6 @@ export async function GET(
   }
 }
 
-// Handle preflight requests for CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
