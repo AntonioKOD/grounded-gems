@@ -16,6 +16,7 @@ import LocationList from "./location-list"
 import LocationDetail from "./location-detail"
 import LocationDetailMobile from "./location-detail-mobile"
 import LocationBottomSheet from "./location-bottom-sheet"
+import ClusterBottomSheet from "./cluster-bottom-sheet"
 import type { Location } from "./map-data"
 
 // Simple mobile detection
@@ -75,10 +76,25 @@ export default function MapExplorer() {
   const [previewLocation, setPreviewLocation] = useState<Location | null>(null)
   const [clusterPreviewData, setClusterPreviewData] = useState<{
     locations: Location[];
-    isCluster: boolean;
-    center?: [number, number]; 
+    center: [number, number];
+    count: number;
   } | null>(null)
   const [showClusterBottomSheet, setShowClusterBottomSheet] = useState(false)
+
+  // Handle cluster clicks
+  const handleClusterClick = useCallback((clusterData: {
+    locations: Location[];
+    center: [number, number];
+    count: number;
+  }) => {
+    console.log('🎯 Cluster clicked with', clusterData.count, 'locations')
+    setClusterPreviewData({
+      locations: clusterData.locations,
+      center: clusterData.center,
+      count: clusterData.count
+    })
+    setShowClusterBottomSheet(true)
+  }, [])
 
   // Check mobile on mount and resize
   useEffect(() => {
@@ -524,8 +540,8 @@ export default function MapExplorer() {
         if (isCluster && cluster && cluster.locations.length > 1) {
           setClusterPreviewData({ 
             locations: cluster.locations, 
-            isCluster: true,
-            center: cluster.center // Pass cluster center 
+            center: cluster.center,
+            count: cluster.locations.length
           });
           setShowClusterBottomSheet(true);
           // When showing bottom sheet for cluster, adjust map padding
@@ -537,7 +553,8 @@ export default function MapExplorer() {
           // Single location tapped on map - use LocationBottomSheet
           setClusterPreviewData({ // Use clusterPreviewData to pass single location to LocationBottomSheet
             locations: [primaryLocationFromEvent],
-            isCluster: false, // Explicitly false for single
+            center: [coordinates?.lng || 0, coordinates?.lat || 0],
+            count: 1
           });
           setShowClusterBottomSheet(true); // Show the bottom sheet
           // When showing bottom sheet for single location, adjust map padding
@@ -754,6 +771,7 @@ export default function MapExplorer() {
                     forceRefresh={0}
                     mapPadding={mapPadding}
                     isDetailModalOpen={isDetailOpen}
+                    onClusterClick={handleClusterClick}
                   />
                   
                   {/* Mobile SIMPLE preview for SINGLE locations - REMOVED */}
@@ -860,14 +878,22 @@ export default function MapExplorer() {
       {/* Render LocationBottomSheet for CLUSTER preview on mobile */}
       {isMobile && showClusterBottomSheet && clusterPreviewData && (
         <LocationBottomSheet
-          location={clusterPreviewData.isCluster ? null : (clusterPreviewData.locations[0] ?? null)} // Pass single location if not a cluster
+          location={clusterPreviewData.count === 1 ? (clusterPreviewData.locations[0] ?? null) : null} // Pass single location if count is 1
           isOpen={showClusterBottomSheet}
           onClose={closeClusterBottomSheet}
           onViewDetails={handleViewDetailsFromPreview} // This opens LocationDetailMobile
           isMobile={true}
-          cluster={clusterPreviewData.isCluster ? clusterPreviewData : undefined} // Pass cluster data only if it's a cluster
+          cluster={clusterPreviewData.count > 1 ? { ...clusterPreviewData, isCluster: true } : undefined} // Pass cluster data only if count > 1
         />
       )}
+      
+      {/* New Cluster Bottom Sheet */}
+      <ClusterBottomSheet
+        isOpen={showClusterBottomSheet}
+        onClose={() => setShowClusterBottomSheet(false)}
+        clusterData={clusterPreviewData}
+        onLocationSelect={handleViewDetailsFromPreview}
+      />
     </div>
   )
 }

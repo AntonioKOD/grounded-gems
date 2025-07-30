@@ -162,26 +162,26 @@ export async function POST(request: NextRequest) {
     
     // Search guides with AI context
     if (queryAnalysis.shouldSearchGuides) {
-      const guidesResult = await payload.find({
-        collection: 'guides',
+    const guidesResult = await payload.find({
+      collection: 'guides',
         where: { 
           or: [
             { title: { like: query } },
             { description: { like: query } }
           ]
         },
-        limit: 10,
-        sort: '-createdAt',
-        depth: 1
-      })
+      limit: 10,
+      sort: '-createdAt',
+      depth: 1
+    })
       
       searchResults.guides = guidesResult.docs.map((g: any) => ({
-        id: g.id,
-        title: g.title,
-        description: g.description,
-        featuredImage: g.featuredImage?.url || null,
-        createdAt: g.createdAt
-      }))
+      id: g.id,
+      title: g.title,
+      description: g.description,
+      featuredImage: g.featuredImage?.url || null,
+      createdAt: g.createdAt
+    }))
     }
     
     // Enhanced people search with AI context
@@ -232,9 +232,9 @@ export async function POST(request: NextRequest) {
           // Calculate distance if coordinates available
           let distance = null
           if (currentUserLocation && u.location?.coordinates) {
-            distance = calculateDistance(
-              currentUserLocation.latitude,
-              currentUserLocation.longitude,
+              distance = calculateDistance(
+                currentUserLocation.latitude,
+                currentUserLocation.longitude,
               u.location.coordinates.latitude,
               u.location.coordinates.longitude
             )

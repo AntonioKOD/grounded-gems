@@ -101,28 +101,47 @@ export async function POST(req: NextRequest) {
         
         console.log(`📊 Found ${allLocations.length} total locations in database`)
         
-        // Enhanced distance calculation with better filtering
+        // Enhanced distance calculation with better filtering and error handling
         const locationsWithDistance = allLocations
           .map((location: any) => {
-            const locLat = location.coordinates?.latitude
-            const locLng = location.coordinates?.longitude
-            
-            if (!locLat || !locLng || !location.name) return null
-            
-            // Haversine distance calculation
-            const R = 3959 // Earth's radius in miles
-            const dLat = (locLat - coordinates.latitude) * Math.PI / 180
-            const dLon = (locLng - coordinates.longitude) * Math.PI / 180
-            const a = 
-              Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(coordinates.latitude * Math.PI / 180) * Math.cos(locLat * Math.PI / 180) * 
-              Math.sin(dLon/2) * Math.sin(dLon/2)
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-            const distance = R * c
-            
-            return {
-              ...location,
-              distance
+            try {
+              const locLat = location.coordinates?.latitude
+              const locLng = location.coordinates?.longitude
+              
+              if (!locLat || !locLng || !location.name) {
+                console.log(`⚠️ Skipping location ${location.name || 'unnamed'} - missing coordinates or name`)
+                return null
+              }
+              
+              // Validate coordinate values are numbers
+              const lat = Number(locLat)
+              const lng = Number(locLng)
+              const userLat = Number(coordinates.latitude)
+              const userLng = Number(coordinates.longitude)
+              
+              if (isNaN(lat) || isNaN(lng) || isNaN(userLat) || isNaN(userLng)) {
+                console.log(`⚠️ Skipping location ${location.name} - invalid coordinate values`)
+                return null
+              }
+              
+              // Haversine distance calculation
+              const R = 3959 // Earth's radius in miles
+              const dLat = (lat - userLat) * Math.PI / 180
+              const dLon = (lng - userLng) * Math.PI / 180
+              const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(userLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2)
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+              const distance = R * c
+              
+              return {
+                ...location,
+                distance
+              }
+            } catch (error) {
+              console.log(`⚠️ Error calculating distance for location ${location.name || 'unnamed'}:`, error)
+              return null
             }
           })
           .filter((loc: any) => loc && loc.distance <= 25) // Within 25 miles (expanded radius)
@@ -485,47 +504,57 @@ function selectBestLocationsForContext(
   userInterests: string[] = [],
   userInput: string = ''
 ) {
-  const contextKeywords = getContextKeywords(context)
-  const interestKeywords = userInterests.flatMap(interest => interest.toLowerCase().split(' '))
-  const inputKeywords = userInput.toLowerCase().split(' ').filter(word => word.length > 3)
-  
-  const scoredLocations = locations.map(loc => {
-    let score = 0
+  try {
+    const contextKeywords = getContextKeywords(context)
+    const interestKeywords = userInterests.flatMap(interest => interest.toLowerCase().split(' '))
+    const inputKeywords = userInput.toLowerCase().split(' ').filter(word => word.length > 3)
     
-    const locText = `${loc.name} ${loc.description || ''} ${formatLocationCategories(loc.categories)}`.toLowerCase()
-    
-    // Score based on context relevance (highest priority)
-    contextKeywords.forEach(keyword => {
-      if (locText.includes(keyword)) score += 5
+    const scoredLocations = locations.map(loc => {
+      try {
+        let score = 0
+        
+        const locText = `${loc.name || ''} ${loc.description || ''} ${formatLocationCategories(loc.categories)}`.toLowerCase()
+        
+        // Score based on context relevance (highest priority)
+        contextKeywords.forEach(keyword => {
+          if (locText.includes(keyword)) score += 5
+        })
+        
+        // Score based on user input keywords
+        inputKeywords.forEach(keyword => {
+          if (locText.includes(keyword)) score += 4
+        })
+        
+        // Score based on user interests
+        interestKeywords.forEach(interest => {
+          if (locText.includes(interest)) score += 3
+        })
+        
+        // Bonus for quality indicators
+        if (loc.isVerified) score += 3
+        if (loc.averageRating >= 4.5) score += 2
+        else if (loc.averageRating >= 4.0) score += 1
+        if (loc.isFeatured) score += 2
+        if (loc.insiderTips) score += 1
+        
+        // Distance penalty (closer is better)
+        score -= (loc.distance || 0) * 0.2
+        
+        return { ...loc, score }
+      } catch (error) {
+        console.log(`⚠️ Error scoring location ${loc.name || 'unnamed'}:`, error)
+        return { ...loc, score: 0 }
+      }
     })
     
-    // Score based on user input keywords
-    inputKeywords.forEach(keyword => {
-      if (locText.includes(keyword)) score += 4
-    })
-    
-    // Score based on user interests
-    interestKeywords.forEach(interest => {
-      if (locText.includes(interest)) score += 3
-    })
-    
-    // Bonus for quality indicators
-    if (loc.isVerified) score += 3
-    if (loc.averageRating >= 4.5) score += 2
-    else if (loc.averageRating >= 4.0) score += 1
-    if (loc.isFeatured) score += 2
-    if (loc.insiderTips) score += 1
-    
-    // Distance penalty (closer is better)
-    score -= loc.distance * 0.2
-    
-    return { ...loc, score }
-  })
-  
-  // Return diverse selection of top scored locations
-  return scoredLocations
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.min(12, locations.length)) // Increased for better selection
+    // Return diverse selection of top scored locations
+    return scoredLocations
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(12, locations.length)) // Increased for better selection
+  } catch (error) {
+    console.log('⚠️ Error in selectBestLocationsForContext:', error)
+    return locations.slice(0, Math.min(12, locations.length))
+  }
 }
 
 function getContextKeywords(context: string): string[] {
@@ -541,25 +570,35 @@ function getContextKeywords(context: string): string[] {
 }
 
 function formatLocationAddress(address: any): string {
-  if (typeof address === 'string') return address
-  if (!address) return 'Address not available'
-  
-  const parts = [
-    address.street,
-    address.city,
-    address.state,
-    address.zip
-  ].filter(Boolean)
-  
-  return parts.join(', ') || 'Address not available'
+  try {
+    if (typeof address === 'string') return address
+    if (!address) return 'Address not available'
+    
+    const parts = [
+      address.street,
+      address.city,
+      address.state,
+      address.zip
+    ].filter(Boolean)
+    
+    return parts.join(', ') || 'Address not available'
+  } catch (error) {
+    console.log('⚠️ Error formatting address:', error)
+    return 'Address not available'
+  }
 }
 
 function formatLocationCategories(categories: any[]): string {
-  if (!categories || !Array.isArray(categories)) return 'General'
-  
-  return categories
-    .map(cat => typeof cat === 'string' ? cat : cat?.name || 'Category')
-    .join(', ') || 'General'
+  try {
+    if (!categories || !Array.isArray(categories)) return 'General'
+    
+    return categories
+      .map(cat => typeof cat === 'string' ? cat : cat?.name || 'Category')
+      .join(', ') || 'General'
+  } catch (error) {
+    console.log('⚠️ Error formatting categories:', error)
+    return 'General'
+  }
 }
 
 function formatBusinessHours(hours: any[]): string {

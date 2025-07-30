@@ -36,6 +36,13 @@ interface MarkerCluster {
   id: string;
   locations: Location[];
   center: [number, number]; // [lng, lat]
+  count: number;
+}
+
+interface ClusterPreviewData {
+  locations: Location[];
+  center: [number, number];
+  count: number;
 }
 
 // Detect mobile device with more robust detection
@@ -104,6 +111,8 @@ interface MapComponentProps {
   showMobilePreview?: boolean // Add prop to track mobile preview state
   forceRefresh?: number // Add prop to trigger map refresh
   mapPadding?: { top: number; right: number; bottom: number; left: number } // New prop
+  isDetailModalOpen?: boolean
+  onClusterClick?: (clusterData: ClusterPreviewData) => void // New prop for cluster clicks
 }
 
 const MapComponent = memo<MapComponentProps>(function MapComponent({
@@ -124,6 +133,8 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
   showMobilePreview = true,
   forceRefresh,
   mapPadding = { top: 0, right: 0, bottom: 0, left: 0 }, // Default padding
+  isDetailModalOpen,
+  onClusterClick,
 }: MapComponentProps) {
   
   const mapRef = useRef<any>(null)
@@ -140,6 +151,77 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
   const [isMobile, setIsMobile] = useState(false)
   const [mapReady, setMapReady] = useState(false)
   const [markerClusters, setMarkerClusters] = useState<MarkerCluster[]>([])
+
+  // Clustering logic
+  const createClusters = useCallback((locations: Location[], zoom: number): MarkerCluster[] => {
+    if (zoom >= 14) {
+      // At high zoom levels, show individual markers
+      return []
+    }
+
+    const clusters: MarkerCluster[] = []
+    const clusterRadius = zoom < 10 ? 50 : zoom < 12 ? 30 : 20 // pixels
+    const processedLocations = new Set<string>()
+
+    locations.forEach((location) => {
+      if (processedLocations.has(location.id)) return
+
+      // Use coordinates if available, otherwise use latitude/longitude
+      const locationLat = location.coordinates?.latitude ?? location.latitude
+      const locationLng = location.coordinates?.longitude ?? location.longitude
+      
+      if (!locationLat || !locationLng) return // Skip locations without coordinates
+      
+      const nearbyLocations: Location[] = [location]
+      processedLocations.add(location.id)
+
+      // Find nearby locations
+      locations.forEach((otherLocation) => {
+        if (otherLocation.id === location.id || processedLocations.has(otherLocation.id)) return
+
+        const otherLat = otherLocation.coordinates?.latitude ?? otherLocation.latitude
+        const otherLng = otherLocation.coordinates?.longitude ?? otherLocation.longitude
+        
+        if (!otherLat || !otherLng) return // Skip locations without coordinates
+        
+        const distance = calculateDistance(
+          locationLat,
+          locationLng,
+          otherLat,
+          otherLng
+        )
+
+        // Convert distance to pixels (approximate)
+        const distanceInPixels = (distance / 1000) * (zoom * 2) // Rough conversion
+        if (distanceInPixels <= clusterRadius) {
+          nearbyLocations.push(otherLocation)
+          processedLocations.add(otherLocation.id)
+        }
+      })
+
+              if (nearbyLocations.length > 1) {
+          // Calculate cluster center
+          const totalLng = nearbyLocations.reduce((sum, loc) => {
+            const lng = loc.coordinates?.longitude ?? loc.longitude
+            return sum + (lng || 0)
+          }, 0)
+          const totalLat = nearbyLocations.reduce((sum, loc) => {
+            const lat = loc.coordinates?.latitude ?? loc.latitude
+            return sum + (lat || 0)
+          }, 0)
+          const center: [number, number] = [totalLng / nearbyLocations.length, totalLat / nearbyLocations.length]
+
+          clusters.push({
+            id: `cluster-${location.id}`,
+            locations: nearbyLocations,
+            center,
+            count: nearbyLocations.length
+          })
+        }
+    })
+
+    return clusters
+  }, [])
 
   // Track mount state for React 18 concurrent rendering safety
   useEffect(() => {
@@ -1126,19 +1208,17 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
           console.log(`🎯 Desktop cluster clicked with ${cluster.locations.length} locations`, 
             cluster.locations.map(l => l.name))
           
-          // For desktop, just highlight the cluster (the hover tooltip shows the options)
-          // Do not flyTo here to prevent map re-render from view change.
-          // The selection will be handled by onMarkerClick, which updates selectedLocation prop.
-          // if (mapRef.current) {
-          //   mapRef.current.flyTo({
-          //     center: cluster.center,
-          //     zoom: Math.min(mapRef.current.getZoom() + 1, 18), // Zoom in slightly
-          //     duration: 500
-          //   })
-          // }
+          // Call the cluster click handler if provided
+          if (onClusterClick) {
+            onClusterClick({
+              locations: cluster.locations,
+              center: cluster.center,
+              count: cluster.locations.length
+            })
+            return
+          }
           
-          // Call onMarkerClick with the primary location for consistency
-          // This will trigger handleLocationSelect in MapExplorer, which updates selectedLocation
+          // Fallback: Call onMarkerClick with the primary location for consistency
           onMarkerClick(location) 
           return
         }
@@ -1204,6 +1284,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
         id: nearbyLocations.length > 1 ? `cluster-${centerLat}-${centerLng}` : `single-${location.id}`,
         locations: nearbyLocations,
         center: [centerLng, centerLat],
+        count: nearbyLocations.length,
       })
       
       if (nearbyLocations.length > 1) {

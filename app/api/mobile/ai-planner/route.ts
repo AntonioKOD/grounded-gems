@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import config from '@/payload.config'
 import { getServerSideUser } from '@/lib/auth-server'
 
 // Helper function to get user from either cookies or Bearer token
@@ -40,15 +40,7 @@ export async function POST(request: NextRequest) {
     }
     
     console.log(`✅ Mobile AI Planner: Authenticated user ${user.id} (${user.name})`)
-  } catch (authError) {
-    console.error('❌ Mobile AI Planner: Authentication error:', authError)
-    return NextResponse.json({ 
-      error: 'Authentication service unavailable',
-      code: 'AUTH_ERROR'
-    }, { status: 503 })
-  }
-  
-  try {
+
     const body = await request.json()
     const { input, context, coordinates } = body
     safeContext = context || "error"
@@ -98,57 +90,106 @@ export async function POST(request: NextRequest) {
         }
         
         // Enhanced location query with better filtering and error handling
-        const locationResult = await Promise.race([
+        console.log('🔍 Querying locations with coordinates:', coordinates)
+        
+        // First, let's get ALL published locations to see what we have
+        const allLocationsResult = await Promise.race([
           payload.find({
-            collection: 'locations',
-            where: {
-              and: [
-                { status: { equals: 'published' } },
-                { 'coordinates.latitude': { exists: true } },
-                { 'coordinates.longitude': { exists: true } },
-                { name: { exists: true } },
-                { name: { not_equals: '' } }
-              ]
+          collection: 'locations',
+          where: {
+              status: { equals: 'published' }
             },
-            limit: 150, // Increased limit for better selection
+            limit: 200,
             depth: 2,
-            sort: '-updatedAt' // Prefer recently updated locations
+            sort: '-updatedAt'
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Location fetch timeout')), 5000))
         ]) as { docs: any[] }
-        const allLocations = locationResult.docs
         
-        console.log(`📊 Found ${allLocations.length} total locations in database`)
+        console.log(`📊 Found ${allLocationsResult.docs.length} total published locations in database`)
         
-        // Enhanced distance calculation with better filtering
+        // Log some sample locations to debug
+        if (allLocationsResult.docs.length > 0) {
+          console.log('📋 Sample locations:')
+          allLocationsResult.docs.slice(0, 3).forEach((loc, index) => {
+            console.log(`  ${index + 1}. ${loc.name} - Coords: ${loc.coordinates?.latitude}, ${loc.coordinates?.longitude} - Status: ${loc.status}`)
+          })
+        }
+        
+        // Filter locations with coordinates
+        const allLocations = allLocationsResult.docs.filter(loc => 
+          loc.coordinates?.latitude && 
+          loc.coordinates?.longitude && 
+          loc.name && 
+          loc.name.trim() !== ''
+        )
+        
+        console.log(`📍 Found ${allLocations.length} locations with valid coordinates`)
+        
+        // Enhanced distance calculation with better filtering and error handling
+        console.log('🧮 Calculating distances from user coordinates:', coordinates)
+        
         const locationsWithDistance = allLocations
           .map((location: any) => {
-            const locLat = location.coordinates?.latitude
-            const locLng = location.coordinates?.longitude
-            
-            if (!locLat || !locLng || !location.name) return null
-            
-            // Haversine distance calculation
-            const R = 3959 // Earth's radius in miles
-            const dLat = (locLat - coordinates.latitude) * Math.PI / 180
-            const dLon = (locLng - coordinates.longitude) * Math.PI / 180
-            const a = 
-              Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(coordinates.latitude * Math.PI / 180) * Math.cos(locLat * Math.PI / 180) * 
-              Math.sin(dLon/2) * Math.sin(dLon/2)
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-            const distance = R * c
-            
-            return {
-              ...location,
-              distance
+            try {
+              const locLat = location.coordinates?.latitude
+              const locLng = location.coordinates?.longitude
+              
+              if (!locLat || !locLng || !location.name) {
+                console.log(`⚠️ Skipping location ${location.name || 'unnamed'} - missing coordinates or name`)
+                return null
+              }
+              
+              // Validate coordinate values are numbers
+              const lat = Number(locLat)
+              const lng = Number(locLng)
+              const userLat = Number(coordinates.latitude)
+              const userLng = Number(coordinates.longitude)
+              
+              if (isNaN(lat) || isNaN(lng) || isNaN(userLat) || isNaN(userLng)) {
+                console.log(`⚠️ Skipping location ${location.name} - invalid coordinate values`)
+                return null
+              }
+              
+              // Haversine distance calculation
+              const R = 3959 // Earth's radius in miles
+              const dLat = (lat - userLat) * Math.PI / 180
+              const dLon = (lng - userLng) * Math.PI / 180
+              const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(userLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2)
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+              const distance = R * c
+              
+              return {
+                ...location,
+                distance
+              }
+            } catch (error) {
+              console.log(`⚠️ Error calculating distance for location ${location.name || 'unnamed'}:`, error)
+              return null
             }
           })
-          .filter((loc: any) => loc && loc.distance <= 25) // Within 25 miles (expanded radius)
+          .filter((loc: any) => loc && loc.distance <= 50) // Increased to 50 miles for better coverage
           .sort((a: any, b: any) => a.distance - b.distance)
         
         nearbyLocations = locationsWithDistance
-        console.log(`📍 Found ${nearbyLocations.length} locations within 25 miles`)
+        console.log(`📍 Found ${nearbyLocations.length} locations within 50 miles`)
+        
+        // Log the closest locations for debugging
+        if (nearbyLocations.length > 0) {
+          console.log('🎯 Closest locations:')
+          nearbyLocations.slice(0, 5).forEach((loc, index) => {
+            console.log(`  ${index + 1}. ${loc.name} - ${loc.distance.toFixed(1)} miles away`)
+          })
+        } else {
+          console.log('⚠️ No locations found within 50 miles - this might indicate:')
+          console.log('  1. No locations in database')
+          console.log('  2. Locations missing coordinates')
+          console.log('  3. User coordinates are invalid')
+          console.log('  4. All locations are too far away')
+        }
         
         // Create detailed location context for AI - MANDATORY USAGE
         if (nearbyLocations.length > 0) {
@@ -174,8 +215,31 @@ export async function POST(request: NextRequest) {
           referencedLocationIds = selectedLocations.map(loc => loc.id)
           
           console.log(`🎯 Selected ${selectedLocations.length} best locations for AI context`)
+        } else if (allLocations.length > 0) {
+          // Fallback: use all locations if no nearby ones found
+          console.log('🔄 No nearby locations found, using all available locations as fallback')
+          usedRealLocations = true
+          userLocation = 'your area'
           
-          // Enhanced location formatting for AI with MANDATORY usage instruction
+          const selectedLocations = selectBestLocationsForContext(
+            allLocations, 
+            context, 
+            (userData && typeof userData === 'object' && userData !== null && 'interests' in userData && Array.isArray((userData as any).interests)) ? (userData as any).interests : [],
+            input
+          )
+          referencedLocationIds = selectedLocations.map(loc => loc.id)
+          
+          console.log(`🎯 Selected ${selectedLocations.length} locations from all available (fallback)`)
+        } else {
+          console.log('⚠️ No locations found in database at all')
+          usedRealLocations = false
+          userLocation = 'your area'
+        }
+        
+        // Enhanced location formatting for AI with MANDATORY usage instruction
+        if (referencedLocationIds.length > 0) {
+          const selectedLocations = allLocations.filter(loc => referencedLocationIds.includes(loc.id))
+          
           const locationDescriptions = selectedLocations.map((loc: any) => {
             const address = formatLocationAddress(loc.address)
             const categories = formatLocationCategories(loc.categories)
@@ -186,15 +250,18 @@ export async function POST(request: NextRequest) {
             const website = loc.contactInfo?.website ? ` | Website: ${loc.contactInfo.website}` : ''
             const tips = loc.insiderTips ? ` | Insider Tips: ${loc.insiderTips}` : ''
             const verified = loc.isVerified ? ' ✓ VERIFIED' : ''
+            const distance = loc.distance ? ` - ${loc.distance.toFixed(1)} miles away` : ''
             
-            return `${loc.name}${verified} (${categories}) - ${address} - ${loc.distance.toFixed(1)} miles away
+            return `${loc.name}${verified} (${categories}) - ${address}${distance}
    Rating: ${rating} | Price: ${priceRange} | Hours: ${hours}${contact}${website}${tips}`
           }).join('\n\n')
           
           locationContext = `\n\n🎯 MANDATORY VERIFIED LOCATIONS TO USE IN YOUR PLAN:
 ${locationDescriptions}
 
-⚠️ CRITICAL INSTRUCTION: You MUST use AT LEAST ${Math.min(selectedLocations.length, 3)} of these verified locations in your plan. Each step using a verified location MUST include the exact location name followed by "(Verified Sacavia Location)".`
+⚠️ CRITICAL INSTRUCTION: You MUST use AT LEAST ${Math.min(selectedLocations.length, 3)} of these verified locations in your plan. Each step using a verified location MUST include the exact location name.`
+        } else {
+          locationContext = '\n\n⚠️ NO VERIFIED LOCATIONS AVAILABLE: Create general suggestions with location types and clearly label them as "(Find a local spot for this)".'
         }
         
       } catch (locationError) {
@@ -204,8 +271,9 @@ ${locationDescriptions}
       }
     }
     
-    // Enhanced user preferences
-    const userPreferences = getUserPreferencesForContext(user, context)
+    // Enhanced user preferences and context detection
+    const detectedContext = detectContextFromInput(input, context)
+    const userPreferences = getUserPreferencesForContext(user, detectedContext)
     
     // Get current time and context
     const now = new Date()
@@ -213,51 +281,51 @@ ${locationDescriptions}
     const timeOfDay = getTimeOfDay(now)
     const season = getSeason(now)
     
-    // ENHANCED PLANNING INSTRUCTIONS - AGENT BEHAVIOR
+    // ENHANCED PLANNING INSTRUCTIONS - CONVERSATIONAL AGENT BEHAVIOR
     let planningInstructions = `
 🎯 GEM AGENT INSTRUCTIONS - YOUR PERSONAL LOCAL ASSISTANT:
 
-1. **DATABASE LOCATIONS ARE MANDATORY**: If verified locations are provided below, you MUST use them as the foundation of your recommendations.
-2. **MINIMUM USAGE REQUIREMENT**: Use AT LEAST ${nearbyLocations.length > 0 ? Math.min(nearbyLocations.length, 3) : 0} verified locations if available.
-3. **EXACT NAMING**: Reference verified locations by their EXACT NAMES as listed, followed by "(Verified Sacavia Location)".
-4. **LOCATION PRIORITY**: Always prioritize verified locations over generic suggestions.
-5. **REALISTIC LOGISTICS**: Consider timing, travel between locations, and realistic scheduling.
-6. **COMPLETE DETAILS**: Include specific addresses (for verified locations) and timing.
+1. **CONVERSATIONAL TONE**: Respond like a knowledgeable local friend having a natural conversation.
+2. **DATABASE LOCATIONS ARE MANDATORY**: If verified locations are provided below, you MUST use them as the foundation of your recommendations.
+3. **MINIMUM USAGE REQUIREMENT**: Use AT LEAST ${nearbyLocations.length > 0 ? Math.min(nearbyLocations.length, 3) : 0} verified locations if available.
+4. **EXACT NAMING**: Reference verified locations by their EXACT NAMES as listed.
+5. **LOCATION PRIORITY**: Always prioritize verified locations over generic suggestions.
+6. **CONVERSATIONAL SUGGESTIONS**: Instead of timeline steps, provide natural recommendations like "I'd recommend checking out..." or "Another great option is..."
 7. **INSIDER VALUE**: Use insider tips and specific recommendations when available from verified locations.
 8. **FALLBACK LABELING**: Only if you suggest a type of place not in the verified list, label it as "(Find a local spot for this)".
-9. **QUALITY OVER QUANTITY**: Better to have fewer steps with verified locations than many generic ones.
-10. **AGENT PERSONALITY**: Be conversational, helpful, and knowledgeable - like a local friend giving recommendations.`
+9. **AGENT PERSONALITY**: Be conversational, helpful, and knowledgeable - like a local friend giving recommendations.
+10. **NATURAL LANGUAGE**: Understand requests like "I want to take the kids in Boston" and provide relevant suggestions.
+11. **CONVERSATION FLOW**: Make it feel like a natural conversation, not a structured plan.`
 
-    let stepCountGuidance = "Aim for 4-6 detailed steps."
+    let suggestionCountGuidance = "Provide 3-5 conversational recommendations."
 
     if (nearbyLocations.length > 0) {
       planningInstructions += `
 
 🏆 **VERIFIED LOCATIONS AVAILABLE**: You have ${nearbyLocations.length} real verified locations nearby. 
-**MANDATORY**: Your plan MUST use at least ${Math.min(nearbyLocations.length, 3)} of these verified locations.
-**SUCCESS CRITERIA**: Each verified location used should be clearly identified with "(Verified Sacavia Location)" label.`
+**MANDATORY**: Your suggestions MUST use at least ${Math.min(nearbyLocations.length, 3)} of these verified locations.
+**SUCCESS CRITERIA**: Each verified location used should be clearly identified by name.`
       
       if (nearbyLocations.length <= 2) {
-        stepCountGuidance = "Create 2-3 detailed steps, focusing primarily on the verified locations."
+        suggestionCountGuidance = "Provide 2-3 conversational recommendations, focusing primarily on the verified locations."
       } else if (nearbyLocations.length <= 4) {
-        stepCountGuidance = "Create 3-5 detailed steps, integrating multiple verified locations."
+        suggestionCountGuidance = "Provide 3-4 conversational recommendations, integrating multiple verified locations."
       } else {
-        stepCountGuidance = "Create 4-6 detailed steps, showcasing the best verified locations."
+        suggestionCountGuidance = "Provide 4-5 conversational recommendations, showcasing the best verified locations."
       }
     } else {
       planningInstructions += `
 
-⚠️ **NO VERIFIED LOCATIONS**: No database locations found nearby. Create a general plan with location types and clearly label suggestions as "(Find a local spot for this)".`
-      stepCountGuidance = "Create 3-5 general steps with location type suggestions."
+⚠️ **NO VERIFIED LOCATIONS**: No database locations found nearby. Create general suggestions with location types and clearly label them as "(Find a local spot for this)".`
+      suggestionCountGuidance = "Provide 3-4 general suggestions with location type recommendations."
     }
     
-    planningInstructions += `\n\n📋 **STEP COUNT**: ${stepCountGuidance}`
+    planningInstructions += `\n\n💬 **SUGGESTION COUNT**: ${suggestionCountGuidance}`
 
     // Enhanced AI prompt for Gem Agent - Your Personal Local Assistant
     const basePrompt = `You are Gem Agent, your personal local assistant and experience curator. You're like having a knowledgeable local friend who knows all the best spots and can help you discover amazing experiences.
 
 🎯 **USER REQUEST**: "${input}"
-📝 **EXPERIENCE TYPE**: ${context}
 📍 **USER LOCATION**: ${userLocation}
 🗓️ **DAY & TIME**: ${dayOfWeek}, ${timeOfDay}
 🌍 **SEASON**: ${season}
@@ -268,11 +336,12 @@ ${planningInstructions}
 
 🔥 **RESPONSE FORMAT** (JSON ONLY - NO OTHER TEXT):
 {
-  "title": "Engaging, specific plan title (include location names if using verified locations)",
-  "summary": "Brief, exciting description (mention real places by name if used)",
+  "title": "Personalized recommendations for your request",
+  "summary": "Here are my suggestions based on what you're looking for:",
   "steps": [
-    "Step 1: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified]",
-    "Step 2: [Time] - [Specific action] at [Exact location name] [Label] - [Description/tip, address if verified]"
+    "I'd recommend checking out [Exact location name] - [Description with insider tips, address if verified]",
+    "Another great option is [Exact location name] - [Description with insider tips, address if verified]",
+    "For [activity type], you might enjoy [Exact location name] - [Description with insider tips, address if verified]"
   ],
   "context": "${context}",
   "usedRealLocations": ${usedRealLocations},
@@ -297,11 +366,14 @@ ${planningInstructions}
 
 CRITICAL RULES:
 1. ALWAYS prioritize verified database locations when available
-2. Use EXACT location names followed by "(Verified Sacavia Location)"
+2. Use EXACT location names as listed
 3. Only use generic suggestions when no verified options exist
 4. Focus on creating memorable, actionable experiences
 5. Be conversational and helpful - like a local friend giving recommendations
-6. RESPOND ONLY IN JSON FORMAT - NO OTHER TEXT` 
+6. Understand natural language requests (e.g., "I want to take the kids in Boston")
+7. Provide relevant suggestions based on the user's intent, not just structured planning
+8. Use conversational language like "I'd recommend..." or "Another great option is..."
+9. RESPOND ONLY IN JSON FORMAT - NO OTHER TEXT` 
           },
           { role: 'user', content: basePrompt },
         ],
@@ -359,8 +431,13 @@ CRITICAL RULES:
       
       // CRITICAL: Validate that verified locations were used if available
       if (nearbyLocations.length > 0) {
+        // Check if any of the selected location names appear in the steps
+        const selectedLocationNames = nearbyLocations
+          .filter(loc => referencedLocationIds.includes(loc.id))
+          .map(loc => loc.name.toLowerCase())
+        
         const verifiedLocationUsage = plan.steps.filter((step: string) => 
-          step.includes('(Verified Sacavia Location)')
+          selectedLocationNames.some(name => step.toLowerCase().includes(name))
         ).length
         
         console.log(`🎯 Verified location usage check: ${verifiedLocationUsage}/${nearbyLocations.length} available locations used`)
@@ -369,7 +446,7 @@ CRITICAL RULES:
         if (verifiedLocationUsage === 0) {
           console.warn('⚠️ AI did not use any verified locations, this should not happen!')
           plan.usedRealLocations = false
-        } else {
+      } else {
           plan.usedRealLocations = true
         }
       }
@@ -377,21 +454,26 @@ CRITICAL RULES:
       // Add comprehensive metadata
       plan.coordinates = coordinates
       plan.nearbyLocationsCount = nearbyLocations.length
+      // Get selected location names for verification
+      const selectedLocationNames = nearbyLocations
+        .filter(loc => referencedLocationIds.includes(loc.id))
+        .map(loc => loc.name.toLowerCase())
+      
       plan.verifiedLocationsUsed = plan.steps.filter((step: string) => 
-        step.includes('(Verified Sacavia Location)')
+        selectedLocationNames.some(name => step.toLowerCase().includes(name))
       ).length
       plan.generatedAt = new Date().toISOString()
       plan.locationIds = referencedLocationIds
       plan.userLocation = userLocation
       plan.locationFetchError = locationFetchError
       
-          console.log('✅ Gem Agent recommendation generated successfully:', {
-      title: plan.title,
-      stepsCount: plan.steps.length,
-      nearbyLocations: nearbyLocations.length,
-      verifiedUsed: plan.verifiedLocationsUsed,
-      usedRealLocations: plan.usedRealLocations
-    })
+      console.log('✅ Gem Agent recommendation generated successfully:', {
+        title: plan.title,
+        stepsCount: plan.steps.length,
+        nearbyLocations: nearbyLocations.length,
+        verifiedUsed: plan.verifiedLocationsUsed,
+        usedRealLocations: plan.usedRealLocations
+      })
       
     } catch (parseError) {
       console.error('❌ Error parsing AI response:', parseError)
@@ -412,7 +494,7 @@ CRITICAL RULES:
           const categories = formatLocationCategories(location.categories)
           const address = formatLocationAddress(location.address)
           stepsArray.push(
-            `Step ${index + 1}: Visit ${location.name} (Verified Sacavia Location) - ${categories} located at ${address}. Distance: ${location.distance.toFixed(1)} miles.`
+            `Step ${index + 1}: Visit ${location.name} - ${categories} located at ${address}. Distance: ${location.distance.toFixed(1)} miles.`
           )
         })
         
@@ -456,7 +538,7 @@ CRITICAL RULES:
     })
     
     return NextResponse.json(response)
-
+    
   } catch (err: any) {
     console.error('❌ Mobile AI Planner critical error:', err)
     
@@ -505,81 +587,104 @@ function selectBestLocationsForContext(
   userInterests: string[] = [],
   userInput: string = ''
 ) {
-  const contextKeywords = getContextKeywords(context)
-  const interestKeywords = userInterests.flatMap(interest => interest.toLowerCase().split(' '))
-  const inputKeywords = userInput.toLowerCase().split(' ').filter(word => word.length > 3)
-  
-  const scoredLocations = locations.map(loc => {
-    let score = 0
+  try {
+    const contextKeywords = getContextKeywords(context)
+    const interestKeywords = userInterests.flatMap(interest => interest.toLowerCase().split(' '))
+    const inputKeywords = userInput.toLowerCase().split(' ').filter(word => word.length > 3)
     
-    const locText = `${loc.name} ${loc.description || ''} ${formatLocationCategories(loc.categories)}`.toLowerCase()
-    
-    // Score based on context relevance (highest priority)
-    contextKeywords.forEach(keyword => {
-      if (locText.includes(keyword)) score += 5
+    const scoredLocations = locations.map(loc => {
+      try {
+        let score = 0
+        
+        const locText = `${loc.name || ''} ${loc.description || ''} ${formatLocationCategories(loc.categories)}`.toLowerCase()
+        
+        // Score based on context relevance (highest priority)
+        contextKeywords.forEach(keyword => {
+          if (locText.includes(keyword)) score += 5
+        })
+        
+        // Score based on user input keywords
+        inputKeywords.forEach(keyword => {
+          if (locText.includes(keyword)) score += 4
+        })
+        
+        // Score based on user interests
+        interestKeywords.forEach(interest => {
+          if (locText.includes(interest)) score += 3
+        })
+        
+        // Bonus for quality indicators
+        if (loc.isVerified) score += 3
+        if (loc.averageRating >= 4.5) score += 2
+        else if (loc.averageRating >= 4.0) score += 1
+        if (loc.isFeatured) score += 2
+        if (loc.insiderTips) score += 1
+        
+        // Distance penalty (closer is better)
+        score -= (loc.distance || 0) * 0.2
+        
+        return { ...loc, score }
+      } catch (error) {
+        console.log(`⚠️ Error scoring location ${loc.name || 'unnamed'}:`, error)
+        return { ...loc, score: 0 }
+      }
     })
     
-    // Score based on user input keywords
-    inputKeywords.forEach(keyword => {
-      if (locText.includes(keyword)) score += 4
-    })
-    
-    // Score based on user interests
-    interestKeywords.forEach(interest => {
-      if (locText.includes(interest)) score += 3
-    })
-    
-    // Bonus for quality indicators
-    if (loc.isVerified) score += 3
-    if (loc.averageRating >= 4.5) score += 2
-    else if (loc.averageRating >= 4.0) score += 1
-    if (loc.isFeatured) score += 2
-    if (loc.insiderTips) score += 1
-    
-    // Distance penalty (closer is better)
-    score -= loc.distance * 0.2
-    
-    return { ...loc, score }
-  })
-  
-  // Return diverse selection of top scored locations
-  return scoredLocations
-    .sort((a, b) => b.score - a.score)
-    .slice(0, Math.min(12, locations.length)) // Increased for better selection
+    // Return diverse selection of top scored locations
+    return scoredLocations
+      .sort((a, b) => b.score - a.score)
+      .slice(0, Math.min(12, locations.length)) // Increased for better selection
+  } catch (error) {
+    console.log('⚠️ Error in selectBestLocationsForContext:', error)
+    return locations.slice(0, Math.min(12, locations.length))
+  }
 }
 
 function getContextKeywords(context: string): string[] {
   const contextMap: { [key: string]: string[] } = {
     'date': ['romantic', 'dinner', 'restaurant', 'cafe', 'wine', 'intimate', 'cozy', 'view', 'fine dining', 'cocktail'],
-    'group': ['bar', 'restaurant', 'activity', 'entertainment', 'game', 'music', 'social', 'brewery', 'lounge'],
-    'family': ['family', 'kid', 'child', 'park', 'museum', 'outdoor', 'activity', 'fun', 'playground', 'interactive'],
+    'friends': ['bar', 'restaurant', 'activity', 'entertainment', 'game', 'music', 'social', 'brewery', 'lounge'],
+    'family': ['family', 'kid', 'child', 'park', 'museum', 'outdoor', 'activity', 'fun', 'playground', 'interactive', 'children', 'family-friendly', 'educational', 'safe'],
     'solo': ['cafe', 'book', 'quiet', 'park', 'museum', 'walk', 'peaceful', 'solo', 'library', 'gallery'],
-    'friend_group': ['bar', 'game', 'activity', 'social', 'fun', 'entertainment', 'food', 'music', 'nightlife']
+    'business': ['restaurant', 'cafe', 'meeting', 'professional', 'quiet', 'business', 'formal'],
+    'celebration': ['restaurant', 'bar', 'party', 'celebration', 'fun', 'entertainment', 'special'],
+    'cultural': ['museum', 'art', 'culture', 'theater', 'gallery', 'history', 'educational', 'exhibition'],
+    'casual': ['restaurant', 'cafe', 'activity', 'entertainment', 'fun', 'social', 'food']
   }
   
   return contextMap[context] || ['entertainment', 'food', 'activity', 'social']
 }
 
 function formatLocationAddress(address: any): string {
-  if (typeof address === 'string') return address
-  if (!address) return 'Address not available'
-  
-  const parts = [
-    address.street,
-    address.city,
-    address.state,
-    address.zip
-  ].filter(Boolean)
-  
-  return parts.join(', ') || 'Address not available'
+  try {
+    if (typeof address === 'string') return address
+    if (!address) return 'Address not available'
+    
+    const parts = [
+      address.street,
+      address.city,
+      address.state,
+      address.zip
+    ].filter(Boolean)
+    
+    return parts.join(', ') || 'Address not available'
+  } catch (error) {
+    console.log('⚠️ Error formatting address:', error)
+    return 'Address not available'
+  }
 }
 
 function formatLocationCategories(categories: any[]): string {
-  if (!categories || !Array.isArray(categories)) return 'General'
-  
-  return categories
-    .map(cat => typeof cat === 'string' ? cat : cat?.name || 'Category')
-    .join(', ') || 'General'
+  try {
+    if (!categories || !Array.isArray(categories)) return 'General'
+    
+    return categories
+      .map(cat => typeof cat === 'string' ? cat : cat?.name || 'Category')
+      .join(', ') || 'General'
+  } catch (error) {
+    console.log('⚠️ Error formatting categories:', error)
+    return 'General'
+  }
 }
 
 function formatBusinessHours(hours: any[]): string {
@@ -617,10 +722,13 @@ function getUserPreferencesForContext(user: any, context: string): string {
   
   const contextPrefs: { [key: string]: string } = {
     'date': 'romantic atmosphere, quality dining, intimate settings',
-    'group': 'social venues, shared activities, good for groups',
-    'family': 'family-friendly, activities for all ages, safe environment',
+    'friends': 'social venues, shared activities, good for groups',
+    'family': 'family-friendly, activities for all ages, safe environment, educational opportunities',
     'solo': 'peaceful settings, personal enrichment, comfortable for solo visits',
-    'friend_group': 'fun activities, social dining, entertainment'
+    'business': 'professional atmosphere, quiet settings, good for meetings',
+    'celebration': 'special atmosphere, fun activities, memorable experiences',
+    'cultural': 'educational experiences, artistic venues, cultural enrichment',
+    'casual': 'relaxed atmosphere, enjoyable experiences, good food'
   }
   
   const contextSpecific = contextPrefs[context] || 'enjoyable experiences'
@@ -643,6 +751,55 @@ function getSeason(date: Date): string {
   if (month >= 5 && month <= 7) return 'Summer'
   if (month >= 8 && month <= 10) return 'Fall'
   return 'Winter'
+}
+
+function detectContextFromInput(input: string, fallbackContext: string): string {
+  const inputLower = input.toLowerCase()
+  
+  // Family/kids context
+  if (inputLower.includes('kid') || inputLower.includes('child') || inputLower.includes('family') || 
+      inputLower.includes('children') || inputLower.includes('baby') || inputLower.includes('toddler')) {
+    return 'family'
+  }
+  
+  // Date/romantic context
+  if (inputLower.includes('date') || inputLower.includes('romantic') || inputLower.includes('couple') || 
+      inputLower.includes('anniversary') || inputLower.includes('valentine') || inputLower.includes('dinner')) {
+    return 'date'
+  }
+  
+  // Solo context
+  if (inputLower.includes('solo') || inputLower.includes('alone') || inputLower.includes('me time') || 
+      inputLower.includes('quiet') || inputLower.includes('peaceful')) {
+    return 'solo'
+  }
+  
+  // Group/friends context
+  if (inputLower.includes('friend') || inputLower.includes('group') || inputLower.includes('party') || 
+      inputLower.includes('social') || inputLower.includes('hangout') || inputLower.includes('meetup')) {
+    return 'friends'
+  }
+  
+  // Business context
+  if (inputLower.includes('business') || inputLower.includes('meeting') || inputLower.includes('work') || 
+      inputLower.includes('professional') || inputLower.includes('office')) {
+    return 'business'
+  }
+  
+  // Celebration context
+  if (inputLower.includes('birthday') || inputLower.includes('celebration') || inputLower.includes('party') || 
+      inputLower.includes('anniversary') || inputLower.includes('graduation')) {
+    return 'celebration'
+  }
+  
+  // Cultural context
+  if (inputLower.includes('museum') || inputLower.includes('art') || inputLower.includes('culture') || 
+      inputLower.includes('theater') || inputLower.includes('gallery') || inputLower.includes('history')) {
+    return 'cultural'
+  }
+  
+  // Default to casual if no specific context detected
+  return fallbackContext || 'casual'
 }
 
 export async function OPTIONS() {

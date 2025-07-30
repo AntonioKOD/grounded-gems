@@ -24,6 +24,7 @@ interface InteractiveMapProps {
   forceRefresh?: number
   mapPadding?: { top: number; right: number; bottom: number; left: number }
   isDetailModalOpen?: boolean
+  onClusterClick?: (clusterData: { locations: Location[]; center: [number, number]; count: number }) => void
 }
 
 const LoadingComponent = () => (
@@ -75,7 +76,7 @@ const InteractiveMap = memo(function InteractiveMap(props: InteractiveMapProps) 
   // Wrap in a div to ensure proper container handling with navigation key
   return (
     <div className="w-full h-full relative" key={`map-${mapKey}`}>
-      <MapComponent {...props} onMarkerClick={handleMarkerClick} mapPadding={props.mapPadding} />
+      <MapComponent {...props} onMarkerClick={handleMarkerClick} mapPadding={props.mapPadding} onClusterClick={props.onClusterClick} />
     </div>
   )
 })
