@@ -15,7 +15,7 @@ export default function SupportPage() {
               <h3 className="text-xl font-semibold text-blue-900 mb-4">Contact Us</h3>
               <div className="space-y-3">
                 <p className="text-blue-800">
-                  <strong>Email:</strong> support@sacavia.com
+                  <strong>Email:</strong> antonio_kodheli@icloud.com
                 </p>
                 <p className="text-blue-800">
                   <strong>Response Time:</strong> Within 24 hours
@@ -191,7 +191,7 @@ export default function SupportPage() {
               Still need help? We're here for you!
             </p>
             <a 
-              href="mailto:support@sacavia.com" 
+              href="mailto:antonio_kodheli@icloud.com" 
               className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
             >
               Contact Support
