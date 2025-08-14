@@ -1,6 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import config from 'payload.config'
+
+interface RouteParams {
+  params: Promise<{
+    userId: string
+  }>
+}
 
 interface MobileFollowResponse {
   success: boolean
@@ -12,10 +19,6 @@ interface MobileFollowResponse {
   }
   error?: string
   code?: string
-}
-
-interface RouteParams {
-  params: Promise<{ userId: string }>
 }
 
 export async function POST(
@@ -71,19 +74,6 @@ export async function POST(
           message: 'Invalid user ID',
           error: 'User ID is required and must be a valid string',
           code: 'INVALID_USER_ID'
-        },
-        { status: 400 }
-      )
-    }
-
-    // Prevent self-following
-    if (currentUser.id === targetUserId) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: 'Cannot follow yourself',
-          error: 'Users cannot follow themselves',
-          code: 'SELF_FOLLOW_ATTEMPT'
         },
         { status: 400 }
       )
@@ -238,8 +228,6 @@ export async function DELETE(
     const payload = await getPayload({ config })
     
     console.log(`🔗 [Unfollow API] Starting unfollow operation for target user: ${targetUserId}`)
-    console.log(`🔗 [Unfollow API] Current user ID: ${currentUser.id}`)
-    console.log(`🔗 [Unfollow API] Current user name: ${currentUser.name}`)
 
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
@@ -275,6 +263,9 @@ export async function DELETE(
         { status: 401 }
       )
     }
+
+    console.log(`🔗 [Unfollow API] Current user ID: ${currentUser.id}`)
+    console.log(`🔗 [Unfollow API] Current user name: ${currentUser.name}`)
 
     // Validate target user ID
     if (!targetUserId || typeof targetUserId !== 'string') {
