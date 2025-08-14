@@ -25,6 +25,8 @@ export async function POST(
   try {
     const { userId: targetUserId } = await params
     const payload = await getPayload({ config })
+    
+    console.log(`🔗 [Follow API] Starting follow operation for target user: ${targetUserId}`)
 
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
@@ -139,6 +141,25 @@ export async function POST(
       },
     })
 
+    // Add current user to target user's followers list
+    const targetUserFollowers = Array.isArray(targetUser.followers) 
+      ? targetUser.followers 
+      : []
+    
+    const updatedTargetFollowers = [...targetUserFollowers, currentUser.id]
+    
+    console.log(`🔗 [Follow API] Adding ${currentUser.name} (${currentUser.id}) to ${targetUser.name}'s followers list`)
+    console.log(`🔗 [Follow API] Target user followers before: ${targetUserFollowers.length}`)
+    console.log(`🔗 [Follow API] Target user followers after: ${updatedTargetFollowers.length}`)
+    
+    await payload.update({
+      collection: 'users',
+      id: targetUserId,
+      data: {
+        followers: updatedTargetFollowers,
+      },
+    })
+
     // Calculate new followers count for target user
     const followersResult = await payload.find({
       collection: 'users',
@@ -215,6 +236,8 @@ export async function DELETE(
   try {
     const { userId: targetUserId } = await params
     const payload = await getPayload({ config })
+    
+    console.log(`🔗 [Unfollow API] Starting unfollow operation for target user: ${targetUserId}`)
 
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
@@ -313,6 +336,25 @@ export async function DELETE(
       id: currentUser.id,
       data: {
         following: updatedFollowing,
+      },
+    })
+
+    // Remove current user from target user's followers list
+    const targetUserFollowers = Array.isArray(targetUser.followers) 
+      ? targetUser.followers 
+      : []
+    
+    const updatedTargetFollowers = targetUserFollowers.filter((id: string) => id !== currentUser.id)
+    
+    console.log(`🔗 [Unfollow API] Removing ${currentUser.name} (${currentUser.id}) from ${targetUser.name}'s followers list`)
+    console.log(`🔗 [Unfollow API] Target user followers before: ${targetUserFollowers.length}`)
+    console.log(`🔗 [Unfollow API] Target user followers after: ${updatedTargetFollowers.length}`)
+    
+    await payload.update({
+      collection: 'users',
+      id: targetUserId,
+      data: {
+        followers: updatedTargetFollowers,
       },
     })
 
