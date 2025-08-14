@@ -238,6 +238,8 @@ export async function DELETE(
     const payload = await getPayload({ config })
     
     console.log(`🔗 [Unfollow API] Starting unfollow operation for target user: ${targetUserId}`)
+    console.log(`🔗 [Unfollow API] Current user ID: ${currentUser.id}`)
+    console.log(`🔗 [Unfollow API] Current user name: ${currentUser.name}`)
 
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
@@ -315,8 +317,13 @@ export async function DELETE(
       ? currentUserData.following 
       : []
 
+    console.log(`🔗 [Unfollow API] Current user following list: ${JSON.stringify(currentFollowing)}`)
+    console.log(`🔗 [Unfollow API] Target user ID: ${targetUserId}`)
+    console.log(`🔗 [Unfollow API] Is target user in following list? ${currentFollowing.includes(targetUserId)}`)
+
     // Check if not following
     if (!currentFollowing.includes(targetUserId)) {
+      console.log(`🔗 [Unfollow API] User is not following target user, returning 409`)
       return NextResponse.json(
         {
           success: false,
