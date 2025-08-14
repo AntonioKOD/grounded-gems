@@ -83,7 +83,7 @@ export const Specials: CollectionConfig = {
   fields: [
     { name: 'title', type: 'text', required: true },
     { name: 'slug', type: 'text', required: true, unique: true, admin: { description: 'URL-friendly identifier' } },
-    { name: 'description', type: 'richText', required: true, editor: lexicalEditor({}) },
+    { name: 'description', type: 'textarea', required: true },
     { name: 'shortDescription', type: 'text' },
     { name: 'featuredImage', type: 'relationship', relationTo: 'media' },
     { name: 'gallery', type: 'array', fields: [
@@ -127,16 +127,175 @@ export const Specials: CollectionConfig = {
       { name: 'startTime', type: 'text', label: 'Start Time' },
       { name: 'endTime', type: 'text', label: 'End Time' },
     ] },
-    { name: 'termsAndConditions', type: 'richText', editor: lexicalEditor({}), admin: { description: 'Terms and fine print' } },
+    { name: 'termsAndConditions', type: 'textarea', admin: { description: 'Terms and fine print' } },
     { name: 'restrictions', type: 'array', fields: [{ name: 'restriction', type: 'text' }] },
     { name: 'createdBy', type: 'relationship', relationTo: 'users' },
+    // Business owner fields
+    {
+      name: 'businessOwner',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: {
+        description: 'Business owner who created this special'
+      }
+    },
     { name: 'status', type: 'select', options: [
       { label: 'Draft', value: 'draft' },
-      { label: 'Review', value: 'review' },
+      { label: 'Pending Review', value: 'pending' },
       { label: 'Published', value: 'published' },
+      { label: 'Rejected', value: 'rejected' },
       { label: 'Archived', value: 'archived' },
       { label: 'Expired', value: 'expired' },
     ], required: true },
+    {
+      name: 'adminNotes',
+      type: 'textarea',
+      admin: {
+        description: 'Admin notes about the special'
+      }
+    },
+    {
+      name: 'approvalHistory',
+      type: 'array',
+      admin: {
+        description: 'History of approval actions'
+      },
+      fields: [
+        {
+          name: 'action',
+          type: 'select',
+          options: [
+            { label: 'Submitted', value: 'submitted' },
+            { label: 'Approved', value: 'approved' },
+            { label: 'Rejected', value: 'rejected' },
+            { label: 'Modified', value: 'modified' }
+          ]
+        },
+        {
+          name: 'timestamp',
+          type: 'date'
+        },
+        {
+          name: 'adminId',
+          type: 'relationship',
+          relationTo: 'users'
+        },
+        {
+          name: 'notes',
+          type: 'textarea'
+        }
+      ]
+    },
+    {
+      name: 'notificationSettings',
+      type: 'group',
+      admin: {
+        description: 'Notification settings for this special'
+      },
+      fields: [
+        {
+          name: 'sendPushNotification',
+          type: 'checkbox',
+          defaultValue: true,
+          admin: {
+            description: 'Send push notification for this special'
+          }
+        },
+        {
+          name: 'sendEmailNotification',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Send email notification for this special'
+          }
+        },
+        {
+          name: 'targetAudience',
+          type: 'select',
+          options: [
+            { label: 'All Followers', value: 'all' },
+            { label: 'Subscribers Only', value: 'subscribers' },
+            { label: 'Saved Location Users', value: 'saved' },
+            { label: 'Custom Audience', value: 'custom' }
+          ],
+          defaultValue: 'all',
+          admin: {
+            description: 'Target audience for notifications'
+          }
+        },
+        {
+          name: 'customAudience',
+          type: 'relationship',
+          relationTo: 'users',
+          hasMany: true,
+          admin: {
+            description: 'Custom list of users to notify',
+            condition: (data) => data?.notificationSettings?.targetAudience === 'custom'
+          }
+        },
+        {
+          name: 'scheduledAt',
+          type: 'date',
+          admin: {
+            description: 'When to send the notification'
+          }
+        }
+      ]
+    },
+    {
+      name: 'performance',
+      type: 'group',
+      admin: {
+        description: 'Performance metrics for this special'
+      },
+      fields: [
+        {
+          name: 'views',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description: 'Number of times this special was viewed'
+          }
+        },
+        {
+          name: 'saves',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description: 'Number of times this special was saved'
+          }
+        },
+        {
+          name: 'shares',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description: 'Number of times this special was shared'
+          }
+        },
+        {
+          name: 'notificationsSent',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description: 'Number of notifications sent for this special'
+          }
+        },
+        {
+          name: 'notificationsOpened',
+          type: 'number',
+          defaultValue: 0,
+          admin: {
+            readOnly: true,
+            description: 'Number of notifications opened for this special'
+          }
+        }
+      ]
+    },
     { name: 'isFeatured', type: 'checkbox' },
     { name: 'isVerified', type: 'checkbox' },
     { name: 'redemptionCount', type: 'number', admin: { readOnly: true } },

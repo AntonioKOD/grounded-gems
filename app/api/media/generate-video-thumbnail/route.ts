@@ -3,6 +3,7 @@ import { getPayload } from "payload"
 import { spawn } from 'child_process'
 import path from 'path'
 import fs from 'fs'
+import config from "@/payload.config"
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,10 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Initialize payload with config
-    const configModule = await import(path.resolve(process.cwd(), 'payload.config.ts'))
-    const payload = await getPayload({
-      config: configModule.default || configModule
-    })
+    const payload = await getPayload({ config })
     
     // Get the video document
     const videoDoc = await payload.findByID({

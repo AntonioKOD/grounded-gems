@@ -51,6 +51,39 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return Math.round(distance * 100) / 100
 }
 
+function calculateUserInterestMatch(item: any, userPrefs: UserFeedPreferences): number {
+  if (userPrefs.categories.length === 0 || !item.categories) return 0.5
+  
+  const itemCategories = item.categories.map((cat: any) => 
+    typeof cat === 'string' ? cat.toLowerCase() : cat.name?.toLowerCase()
+  )
+  const matches = userPrefs.categories.filter(userCat => 
+    itemCategories.some((itemCat: string) => itemCat.includes(userCat.toLowerCase()))
+  )
+  return matches.length / userPrefs.categories.length
+}
+
+function calculateLocationRelevance(item: any, userPrefs: UserFeedPreferences): number {
+  const userLat = userPrefs.location?.coordinates?.latitude
+  const userLng = userPrefs.location?.coordinates?.longitude
+  
+  if (!userLat || !userLng || !item.location?.coordinates) return 1.0
+  
+  const distance = calculateDistance(
+    userLat, userLng, 
+    item.location.coordinates.latitude, item.location.coordinates.longitude
+  )
+  // Exponential decay based on distance (25km radius)
+  return Math.exp(-distance / 25)
+}
+
+function calculatePopularityScore(item: any): number {
+  const likeCount = item.likeCount || item.engagement?.likeCount || 0
+  const commentCount = item.commentCount || item.engagement?.commentCount || 0
+  const saveCount = item.saveCount || item.engagement?.saveCount || 0
+  return Math.min(2.0, 1.0 + (likeCount / 50) + (commentCount / 20) + (saveCount / 30))
+}
+
 // Get time-based relevance score for feed items
 function getTimeRelevanceScore(item: any): number {
   const now = new Date()
@@ -147,64 +180,60 @@ function calculateDiversityScore(item: any, recommendedItems: any[]): number {
   return Math.max(0.5, 1.0 - (similarCategoryCount * 0.05) - (sameAuthorCount * 0.1))
 }
 
-// Main feed recommendation algorithm
+// Add content filtering function
+function filterObjectionableContent(items: any[]): any[] {
+  const objectionableKeywords = [
+    'spam', 'scam', 'fake', 'clickbait', 'inappropriate', 'offensive',
+    'harassment', 'bullying', 'hate', 'violence', 'explicit'
+  ]
+  
+  return items.filter(item => {
+    // Check content text
+    const content = (item.content || item.caption || item.title || '').toLowerCase()
+    const hasObjectionableContent = objectionableKeywords.some(keyword => 
+      content.includes(keyword)
+    )
+    
+    // Check if content has been reported multiple times
+    const reportCount = item.reportCount || 0
+    const isFrequentlyReported = reportCount > 5
+    
+    // Check if author is blocked or suspended
+    const authorStatus = item.author?.status || 'active'
+    const isAuthorSuspended = authorStatus === 'suspended' || authorStatus === 'banned'
+    
+    return !hasObjectionableContent && !isFrequentlyReported && !isAuthorSuspended
+  })
+}
+
+// Update the getRecommendedFeedItems function to include filtering
 async function getRecommendedFeedItems(
   allItems: any[], 
   userPrefs: UserFeedPreferences, 
   limit: number = 20
 ): Promise<any[]> {
-  const scoredItems: FeedItemScore[] = []
-  const userLat = userPrefs.location?.coordinates?.latitude
-  const userLng = userPrefs.location?.coordinates?.longitude
+  // First, filter out objectionable content
+  const filteredItems = filterObjectionableContent(allItems)
   
-  for (const item of allItems) {
-    let userInterestMatch = 0
-    let locationRelevance = 1.0
-    let popularityScore = 1.0
-    
-    // User interest matching
-    if (userPrefs.categories.length > 0 && item.categories) {
-      const itemCategories = item.categories.map((cat: any) => 
-        typeof cat === 'string' ? cat.toLowerCase() : cat.name?.toLowerCase()
-      )
-      const matches = userPrefs.categories.filter(userCat => 
-        itemCategories.some((itemCat: string) => itemCat.includes(userCat.toLowerCase()))
-      )
-      userInterestMatch = matches.length / userPrefs.categories.length
-    }
-    
-    // Location relevance
-    if (userLat && userLng && item.location?.coordinates) {
-      const distance = calculateDistance(
-        userLat, userLng, 
-        item.location.coordinates.latitude, item.location.coordinates.longitude
-      )
-      // Exponential decay based on distance (25km radius)
-      locationRelevance = Math.exp(-distance / 25)
-    }
-    
-    // Popularity scoring (based on engagement metrics)
-    const likeCount = item.likeCount || item.engagement?.likeCount || 0
-    const commentCount = item.commentCount || item.engagement?.commentCount || 0
-    const saveCount = item.saveCount || item.engagement?.saveCount || 0
-    popularityScore = Math.min(2.0, 1.0 + (likeCount / 50) + (commentCount / 20) + (saveCount / 30))
-    
-    // Time relevance
+  // Then apply the existing recommendation logic
+  const scoredItems: FeedItemScore[] = filteredItems.map(item => {
+    const userInterestMatch = calculateUserInterestMatch(item, userPrefs)
+    const locationRelevance = calculateLocationRelevance(item, userPrefs)
     const timeRelevance = getTimeRelevanceScore(item)
+    const popularityScore = calculatePopularityScore(item)
+    const userBehaviorScore = calculateUserBehaviorScore(item, userPrefs)
+    const diversityScore = calculateDiversityScore(item, []) // Will be updated in loop
     
-    // User behavior
-    const userBehavior = calculateUserBehaviorScore(item, userPrefs)
-    
-    // Calculate total score
     const totalScore = (
-      userInterestMatch * 0.25 +
+      userInterestMatch * 0.3 +
       locationRelevance * 0.2 +
-      popularityScore * 0.15 +
       timeRelevance * 0.15 +
-      userBehavior * 0.25
+      popularityScore * 0.2 +
+      userBehaviorScore * 0.1 +
+      diversityScore * 0.05
     )
     
-    scoredItems.push({
+    return {
       item,
       score: totalScore,
       factors: {
@@ -212,33 +241,44 @@ async function getRecommendedFeedItems(
         locationRelevance,
         timeRelevance,
         popularityScore,
-        userBehaviorScore: userBehavior,
-        diversityScore: 1.0 // Will be calculated later
+        userBehaviorScore,
+        diversityScore
       }
-    })
-  }
-  
-  // Sort by score and apply diversity
-  scoredItems.sort((a, b) => b.score - a.score)
-  
-  const recommended: any[] = []
-  for (const scored of scoredItems) {
-    // Apply diversity score
-    scored.factors.diversityScore = calculateDiversityScore(scored.item, recommended)
-    scored.score *= scored.factors.diversityScore
-    
-    recommended.push(scored.item)
-    if (recommended.length >= limit) break
-  }
-  
-  // Re-sort with diversity applied
-  recommended.sort((a, b) => {
-    const scoreA = scoredItems.find(s => s.item.id === a.id)?.score || 0
-    const scoreB = scoredItems.find(s => s.item.id === b.id)?.score || 0
-    return scoreB - scoreA
+    }
   })
   
-  return recommended
+  // Sort by score and apply diversity
+  const recommendedItems: any[] = []
+  const selectedCategories = new Set<string>()
+  
+  for (const scoredItem of scoredItems.sort((a, b) => b.score - a.score)) {
+    // Update diversity score based on already selected items
+    scoredItem.factors.diversityScore = calculateDiversityScore(scoredItem.item, recommendedItems)
+    
+    // Recalculate total score with updated diversity
+    const finalScore = (
+      scoredItem.factors.userInterestMatch * 0.3 +
+      scoredItem.factors.locationRelevance * 0.2 +
+      scoredItem.factors.timeRelevance * 0.15 +
+      scoredItem.factors.popularityScore * 0.2 +
+      scoredItem.factors.userBehaviorScore * 0.1 +
+      scoredItem.factors.diversityScore * 0.05
+    )
+    
+    // Check if we should include this item based on diversity
+    const itemCategory = scoredItem.item.category || 'general'
+    const categoryCount = selectedCategories.has(itemCategory) ? 1 : 0
+    
+    // Limit similar content to maintain diversity
+    if (categoryCount < 3 || recommendedItems.length < limit * 0.3) {
+      recommendedItems.push(scoredItem.item)
+      selectedCategories.add(itemCategory)
+    }
+    
+    if (recommendedItems.length >= limit) break
+  }
+  
+  return recommendedItems
 }
 
 // Get user feed preferences and interaction history

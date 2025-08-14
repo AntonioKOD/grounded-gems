@@ -37,6 +37,10 @@ import ChallengeVotes from './collections/ChallengeVotes'
 import { ChallengeParticipation } from './collections/ChallengeParticipation'
 import { LocationFollowers } from './collections/LocationFollowers'
 import { CreatorApplications } from './collections/CreatorApplications'
+import { BusinessOwnerApplications } from './collections/BusinessOwnerApplications'
+import { AccountDeletions } from './collections/AccountDeletions'
+import { Reports } from './collections/Reports'
+import { UserBlocks } from './collections/UserBlocks'
 import Analytics from './collections/Analytics'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -145,6 +149,10 @@ export default buildConfig({
     ChallengeParticipation,
     LocationFollowers,
     CreatorApplications,
+    BusinessOwnerApplications,
+    AccountDeletions,
+    Reports,
+    UserBlocks,
     Analytics,
   ],
 })

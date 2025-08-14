@@ -1070,5 +1070,130 @@ export const Users: CollectionConfig = {
         }
       ]
     },
+    // Business Owner fields
+    { 
+      name: 'isBusinessOwner', 
+      type: 'checkbox', 
+      defaultValue: false,
+      admin: {
+        description: 'Whether the user is a business owner'
+      }
+    },
+    {
+      name: 'businessOwnerProfile',
+      type: 'group',
+      admin: {
+        condition: data => Boolean(data?.isBusinessOwner),
+        description: 'Business owner profile information'
+      },
+      fields: [
+        {
+          name: 'businessName',
+          type: 'text',
+          admin: {
+            description: 'Primary business name (for multi-location businesses)'
+          }
+        },
+        {
+          name: 'contactEmail',
+          type: 'email',
+          required: true,
+          admin: {
+            description: 'Business contact email'
+          }
+        },
+        {
+          name: 'phoneNumber',
+          type: 'text',
+          admin: {
+            description: 'Business phone number'
+          }
+        },
+        {
+          name: 'website',
+          type: 'text',
+          admin: {
+            description: 'Business website'
+          }
+        },
+        {
+          name: 'businessType',
+          type: 'select',
+          options: [
+            { label: 'Restaurant', value: 'restaurant' },
+            { label: 'Retail', value: 'retail' },
+            { label: 'Service', value: 'service' },
+            { label: 'Entertainment', value: 'entertainment' },
+            { label: 'Other', value: 'other' }
+          ],
+          admin: {
+            description: 'Type of business'
+          }
+        },
+        {
+          name: 'verificationStatus',
+          type: 'select',
+          options: [
+            { label: 'Pending', value: 'pending' },
+            { label: 'Verified', value: 'verified' },
+            { label: 'Rejected', value: 'rejected' }
+          ],
+          defaultValue: 'pending',
+          admin: {
+            description: 'Business verification status'
+          }
+        },
+        {
+          name: 'verificationDocuments',
+          type: 'upload',
+          relationTo: 'media',
+          hasMany: true,
+          admin: {
+            description: 'Business verification documents (license, tax documents, etc.)'
+          }
+        },
+        {
+          name: 'approvedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When the business owner was approved'
+          }
+        },
+        {
+          name: 'approvedBy',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            readOnly: true,
+            description: 'Admin who approved the business owner'
+          }
+        },
+        {
+          name: 'rejectionReason',
+          type: 'textarea',
+          admin: {
+            description: 'Reason for rejection (if applicable)'
+          }
+        }
+      ]
+    },
+    {
+      name: 'ownedLocations',
+      type: 'relationship',
+      relationTo: 'locations',
+      hasMany: true,
+      admin: {
+        description: 'Locations owned by this business owner'
+      }
+    },
+    {
+      name: 'businessApiKey',
+      type: 'text',
+      admin: {
+        hidden: true,
+        description: 'API key for business webhook access'
+      }
+    },
   ],
 };

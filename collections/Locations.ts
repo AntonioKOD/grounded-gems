@@ -639,6 +639,149 @@ export const Locations: CollectionConfig = {
     { name: 'reviewCount', type: 'number', admin: { readOnly: true } },
     { name: 'followerCount', type: 'number', admin: { readOnly: true, description: 'Number of users following this location' } },
     { name: 'foursquareId', type: 'text', admin: { description: 'Foursquare place ID for API integration' } },
+    // Business ownership fields
+    {
+      name: 'ownership',
+      type: 'group',
+      admin: {
+        description: 'Business ownership information'
+      },
+      fields: [
+        {
+          name: 'ownerId',
+          type: 'relationship',
+          relationTo: 'users',
+          admin: {
+            description: 'Business owner who owns this location'
+          }
+        },
+        {
+          name: 'claimedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When this location was claimed by the business owner'
+          }
+        },
+        {
+          name: 'verifiedAt',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'When ownership was verified by admin'
+          }
+        },
+        {
+          name: 'verificationMethod',
+          type: 'select',
+          options: [
+            { label: 'Manual Review', value: 'manual' },
+            { label: 'Document Verification', value: 'document' },
+            { label: 'Phone Verification', value: 'phone' },
+            { label: 'Email Verification', value: 'email' }
+          ],
+          admin: {
+            description: 'Method used to verify ownership'
+          }
+        },
+        {
+          name: 'businessLicense',
+          type: 'text',
+          admin: {
+            description: 'Business license number'
+          }
+        },
+        {
+          name: 'taxId',
+          type: 'text',
+          admin: {
+            description: 'Business tax ID'
+          }
+        },
+        {
+          name: 'claimStatus',
+          type: 'select',
+          options: [
+            { label: 'Unclaimed', value: 'unclaimed' },
+            { label: 'Pending', value: 'pending' },
+            { label: 'Approved', value: 'approved' },
+            { label: 'Rejected', value: 'rejected' }
+          ],
+          defaultValue: 'unclaimed',
+          admin: {
+            description: 'Status of ownership claim'
+          }
+        },
+        {
+          name: 'rejectionReason',
+          type: 'textarea',
+          admin: {
+            description: 'Reason for rejection (if applicable)'
+          }
+        }
+      ]
+    },
+    {
+      name: 'businessSettings',
+      type: 'group',
+      admin: {
+        description: 'Business-specific settings for this location'
+      },
+      fields: [
+        {
+          name: 'allowSpecials',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Allow business owner to create specials for this location'
+          }
+        },
+        {
+          name: 'allowNotifications',
+          type: 'checkbox',
+          defaultValue: false,
+          admin: {
+            description: 'Allow business owner to send notifications for this location'
+          }
+        },
+        {
+          name: 'notificationPreferences',
+          type: 'group',
+          fields: [
+            {
+              name: 'pushNotifications',
+              type: 'checkbox',
+              defaultValue: true,
+              admin: {
+                description: 'Send push notifications for specials'
+              }
+            },
+            {
+              name: 'emailNotifications',
+              type: 'checkbox',
+              defaultValue: false,
+              admin: {
+                description: 'Send email notifications for specials'
+              }
+            },
+            {
+              name: 'targetAudience',
+              type: 'select',
+              options: [
+                { label: 'All Followers', value: 'all' },
+                { label: 'Subscribers Only', value: 'subscribers' },
+                { label: 'Saved Location Users', value: 'saved' },
+                { label: 'Custom Audience', value: 'custom' }
+              ],
+              defaultValue: 'all',
+              admin: {
+                description: 'Target audience for notifications'
+              }
+            }
+          ]
+        }
+      ]
+    },
     {
       name: 'communityPhotos',
       type: 'array',
