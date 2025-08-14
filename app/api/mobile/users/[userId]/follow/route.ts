@@ -371,10 +371,6 @@ export async function DELETE(
     })
 
     // Remove current user from target user's followers list
-    const targetUserFollowers = Array.isArray(targetUser.followers) 
-      ? targetUser.followers 
-      : []
-    
     const updatedTargetFollowers = targetUserFollowers.filter((id: string) => id !== currentUser.id)
     
     console.log(`🔗 [Unfollow API] Removing ${currentUser.name} (${currentUser.id}) from ${targetUser.name}'s followers list`)
