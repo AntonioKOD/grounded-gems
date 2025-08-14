@@ -307,7 +307,7 @@ export async function DELETE(
       )
     }
 
-    // Get current user's following list
+    // Get current user's following list - use a more reliable method
     const currentUserData = await payload.findByID({
       collection: 'users',
       id: currentUser.id,
@@ -321,9 +321,27 @@ export async function DELETE(
     console.log(`🔗 [Unfollow API] Target user ID: ${targetUserId}`)
     console.log(`🔗 [Unfollow API] Is target user in following list? ${currentFollowing.includes(targetUserId)}`)
 
-    // Check if not following
-    if (!currentFollowing.includes(targetUserId)) {
-      console.log(`🔗 [Unfollow API] User is not following target user, returning 409`)
+    // Also check if the target user has the current user in their followers list
+    const targetUserData = await payload.findByID({
+      collection: 'users',
+      id: targetUserId,
+    })
+
+    const targetUserFollowers = Array.isArray(targetUserData.followers) 
+      ? targetUserData.followers 
+      : []
+
+    console.log(`🔗 [Unfollow API] Target user followers list: ${JSON.stringify(targetUserFollowers)}`)
+    console.log(`🔗 [Unfollow API] Is current user in target's followers? ${targetUserFollowers.includes(currentUser.id)}`)
+
+    // Check if not following - be more lenient and check both sides
+    const isFollowing = currentFollowing.includes(targetUserId)
+    const isInFollowers = targetUserFollowers.includes(currentUser.id)
+    
+    console.log(`🔗 [Unfollow API] Following relationship check: following=${isFollowing}, inFollowers=${isInFollowers}`)
+
+    if (!isFollowing && !isInFollowers) {
+      console.log(`🔗 [Unfollow API] No following relationship found, returning 409`)
       return NextResponse.json(
         {
           success: false,
@@ -333,6 +351,12 @@ export async function DELETE(
         },
         { status: 409 }
       )
+    }
+
+    // If there's an inconsistency, log it but proceed with the unfollow
+    if (isFollowing !== isInFollowers) {
+      console.log(`🔗 [Unfollow API] WARNING: Inconsistent following relationship detected!`)
+      console.log(`🔗 [Unfollow API] Will proceed with unfollow to fix inconsistency`)
     }
 
     // Remove from following list
