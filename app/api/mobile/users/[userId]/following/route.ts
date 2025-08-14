@@ -130,6 +130,8 @@ export async function GET(
     // Get the following list from the target user
     const followingData = Array.isArray(targetUser.following) ? targetUser.following : []
     
+    console.log(`🔍 [Following API] Raw following data: ${JSON.stringify(followingData)}`)
+    
     // Extract user IDs from the following data (handle both string IDs and full objects)
     const followingIds = followingData.map((item: any) => {
       if (typeof item === 'string') {
@@ -140,7 +142,14 @@ export async function GET(
       return null
     }).filter((id: string | null) => id !== null)
     
-    if (followingIds.length === 0) {
+    // Deduplicate the following IDs to prevent duplicates
+    const uniqueFollowingIds = [...new Set(followingIds)]
+    
+    console.log(`🔍 [Following API] Following IDs before deduplication: ${JSON.stringify(followingIds)}`)
+    console.log(`🔍 [Following API] Following IDs after deduplication: ${JSON.stringify(uniqueFollowingIds)}`)
+    console.log(`🔍 [Following API] Removed ${followingIds.length - uniqueFollowingIds.length} duplicate entries`)
+    
+    if (uniqueFollowingIds.length === 0) {
       const response: MobileFollowingResponse = {
         success: true,
         message: 'Following list retrieved successfully',
@@ -154,7 +163,7 @@ export async function GET(
 
     // Get the actual user objects for the following IDs
     const followingUsers = await Promise.all(
-      followingIds.slice(0, 100).map(async (followingId: string) => {
+      uniqueFollowingIds.slice(0, 100).map(async (followingId: string) => {
         try {
           const user = await payload.findByID({
             collection: 'users',
