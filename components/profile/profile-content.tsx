@@ -112,6 +112,7 @@ export default function ProfileContent({
     initialIsFollowing: isFollowing,
     onFollowStateChange: setIsFollowing,
     onFollowersUpdate: setFollowers,
+    onFollowingUpdate: setFollowing,
     onProfileUpdate: setProfile
   })
 

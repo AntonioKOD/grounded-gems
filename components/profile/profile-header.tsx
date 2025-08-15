@@ -42,6 +42,7 @@ export default function ProfileHeader({
     initialIsFollowing: isFollowing,
     onFollowStateChange: setIsFollowing,
     onFollowersUpdate: setFollowers,
+    onFollowingUpdate: () => {}, // Profile header doesn't manage following list
     onProfileUpdate: setProfileUser
   })
 

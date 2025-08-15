@@ -7,6 +7,7 @@ interface UseFollowProps {
   initialIsFollowing: boolean
   onFollowStateChange?: (isFollowing: boolean) => void
   onFollowersUpdate?: (followers: any[] | ((prev: any[]) => any[])) => void
+  onFollowingUpdate?: (following: any[] | ((prev: any[]) => any[])) => void
   onProfileUpdate?: (updater: (prev: any) => any) => void
 }
 
@@ -16,6 +17,7 @@ export function useFollow({
   initialIsFollowing,
   onFollowStateChange,
   onFollowersUpdate,
+  onFollowingUpdate,
   onProfileUpdate
 }: UseFollowProps) {
   const [isFollowing, setIsFollowing] = useState(initialIsFollowing)
@@ -114,6 +116,33 @@ export function useFollow({
           }
         }
 
+        // Update following list immediately (for current user)
+        if (onFollowingUpdate) {
+          if (newFollowingState) {
+            // Add profile user to current user's following list
+            const newFollowing = {
+              id: profileUserId,
+              name: 'Profile User', // This will be updated when data is refreshed
+              username: 'user',
+              email: '',
+              profileImage: null,
+              bio: '',
+              isVerified: false,
+              followerCount: 0
+            }
+            onFollowingUpdate((prev: any[]) => [newFollowing, ...(Array.isArray(prev) ? prev : [])])
+          } else {
+            // Remove profile user from current user's following list
+            onFollowingUpdate((prev: any[]) => 
+              Array.isArray(prev) ? prev.filter(following => {
+                const followingId = normalizeId(following.id || following)
+                const profileId = normalizeId(profileUserId)
+                return followingId !== profileId
+              }) : []
+            )
+          }
+        }
+
         // Update profile follower count immediately
         if (onProfileUpdate) {
           onProfileUpdate((prev: any) => prev ? {
@@ -164,6 +193,20 @@ export function useFollow({
                     setIsFollowing(isUserFollowing)
                     onFollowStateChange?.(isUserFollowing)
                   }
+                }
+              }
+            }
+
+            // Refresh following list (for current user)
+            if (currentUserId && onFollowingUpdate) {
+              const followingResponse = await fetch(`/api/users/${currentUserId}/following`, {
+                credentials: 'include',
+              })
+              
+              if (followingResponse.ok) {
+                const followingData = await followingResponse.json()
+                if (followingData.success && Array.isArray(followingData.following)) {
+                  onFollowingUpdate(followingData.following)
                 }
               }
             }
@@ -218,6 +261,7 @@ export function useFollow({
     currentUserId,
     onFollowStateChange,
     onFollowersUpdate,
+    onFollowingUpdate,
     onProfileUpdate
   ])
 
