@@ -410,7 +410,7 @@ export default function EnhancedFeedContainer({
         return (
           <PeopleSuggestionCard
             key={item.id}
-            item={item as PeopleSuggestionItem}
+            user={item.people}
           />
         )
       

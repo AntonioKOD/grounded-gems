@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
     // Check if user to follow exists
     const userToFollow = await payload.findByID({
       collection: 'users',
-      id: userId
+      id: userId,
+      depth: 0
     })
 
     if (!userToFollow) {
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
     // Get current user's following list
     const currentUser = await payload.findByID({
       collection: 'users',
-      id: user.id
+      id: user.id,
+      depth: 0
     })
 
     if (!currentUser) {
@@ -69,16 +71,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Helper function to normalize IDs
+    const normalizeId = (val: any): string => {
+      if (typeof val === 'string') return val
+      if (val?.id) return val.id
+      if (val?._id) return val._id
+      throw new Error(`Unable to normalize ID from value: ${JSON.stringify(val)}`)
+    }
+
     // Get current following list and deduplicate it
     const currentFollowing = Array.isArray(currentUser.following) ? currentUser.following : []
-    const uniqueFollowing = [...new Set(currentFollowing.map(id => {
-      if (typeof id === 'string') {
-        return id
-      } else if (id && typeof id === 'object' && id.id) {
-        return id.id
-      }
-      return null
-    }).filter(id => id !== null))]
+    const uniqueFollowing = [...new Set(currentFollowing.map(normalizeId))]
     
     console.log('🔍 Current following list:', uniqueFollowing)
     
@@ -96,6 +99,7 @@ export async function POST(request: NextRequest) {
     
     console.log('🔍 Updated following list:', updatedFollowing)
     
+    // Update current user's following list
     await payload.update({
       collection: 'users',
       id: user.id,
@@ -109,18 +113,12 @@ export async function POST(request: NextRequest) {
 
     // Add current user to the other user's followers list
     const userToFollowFollowers = Array.isArray(userToFollow.followers) ? userToFollow.followers : []
-    const uniqueFollowers = [...new Set(userToFollowFollowers.map(id => {
-      if (typeof id === 'string') {
-        return id
-      } else if (id && typeof id === 'object' && id.id) {
-        return id.id
-      }
-      return null
-    }).filter(id => id !== null))]
+    const uniqueFollowers = [...new Set(userToFollowFollowers.map(normalizeId))]
     const updatedFollowers = [...uniqueFollowers, user.id]
     
     console.log('🔍 Updated followers list for target user:', updatedFollowers)
     
+    // Update target user's followers list
     await payload.update({
       collection: 'users',
       id: userId,
@@ -132,9 +130,14 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Updated target user followers list')
 
+    // Return updated counts for immediate UI update
     return NextResponse.json({ 
       success: true,
-      message: 'Successfully followed user'
+      message: 'Successfully followed user',
+      data: {
+        currentUserFollowingCount: updatedFollowing.length,
+        targetUserFollowersCount: updatedFollowers.length
+      }
     })
 
   } catch (error) {
@@ -174,10 +177,19 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
+    // Helper function to normalize IDs
+    const normalizeId = (val: any): string => {
+      if (typeof val === 'string') return val
+      if (val?.id) return val.id
+      if (val?._id) return val._id
+      throw new Error(`Unable to normalize ID from value: ${JSON.stringify(val)}`)
+    }
+
     // Get current user's following list
     const currentUser = await payload.findByID({
       collection: 'users',
-      id: user.id
+      id: user.id,
+      depth: 0
     })
 
     if (!currentUser) {
@@ -190,14 +202,7 @@ export async function DELETE(request: NextRequest) {
 
     // Get current following list and deduplicate it
     const currentFollowing = Array.isArray(currentUser.following) ? currentUser.following : []
-    const uniqueFollowing = [...new Set(currentFollowing.map(id => {
-      if (typeof id === 'string') {
-        return id
-      } else if (id && typeof id === 'object' && id.id) {
-        return id.id
-      }
-      return null
-    }).filter(id => id !== null))]
+    const uniqueFollowing = [...new Set(currentFollowing.map(normalizeId))]
     
     console.log('🔍 Current following list for unfollow:', uniqueFollowing)
     console.log('🔍 Looking for userId in following list:', userId)
@@ -219,6 +224,7 @@ export async function DELETE(request: NextRequest) {
     
     console.log('🔍 Updated following list after unfollow:', updatedFollowing)
     
+    // Update current user's following list
     await payload.update({
       collection: 'users',
       id: user.id,
@@ -233,23 +239,20 @@ export async function DELETE(request: NextRequest) {
     // Remove current user from the other user's followers list
     const userToUnfollow = await payload.findByID({
       collection: 'users',
-      id: userId
+      id: userId,
+      depth: 0
     })
+
+    let updatedFollowers: string[] = []
 
     if (userToUnfollow) {
       const userToUnfollowFollowers = Array.isArray(userToUnfollow.followers) ? userToUnfollow.followers : []
-      const uniqueFollowers = [...new Set(userToUnfollowFollowers.map(id => {
-        if (typeof id === 'string') {
-          return id
-        } else if (id && typeof id === 'object' && id.id) {
-          return id.id
-        }
-        return null
-      }).filter(id => id !== null))]
-      const updatedFollowers = uniqueFollowers.filter(id => id !== user.id)
+      const uniqueFollowers = [...new Set(userToUnfollowFollowers.map(normalizeId))]
+      updatedFollowers = uniqueFollowers.filter(id => id !== user.id)
       
       console.log('🔍 Updated followers list for target user after unfollow:', updatedFollowers)
       
+      // Update target user's followers list
       await payload.update({
         collection: 'users',
         id: userId,
@@ -264,9 +267,14 @@ export async function DELETE(request: NextRequest) {
       console.log('⚠️ User to unfollow not found:', userId)
     }
 
+    // Return updated counts for immediate UI update
     return NextResponse.json({ 
       success: true,
-      message: 'Successfully unfollowed user'
+      message: 'Successfully unfollowed user',
+      data: {
+        currentUserFollowingCount: updatedFollowing.length,
+        targetUserFollowersCount: updatedFollowers.length
+      }
     })
 
   } catch (error) {

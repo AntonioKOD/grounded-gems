@@ -60,7 +60,7 @@ import CreatorApplicationButton from "@/components/creator/creator-application-b
 import CreatorEarningsDashboard from "@/components/guides/creator-earnings-dashboard"
 import FollowersModal from "./followers-modal"
 import FollowingModal from "./following-modal"
-
+import { useFollow } from "@/hooks/use-follow"
 
 
 // Helper to debounce API calls
@@ -93,7 +93,6 @@ export default function ProfileContent({
   const [error, setError] = useState<string | null>(null)
   const [isCurrentUser, setIsCurrentUser] = useState(false)
   const [isFollowing, setIsFollowing] = useState(false)
-  const [isProcessingFollow, setIsProcessingFollow] = useState(false)
   const [userPosts, setUserPosts] = useState<Post[]>([])
   const [savedPosts, setSavedPosts] = useState<Post[]>([])
   const [isLoadingPosts, setIsLoadingPosts] = useState(false)
@@ -105,6 +104,16 @@ export default function ProfileContent({
   const [hasLoadedSavedPosts, setHasLoadedSavedPosts] = useState(false)
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false)
   const [isFollowingModalOpen, setIsFollowingModalOpen] = useState(false)
+
+  // Use the centralized follow hook
+  const { isProcessing: isProcessingFollow, handleFollowToggle } = useFollow({
+    profileUserId: userId,
+    currentUserId: currentUser?.id,
+    initialIsFollowing: isFollowing,
+    onFollowStateChange: setIsFollowing,
+    onFollowersUpdate: setFollowers,
+    onProfileUpdate: setProfile
+  })
 
   // Rate limiting and caching refs
   const lastFetchTime = useRef<number>(0)
@@ -640,340 +649,6 @@ export default function ProfileContent({
     } catch (error) {
       console.error("Logout failed:", error)
       toast.error("Failed to log out")
-    }
-  }
-
-  const handleFollowToggle = async () => {
-    if (isProcessingFollow || !profile || !currentUser?.id) return
-
-    // Prevent self-following
-    if (profile.id === currentUser.id) {
-      toast.error("You cannot follow yourself")
-      return
-    }
-
-    setIsProcessingFollow(true)
-    
-    try {
-      if (isFollowing) {
-        // UNFOLLOW LOGIC
-        
-        const response = await fetch('/api/users/follow', {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ userId: profile.id }),
-        })
-
-        if (response.ok) {
-          toast.success(`Unfollowed ${profile.name || "user"}`)
-          
-          // IMMEDIATE UI UPDATES - No waiting for server refresh
-          setIsFollowing(false)
-          
-          // Immediately remove current user from followers list
-          setFollowers(prev => {
-            const currentId = normalizeId(currentUser.id)
-            const updated = prev.filter(follower => {
-              const followerId = normalizeId(follower.id || follower)
-              const shouldKeep = followerId !== currentId
-              return shouldKeep
-            })
-            return updated
-          })
-          
-          // Update profile follower count immediately
-          setProfile(prev => prev ? {
-            ...prev,
-            followerCount: Math.max(0, (prev.followerCount || 0) - 1),
-            followers: prev.followers ? prev.followers.filter((followerId: any) => {
-              const followerIdNormalized = normalizeId(followerId)
-              const currentId = normalizeId(currentUser.id)
-              return followerIdNormalized !== currentId
-            }) : prev.followers
-          } : prev)
-          
-          // Clear ALL caches immediately
-          if (typeof globalThis !== 'undefined' && globalThis._followCache) {
-            globalThis._followCache.delete(`followers-${profile.id}`)
-            globalThis._followCache.delete(`following-${profile.id}`)
-            globalThis._followCache.delete(`followers-${currentUser.id}`)
-            globalThis._followCache.delete(`following-${currentUser.id}`)
-          }
-          fetchCache.current.delete(`followers-${profile.id}`)
-          fetchCache.current.delete(`following-${profile.id}`)
-          fetchCache.current.delete(`followers-${currentUser.id}`)
-          fetchCache.current.delete(`following-${currentUser.id}`)
-          
-          // Force refresh profile data after a delay to ensure server has recorded the action
-          setTimeout(async () => {
-            try {
-              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
-                credentials: 'include',
-              })
-            
-            if (refreshResponse.ok) {
-              const refreshData = await refreshResponse.json()
-              if (refreshData.success && refreshData.user) {
-                setProfile(refreshData.user)
-                
-                // Also refresh followers list to ensure consistency
-                const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
-                  credentials: 'include',
-                })
-                
-                if (followersResponse.ok) {
-                  const followersData = await followersResponse.json()
-                  if (followersData.success && Array.isArray(followersData.followers)) {
-                    setFollowers(followersData.followers)
-                    
-                    // Update isFollowing state based on refreshed data
-                    if (currentUser) {
-                      const currentId = normalizeId(currentUser.id)
-                      const isUserFollowing = followersData.followers.some((follower: any) => {
-                        const followerId = normalizeId(follower.id || follower)
-                        return followerId === currentId
-                      })
-                      
-                      if (isFollowing !== isUserFollowing) {
-                        setIsFollowing(isUserFollowing)
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } catch (refreshError) {
-            console.error('Error refreshing profile after unfollow:', refreshError)
-          }
-          }, 1000) // Wait 1 second before refreshing
-          
-          // Mark data as stale to force refresh
-          isDataStale.current = true
-          
-          // Also refresh follow data in background for consistency
-          setTimeout(async () => {
-            try {
-              await debouncedFetchFollowData(profile.id, currentUser.id)
-            } catch (error) {
-              console.error('Background follow data refresh failed:', error)
-            }
-          }, 500)
-          
-        } else {
-          const errorData = await response.json()
-          console.error('❌ Unfollow API error:', errorData)
-          throw new Error(errorData.error || 'Failed to unfollow')
-        }
-      } else {
-        // FOLLOW LOGIC
-        
-        const response = await fetch('/api/users/follow', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({ userId: profile.id }),
-        })
-
-        if (response.ok) {
-          toast.success(`Now following ${profile.name || "user"}`)
-          
-          // IMMEDIATE UI UPDATES - No waiting for server refresh
-          setIsFollowing(true)
-          
-          // Immediately add current user to followers list
-          const newFollower = {
-            id: currentUser.id,
-            name: currentUser.name || 'User',
-            username: currentUser.email?.split('@')[0] || 'user',
-            email: currentUser.email,
-            profileImage: currentUser.profileImage,
-            bio: '',
-            isVerified: false,
-            followerCount: 0
-          }
-          
-          setFollowers(prev => {
-            // Check if user is already in the list to avoid duplicates
-            const currentId = normalizeId(currentUser.id)
-            const alreadyExists = prev.some(follower => {
-              const followerId = normalizeId(follower.id || follower)
-              return followerId === currentId
-            })
-            
-            if (alreadyExists) {
-              return prev
-            }
-            
-            const updated = [newFollower, ...prev]
-            return updated
-          })
-          
-          // Update profile follower count immediately
-          setProfile(prev => prev ? {
-            ...prev,
-            followerCount: (prev.followerCount || 0) + 1,
-            followers: prev.followers ? [...prev.followers, currentUser.id] : [currentUser.id]
-          } : prev)
-          
-          // Clear ALL caches immediately
-          if (typeof globalThis !== 'undefined' && globalThis._followCache) {
-            globalThis._followCache.delete(`followers-${profile.id}`)
-            globalThis._followCache.delete(`following-${profile.id}`)
-            globalThis._followCache.delete(`followers-${currentUser.id}`)
-            globalThis._followCache.delete(`following-${currentUser.id}`)
-          }
-          fetchCache.current.delete(`followers-${profile.id}`)
-          fetchCache.current.delete(`following-${profile.id}`)
-          fetchCache.current.delete(`followers-${currentUser.id}`)
-          fetchCache.current.delete(`following-${currentUser.id}`)
-          
-          // Force refresh profile data after a delay to ensure server has recorded the action
-          setTimeout(async () => {
-            try {
-              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
-                credentials: 'include',
-              })
-            
-            if (refreshResponse.ok) {
-              const refreshData = await refreshResponse.json()
-              if (refreshData.success && refreshData.user) {
-                setProfile(refreshData.user)
-                
-                // Also refresh followers list to ensure consistency
-                const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
-                  credentials: 'include',
-                })
-                
-                if (followersResponse.ok) {
-                  const followersData = await followersResponse.json()
-                  if (followersData.success && Array.isArray(followersData.followers)) {
-                    setFollowers(followersData.followers)
-                    
-                    // Update isFollowing state based on refreshed data
-                    if (currentUser) {
-                      const currentId = normalizeId(currentUser.id)
-                      const isUserFollowing = followersData.followers.some((follower: any) => {
-                        const followerId = normalizeId(follower.id || follower)
-                        return followerId === currentId
-                      })
-                      
-                      if (isFollowing !== isUserFollowing) {
-                        setIsFollowing(isUserFollowing)
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          } catch (refreshError) {
-            console.error('Error refreshing profile after follow:', refreshError)
-          }
-          }, 1000) // Wait 1 second before refreshing
-          
-          // Mark data as stale to force refresh
-          isDataStale.current = true
-          
-          // Also refresh follow data in background for consistency
-          setTimeout(async () => {
-            try {
-              await debouncedFetchFollowData(profile.id, currentUser.id)
-            } catch (error) {
-              console.error('Background follow data refresh failed:', error)
-            }
-          }, 500)
-          
-        } else {
-          const errorData = await response.json()
-          console.error('❌ Follow API error:', errorData)
-          
-          if (errorData.error === 'Already following this user') {
-            // User is already following, update state to reflect this
-            setIsFollowing(true)
-            toast.info("You are already following this user")
-            
-            // Force refresh profile data to get correct state
-            try {
-              const refreshResponse = await fetch(`/api/users/${profile.id}/profile`, {
-                credentials: 'include',
-              })
-              
-              if (refreshResponse.ok) {
-                const refreshData = await refreshResponse.json()
-                if (refreshData.success && refreshData.user) {
-                  setProfile(refreshData.user)
-                  console.log('✅ Profile data refreshed after "Already following" error')
-                  
-                  // Also refresh followers list
-                  const followersResponse = await fetch(`/api/users/${profile.id}/followers`, {
-                    credentials: 'include',
-                  })
-                  
-                  if (followersResponse.ok) {
-                    const followersData = await followersResponse.json()
-                    if (followersData.success && Array.isArray(followersData.followers)) {
-                      setFollowers(followersData.followers)
-                      console.log('✅ Followers list refreshed after "Already following" error')
-                    }
-                  }
-                }
-              }
-            } catch (refreshError) {
-              console.error('Error refreshing profile after "Already following":', refreshError)
-            }
-            
-            // Clear cache and refresh data to ensure consistency
-            if (typeof globalThis !== 'undefined' && globalThis._followCache) {
-              globalThis._followCache.delete(`followers-${profile.id}`)
-              globalThis._followCache.delete(`following-${profile.id}`)
-              globalThis._followCache.delete(`followers-${currentUser.id}`)
-              globalThis._followCache.delete(`following-${currentUser.id}`)
-            }
-            fetchCache.current.delete(`followers-${profile.id}`)
-            fetchCache.current.delete(`following-${profile.id}`)
-            fetchCache.current.delete(`followers-${currentUser.id}`)
-            fetchCache.current.delete(`following-${currentUser.id}`)
-            isDataStale.current = true
-            
-            setTimeout(async () => {
-              try {
-                await debouncedFetchFollowData(profile.id, currentUser.id)
-              } catch (error) {
-                console.error('Background follow data refresh failed:', error)
-              }
-            }, 500)
-          } else {
-            throw new Error(errorData.error || 'Failed to follow')
-          }
-        }
-      }
-
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
-      }
-      
-    } catch (error) {
-      console.error("❌ Error toggling follow:", error)
-      
-      // Revert UI state on error
-      if (isFollowing) {
-        setIsFollowing(false)
-      } else {
-        setIsFollowing(true)
-      }
-      
-      if (error instanceof Error && error.message === 'Users cannot follow themselves') {
-        toast.error("You cannot follow yourself")
-      } else {
-        toast.error("Failed to update follow status")
-      }
-    } finally {
-      setIsProcessingFollow(false)
     }
   }
 
