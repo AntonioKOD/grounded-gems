@@ -52,30 +52,15 @@ export async function POST(
     }
     const { status } = validationResult.data;
 
-    // Extract Bearer token and authenticate directly
-    const authHeader = request.headers.get('authorization')
     let currentUser = null
     
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      
-      try {
-        // Call mobile users/me directly for authentication
-        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        if (meResponse.ok) {
-          const meData = await meResponse.json()
-          currentUser = meData.user
-        }
-      } catch (authError) {
-        console.error('Mobile events RSVP - Authentication error:', authError)
-      }
+    // Try to authenticate using Payload directly
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      currentUser = authResult.user
+      console.log('🔐 [Events RSVP API] Direct Payload authentication successful')
+    } catch (authError) {
+      console.log('❌ [Events RSVP API] Direct Payload authentication failed:', authError instanceof Error ? authError.message : String(authError))
     }
     
     if (!currentUser) {

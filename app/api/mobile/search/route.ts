@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import { getBlockedUserIds, getUsersWhoBlockedMe } from '@/lib/blocked-users-helper'
 
 // POST /api/mobile/search - AI-powered search with natural language understanding
 export async function POST(request: NextRequest) {
@@ -193,6 +194,17 @@ export async function POST(request: NextRequest) {
         
         console.log('🔍 Searching users with query:', query)
         
+        // Get blocked users for filtering
+        let blockedUserIds: string[] = []
+        let usersWhoBlockedMe: string[] = []
+        
+        if (currentUser) {
+          blockedUserIds = await getBlockedUserIds(String(currentUser.id))
+          usersWhoBlockedMe = await getUsersWhoBlockedMe(String(currentUser.id))
+          console.log('🔍 Blocked users:', blockedUserIds.length)
+          console.log('🔍 Users who blocked me:', usersWhoBlockedMe.length)
+        }
+        
         // Build user search query
         let userSearchQuery = {}
         
@@ -216,6 +228,17 @@ export async function POST(request: NextRequest) {
         } else {
           // If no query, get recent users
           userSearchQuery = {}
+        }
+        
+        // Add blocked users filtering
+        const usersToExclude = [...blockedUserIds, ...usersWhoBlockedMe]
+        if (usersToExclude.length > 0) {
+          userSearchQuery = {
+            and: [
+              userSearchQuery,
+              { id: { not_in: usersToExclude } }
+            ]
+          }
         }
         
         console.log('🔍 User search query:', JSON.stringify(userSearchQuery, null, 2))

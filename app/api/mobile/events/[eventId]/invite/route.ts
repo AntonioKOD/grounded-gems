@@ -28,33 +28,20 @@ export async function POST(
   try {
     const { eventId } = context.params
     
-    // Extract Bearer token and authenticate directly
-    const authHeader = request.headers.get('authorization')
-    let user = null
+    const payload = await getPayload({ config })
     
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      
-      try {
-        // Call mobile users/me directly for authentication
-        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        if (meResponse.ok) {
-          const meData = await meResponse.json()
-          user = meData.user
-        }
-      } catch (authError) {
-        console.error('Mobile events invite - Authentication error:', authError)
-      }
+    let currentUser = null
+    
+    // Try to authenticate using Payload directly
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      currentUser = authResult.user
+      console.log('🔐 [Events Invite API] Direct Payload authentication successful')
+    } catch (authError) {
+      console.log('❌ [Events Invite API] Direct Payload authentication failed:', authError instanceof Error ? authError.message : String(authError))
     }
     
-    if (!user) {
+    if (!currentUser) {
       return NextResponse.json(
         { success: false, error: 'Authentication required', message: 'Authentication required' },
         { status: 401 }
@@ -71,8 +58,6 @@ export async function POST(
       )
     }
 
-    const payload = await getPayload({ config })
-
     // Get the event to check permissions
     const event = await payload.findByID({
       collection: 'events',
@@ -88,9 +73,9 @@ export async function POST(
     }
 
     // Check if user can invite to this event
-    const canInvite = event.organizer === user.id || 
-                     event.coOrganizers?.includes(user.id) ||
-                     user.role === 'admin'
+    const canInvite = event.organizer === currentUser.id || 
+                     event.coOrganizers?.includes(currentUser.id) ||
+                     currentUser.role === 'admin'
 
     if (!canInvite) {
       return NextResponse.json(
@@ -141,7 +126,7 @@ export async function POST(
             event: eventId,
             user: userId,
             status: 'invited',
-            invitedBy: user.id,
+            invitedBy: currentUser.id,
             createdAt: new Date().toISOString()
           }
         })
@@ -155,16 +140,16 @@ export async function POST(
             recipient: userId,
             type: 'event_invitation',
             title: `You're invited to ${event.name}`,
-            message: `${user.name} invited you to "${event.name}" on ${new Date(event.startDate).toLocaleDateString()}.`,
+            message: `${currentUser.name} invited you to "${event.name}" on ${new Date(event.startDate).toLocaleDateString()}.`,
             relatedTo: {
               relationTo: 'events',
               value: eventId,
             },
-            actionBy: user.id,
+            actionBy: currentUser.id,
             metadata: {
               eventName: event.name,
               eventDate: event.startDate,
-              organizerName: user.name,
+              organizerName: currentUser.name,
             },
             priority: 'normal',
             read: false,

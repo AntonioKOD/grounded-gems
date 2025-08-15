@@ -42,46 +42,13 @@ export async function GET(
     
     let currentUser = null
     
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      
-      try {
-        // Call mobile users/me directly for authentication
-        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        if (meResponse.ok) {
-          const meData = await meResponse.json()
-          currentUser = meData.user
-        }
-      } catch (authError) {
-        console.error('Mobile following - Authentication error:', authError)
-      }
-    }
-    // Check for payload-token in Cookie header (fallback for mobile apps)
-    else if (cookieHeader?.includes('payload-token=')) {
-      try {
-        // Call mobile users/me directly for authentication with cookie
-        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
-          method: 'GET',
-          headers: {
-            'Cookie': cookieHeader,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        if (meResponse.ok) {
-          const meData = await meResponse.json()
-          currentUser = meData.user
-        }
-      } catch (authError) {
-        console.error('Mobile following - Cookie authentication error:', authError)
-      }
+    // Try to authenticate using Payload directly
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      currentUser = authResult.user
+      console.log('🔐 [Following API] Direct Payload authentication successful')
+    } catch (authError) {
+      console.log('❌ [Following API] Direct Payload authentication failed:', authError instanceof Error ? authError.message : String(authError))
     }
     
     if (!currentUser) {

@@ -87,6 +87,7 @@ interface MobileProfileResponse {
         locationsCount: number
         reviewCount: number
         recommendationCount: number
+        blockedUsersCount: number
         averageRating?: number
       }
       socialLinks?: Array<{
@@ -285,109 +286,127 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileProf
       locationsCount: 0,
       reviewCount: 0,
       recommendationCount: 0,
+      blockedUsersCount: 0,
       averageRating: undefined as number | undefined,
     }
 
-    if (includeStats) {
-      try {
-        // Get posts count for this specific user
-        const postsResult = await payload.find({
-          collection: 'posts',
-          where: {
-            author: { equals: targetUserId },
-            status: { equals: 'published' }
-          },
-          limit: 0, // Just get the count
-        })
-        
-        stats.postsCount = postsResult.totalDocs
-        console.log('🔍 [Profile API] Posts count:', stats.postsCount)
+    // Always calculate stats for mobile profile
+    try {
+      // Get posts count for this specific user
+      const postsResult = await payload.find({
+        collection: 'posts',
+        where: {
+          author: { equals: targetUserId },
+          status: { equals: 'published' }
+        },
+        limit: 0, // Just get the count
+      })
+      
+      stats.postsCount = postsResult.totalDocs
+      console.log('🔍 [Profile API] Posts count:', stats.postsCount)
 
-        // Get locations count (if user has created locations)
-        const locationsResult = await payload.find({
-          collection: 'locations',
+      // Get locations count (if user has created locations)
+      const locationsResult = await payload.find({
+        collection: 'locations',
+        where: {
+          createdBy: { equals: targetUserId }
+        },
+        limit: 0,
+      })
+      stats.locationsCount = locationsResult.totalDocs
+
+      // Get reviews count
+      const reviewsResult = await payload.find({
+        collection: 'reviews',
+        where: {
+          author: { equals: targetUserId }
+        },
+        limit: 0,
+      })
+      stats.reviewCount = reviewsResult.totalDocs
+
+      // Get saved posts count
+      const savedPostsResult = await payload.find({
+        collection: 'posts',
+        where: {
+          'savedBy': { contains: targetUserId }
+        },
+        limit: 0,
+      })
+      stats.savedPostsCount = savedPostsResult.totalDocs
+
+      // Get liked posts count
+      const likedPostsResult = await payload.find({
+        collection: 'posts',
+        where: {
+          'likes': { contains: targetUserId }
+        },
+        limit: 0,
+      })
+      stats.likedPostsCount = likedPostsResult.totalDocs
+
+      // Get followers count - use the user's followers array if available
+      if (targetUser.followers && Array.isArray(targetUser.followers)) {
+        stats.followersCount = targetUser.followers.length
+        console.log('🔍 [Profile API] Followers count from array:', stats.followersCount)
+      } else {
+        // Fallback to querying all users
+        const followersResult = await payload.find({
+          collection: 'users',
           where: {
-            createdBy: { equals: targetUserId }
+            following: { contains: targetUserId }
           },
           limit: 0,
         })
-        stats.locationsCount = locationsResult.totalDocs
+        stats.followersCount = followersResult.totalDocs
+        console.log('🔍 [Profile API] Followers count from query:', stats.followersCount)
+      }
 
-        // Get reviews count
-        const reviewsResult = await payload.find({
+      // Get following count
+      if (targetUser.following && Array.isArray(targetUser.following)) {
+        stats.followingCount = targetUser.following.length
+        console.log('🔍 [Profile API] Following count from array:', stats.followingCount)
+      } else {
+        stats.followingCount = 0
+        console.log('🔍 [Profile API] Following count: 0 (no array)')
+      }
+
+      // Get blocked users count
+      const blockedUsersResult = await payload.find({
+        collection: 'userBlocks',
+        where: {
+          blocker: { equals: targetUserId },
+          isActive: { equals: true }
+        },
+        limit: 0,
+      })
+      stats.blockedUsersCount = blockedUsersResult.totalDocs
+      console.log('🔍 [Profile API] Blocked users count:', stats.blockedUsersCount)
+
+      // Calculate average rating from reviews
+      if (stats.reviewCount > 0) {
+        const reviewsWithRatings = await payload.find({
           collection: 'reviews',
           where: {
-            author: { equals: targetUserId }
+            author: { equals: targetUserId },
+            rating: { exists: true }
           },
-          limit: 0,
+          limit: 100,
         })
-        stats.reviewCount = reviewsResult.totalDocs
-
-        // Get saved posts count
-        const savedPostsResult = await payload.find({
-          collection: 'posts',
-          where: {
-            'savedBy': { contains: targetUserId }
-          },
-          limit: 0,
-        })
-        stats.savedPostsCount = savedPostsResult.totalDocs
-
-        // Get liked posts count
-        const likedPostsResult = await payload.find({
-          collection: 'posts',
-          where: {
-            'likes': { contains: targetUserId }
-          },
-          limit: 0,
-        })
-        stats.likedPostsCount = likedPostsResult.totalDocs
-
-        // Get followers count - use the user's followers array if available
-        if (targetUser.followers && Array.isArray(targetUser.followers)) {
-          stats.followersCount = targetUser.followers.length
-        } else {
-          // Fallback to querying all users
-          const followersResult = await payload.find({
-            collection: 'users',
-            where: {
-              following: { contains: targetUserId }
-            },
-            limit: 0,
-          })
-          stats.followersCount = followersResult.totalDocs
+        
+        const totalRating = reviewsWithRatings.docs.reduce((sum: number, review: any) => {
+          return sum + (review.rating || 0)
+        }, 0)
+        
+        if (reviewsWithRatings.docs.length > 0) {
+          stats.averageRating = totalRating / reviewsWithRatings.docs.length
         }
-
-        // Get following count
-        if (targetUser.following && Array.isArray(targetUser.following)) {
-          stats.followingCount = targetUser.following.length
-        }
-
-        // Calculate average rating from reviews
-        if (stats.reviewCount > 0) {
-          const reviewsWithRatings = await payload.find({
-            collection: 'reviews',
-            where: {
-              author: { equals: targetUserId },
-              rating: { exists: true }
-            },
-            limit: 100,
-          })
-          
-          const totalRating = reviewsWithRatings.docs.reduce((sum: number, review: any) => {
-            return sum + (review.rating || 0)
-          }, 0)
-          
-          if (reviewsWithRatings.docs.length > 0) {
-            stats.averageRating = totalRating / reviewsWithRatings.docs.length
-          }
-        }
-
-        console.log('🔍 [Profile API] Stats calculated:', stats)
-
-      } catch (statsError) {
-        console.warn('Failed to fetch user stats:', statsError)
       }
+
+      console.log('🔍 [Profile API] Final stats calculated:', stats)
+
+    } catch (statsError) {
+      console.warn('Failed to fetch user stats:', statsError)
     }
 
     // Check follow relationship if viewing another user's profile

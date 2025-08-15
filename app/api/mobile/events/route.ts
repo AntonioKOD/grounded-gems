@@ -243,39 +243,20 @@ export async function POST(request: NextRequest) {
   try {
     console.log('Mobile events POST - Starting authentication...')
     
-    // Extract Bearer token and authenticate directly
-    const authHeader = request.headers.get('authorization')
-    let user = null
+    const payload = await getPayload({ config })
     
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      console.log('Mobile events POST - Extracted token:', token.substring(0, 20) + '...')
-      
-      try {
-        // Call mobile users/me directly for authentication
-        const meResponse = await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/mobile/users/me`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        console.log('Mobile events POST - Mobile users/me response status:', meResponse.status)
-        
-        if (meResponse.ok) {
-          const meData = await meResponse.json()
-          user = meData.user
-          console.log('Mobile events POST - Authentication successful, user ID:', user?.id)
-        } else {
-          console.log('Mobile events POST - Authentication failed, status:', meResponse.status)
-        }
-      } catch (authError) {
-        console.error('Mobile events POST - Authentication error:', authError)
-      }
+    let currentUser = null
+    
+    // Try to authenticate using Payload directly
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      currentUser = authResult.user
+      console.log('🔐 [Events API] Direct Payload authentication successful')
+    } catch (authError) {
+      console.log('❌ [Events API] Direct Payload authentication failed:', authError instanceof Error ? authError.message : String(authError))
     }
     
-    if (!user) {
+    if (!currentUser) {
       console.log('Mobile events POST - No user found, returning 401')
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
@@ -285,9 +266,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     console.log('Mobile API: Received event data:', body)
-
-    // Get payload instance
-    const payload = await getPayload({ config })
 
     // Handle location - find existing location or create a placeholder
     let locationId: string | undefined = body.locationId ? String(body.locationId) : undefined // If mobile app sends locationId
@@ -407,7 +385,7 @@ export async function POST(request: NextRequest) {
       durationMinutes: body.durationMinutes,
       location: locationId,
       capacity: body.maxParticipants || body.capacity,
-      organizer: user.id,
+      organizer: String(currentUser.id),
       status: body.status || 'published',
       tags: body.tags || [],
       privacy: body.privacy || 'public',
@@ -425,7 +403,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`Mobile API: Creating event for user ${user.id}`)
+    console.log(`Mobile API: Creating event for user ${currentUser.id}`)
     console.log('Mobile API: Transformed event data:', eventData)
 
     // Create event directly with payload to ensure proper authentication context

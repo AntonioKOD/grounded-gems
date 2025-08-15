@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSideUser } from '@/lib/auth-server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import { getBlockedUserIds, getUsersWhoBlockedMe } from '@/lib/blocked-users-helper'
 
 // Enhanced feed recommendation algorithm
 interface FeedItemScore {
@@ -180,12 +181,24 @@ function calculateDiversityScore(item: any, recommendedItems: any[]): number {
   return Math.max(0.5, 1.0 - (similarCategoryCount * 0.05) - (sameAuthorCount * 0.1))
 }
 
-// Add content filtering function
-function filterObjectionableContent(items: any[]): any[] {
+// Filter out objectionable content and blocked users
+async function filterObjectionableContent(items: any[], currentUserId?: string): Promise<any[]> {
   const objectionableKeywords = [
-    'spam', 'scam', 'fake', 'clickbait', 'inappropriate', 'offensive',
-    'harassment', 'bullying', 'hate', 'violence', 'explicit'
+    'spam', 'scam', 'fake', 'illegal', 'inappropriate'
   ]
+  
+  // Get blocked users if current user is provided
+  let blockedUserIds: string[] = []
+  let usersWhoBlockedMe: string[] = []
+  
+  if (currentUserId) {
+    blockedUserIds = await getBlockedUserIds(currentUserId)
+    usersWhoBlockedMe = await getUsersWhoBlockedMe(currentUserId)
+    console.log('🔍 [Feed] Blocked users:', blockedUserIds.length)
+    console.log('🔍 [Feed] Users who blocked me:', usersWhoBlockedMe.length)
+  }
+  
+  const usersToExclude = [...blockedUserIds, ...usersWhoBlockedMe]
   
   return items.filter(item => {
     // Check content text
@@ -202,7 +215,11 @@ function filterObjectionableContent(items: any[]): any[] {
     const authorStatus = item.author?.status || 'active'
     const isAuthorSuspended = authorStatus === 'suspended' || authorStatus === 'banned'
     
-    return !hasObjectionableContent && !isFrequentlyReported && !isAuthorSuspended
+    // Check if author is blocked by current user or has blocked current user
+    const authorId = item.author?.id || item.author
+    const isAuthorBlocked = usersToExclude.includes(authorId)
+    
+    return !hasObjectionableContent && !isFrequentlyReported && !isAuthorSuspended && !isAuthorBlocked
   })
 }
 
@@ -210,10 +227,11 @@ function filterObjectionableContent(items: any[]): any[] {
 async function getRecommendedFeedItems(
   allItems: any[], 
   userPrefs: UserFeedPreferences, 
-  limit: number = 20
+  limit: number = 20,
+  currentUserId?: string
 ): Promise<any[]> {
   // First, filter out objectionable content
-  const filteredItems = filterObjectionableContent(allItems)
+  const filteredItems = await filterObjectionableContent(allItems, currentUserId)
   
   // Then apply the existing recommendation logic
   const scoredItems: FeedItemScore[] = filteredItems.map(item => {
@@ -502,7 +520,7 @@ export async function GET(request: NextRequest) {
 
           // Get user preferences and apply recommendations
           const userPrefs = await getUserFeedPreferences(currentUserId)
-          feedItems = await getRecommendedFeedItems(allItems, userPrefs, limit)
+          feedItems = await getRecommendedFeedItems(allItems, userPrefs, limit, currentUserId)
 
           console.log(`Generated ${feedItems.length} recommended feed items for user ${currentUserId}`)
         } else {
@@ -517,7 +535,7 @@ export async function GET(request: NextRequest) {
             depth: 2,
             sort: '-createdAt'
           })
-          feedItems = postsResult.docs
+          feedItems = await filterObjectionableContent(postsResult.docs, currentUserId)
         }
         break
 
@@ -532,7 +550,7 @@ export async function GET(request: NextRequest) {
           depth: 2,
           sort: '-createdAt'
         })
-        feedItems = latestResult.docs
+        feedItems = await filterObjectionableContent(latestResult.docs, currentUserId)
         break
 
       case 'popular':
@@ -546,7 +564,7 @@ export async function GET(request: NextRequest) {
           depth: 2,
           sort: '-likeCount'
         })
-        feedItems = popularResult.docs
+        feedItems = await filterObjectionableContent(popularResult.docs, currentUserId)
         break
 
       case 'following':
@@ -565,7 +583,7 @@ export async function GET(request: NextRequest) {
             depth: 2,
             sort: '-createdAt'
           })
-          feedItems = followingResult.docs
+          feedItems = await filterObjectionableContent(followingResult.docs, currentUserId)
         }
         break
 
@@ -580,7 +598,7 @@ export async function GET(request: NextRequest) {
           depth: 2,
           sort: '-createdAt'
         })
-        feedItems = defaultResult.docs
+        feedItems = await filterObjectionableContent(defaultResult.docs, currentUserId)
     }
 
     // Update user interaction states

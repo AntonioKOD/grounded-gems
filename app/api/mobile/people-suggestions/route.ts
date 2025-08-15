@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import { getBlockedUserIds, getUsersWhoBlockedMe } from '@/lib/blocked-users-helper'
 
 // GET /api/mobile/people-suggestions - Get organized people suggestions like Instagram/Facebook
 export async function GET(request: NextRequest) {
@@ -33,7 +34,13 @@ export async function GET(request: NextRequest) {
     
     const currentUserFollowers = user.followers || []
     
+    // Get blocked users for filtering
+    const blockedUserIds = await getBlockedUserIds(String(user.id))
+    const usersWhoBlockedMe = await getUsersWhoBlockedMe(String(user.id))
+    const usersToExclude = [...blockedUserIds, ...usersWhoBlockedMe]
+    
     console.log(`📱 People suggestions: User ${user.id}, category: ${category}, following ${currentUserFollowing.length} users:`, currentUserFollowing)
+    console.log(`📱 People suggestions: Blocked ${blockedUserIds.length} users, blocked by ${usersWhoBlockedMe.length} users`)
     
     // Build base query to exclude current user and users already being followed
     const baseWhereConditions: any[] = [
@@ -48,6 +55,14 @@ export async function GET(request: NextRequest) {
       })
     } else {
       console.log(`🔍 No users to filter out (following list is empty)`)
+    }
+    
+    // Add condition to exclude blocked users
+    if (usersToExclude.length > 0) {
+      console.log(`🔍 Filtering out ${usersToExclude.length} blocked users:`, usersToExclude)
+      baseWhereConditions.push({
+        id: { not_in: usersToExclude }
+      })
     }
     
     // Get users with enhanced data

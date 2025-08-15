@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@/payload.config'
+import config from '@payload-config'
+import { isUserBlocked } from '@/lib/blocked-users-helper'
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,8 +10,16 @@ export async function POST(request: NextRequest) {
     
     console.log('🔍 Follow API called with userId:', userId)
     
-    // Get current user from session
-    const { user } = await payload.auth({ headers: request.headers })
+    // Enhanced authentication that supports both Bearer tokens and cookies
+    let user = null
+    
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+      console.log('🔐 Direct Payload authentication successful, user:', user?.id)
+    } catch (authError) {
+      console.error('❌ Direct Payload authentication error:', authError)
+    }
     
     if (!user) {
       console.log('❌ No authenticated user found')
@@ -55,6 +64,26 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔍 User to follow found:', userToFollow.name)
+
+    // Check if user is blocked
+    const isBlocked = await isUserBlocked(String(user.id), userId)
+    if (isBlocked) {
+      console.log('❌ Cannot follow blocked user:', userId)
+      return NextResponse.json(
+        { error: 'Cannot follow this user' },
+        { status: 400 }
+      )
+    }
+
+    // Check if user has blocked me
+    const hasBlockedMe = await isUserBlocked(userId, String(user.id))
+    if (hasBlockedMe) {
+      console.log('❌ Cannot follow user who has blocked me:', userId)
+      return NextResponse.json(
+        { error: 'Cannot follow this user' },
+        { status: 400 }
+      )
+    }
 
     // Get current user's following list
     const currentUser = await payload.findByID({
@@ -156,8 +185,16 @@ export async function DELETE(request: NextRequest) {
     
     console.log('🔍 Unfollow API called with userId:', userId)
     
-    // Get current user from session
-    const { user } = await payload.auth({ headers: request.headers })
+    // Enhanced authentication that supports both Bearer tokens and cookies
+    let user = null
+    
+    try {
+      const authResult = await payload.auth({ headers: request.headers })
+      user = authResult.user
+      console.log('🔐 Direct Payload authentication successful (DELETE), user:', user?.id)
+    } catch (authError) {
+      console.error('❌ Direct Payload authentication error (DELETE):', authError)
+    }
     
     if (!user) {
       console.log('❌ No authenticated user found for unfollow')

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from 'payload.config'
@@ -30,6 +30,14 @@ export async function POST(
     const payload = await getPayload({ config })
     
     console.log(`🔗 [Follow API] Starting follow operation for target user: ${targetUserId}`)
+
+    // Helper function to normalize IDs (handle both string IDs and object IDs)
+    const normalizeId = (val: any): string => {
+      if (typeof val === 'string') return val
+      if (val?.id) return val.id
+      if (val?._id) return val._id
+      throw new Error(`Unable to normalize ID from value: ${JSON.stringify(val)}`)
+    }
 
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
@@ -83,6 +91,7 @@ export async function POST(
     const targetUser = await payload.findByID({
       collection: 'users',
       id: targetUserId,
+      depth: 0
     })
 
     if (!targetUser) {
@@ -101,14 +110,20 @@ export async function POST(
     const currentUserData = await payload.findByID({
       collection: 'users',
       id: currentUser.id,
+      depth: 0
     })
 
     const currentFollowing = Array.isArray(currentUserData.following) 
       ? currentUserData.following 
       : []
 
+    // Normalize and deduplicate following list
+    const uniqueFollowing = [...new Set(currentFollowing.map(normalizeId))]
+    
+    console.log(`🔗 [Follow API] Current following list (normalized): ${JSON.stringify(uniqueFollowing)}`)
+
     // Check if already following
-    if (currentFollowing.includes(targetUserId)) {
+    if (uniqueFollowing.includes(targetUserId)) {
       return NextResponse.json(
         {
           success: false,
@@ -121,7 +136,7 @@ export async function POST(
     }
 
     // Add to following list
-    const updatedFollowing = [...currentFollowing, targetUserId]
+    const updatedFollowing = [...uniqueFollowing, targetUserId]
 
     await payload.update({
       collection: 'users',
@@ -129,6 +144,7 @@ export async function POST(
       data: {
         following: updatedFollowing,
       },
+      overrideAccess: true
     })
 
     // Add current user to target user's followers list
@@ -136,10 +152,12 @@ export async function POST(
       ? targetUser.followers 
       : []
     
-    const updatedTargetFollowers = [...targetUserFollowers, currentUser.id]
+    // Normalize and deduplicate followers list
+    const uniqueFollowers = [...new Set(targetUserFollowers.map(normalizeId))]
+    const updatedTargetFollowers = [...uniqueFollowers, currentUser.id]
     
     console.log(`🔗 [Follow API] Adding ${currentUser.name} (${currentUser.id}) to ${targetUser.name}'s followers list`)
-    console.log(`🔗 [Follow API] Target user followers before: ${targetUserFollowers.length}`)
+    console.log(`🔗 [Follow API] Target user followers before: ${uniqueFollowers.length}`)
     console.log(`🔗 [Follow API] Target user followers after: ${updatedTargetFollowers.length}`)
     
     await payload.update({
@@ -148,6 +166,7 @@ export async function POST(
       data: {
         followers: updatedTargetFollowers,
       },
+      overrideAccess: true
     })
 
     // Calculate new followers count for target user
@@ -229,6 +248,14 @@ export async function DELETE(
     
     console.log(`🔗 [Unfollow API] Starting unfollow operation for target user: ${targetUserId}`)
 
+    // Helper function to normalize IDs (handle both string IDs and object IDs)
+    const normalizeId = (val: any): string => {
+      if (typeof val === 'string') return val
+      if (val?.id) return val.id
+      if (val?._id) return val._id
+      throw new Error(`Unable to normalize ID from value: ${JSON.stringify(val)}`)
+    }
+
     // Verify authentication - check both Authorization header and Cookie
     const authHeader = request.headers.get('Authorization')
     const cookieHeader = request.headers.get('Cookie')
@@ -284,6 +311,7 @@ export async function DELETE(
     const targetUser = await payload.findByID({
       collection: 'users',
       id: targetUserId,
+      depth: 0
     })
 
     if (!targetUser) {
@@ -302,32 +330,40 @@ export async function DELETE(
     const currentUserData = await payload.findByID({
       collection: 'users',
       id: currentUser.id,
+      depth: 0
     })
 
     const currentFollowing = Array.isArray(currentUserData.following) 
       ? currentUserData.following 
       : []
 
-    console.log(`🔗 [Unfollow API] Current user following list: ${JSON.stringify(currentFollowing)}`)
+    // Normalize and deduplicate following list
+    const uniqueFollowing = [...new Set(currentFollowing.map(normalizeId))]
+
+    console.log(`🔗 [Unfollow API] Current user following list (normalized): ${JSON.stringify(uniqueFollowing)}`)
     console.log(`🔗 [Unfollow API] Target user ID: ${targetUserId}`)
-    console.log(`🔗 [Unfollow API] Is target user in following list? ${currentFollowing.includes(targetUserId)}`)
+    console.log(`🔗 [Unfollow API] Is target user in following list? ${uniqueFollowing.includes(targetUserId)}`)
 
     // Also check if the target user has the current user in their followers list
     const targetUserData = await payload.findByID({
       collection: 'users',
       id: targetUserId,
+      depth: 0
     })
 
     const targetUserFollowers = Array.isArray(targetUserData.followers) 
       ? targetUserData.followers 
       : []
 
-    console.log(`🔗 [Unfollow API] Target user followers list: ${JSON.stringify(targetUserFollowers)}`)
-    console.log(`🔗 [Unfollow API] Is current user in target's followers? ${targetUserFollowers.includes(currentUser.id)}`)
+    // Normalize and deduplicate followers list
+    const uniqueFollowers = [...new Set(targetUserFollowers.map(normalizeId))]
+
+    console.log(`🔗 [Unfollow API] Target user followers list (normalized): ${JSON.stringify(uniqueFollowers)}`)
+    console.log(`🔗 [Unfollow API] Is current user in target's followers? ${uniqueFollowers.includes(String(currentUser.id))}`)
 
     // Check if not following - be more lenient and check both sides
-    const isFollowing = currentFollowing.includes(targetUserId)
-    const isInFollowers = targetUserFollowers.includes(currentUser.id)
+    const isFollowing = uniqueFollowing.includes(targetUserId)
+    const isInFollowers = uniqueFollowers.includes(String(currentUser.id))
     
     console.log(`🔗 [Unfollow API] Following relationship check: following=${isFollowing}, inFollowers=${isInFollowers}`)
 
@@ -351,7 +387,7 @@ export async function DELETE(
     }
 
     // Remove from following list
-    const updatedFollowing = currentFollowing.filter((id: string) => id !== targetUserId)
+    const updatedFollowing = uniqueFollowing.filter((id: string) => id !== targetUserId)
 
     await payload.update({
       collection: 'users',
@@ -359,13 +395,14 @@ export async function DELETE(
       data: {
         following: updatedFollowing,
       },
+      overrideAccess: true
     })
 
     // Remove current user from target user's followers list
-    const updatedTargetFollowers = targetUserFollowers.filter((id: string) => id !== currentUser.id)
+    const updatedTargetFollowers = uniqueFollowers.filter((id: string) => id !== currentUser.id)
     
     console.log(`🔗 [Unfollow API] Removing ${currentUser.name} (${currentUser.id}) from ${targetUser.name}'s followers list`)
-    console.log(`🔗 [Unfollow API] Target user followers before: ${targetUserFollowers.length}`)
+    console.log(`🔗 [Unfollow API] Target user followers before: ${uniqueFollowers.length}`)
     console.log(`🔗 [Unfollow API] Target user followers after: ${updatedTargetFollowers.length}`)
     
     await payload.update({
@@ -374,6 +411,7 @@ export async function DELETE(
       data: {
         followers: updatedTargetFollowers,
       },
+      overrideAccess: true
     })
 
     // Calculate new followers count for target user
