@@ -12,12 +12,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { updateProfileImage } from "@/app/(frontend)/profile/actions"
 
 interface ProfileImageUploadProps {
-  userId: string
   currentImage?: string
   name?: string
 }
 
-export function ProfileImageUpload({ userId, currentImage, name = "User" }: ProfileImageUploadProps) {
+export function ProfileImageUpload({ currentImage, name = "User" }: ProfileImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -72,9 +71,7 @@ export function ProfileImageUpload({ userId, currentImage, name = "User" }: Prof
       // Build FormData for Payload's /api/media
       const formData = new FormData()
       formData.append("file", file)
-      formData.append("alt", `Profile image for ${name}`)
-
-      console.log("Uploading to /api/media")
+      formData.append("alt", `Profile photo for ${name}`)
 
       // Send to Payload's media endpoint
       const res = await fetch("/api/media", {
@@ -95,7 +92,7 @@ export function ProfileImageUpload({ userId, currentImage, name = "User" }: Prof
       setUploadProgress(100)
 
       // Update the user's profile with the media ID
-      const updateResult = await updateProfileImage(userId, doc.id)
+      const updateResult = await updateProfileImage(doc.id)
 
       if (!updateResult.success) {
         throw new Error(updateResult.error || "Failed to update profile image")

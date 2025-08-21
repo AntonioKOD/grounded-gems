@@ -3,6 +3,7 @@
 import { getPayload } from "payload"
 import config from "@/payload.config"
 import { revalidatePath } from "next/cache"
+import { getAuthenticatedUserForServerActions } from "@/lib/auth-server"
 
 export interface ProfileUpdateData {
   name?: string
@@ -23,15 +24,18 @@ export interface ProfileUpdateData {
 
 /**
  * Checks if a user can change their username (7-day cooldown)
- * @param userId - The ID of the user
  * @returns Object with canChange boolean and nextChangeDate if applicable
  */
-export async function checkUsernameChangeCooldown(userId: string) {
-  if (!userId) {
-    throw new Error("User ID is required")
-  }
-
+export async function checkUsernameChangeCooldown() {
   try {
+    // Get the authenticated user from the server
+    const currentUser = await getAuthenticatedUserForServerActions()
+    
+    if (!currentUser) {
+      throw new Error("Authentication required. Please log in to check username change availability.")
+    }
+
+    const userId = currentUser.id
     const payload = await getPayload({ config })
 
     const user = await payload.findByID({
@@ -112,16 +116,19 @@ function generateUsernameFromName(name: string): string {
 
 /**
  * Updates a user's profile in Payload CMS
- * @param userId - The ID of the user to update
  * @param data - The profile data to update
  * @returns The updated user object
  */
-export async function updateUserProfile(userId: string, data: ProfileUpdateData) {
-  if (!userId) {
-    throw new Error("User ID is required")
-  }
-
+export async function updateUserProfile(data: ProfileUpdateData) {
   try {
+    // Get the authenticated user from the server
+    const currentUser = await getAuthenticatedUserForServerActions()
+    
+    if (!currentUser) {
+      throw new Error("Authentication required. Please log in to update your profile.")
+    }
+
+    const userId = currentUser.id
     const payload = await getPayload({ config })
 
     // Prepare the update data
@@ -136,18 +143,18 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
       const username = data.username.trim().toLowerCase()
       
       // Get current user to check existing username
-      const currentUser = await payload.findByID({
+      const user = await payload.findByID({
         collection: "users",
         id: userId,
       })
 
       // Only process username change if it's actually different
-      if (currentUser.username !== username) {
+      if (user.username !== username) {
         // If username is provided and not empty, validate it
         if (username) {
           // Only check cooldown if username is actually being changed
-          if (currentUser.username) {
-            const cooldownCheck = await checkUsernameChangeCooldown(userId)
+          if (user.username) {
+            const cooldownCheck = await checkUsernameChangeCooldown()
             
             if (!cooldownCheck.canChange) {
               throw new Error(`You can change your username again in ${cooldownCheck.daysRemaining} day(s). Next change available: ${cooldownCheck.nextChangeDate?.toLocaleDateString()}`)
@@ -254,21 +261,23 @@ export async function updateUserProfile(userId: string, data: ProfileUpdateData)
 
 /**
  * Updates a user's creator status and level
- * @param userId - The ID of the user to update
  * @param isCreator - Whether the user is a creator
  * @param creatorLevel - The creator level (explorer, hunter, authority, expert)
  * @returns The updated user object
  */
 export async function updateCreatorStatus(
-  userId: string,
   isCreator: boolean,
   creatorLevel?: "explorer" | "hunter" | "authority" | "expert",
 ) {
-  if (!userId) {
-    throw new Error("User ID is required")
-  }
-
   try {
+    // Get the authenticated user from the server
+    const currentUser = await getAuthenticatedUserForServerActions()
+    
+    if (!currentUser) {
+      throw new Error("Authentication required. Please log in to update your creator status.")
+    }
+
+    const userId = currentUser.id
     const payload = await getPayload({ config })
 
     const updateData: Record<string, any> = {
@@ -306,16 +315,19 @@ export async function updateCreatorStatus(
 
 /**
  * Updates a user's profile image
- * @param userId - The ID of the user to update
  * @param mediaId - The ID of the uploaded media to use as profile image
  * @returns The updated user object
  */
-export async function updateProfileImage(userId: string, mediaId: string | null) {
-  if (!userId) {
-    throw new Error("User ID is required")
-  }
-
+export async function updateProfileImage(mediaId: string | null) {
   try {
+    // Get the authenticated user from the server
+    const currentUser = await getAuthenticatedUserForServerActions()
+    
+    if (!currentUser) {
+      throw new Error("Authentication required. Please log in to update your profile image.")
+    }
+
+    const userId = currentUser.id
     const payload = await getPayload({ config })
 
     // Update the user in Payload CMS
@@ -346,15 +358,18 @@ export async function updateProfileImage(userId: string, mediaId: string | null)
 
 /**
  * Generates and sets a username for a user who doesn't have one
- * @param userId - The ID of the user
  * @returns The updated user object with the new username
  */
-export async function generateAndSetUsername(userId: string) {
-  if (!userId) {
-    throw new Error("User ID is required")
-  }
-
+export async function generateAndSetUsername() {
   try {
+    // Get the authenticated user from the server
+    const currentUser = await getAuthenticatedUserForServerActions()
+    
+    if (!currentUser) {
+      throw new Error("Authentication required. Please log in to generate a username.")
+    }
+
+    const userId = currentUser.id
     const payload = await getPayload({ config })
 
     // Get the current user

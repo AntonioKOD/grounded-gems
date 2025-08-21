@@ -2,10 +2,67 @@ import { cookies } from "next/headers"
 import { getApiUrl } from "./utils"
 import { headers } from "next/headers"
 import { NextRequest } from "next/server"
+import { getPayload } from "payload"
+import config from "@/payload.config"
 
 // Cache for user data to avoid redundant fetches
 const userCache = new Map<string, { user: any; timestamp: number }>()
 const CACHE_DURATION = 30000 // 30 seconds
+
+/**
+ * Get the authenticated user directly from Payload for server actions
+ * This function should be used in server actions instead of getServerSideUser()
+ */
+export async function getAuthenticatedUserForServerActions() {
+  try {
+    const cookieStore = await cookies()
+    const payloadToken = cookieStore.get("payload-token")?.value
+
+    if (!payloadToken) {
+      console.log("No auth cookie found in server action")
+      return null
+    }
+
+    // Check cache first
+    const cached = userCache.get(payloadToken)
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log("Returning cached user data for server action")
+      return cached.user
+    }
+
+    const payload = await getPayload({ config })
+    
+    // Create headers object with the cookie for Payload auth
+    const authHeaders = new Headers()
+    authHeaders.set('Cookie', `payload-token=${payloadToken}`)
+    
+    // Use Payload's built-in authentication
+    const { user } = await payload.auth({ headers: authHeaders })
+    
+    if (!user) {
+      console.log("No user found after Payload auth in server action")
+      return null
+    }
+
+    // Get full user data with relationships
+    const fullUser = await payload.findByID({
+      collection: 'users',
+      id: user.id,
+      depth: 1,
+    })
+
+    // Cache the result
+    if (fullUser) {
+      userCache.set(payloadToken, { user: fullUser, timestamp: Date.now() })
+    }
+
+    console.log("Successfully authenticated user for server action:", fullUser.id)
+    return fullUser
+  } catch (error) {
+    console.error("Error getting authenticated user for server actions:", error)
+    return null
+  }
+}
 
 export async function getServerSideUser() {
   try {

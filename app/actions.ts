@@ -11,7 +11,7 @@ import { Post } from "@/types/feed";
 import { Notification } from "@/types/notification";
 import {Where} from "payload";
 import { PayloadRequest } from "payload";
-import { getServerSideUser } from "@/lib/auth-server";
+import { getAuthenticatedUserForServerActions } from "@/lib/auth-server";
 
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
@@ -3165,7 +3165,7 @@ export async function toggleSaveLocationAction(locationId: string, user?: any): 
     // Get the current user from parameter or cookies
     let currentUser = user;
     if (!currentUser) {
-      currentUser = await getServerSideUser();
+      currentUser = await getAuthenticatedUserForServerActions();
     }
     
     if (!currentUser) {
@@ -3213,7 +3213,7 @@ export async function toggleSubscribeLocationAction(locationId: string, notifica
   
   try {
     // Get the current user from cookies or auth
-    const user = await getServerSideUser();
+    const user = await getAuthenticatedUserForServerActions();
     
     if (!user) {
       return {
@@ -3260,7 +3260,7 @@ export async function getUserLocationDataAction(): Promise<{ savedLocations: str
   
   try {
     // Get the current user from cookies or auth
-    const user = await getServerSideUser();
+    const user = await getAuthenticatedUserForServerActions();
     
     if (!user) {
       return {
@@ -3293,7 +3293,7 @@ export async function getSavedLocationsAction(): Promise<any[]> {
   
   try {
     // Get the current user from cookies or auth
-    const user = await getServerSideUser();
+    const user = await getAuthenticatedUserForServerActions();
     
     if (!user) {
       return [];
@@ -3317,7 +3317,7 @@ export async function recordLocationInteraction(
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return { success: false, message: 'Authentication required' }
@@ -3507,7 +3507,7 @@ export async function removeLocationInteraction(
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return { success: false, message: 'Authentication required' }
@@ -3578,7 +3578,7 @@ export async function createEventRequest(requestData: {
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return { success: false, message: 'Authentication required' }
@@ -3695,7 +3695,7 @@ export async function updateEventRequestStatus(
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return { success: false, message: 'Authentication required' }
@@ -3784,7 +3784,7 @@ export async function getLocationInteractions(
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return []
@@ -3840,7 +3840,7 @@ export async function getUserEventRequests(status?: string): Promise<any[]> {
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       return []
@@ -4420,7 +4420,7 @@ export async function createLocationWithNotifications(data: LocationFormData): P
   'use server'
   
   try {
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user?.id) {
       throw new Error('Authentication required')

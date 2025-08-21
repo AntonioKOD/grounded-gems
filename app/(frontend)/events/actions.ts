@@ -9,7 +9,7 @@ import { LocationFormData } from "@/types/location"
 import type { Where } from "payload"
 
 import {cookies } from "next/headers"
-import { getServerSideUser } from '@/lib/auth-server'
+import { getAuthenticatedUserForServerActions } from '@/lib/auth-server'
 
 export async function createEvent(formData: EventFormData) {
   try {
@@ -1224,7 +1224,7 @@ export async function createLocation(data: LocationFormData) {
 }
 
 export async function getSavedGemJourneys() {
-  const user = await getServerSideUser()
+  const user = await getAuthenticatedUserForServerActions()
   if (!user) return []
 
   const payload = await getPayload({ config })
@@ -1246,7 +1246,7 @@ export async function getSavedGemJourneys() {
 }
 
 export async function saveGemJourney(journeyId: string) {
-  const user = await getServerSideUser()
+  const user = await getAuthenticatedUserForServerActions()
   if (!user) return { success: false, error: 'Unauthorized' }
   const payload = await getPayload({ config })
   const dbUser = await payload.findByID({ collection: 'users', id: user.id, depth: 0 })
@@ -1263,7 +1263,7 @@ export async function saveGemJourney(journeyId: string) {
 }
 
 export async function unsaveGemJourney(journeyId: string) {
-  const user = await getServerSideUser()
+  const user = await getAuthenticatedUserForServerActions()
   if (!user) return { success: false, error: 'Unauthorized' }
   const payload = await getPayload({ config })
   const dbUser = await payload.findByID({ collection: 'users', id: user.id, depth: 0 })
@@ -1432,7 +1432,7 @@ export async function searchEventsAction(query: string, limit = 10) {
 export async function inviteUserToEvent(eventId: string, inviteeId: string) {
   try {
     const payload = await getPayload({ config })
-    const user = await getServerSideUser()
+    const user = await getAuthenticatedUserForServerActions()
     
     if (!user) {
       return { success: false, error: 'Unauthorized' }

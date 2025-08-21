@@ -110,11 +110,9 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
   // Check username cooldown on component mount
   useEffect(() => {
     const checkCooldown = async () => {
-      if (!user.id) return
-      
       try {
         setIsCheckingCooldown(true)
-        const cooldownInfo = await checkUsernameChangeCooldown(user.id)
+        const cooldownInfo = await checkUsernameChangeCooldown()
         setUsernameCooldown(cooldownInfo)
       } catch (error) {
         console.error("Error checking username cooldown:", error)
@@ -130,7 +128,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
     }
 
     checkCooldown()
-  }, [user.id])
+  }, [])
 
   // Simulate progress during upload
   const simulateProgress = () => {
@@ -223,7 +221,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
       toast.success("Profile photo uploaded successfully")
 
       // Update the user profile with the new image ID
-      await updateProfileImage(user.id, doc.id)
+      await updateProfileImage(doc.id)
 
       stopProgress()
     } catch (err) {
@@ -239,7 +237,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
   const handleRemoveImage = async () => {
     try {
       setIsUploading(true)
-      await updateProfileImage(user.id, null)
+      await updateProfileImage(null)
       setImagePreview(null)
       setProfileImageId(null)
       toast.success("Profile photo removed")
@@ -338,7 +336,7 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
         console.log('Updating profile fields:', changes.join(', '))
       }
 
-      const profileResult = await updateUserProfile(user.id, profileData)
+      const profileResult = await updateUserProfile(profileData)
 
       if (!profileResult.success) {
         throw new Error(profileResult.error || "Failed to update profile")
@@ -347,7 +345,6 @@ export function ProfileEditForm({ user }: ProfileEditFormProps) {
       // Then update creator status if it has changed
       if (data.isCreator !== user.isCreator || data.creatorLevel !== user.creatorLevel) {
         const creatorResult = await updateCreatorStatus(
-          user.id,
           data.isCreator,
           data.isCreator ? data.creatorLevel : undefined,
         )
