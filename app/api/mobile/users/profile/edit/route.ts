@@ -91,8 +91,8 @@ export async function PUT(request: NextRequest) {
     const updateData: Record<string, any> = {}
 
     // Handle basic fields
-    if (body.name !== undefined) updateData.name = body.name
-    if (body.bio !== undefined) updateData.bio = body.bio
+    if (body.name !== undefined) updateData.name = body.name ? String(body.name) : null
+    if (body.bio !== undefined) updateData.bio = body.bio ? String(body.bio) : null
 
     // Handle username with validation and cooldown check
     if (body.username !== undefined) {
@@ -155,11 +155,11 @@ export async function PUT(request: NextRequest) {
             }, { status: 400 })
           }
           
-          updateData.username = username
-          updateData.lastUsernameChange = new Date().toISOString()
+          updateData.username = String(username)
+          updateData.lastUsernameChange = new Date()
         } else {
           // User is clearing their username
-          updateData.username = ''
+          updateData.username = null
         }
       }
     }
@@ -167,9 +167,9 @@ export async function PUT(request: NextRequest) {
     // Handle location data
     if (body.location) {
       const locationData: any = {}
-      if (body.location.city !== undefined) locationData.city = body.location.city || null
-      if (body.location.state !== undefined) locationData.state = body.location.state || null
-      if (body.location.country !== undefined) locationData.country = body.location.country || null
+      if (body.location.city !== undefined) locationData.city = body.location.city ? String(body.location.city) : null
+      if (body.location.state !== undefined) locationData.state = body.location.state ? String(body.location.state) : null
+      if (body.location.country !== undefined) locationData.country = body.location.country ? String(body.location.country) : null
       
       // Only include location if there are actual values
       if (Object.keys(locationData).length > 0) {
@@ -179,23 +179,43 @@ export async function PUT(request: NextRequest) {
 
     // Handle interests
     if (body.interests) {
-      updateData.interests = body.interests.filter(interest => interest.trim() !== '')
+      updateData.interests = body.interests
+        .filter(interest => interest && typeof interest === 'string' && interest.trim() !== '')
+        .map(interest => String(interest))
     }
 
     // Handle social links
     if (body.socialLinks) {
-      updateData.socialLinks = body.socialLinks.map((link) => ({
-        platform: link.platform,
-        url: link.url,
-      }))
+      updateData.socialLinks = body.socialLinks
+        .filter(link => link && link.platform && link.url)
+        .map((link) => ({
+          platform: String(link.platform),
+          url: String(link.url),
+        }))
     }
 
     // Handle profile image
     if (body.profileImage !== undefined) {
-      updateData.profileImage = body.profileImage ? String(body.profileImage) : null
+      // Only set profileImage if it's a valid non-empty string, otherwise set to null
+      if (body.profileImage && typeof body.profileImage === 'string' && body.profileImage.trim() !== '') {
+        updateData.profileImage = String(body.profileImage)
+      } else if (body.profileImage && typeof body.profileImage === 'number') {
+        updateData.profileImage = String(body.profileImage)
+      } else {
+        updateData.profileImage = null
+      }
     }
 
-    console.log('📝 [Mobile Profile Edit] Update data:', updateData)
+    console.log('📝 [Mobile Profile Edit] Update data:', JSON.stringify(updateData, null, 2))
+    console.log('📝 [Mobile Profile Edit] User ID type:', typeof user.id, 'Value:', user.id)
+    console.log('📝 [Mobile Profile Edit] Profile Image type:', typeof body.profileImage, 'Value:', body.profileImage)
+    
+    // Validate that we're not passing any invalid data
+    for (const [key, value] of Object.entries(updateData)) {
+      if (value === undefined) {
+        delete updateData[key]
+      }
+    }
 
     // Update the user in Payload CMS
     const updatedUser = await payload.update({

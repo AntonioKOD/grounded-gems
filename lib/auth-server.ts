@@ -47,7 +47,7 @@ export async function getAuthenticatedUserForServerActions() {
     // Get full user data with relationships
     const fullUser = await payload.findByID({
       collection: 'users',
-      id: user.id,
+      id: String(user.id),
       depth: 1,
     })
 
