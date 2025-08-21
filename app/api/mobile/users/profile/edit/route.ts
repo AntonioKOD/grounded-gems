@@ -77,7 +77,7 @@ export async function PUT(request: NextRequest) {
     // Get current user to check existing data
     const currentUser = await payload.findByID({
       collection: "users",
-      id: user.id,
+      id: String(user.id),
     })
 
     if (!currentUser) {
@@ -142,7 +142,7 @@ export async function PUT(request: NextRequest) {
             where: {
               and: [
                 { username: { equals: username } },
-                { id: { not_equals: user.id } }
+                { id: { not_equals: String(user.id) } }
               ]
             },
             limit: 1
@@ -200,7 +200,7 @@ export async function PUT(request: NextRequest) {
     // Update the user in Payload CMS
     const updatedUser = await payload.update({
       collection: "users",
-      id: user.id,
+      id: String(user.id),
       data: updateData,
     })
 
@@ -274,7 +274,7 @@ export async function GET(request: NextRequest) {
 
     const currentUser = await payload.findByID({
       collection: "users",
-      id: user.id,
+      id: String(user.id),
       depth: 1,
     })
 
