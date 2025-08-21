@@ -35,7 +35,7 @@ export async function checkUsernameChangeCooldown() {
       throw new Error("Authentication required. Please log in to check username change availability.")
     }
 
-    const userId = currentUser.id
+    const userId = String(currentUser.id)
     const payload = await getPayload({ config })
 
     const user = await payload.findByID({
@@ -128,7 +128,7 @@ export async function updateUserProfile(data: ProfileUpdateData) {
       throw new Error("Authentication required. Please log in to update your profile.")
     }
 
-    const userId = currentUser.id
+    const userId = String(currentUser.id)
     const payload = await getPayload({ config })
 
     // Prepare the update data
@@ -277,7 +277,7 @@ export async function updateCreatorStatus(
       throw new Error("Authentication required. Please log in to update your creator status.")
     }
 
-    const userId = currentUser.id
+    const userId = String(currentUser.id)
     const payload = await getPayload({ config })
 
     const updateData: Record<string, any> = {
@@ -327,7 +327,7 @@ export async function updateProfileImage(mediaId: string | null) {
       throw new Error("Authentication required. Please log in to update your profile image.")
     }
 
-    const userId = currentUser.id
+    const userId = String(currentUser.id)
     const payload = await getPayload({ config })
 
     // Update the user in Payload CMS
@@ -369,7 +369,7 @@ export async function generateAndSetUsername() {
       throw new Error("Authentication required. Please log in to generate a username.")
     }
 
-    const userId = currentUser.id
+    const userId = String(currentUser.id)
     const payload = await getPayload({ config })
 
     // Get the current user

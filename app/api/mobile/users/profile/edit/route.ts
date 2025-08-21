@@ -192,7 +192,7 @@ export async function PUT(request: NextRequest) {
 
     // Handle profile image
     if (body.profileImage !== undefined) {
-      updateData.profileImage = body.profileImage
+      updateData.profileImage = body.profileImage ? String(body.profileImage) : null
     }
 
     console.log('📝 [Mobile Profile Edit] Update data:', updateData)
