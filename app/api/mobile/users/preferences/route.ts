@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSideUser } from '@/lib/auth-server'
+
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
@@ -54,8 +54,10 @@ interface PreferencesResponse {
 // GET /api/mobile/users/preferences - Get user preferences
 export async function GET(request: NextRequest): Promise<NextResponse<PreferencesResponse>> {
   try {
-    const user = await getServerSideUser()
-    if (!user?.id) {
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json({
         success: false,
         error: 'Authentication required',
@@ -65,11 +67,21 @@ export async function GET(request: NextRequest): Promise<NextResponse<Preference
     }
 
     const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
+    
+    if (!user?.id) {
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED',
+        message: 'Authentication required to access preferences'
+      }, { status: 401 })
+    }
 
     // Get user with preferences
     const userDoc = await payload.findByID({
       collection: 'users',
-      id: user.id,
+      id: String(user.id),
       depth: 2
     })
 
@@ -125,7 +137,21 @@ export async function GET(request: NextRequest): Promise<NextResponse<Preference
 // PUT /api/mobile/users/preferences - Update user preferences
 export async function PUT(request: NextRequest): Promise<NextResponse<PreferencesResponse>> {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED',
+        message: 'Authentication required to update preferences'
+      }, { status: 401 })
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
+    
     if (!user?.id) {
       return NextResponse.json({
         success: false,
@@ -145,8 +171,6 @@ export async function PUT(request: NextRequest): Promise<NextResponse<Preference
       preferences,
       onboardingData
     } = body
-
-    const payload = await getPayload({ config })
 
     // Validate categories if provided
     let validCategories: string[] = []
@@ -219,7 +243,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse<Preference
     // Update user
     const updatedUser = await payload.update({
       collection: 'users',
-      id: user.id,
+      id: String(user.id),
       data: updateData
     })
 
@@ -261,7 +285,21 @@ export async function PUT(request: NextRequest): Promise<NextResponse<Preference
 // POST /api/mobile/users/preferences - Add preference interaction for ML
 export async function POST(request: NextRequest): Promise<NextResponse<PreferencesResponse>> {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Authentication required',
+        code: 'AUTH_REQUIRED',
+        message: 'Authentication required to record interaction'
+      }, { status: 401 })
+    }
+
+    const payloadInstance = await getPayload({ config })
+    const { user } = await payloadInstance.auth({ headers: request.headers })
+    
     if (!user?.id) {
       return NextResponse.json({
         success: false,
@@ -281,11 +319,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Preferenc
       feedback
     } = body
 
-    const payload = await getPayload({ config })
-
     // Record user interaction for ML training
     const interactionData = {
-      user: user.id,
+      user: String(user.id),
       action, // 'like', 'save', 'visit', 'skip', 'report'
       itemId,
       itemType, // 'location', 'post', 'event'
@@ -297,7 +333,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Preferenc
 
     // Store interaction in a new collection for ML training
     try {
-      await payload.create({
+      await payloadInstance.create({
         collection: 'userInteractions',
         data: interactionData
       })
@@ -312,9 +348,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Preferenc
     if (action === 'like' || action === 'save') {
       // Strengthen category preference
       if (category) {
-        const currentUser = await payload.findByID({
+        const currentUser = await payloadInstance.findByID({
           collection: 'users',
-          id: user.id
+          id: String(user.id)
         })
 
         const currentCategories = currentUser.preferences?.categories || []
@@ -330,9 +366,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Preferenc
     if (action === 'skip' && feedback === 'negative') {
       // Weaken category preference or add to excluded categories
       if (category) {
-        const currentUser = await payload.findByID({
+        const currentUser = await payloadInstance.findByID({
           collection: 'users',
-          id: user.id
+          id: String(user.id)
         })
 
         const currentCategories = currentUser.preferences?.categories || []
@@ -347,9 +383,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Preferenc
 
     // Apply preference updates if any
     if (Object.keys(preferenceUpdates).length > 0) {
-      await payload.update({
+      await payloadInstance.update({
         collection: 'users',
-        id: user.id,
+        id: String(user.id),
         data: preferenceUpdates
       })
     }

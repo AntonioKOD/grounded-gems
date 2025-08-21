@@ -1,24 +1,6 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getPayload } from "payload"
-import config from "@/payload.config"
-import { getServerSideUser } from "@/lib/auth-server"
-
-interface ProfileUpdateData {
-  name?: string
-  username?: string
-  bio?: string
-  location?: {
-    city?: string
-    state?: string
-    country?: string
-  }
-  interests?: string[]
-  socialLinks?: {
-    platform: "instagram" | "twitter" | "tiktok" | "youtube" | "website"
-    url: string
-  }[]
-  profileImage?: string | null
-}
+import { NextRequest, NextResponse } from 'next/server'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 
 interface ProfileUpdateRequest {
   name?: string
@@ -41,7 +23,45 @@ interface ProfileUpdateRequest {
 export async function PUT(request: NextRequest) {
   try {
     console.log('🔍 [Mobile Profile Edit] PUT request received')
-    const user = await getServerSideUser()
+    
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    console.log('[Mobile Profile Edit] Authorization header:', authorization)
+
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      console.warn('[Mobile Profile Edit] No Bearer token found in Authorization header')
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Authentication required' 
+      }, { status: 401 })
+    }
+
+    const token = authorization.replace('Bearer ', '')
+    console.log('[Mobile Profile Edit] Extracted token:', token.substring(0, 20) + '...')
+
+    const payload = await getPayload({ config })
+    console.log('[Mobile Profile Edit] getPayload resolved')
+
+    // Use Payload's built-in authentication with Bearer token
+    let userAuthResult
+    try {
+      // Create headers object with the Bearer token
+      const authHeaders = new Headers()
+      authHeaders.set('Authorization', `Bearer ${token}`)
+      
+      userAuthResult = await payload.auth({ headers: authHeaders })
+      console.log('[Mobile Profile Edit] payload.auth result:', userAuthResult)
+    } catch (authError) {
+      console.error('[Mobile Profile Edit] Error in payload.auth:', authError)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Authentication failed',
+        details: authError instanceof Error ? authError.message : authError 
+      }, { status: 401 })
+    }
+    
+    const { user } = userAuthResult || {}
+    
     if (!user) {
       console.log('❌ [Mobile Profile Edit] No authenticated user found for PUT')
       return NextResponse.json({ 
@@ -53,7 +73,6 @@ export async function PUT(request: NextRequest) {
     console.log('✅ [Mobile Profile Edit] Authenticated user for PUT:', user.id)
 
     const body: ProfileUpdateRequest = await request.json()
-    const payload = await getPayload({ config })
 
     // Get current user to check existing data
     const currentUser = await payload.findByID({
@@ -145,13 +164,14 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Handle location
+    // Handle location data
     if (body.location) {
       const locationData: any = {}
       if (body.location.city !== undefined) locationData.city = body.location.city || null
       if (body.location.state !== undefined) locationData.state = body.location.state || null
       if (body.location.country !== undefined) locationData.country = body.location.country || null
       
+      // Only include location if there are actual values
       if (Object.keys(locationData).length > 0) {
         updateData.location = locationData
       }
@@ -175,6 +195,8 @@ export async function PUT(request: NextRequest) {
       updateData.profileImage = body.profileImage
     }
 
+    console.log('📝 [Mobile Profile Edit] Update data:', updateData)
+
     // Update the user in Payload CMS
     const updatedUser = await payload.update({
       collection: "users",
@@ -182,35 +204,17 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     })
 
+    console.log('✅ [Mobile Profile Edit] User updated successfully:', updatedUser.id)
+
     return NextResponse.json({
       success: true,
-      message: 'Profile updated successfully',
-      data: {
-        user: {
-          id: updatedUser.id,
-          name: updatedUser.name,
-          username: updatedUser.username,
-          bio: updatedUser.bio,
-          location: updatedUser.location,
-          interests: updatedUser.interests,
-          socialLinks: updatedUser.socialLinks,
-          profileImage: updatedUser.profileImage ? {
-            url: typeof updatedUser.profileImage === 'object' && updatedUser.profileImage.url
-              ? updatedUser.profileImage.url 
-              : typeof updatedUser.profileImage === 'string'
-              ? updatedUser.profileImage
-              : ''
-          } : null,
-        }
-      }
+      user: updatedUser,
     })
-
   } catch (error) {
-    console.error('Error updating profile:', error)
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to update profile',
-      details: error instanceof Error ? error.message : 'Unknown error'
+    console.error('❌ [Mobile Profile Edit] Error updating profile:', error)
+    return NextResponse.json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : "Failed to update profile" 
     }, { status: 500 })
   }
 }
@@ -219,7 +223,45 @@ export async function PUT(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 [Mobile Profile Edit] GET request received')
-    const user = await getServerSideUser()
+    
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    console.log('[Mobile Profile Edit] Authorization header:', authorization)
+
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      console.warn('[Mobile Profile Edit] No Bearer token found in Authorization header')
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Authentication required' 
+      }, { status: 401 })
+    }
+
+    const token = authorization.replace('Bearer ', '')
+    console.log('[Mobile Profile Edit] Extracted token:', token.substring(0, 20) + '...')
+
+    const payload = await getPayload({ config })
+    console.log('[Mobile Profile Edit] getPayload resolved')
+
+    // Use Payload's built-in authentication with Bearer token
+    let userAuthResult
+    try {
+      // Create headers object with the Bearer token
+      const authHeaders = new Headers()
+      authHeaders.set('Authorization', `Bearer ${token}`)
+      
+      userAuthResult = await payload.auth({ headers: authHeaders })
+      console.log('[Mobile Profile Edit] payload.auth result:', userAuthResult)
+    } catch (authError) {
+      console.error('[Mobile Profile Edit] Error in payload.auth:', authError)
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Authentication failed',
+        details: authError instanceof Error ? authError.message : authError 
+      }, { status: 401 })
+    }
+    
+    const { user } = userAuthResult || {}
+    
     if (!user) {
       console.log('❌ [Mobile Profile Edit] No authenticated user found')
       return NextResponse.json({ 
@@ -229,8 +271,6 @@ export async function GET(request: NextRequest) {
     }
     
     console.log('✅ [Mobile Profile Edit] Authenticated user:', user.id)
-
-    const payload = await getPayload({ config })
 
     const currentUser = await payload.findByID({
       collection: "users",

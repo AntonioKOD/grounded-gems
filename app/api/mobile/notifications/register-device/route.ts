@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
-import { getServerSideUser } from '@/lib/auth-server'
+
 
 // POST /api/mobile/notifications/register-device - Register device for push notifications
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
+    
     if (!user) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
     }
@@ -18,15 +27,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Device token is required' }, { status: 400 })
     }
 
-    const payload = await getPayload({ config })
-
     // Check if device is already registered
     const existingDevice = await payload.find({
       collection: 'deviceTokens',
       where: {
         and: [
           { deviceToken: { equals: deviceToken } },
-          { user: { equals: user.id } }
+          { user: { equals: String(user.id) } }
         ]
       }
     })
@@ -50,7 +57,7 @@ export async function POST(request: NextRequest) {
         collection: 'deviceTokens',
         data: {
           deviceToken,
-          user: user.id,
+          user: String(user.id),
           platform: platform || 'ios',
           appVersion: appVersion || '1.0',
           isActive: true
@@ -72,7 +79,16 @@ export async function POST(request: NextRequest) {
 // DELETE /api/mobile/notifications/register-device - Unregister device
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
+    
     if (!user) {
       return NextResponse.json({ success: false, error: 'Authentication required' }, { status: 401 })
     }
@@ -84,15 +100,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Device token is required' }, { status: 400 })
     }
 
-    const payload = await getPayload({ config })
-
     // Find and deactivate device
     const existingDevice = await payload.find({
       collection: 'deviceTokens',
       where: {
         and: [
           { deviceToken: { equals: deviceToken } },
-          { user: { equals: user.id } }
+          { user: { equals: String(user.id) } }
         ]
       }
     })

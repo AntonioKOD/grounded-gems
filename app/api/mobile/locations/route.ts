@@ -11,7 +11,7 @@ import {
   type LocationFormData 
 } from '@/app/actions'
 import { getNearbyOrPopularLocations } from '@/app/(frontend)/home-page-actions/actions'
-import { getServerSideUser } from '@/lib/auth-server'
+
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
@@ -326,8 +326,19 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
 
     // Get current user for personalization
-    const user = await getServerSideUser()
-    const currentUserId = user?.id
+    let currentUserId = null
+    
+    try {
+      const authHeader = request.headers.get('Authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        const payload = await getPayload({ config })
+        const { user } = await payload.auth({ headers: request.headers })
+        currentUserId = user?.id
+      }
+    } catch (authError) {
+      console.log('Authentication failed:', authError)
+      // Continue without authentication for public endpoints
+    }
 
     console.log(`Mobile API: Getting ${type} locations for user ${currentUserId}`)
 
@@ -338,8 +349,8 @@ export async function GET(request: NextRequest) {
       case 'recommended':
         if (currentUserId) {
           // Get all locations first
-          const allLocations = await getLocations(currentUserId)
-          const userPrefs = await getUserPreferences(currentUserId)
+          const allLocations = await getLocations(String(currentUserId))
+          const userPrefs = await getUserPreferences(String(currentUserId))
           
           // Apply smart recommendations
           locations = await getRecommendedLocations(allLocations, userPrefs, limit)
@@ -378,7 +389,7 @@ export async function GET(request: NextRequest) {
           const result = await payload.find({
             collection: 'locations',
             where: {
-              createdBy: { equals: currentUserId }
+              createdBy: { equals: String(currentUserId) }
             },
             limit,
             page,
@@ -391,7 +402,7 @@ export async function GET(request: NextRequest) {
         break
         
       default: // 'all'
-        const allLocations = await getLocations(currentUserId)
+        const allLocations = await getLocations(currentUserId ? String(currentUserId) : undefined)
         // Use the same formatting as the web API
         locations = allLocations
           .map((loc: any) => {

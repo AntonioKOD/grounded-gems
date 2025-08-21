@@ -6,12 +6,27 @@ import {
 
   getBucketListItems
 } from '@/app/actions'
-import { getServerSideUser } from '@/lib/auth-server'
+import { getPayload } from 'payload'
+import config from '@payload-config'
 
 // GET /api/v1/mobile/bucket-lists - Get user's bucket lists
 export async function GET(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const token = authorization.replace('Bearer ', '')
+    const payload = await getPayload({ config })
+    
+    // Use Payload's built-in authentication with Bearer token
+    const { user } = await payload.auth({ headers: request.headers })
     
     if (!user) {
       return NextResponse.json(
@@ -32,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     switch (type) {
       case 'my':
-        bucketLists = await getUserBucketLists(user.id)
+        bucketLists = await getUserBucketLists(String(user.id))
         break
         
       case 'shared':
@@ -44,7 +59,7 @@ export async function GET(request: NextRequest) {
         const sharedResult = await payload.find({
           collection: 'bucketLists',
           where: {
-            'sharedWith.user': { equals: user.id }
+            'sharedWith.user': { equals: String(user.id) }
           },
           limit,
           page,
@@ -64,7 +79,7 @@ export async function GET(request: NextRequest) {
           collection: 'bucketLists',
           where: {
             isPublic: { equals: true },
-            createdBy: { not_equals: user.id } // Exclude own lists
+            createdBy: { not_equals: String(user.id) } // Exclude own lists
           },
           limit,
           page,
@@ -156,7 +171,18 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/mobile/bucket-lists - Create a new bucket list
 export async function POST(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
     
     if (!user) {
       return NextResponse.json(
@@ -186,7 +212,7 @@ export async function POST(request: NextRequest) {
       title: title.trim(),
       description: description?.trim(),
       isPublic,
-      createdBy: user.id
+      createdBy: String(user.id)
     }
 
     const bucketList = await createBucketList(bucketListData as any)
@@ -235,7 +261,18 @@ export async function POST(request: NextRequest) {
 // PUT /api/v1/mobile/bucket-lists/[id] - Update bucket list
 export async function PUT(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
     
     if (!user) {
       return NextResponse.json(
@@ -254,9 +291,6 @@ export async function PUT(request: NextRequest) {
     console.log(`Mobile API: Updating bucket list ${bucketListId}`)
 
     // Update bucket list using payload directly
-    const { getPayload } = await import('payload')
-    const config = (await import('@payload-config')).default
-    const payload = await getPayload({ config })
 
     // Check ownership first
     const bucketList = await payload.findByID({
@@ -276,7 +310,7 @@ export async function PUT(request: NextRequest) {
       ? bucketList.createdBy 
       : bucketList.createdBy?.id
 
-    if (ownerId !== user.id) {
+    if (ownerId !== String(user.id)) {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }
@@ -315,7 +349,18 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/v1/mobile/bucket-lists/[id] - Delete bucket list
 export async function DELETE(request: NextRequest) {
   try {
-    const user = await getServerSideUser()
+    // Check for Bearer token in Authorization header
+    const authorization = request.headers.get('authorization')
+    
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    const payload = await getPayload({ config })
+    const { user } = await payload.auth({ headers: request.headers })
     
     if (!user) {
       return NextResponse.json(
@@ -331,9 +376,6 @@ export async function DELETE(request: NextRequest) {
     console.log(`Mobile API: Deleting bucket list ${bucketListId}`)
 
     // Delete bucket list using payload directly
-    const { getPayload } = await import('payload')
-    const config = (await import('@payload-config')).default
-    const payload = await getPayload({ config })
 
     // Check ownership first
     const bucketList = await payload.findByID({
@@ -353,7 +395,7 @@ export async function DELETE(request: NextRequest) {
       ? bucketList.createdBy 
       : bucketList.createdBy?.id
 
-    if (ownerId !== user.id) {
+    if (ownerId !== String(user.id)) {
       return NextResponse.json(
         { success: false, error: 'Permission denied' },
         { status: 403 }

@@ -3,7 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
 import { createPost, getFeedPosts, getPostById } from '@/app/actions'
-import { getServerSideUser } from '@/lib/auth-server'
+
 
 // Input validation schema for mobile post creation
 const createPostSchema = z.object({
@@ -289,11 +289,23 @@ export async function POST(request: NextRequest) {
     let user = null
     
     try {
-      console.log('📱 Mobile Posts API: Getting user with getServerSideUser...')
-      user = await getServerSideUser()
+      console.log('📱 Mobile Posts API: Getting user with Bearer token...')
+      // Check for Bearer token in Authorization header
+      const authorization = request.headers.get('authorization')
+      
+      if (!authorization || !authorization.startsWith('Bearer ')) {
+        return NextResponse.json(
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
+        )
+      }
+
+      const payload = await getPayload({ config })
+      const { user: authUser } = await payload.auth({ headers: request.headers })
+      user = authUser
       console.log('📱 Mobile Posts API: User found:', user?.id)
     } catch (userError) {
-      console.error('📱 Mobile Posts API: Error in getServerSideUser:', userError)
+      console.error('📱 Mobile Posts API: Error in authentication:', userError)
       return NextResponse.json(
         { 
           success: false, 
@@ -346,7 +358,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Add user ID to form data
-    formData.append('userId', user.id)
+    formData.append('userId', String(user.id))
     console.log('📱 Mobile Posts API: Added userId to formData:', user.id)
 
     const result = await createPost(formData)
@@ -354,7 +366,7 @@ export async function POST(request: NextRequest) {
 
     if (result.success) {
       // Get the created post details
-      const post = result.postId ? await getPostById(result.postId.toString(), user.id) : null
+      const post = result.postId ? await getPostById(result.postId.toString(), String(user.id)) : null
       
       return NextResponse.json({
         success: true,
