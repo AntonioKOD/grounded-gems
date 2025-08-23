@@ -33,9 +33,9 @@ interface MobileParticipantResponse {
 }
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     eventId: string
-  }
+  }>
 }
 
 // GET /api/mobile/events/[eventId]/participants - Get event participants
@@ -44,7 +44,7 @@ export async function GET(
   context: RouteContext,
 ): Promise<NextResponse<MobileParticipantResponse>> {
   try {
-    const { eventId } = context.params
+    const { eventId } = await context.params
     
     const payload = await getPayload({ config })
     

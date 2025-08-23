@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export const LocationPhotoSubmissions: CollectionConfig = {
   slug: 'locationPhotoSubmissions',
@@ -352,7 +353,7 @@ export const LocationPhotoSubmissions: CollectionConfig = {
     ],
     afterChange: [
       async ({ operation, doc, req }) => {
-        // If photo is approved, add it to the location's communityPhotos array
+        // If photo is approved, add it to the location's communityPhotos array and notify submitter
         if (operation === 'update' && doc.status === 'approved') {
           try {
             const payload = req.payload;
@@ -381,6 +382,43 @@ export const LocationPhotoSubmissions: CollectionConfig = {
                   communityPhotos: updatedCommunityPhotos,
                 },
               });
+
+              // Notify submitter about photo approval
+              await payload.create({
+                collection: 'notifications',
+                data: {
+                  recipient: doc.submittedBy,
+                  type: 'photo_approved',
+                  title: 'Photo Approved! 📸',
+                  message: `Your photo submission for ${location.name} has been approved and added to the location gallery.`,
+                  priority: 'normal',
+                  relatedTo: {
+                    relationTo: 'locations',
+                    value: doc.location,
+                  },
+                  metadata: {
+                    locationName: location.name,
+                    submissionId: doc.id,
+                  },
+                  read: false,
+                },
+              });
+
+              // Send push notification
+              try {
+                await sendPushNotification(doc.submittedBy, {
+                  title: 'Photo Approved! 📸',
+                  body: `Your photo for ${location.name} has been approved!`,
+                  data: {
+                    type: 'photo_approved',
+                    locationId: doc.location,
+                    submissionId: doc.id,
+                  },
+                  badge: 1,
+                });
+              } catch (error) {
+                console.error('Error sending photo approval push notification:', error);
+              }
             }
           } catch (error) {
             console.error('Error adding approved photo to communityPhotos:', error);

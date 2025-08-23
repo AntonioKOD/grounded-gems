@@ -71,7 +71,7 @@ export default function OptimizedImage({
     if (!src) return true
     // Known broken URL patterns - removed old domain since we're transforming them to blob URLs
     const brokenPatterns = [
-      'localhost:3001/', // Development backend that might be down
+              'localhost:3000/', // Development backend
     ]
     return brokenPatterns.some(pattern => src.includes(pattern))
   }, [src])

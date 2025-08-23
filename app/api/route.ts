@@ -7,7 +7,7 @@ export async function OPTIONS(request: NextRequest) {
   // Define allowed origins
   const allowedOrigins = [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001', // Mobile app dev server
+    'http://localhost:3000', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
     'https://www.sacavia.com', // Production web app
   ]

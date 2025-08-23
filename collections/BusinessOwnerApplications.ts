@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload';
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export const BusinessOwnerApplications: CollectionConfig = {
   slug: 'business-owner-applications',
@@ -57,6 +58,26 @@ export const BusinessOwnerApplications: CollectionConfig = {
     group: 'Business Management',
   },
   hooks: {
+    beforeChange: [
+      async ({ operation, data, req }) => {
+        // Set submittedAt if not provided
+        if (operation === 'create' && !data.submittedAt) {
+          data.submittedAt = new Date().toISOString();
+        }
+        
+        // Set reviewedAt and reviewedBy when status changes
+        if (operation === 'update' && data.status && data.status !== 'pending') {
+          if (!data.reviewedAt) {
+            data.reviewedAt = new Date().toISOString();
+          }
+          if (!data.reviewedBy && req.user?.id) {
+            data.reviewedBy = req.user.id;
+          }
+        }
+        
+        return data;
+      },
+    ],
     afterChange: [
       async ({ req, doc, operation }) => {
         if (!req.payload) return doc;
@@ -270,4 +291,5 @@ export const BusinessOwnerApplications: CollectionConfig = {
       }
     }
   ],
+  timestamps: true,
 }; 

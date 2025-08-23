@@ -330,13 +330,24 @@ export async function GET(request: NextRequest) {
     
     try {
       const authHeader = request.headers.get('Authorization')
+      const cookieHeader = request.headers.get('Cookie')
+      
+      // Check for Bearer token in Authorization header
       if (authHeader?.startsWith('Bearer ')) {
         const payload = await getPayload({ config })
         const { user } = await payload.auth({ headers: request.headers })
         currentUserId = user?.id
+        console.log('📱 Mobile Locations API: Authenticated user via Bearer token:', user?.id)
+      }
+      // Check for payload-token in Cookie header (fallback for mobile apps)
+      else if (cookieHeader?.includes('payload-token=')) {
+        const payload = await getPayload({ config })
+        const { user } = await payload.auth({ headers: request.headers })
+        currentUserId = user?.id
+        console.log('📱 Mobile Locations API: Authenticated user via cookie:', user?.id)
       }
     } catch (authError) {
-      console.log('Authentication failed:', authError)
+      console.log('📱 Mobile Locations API: Authentication failed:', authError)
       // Continue without authentication for public endpoints
     }
 
@@ -545,6 +556,45 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = await getPayload({ config })
+    
+    console.log('📱 Mobile Locations API: POST request received')
+    
+    // Get current user - support both Bearer token and cookie authentication
+    let user = null
+    
+    try {
+      const authHeader = request.headers.get('Authorization')
+      const cookieHeader = request.headers.get('Cookie')
+      
+      // Check for Bearer token in Authorization header
+      if (authHeader?.startsWith('Bearer ')) {
+        const { user: authUser } = await payload.auth({ headers: request.headers })
+        user = authUser
+        console.log('📱 Mobile Locations API: Authenticated user via Bearer token:', user?.id)
+      }
+      // Check for payload-token in Cookie header (fallback for mobile apps)
+      else if (cookieHeader?.includes('payload-token=')) {
+        const { user: authUser } = await payload.auth({ headers: request.headers })
+        user = authUser
+        console.log('📱 Mobile Locations API: Authenticated user via cookie:', user?.id)
+      }
+      
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
+        )
+      }
+      
+      console.log('📱 Mobile Locations API: User authenticated:', user.id)
+    } catch (authError) {
+      console.error('📱 Mobile Locations API: Authentication error:', authError)
+      return NextResponse.json(
+        { success: false, error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+    
     const body = await request.json()
     // Accept all fields from the mobile/web form
     const {
@@ -734,6 +784,7 @@ export async function POST(request: NextRequest) {
         } : undefined,
         meta,
         status: 'review', // Always set status to review for mobile
+        createdBy: String(user.id), // Add the authenticated user as creator
       }
     })
 

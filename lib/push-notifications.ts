@@ -1,5 +1,32 @@
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import apn from 'apn'
+
+// Initialize APNs provider for development
+let apnProvider: apn.Provider | null = null
+
+// Initialize APNs provider
+function getApnProvider(): apn.Provider | null {
+  if (apnProvider) return apnProvider
+  
+  try {
+    // For development, we'll use a simple provider
+    // In production, you'll need to provide actual certificates
+    apnProvider = new apn.Provider({
+      token: {
+        key: process.env.APN_KEY_PATH || '', // Path to your APN key file
+        keyId: process.env.APN_KEY_ID || '', // Your APN key ID
+        teamId: process.env.APN_TEAM_ID || '' // Your Apple Team ID
+      },
+      production: process.env.NODE_ENV === 'production'
+    })
+    
+    return apnProvider
+  } catch (error) {
+    console.error('Failed to initialize APNs provider:', error)
+    return null
+  }
+}
 
 interface PushNotificationPayload {
   title: string
@@ -99,35 +126,39 @@ export async function sendPushNotificationToMultipleUsers(
 
 async function sendToDevice(deviceToken: string, notification: PushNotificationPayload): Promise<boolean> {
   try {
-    // For development, we'll use a simple HTTP request
-    // In production, you should use Apple's APNs service or a service like Firebase Cloud Messaging
+    const provider = getApnProvider()
     
-    const payload = {
-      aps: {
-        alert: {
-          title: notification.title,
-          body: notification.body
-        },
-        badge: notification.badge || 1,
-        sound: notification.sound || 'default',
-        'content-available': 1
-      },
-      ...notification.data
+    if (!provider) {
+      // Fallback to logging for development
+      console.log(`🔔 [PushNotification] Would send to device ${deviceToken}:`, {
+        title: notification.title,
+        body: notification.body,
+        data: notification.data
+      })
+      return true
     }
 
-    // For now, we'll just log the notification
-    // In production, you would send this to Apple's APNs
-    console.log(`Would send push notification to device ${deviceToken}:`, payload)
+    const apnNotification = new apn.Notification()
+    apnNotification.alert = {
+      title: notification.title,
+      body: notification.body
+    }
+    apnNotification.badge = notification.badge || 1
+    apnNotification.sound = notification.sound || 'default'
+    apnNotification.topic = 'com.sacavia.app' // Your app's bundle identifier
+    apnNotification.payload = notification.data || {}
     
-    // TODO: Implement actual APNs sending
-    // You'll need to:
-    // 1. Set up Apple Developer account
-    // 2. Create APNs certificates
-    // 3. Use a library like 'apn' or 'node-apn' to send notifications
+    const result = await provider.send(apnNotification, deviceToken)
     
+    if (result.failed.length > 0) {
+      console.error(`❌ [PushNotification] Failed to send to device ${deviceToken}:`, result.failed[0]?.response || 'Unknown error')
+      return false
+    }
+    
+    console.log(`✅ [PushNotification] Successfully sent to device ${deviceToken}`)
     return true
   } catch (error) {
-    console.error(`Error sending to device ${deviceToken}:`, error)
+    console.error(`❌ [PushNotification] Error sending to device ${deviceToken}:`, error)
     return false
   }
 }

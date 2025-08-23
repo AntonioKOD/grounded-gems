@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from 'payload.config'
+import { notificationService } from '@/lib/notification-service'
 
 interface RouteParams {
   params: Promise<{
@@ -178,29 +179,31 @@ export async function POST(
       limit: 0,
     })
 
-    // Create follow notification (optional)
+    // Create follow notification using centralized service
     try {
-      await payload.create({
-        collection: 'notifications',
-        data: {
-          recipient: targetUserId,
-          type: 'follow',
-          title: 'New Follower',
-          message: `${currentUser.name || 'Someone'} started following you`,
-          metadata: {
-            followerId: currentUser.id,
-            followerName: currentUser.name,
-            followerAvatar: currentUser.profileImage ? 
-              (typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
-                ? currentUser.profileImage.url 
-                : typeof currentUser.profileImage === 'string'
-                ? currentUser.profileImage
-                : null) : null
-          },
-          isRead: false,
-          createdAt: new Date(),
+      const notificationResult = await notificationService.createNotification({
+        recipient: targetUserId,
+        type: 'follow',
+        title: 'New Follower',
+        message: `${currentUser.name || 'Someone'} started following you`,
+        metadata: {
+          followerId: currentUser.id,
+          followerName: currentUser.name,
+          followerAvatar: currentUser.profileImage ? 
+            (typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
+              ? currentUser.profileImage.url 
+              : typeof currentUser.profileImage === 'string'
+              ? currentUser.profileImage
+              : null) : null
         },
+        read: false,
       })
+
+      if (notificationResult.success) {
+        console.log(`✅ [Follow API] Created follow notification for ${targetUserId} from ${currentUser.id}`)
+      } else {
+        console.log(`⚠️ [Follow API] ${notificationResult.error}`)
+      }
     } catch (notificationError) {
       console.warn('Failed to create follow notification:', notificationError)
     }

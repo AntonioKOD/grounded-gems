@@ -12,6 +12,40 @@ import config from '@payload-config'
 import type { EventFormData } from '@/types/event'
 import type { EventFilterOptions } from '@/types/event-filter'
 
+// Helper function to get location name by ID
+async function getLocationName(locationId: string, payload: any): Promise<string> {
+  try {
+    const location = await payload.findByID({
+      collection: 'locations',
+      id: locationId,
+      depth: 0
+    })
+    
+    if (!location?.name) {
+      return 'Unknown Location'
+    }
+    
+    // Check if the name looks like an ID (24 character hex string)
+    const isIdPattern = /^[a-f0-9]{24}$/i
+    if (isIdPattern.test(location.name)) {
+      // The name is actually an ID, recursively resolve it
+      console.log('🔍 [Location Debug] Name is an ID, recursively resolving:', location.name)
+      return await getLocationName(location.name, payload)
+    }
+    
+    return location.name
+  } catch (error) {
+    console.error('Error fetching location name:', error)
+    return 'Unknown Location'
+  }
+}
+
+// Helper function to get location name by ID (for use in map function) - DEPRECATED
+async function getLocationNameForEvent(event: any, payload: any): Promise<string> {
+  // This function is no longer used, kept for backward compatibility
+  return 'Unknown Location'
+}
+
 // GET /api/v1/mobile/events - Get events with various filters
 export async function GET(request: NextRequest) {
   try {
@@ -32,6 +66,11 @@ export async function GET(request: NextRequest) {
     // Get current user for personalization
     const user = await getAuthenticatedUser(request)
     const currentUserId = user?.id
+
+    // Initialize payload for location name fetching
+    const { getPayload } = await import('payload')
+    const config = (await import('@payload-config')).default
+    const payload = await getPayload({ config })
 
     console.log(`Mobile API: Getting ${type} events`)
 
@@ -71,9 +110,6 @@ export async function GET(request: NextRequest) {
       case 'created':
         if (currentUserId) {
           // Get events created by the current user
-          const { getPayload } = await import('payload')
-          const config = (await import('@payload-config')).default
-          const payload = await getPayload({ config })
           
           const result = await payload.find({
             collection: 'events',
@@ -96,9 +132,6 @@ export async function GET(request: NextRequest) {
       case 'attending':
         if (currentUserId) {
           // Get events user is attending
-          const { getPayload } = await import('payload')
-          const config = (await import('@payload-config')).default
-          const payload = await getPayload({ config })
           
           const result = await payload.find({
             collection: 'events',
@@ -148,7 +181,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Format events for mobile
-    const formattedEvents = events.map((event: any) => {
+    const formattedEvents = []
+    
+    for (const event of events) {
       // Check if user is attending
       let userRsvpStatus = null
       if (currentUserId && event.participants) {
@@ -158,7 +193,16 @@ export async function GET(request: NextRequest) {
         userRsvpStatus = participation ? participation.status : null
       }
 
-      return {
+      // Get location name - always fetch directly from database
+      let locationName = 'Unknown Location'
+      if (event.location) {
+        const locationId = typeof event.location === 'object' ? event.location.id : event.location
+        if (locationId) {
+          locationName = await getLocationName(locationId, payload)
+        }
+      }
+
+      formattedEvents.push({
         id: event.id,
         name: event.name, // Events collection uses 'name' field
         description: event.description,
@@ -177,7 +221,7 @@ export async function GET(request: NextRequest) {
         })) || [],
         location: event.location ? {
           id: typeof event.location === 'object' ? event.location.id : event.location,
-          name: typeof event.location === 'object' ? event.location.name : 'Unknown Location',
+          name: locationName,
           address: typeof event.location === 'object' ? event.location.address : undefined,
           coordinates: typeof event.location === 'object' ? event.location.coordinates : undefined
         } : null,
@@ -203,8 +247,8 @@ export async function GET(request: NextRequest) {
         userRsvpStatus,
         createdAt: event.createdAt,
         updatedAt: event.updatedAt
-      }
-    })
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -294,7 +338,30 @@ export async function POST(request: NextRequest) {
               slug: locationSlug,
               description: `Location for event: ${body.title || 'Untitled Event'}`,
               status: 'draft',
-              privacy: 'public'
+              privacy: 'public',
+              createdBy: currentUser.id,
+              address: {},
+              coordinates: {},
+              contactInfo: { socialMedia: {} },
+              accessibility: {},
+              partnershipDetails: {},
+              meta: {},
+              ownership: { claimStatus: 'unclaimed' },
+              businessSettings: {
+                allowSpecials: false,
+                allowNotifications: false,
+                notificationPreferences: {
+                  pushNotifications: true,
+                  emailNotifications: false,
+                  targetAudience: 'all'
+                }
+              },
+              gallery: [],
+              tags: [],
+              businessHours: [],
+              bestTimeToVisit: [],
+              insiderTips: [],
+              communityPhotos: []
             }
           })
           locationId = String(newLocation.id)
@@ -397,10 +464,27 @@ export async function POST(request: NextRequest) {
       ageRestriction: body.ageRestriction || 'all',
       isMatchmaking: body.isMatchmaking || false,
       matchmakingSettings: body.matchmakingSettings,
+      image: body.image, // Add image field
       meta: body.meta || {
         title: title,
         description: body.description?.substring(0, 160) || ''
       }
+    }
+
+    // Handle invited users if provided
+    if (body.invitedUsers && Array.isArray(body.invitedUsers) && body.invitedUsers.length > 0) {
+      console.log(`Mobile API: Processing ${body.invitedUsers.length} invited users`)
+      
+      // Create RSVP entries for invited users
+      const rsvpEntries = body.invitedUsers.map((userId: string) => ({
+        user: userId,
+        status: 'invited',
+        invitedAt: new Date().toISOString(),
+        invitedBy: String(currentUser.id)
+      }))
+      
+      // Note: RSVP entries will be created separately after event creation
+      console.log(`Mobile API: Will create ${body.invitedUsers.length} RSVP entries after event creation`)
     }
 
     console.log(`Mobile API: Creating event for user ${currentUser.id}`)

@@ -242,12 +242,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileUpl
       return NextResponse.json({ success: false, message: 'Invalid form data', error: 'Invalid form data', code: 'INVALID_FORM_DATA' }, { status: 400 })
     }
 
-    // Get file from formData
-    const file = formData.get('image') as File | null
+    // Get file from formData - check both 'image' and 'file' keys for compatibility
+    let file = formData.get('image') as File | null
     if (!file) {
-      console.warn('[UPLOAD] No file found in formData under key "image"')
+      file = formData.get('file') as File | null
+    }
+    
+    if (!file) {
+      console.warn('[UPLOAD] No file found in formData under keys "image" or "file"')
+      console.warn('[UPLOAD] Available keys:', Array.from(formData.keys()))
       return NextResponse.json({ success: false, message: 'No image file provided', error: 'No image file provided', code: 'NO_IMAGE' }, { status: 400 })
     }
+    
+    console.log('[UPLOAD] File found under key:', formData.get('image') ? 'image' : 'file')
     console.log('[UPLOAD] File info:', {
       name: file.name,
       type: file.type,

@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload'
+import { sendPushNotification } from '@/lib/push-notifications'
 
 export const GuideReviews: CollectionConfig = {
   slug: 'guide-reviews',
@@ -234,40 +235,102 @@ export const GuideReviews: CollectionConfig = {
     ],
     afterChange: [
       async ({ doc, req, operation }) => {
-        // Update guide rating stats when a review is approved
-        if (doc.status === 'approved') {
-          try {
-            const payload = req.payload
-            
-            // Get all approved reviews for this guide
-            const reviews = await payload.find({
-              collection: 'guide-reviews',
-              where: {
-                and: [
-                  { guide: { equals: doc.guide } },
-                  { status: { equals: 'approved' } }
-                ]
-              },
-              limit: 0, // Get all reviews
-            })
-            
-            if (reviews.docs.length > 0) {
-              const totalRating = reviews.docs.reduce((sum, review) => sum + review.rating, 0)
-              const averageRating = totalRating / reviews.docs.length
-              
-              await payload.update({
-                collection: 'guides',
-                id: doc.guide,
+        if (!req.payload) return doc;
+
+        try {
+          // Handle new review creation
+          if (operation === 'create') {
+            const reviewer = await req.payload.findByID({
+              collection: 'users',
+              id: doc.user,
+            });
+
+            const guide = await req.payload.findByID({
+              collection: 'guides',
+              id: doc.guide,
+            });
+
+            // Notify guide creator about new review
+            if (guide.creator && guide.creator !== doc.user) {
+              await req.payload.create({
+                collection: 'notifications',
                 data: {
-                  'stats.rating': Math.round(averageRating * 10) / 10, // Round to 1 decimal
-                  'stats.reviewCount': reviews.docs.length,
+                  recipient: guide.creator,
+                  type: 'guide_reviewed',
+                  title: `New review for "${guide.title}"`,
+                  message: `${reviewer.name} left a ${doc.rating}-star review for your guide "${guide.title}".`,
+                  relatedTo: {
+                    relationTo: 'guides',
+                    value: doc.guide,
+                  },
+                  actionBy: doc.user,
+                  metadata: {
+                    guideTitle: guide.title,
+                    rating: doc.rating,
+                    reviewTitle: doc.title,
+                  },
+                  priority: 'normal',
+                  read: false,
                 },
-              })
+              });
+
+              // Send push notification
+              try {
+                await sendPushNotification(guide.creator, {
+                  title: `New review for "${guide.title}"`,
+                  body: `${reviewer.name} left a ${doc.rating}-star review!`,
+                  data: {
+                    type: 'guide_reviewed',
+                    guideId: doc.guide,
+                    reviewId: doc.id,
+                  },
+                  badge: 1,
+                });
+              } catch (error) {
+                console.error('Error sending guide review push notification:', error);
+              }
             }
-          } catch (error) {
-            console.error('Error updating guide rating stats:', error)
           }
+
+          // Update guide rating stats when a review is approved
+          if (doc.status === 'approved') {
+            try {
+              const payload = req.payload
+              
+              // Get all approved reviews for this guide
+              const reviews = await payload.find({
+                collection: 'guide-reviews',
+                where: {
+                  and: [
+                    { guide: { equals: doc.guide } },
+                    { status: { equals: 'approved' } }
+                  ]
+                },
+                limit: 0, // Get all reviews
+              })
+              
+              if (reviews.docs.length > 0) {
+                const totalRating = reviews.docs.reduce((sum, review) => sum + review.rating, 0)
+                const averageRating = totalRating / reviews.docs.length
+                
+                await payload.update({
+                  collection: 'guides',
+                  id: doc.guide,
+                  data: {
+                    'stats.rating': Math.round(averageRating * 10) / 10, // Round to 1 decimal
+                    'stats.reviewCount': reviews.docs.length,
+                  },
+                })
+              }
+            } catch (error) {
+              console.error('Error updating guide rating stats:', error)
+            }
+          }
+        } catch (error) {
+          console.error('Error creating guide review notification:', error);
         }
+
+        return doc;
       },
     ],
   },

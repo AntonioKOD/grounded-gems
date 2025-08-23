@@ -54,33 +54,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 })
     }
 
+    // Validate tip length (minimum 10 characters like web version)
+    if (tip.trim().length < 10) {
+      return NextResponse.json({ success: false, error: 'Tip must be at least 10 characters long' }, { status: 400 })
+    }
+
     const { getPayload } = await import('payload')
     const config = (await import('@payload-config')).default
     const payload = await getPayload({ config })
 
-    // Get current location to get existing tips
-    const currentLocation = await payload.findByID({ 
-      collection: 'locations', 
-      id: locationId, 
-      depth: 0 
-    })
+    // Get current location to get existing tips and validate location exists
+    let location;
+    try {
+      location = await payload.findByID({ 
+        collection: 'locations', 
+        id: locationId, 
+        depth: 1 
+      })
+    } catch (error) {
+      return NextResponse.json({ success: false, error: 'Location not found' }, { status: 404 })
+    }
+
+    // Check for duplicate tips from the same user (matching web API logic)
+    const existingTips = location.insiderTips || []
+    const userTips = existingTips.filter((existingTip: any) => 
+      existingTip.source === 'user_submitted' && 
+      existingTip.tip?.toLowerCase().trim() === tip.toLowerCase().trim()
+    )
+
+    if (userTips.length > 0) {
+      return NextResponse.json({ success: false, error: 'This tip has already been submitted' }, { status: 400 })
+    }
     
-    const existingTips = currentLocation.insiderTips || []
+    // Create the new tip (matching web API structure)
     const newTip = {
       category,
-      tip,
+      tip: tip.trim(),
       priority: priority || 'medium',
-      source: 'user_submitted',
+      isVerified: false,
+      source: 'user_submitted' as const,
+      status: 'pending' as const,
       submittedBy: user.id,
       submittedAt: new Date().toISOString(),
-      status: 'pending'
     }
 
     // Add new tip to the array
     const updatedTips = [...existingTips, newTip]
 
     // Update location with new tips array
-    const updated = await payload.update({
+    await payload.update({
       collection: 'locations',
       id: locationId,
       data: {
@@ -88,10 +110,40 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     })
 
+    // Create notification for location owner (if different from submitter) - matching web API
+    if (location.createdBy && location.createdBy !== user.id) {
+      try {
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            recipient: typeof location.createdBy === 'string' ? location.createdBy : location.createdBy.id,
+            type: 'tip_submission',
+            title: 'New Insider Tip Submitted',
+            message: `${user.name || 'Someone'} shared an insider tip for ${location.name}`,
+            actionBy: user.id,
+            priority: 'normal',
+            relatedTo: {
+              relationTo: 'locations',
+              value: locationId,
+            },
+            metadata: {
+              locationName: location.name,
+              tipCategory: category,
+              tipPreview: tip.substring(0, 50) + (tip.length > 50 ? '...' : ''),
+            },
+            read: false,
+          },
+        })
+      } catch (error) {
+        console.error('[INSIDER TIPS] Error creating notification:', error)
+      }
+    }
+
     console.log('[INSIDER TIPS] Successfully added tip:', newTip);
 
     return NextResponse.json({ 
       success: true, 
+      message: 'Insider tip submitted successfully',
       data: { 
         tip: newTip,
         totalTips: updatedTips.length

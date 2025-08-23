@@ -1,5 +1,5 @@
 import { CollectionConfig } from 'payload';
-
+import { sendPushNotification } from '@/lib/push-notifications';
 
 export const Reviews: CollectionConfig = {
   slug: 'reviews',
@@ -154,46 +154,142 @@ export const Reviews: CollectionConfig = {
       },
     ],
     afterChange: [
-      async ({ doc }) => {
-        // Only update if this is a location review and has a location
-        if (doc.reviewType === 'location' && doc.location) {
-          try {
-            const { getPayload } = await import('payload')
-            const config = (await import('../payload.config')).default
-            const payload = await getPayload({ config })
-            
-            // Extract location ID (could be string or populated object)
-            const locationId = typeof doc.location === 'string' ? doc.location : doc.location.id
-            
-            // Get all published reviews for this location
-            const reviews = await payload.find({
-              collection: 'reviews',
-              where: {
-                and: [
-                  { location: { equals: locationId } },
-                  { status: { equals: 'published' } }
-                ]
-              },
-              limit: 1000
-            })
-            const publishedReviews = reviews.docs
-            const reviewCount = publishedReviews.length
-            const averageRating = reviewCount > 0
-              ? publishedReviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount
-              : 0
-            await payload.update({
-              collection: 'locations',
-              id: locationId,
-              data: {
-                averageRating: Math.round(averageRating * 10) / 10,
-                reviewCount
+      async ({ doc, req, operation }) => {
+        if (!req.payload) return doc;
+
+        try {
+          // Handle new review creation
+          if (operation === 'create' && doc.status === 'published') {
+            const author = await req.payload.findByID({
+              collection: 'users',
+              id: doc.author,
+            });
+
+            // Notify location owner about new review
+            if (doc.reviewType === 'location' && doc.location) {
+              const location = await req.payload.findByID({
+                collection: 'locations',
+                id: doc.location,
+              });
+
+              if (location.createdBy && location.createdBy !== doc.author) {
+                await req.payload.create({
+                  collection: 'notifications',
+                  data: {
+                    recipient: location.createdBy,
+                    type: 'location_reviewed',
+                    title: `New review for ${location.name}`,
+                    message: `${author.name} left a ${doc.rating}-star review for "${location.name}".`,
+                    relatedTo: {
+                      relationTo: 'locations',
+                      value: doc.location,
+                    },
+                    actionBy: doc.author,
+                    metadata: {
+                      locationName: location.name,
+                      rating: doc.rating,
+                      reviewTitle: doc.title,
+                    },
+                    priority: 'normal',
+                    read: false,
+                  },
+                });
+
+                // Send push notification
+                try {
+                  await sendPushNotification(location.createdBy, {
+                    title: `New review for ${location.name}`,
+                    body: `${author.name} left a ${doc.rating}-star review!`,
+                    data: {
+                      type: 'location_reviewed',
+                      locationId: doc.location,
+                      reviewId: doc.id,
+                    },
+                    badge: 1,
+                  });
+                } catch (error) {
+                  console.error('Error sending review push notification:', error);
+                }
               }
-            })
-            console.log(`[REVIEWS HOOK] Updated location ${locationId}: rating=${averageRating}, count=${reviewCount}`)
-          } catch (err) {
-            console.error('[REVIEWS HOOK] Failed to update location stats:', err)
+            }
+
+            // Notify event organizer about new review
+            if (doc.reviewType === 'event' && doc.event) {
+              const event = await req.payload.findByID({
+                collection: 'events',
+                id: doc.event,
+              });
+
+              if (event.organizer && event.organizer !== doc.author) {
+                await req.payload.create({
+                  collection: 'notifications',
+                  data: {
+                    recipient: event.organizer,
+                    type: 'event_reviewed',
+                    title: `New review for ${event.name}`,
+                    message: `${author.name} left a ${doc.rating}-star review for "${event.name}".`,
+                    relatedTo: {
+                      relationTo: 'events',
+                      value: doc.event,
+                    },
+                    actionBy: doc.author,
+                    metadata: {
+                      eventName: event.name,
+                      rating: doc.rating,
+                      reviewTitle: doc.title,
+                    },
+                    priority: 'normal',
+                    read: false,
+                  },
+                });
+              }
+            }
           }
+
+          // Update location stats
+          if (doc.reviewType === 'location' && doc.location) {
+            try {
+              const { getPayload } = await import('payload')
+              const config = (await import('../payload.config')).default
+              const payload = await getPayload({ config })
+              
+              // Extract location ID (could be string or populated object)
+              const locationId = typeof doc.location === 'string' ? doc.location : doc.location.id
+              
+              // Get all published reviews for this location
+              const reviews = await payload.find({
+                collection: 'reviews',
+                where: {
+                  and: [
+                    { location: { equals: locationId } },
+                    { status: { equals: 'published' } }
+                  ]
+                },
+                limit: 1000
+              })
+              const publishedReviews = reviews.docs
+              const reviewCount = publishedReviews.length
+              const averageRating = reviewCount > 0
+                ? publishedReviews.reduce((sum, review) => sum + review.rating, 0) / reviewCount
+                : 0
+              await payload.update({
+                collection: 'locations',
+                id: locationId,
+                data: {
+                  averageRating: Math.round(averageRating * 10) / 10,
+                  reviewCount
+                }
+              })
+              console.log(`[REVIEWS HOOK] Updated location ${locationId}: rating=${averageRating}, count=${reviewCount}`)
+            } catch (err) {
+              console.error('[REVIEWS HOOK] Failed to update location stats:', err)
+            }
+          }
+        } catch (error) {
+          console.error('Error creating review notification:', error);
         }
+
+        return doc;
       }
     ],
     afterDelete: [

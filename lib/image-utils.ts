@@ -44,6 +44,8 @@ function getBaseUrlSafely(): string {
     : 'http://localhost:3000'
 }
 
+
+
 /**
  * Simple function to get image URL from PayloadCMS media object
  */
@@ -1024,4 +1026,6 @@ export const IMAGE_SIZES = {
   HERO: { width: 1200, height: 600 },
   MOBILE_CARD: { width: 300, height: 225 }
 } as const
+
+
   

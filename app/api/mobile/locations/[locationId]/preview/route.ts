@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 
-export async function GET(request: NextRequest, { params }: { params: { locationId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ locationId: string }> }) {
+  const { locationId } = await params
   const payload = await getPayload({ config })
   const location = await payload.findByID({
     collection: 'locations',
-    id: params.locationId,
+    id: locationId,
     depth: 1
   })
   if (!location) {

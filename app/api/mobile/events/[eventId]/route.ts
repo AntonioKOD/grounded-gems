@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '@payload-config'; // Assuming MobileEventItem & RsvpStatus are exported
+import config from '@/payload.config';
 
 type RsvpStatus = 'going' | 'interested' | 'not_going' | null;
 
@@ -12,6 +12,7 @@ interface MobileEventItem {
   startDate?: string;
   endDate?: string;
   image?: { url: string; alt?: string } | null;
+  gallery?: any[]; // Add gallery field to match iOS Event struct
   category?: any;
   eventType?: any;
   sportType?: any;
@@ -28,12 +29,18 @@ interface MobileEventItem {
   } | null;
   capacity?: number;
   attendeeCount?: number;
+  interestedCount?: number; // Add missing field
+  goingCount?: number; // Add missing field
+  invitedCount?: number; // Add missing field
   isFree?: boolean;
   price?: number;
   currency?: string;
   status?: string;
   tags?: string[];
   userRsvpStatus?: RsvpStatus;
+  matchmakingSettings?: { [key: string]: string }; // Add missing field
+  createdAt?: string; // Add missing field
+  updatedAt?: string; // Add missing field
   // isUserAttending?: boolean;
 }
 
@@ -164,6 +171,11 @@ export async function GET(
       alt: typeof event.image === 'object' ? event.image.alt : undefined,
     } : null;
 
+    // Get participant counts from the event
+    const goingCount = event.goingCount || 0;
+    const interestedCount = event.interestedCount || 0;
+    const invitedCount = event.invitedCount || 0;
+
     const formattedEvent: MobileEventItem = {
       id: String(event.id),
       name: event.name,
@@ -172,19 +184,26 @@ export async function GET(
       startDate: event.startDate,
       endDate: event.endDate,
       image,
+      gallery: [], // Add empty gallery array to match iOS Event struct
       category: event.category ? String(event.category) : undefined,
       eventType: event.eventType ? String(event.eventType) : undefined,
       sportType: event.sportType ? String(event.sportType) : undefined,
       location,
       organizer,
       capacity: event.capacity,
-      attendeeCount: event.attendeeCount || 0, // Assuming attendeeCount field exists
-      isFree: event.pricing?.isFree ?? true,
-      price: event.pricing?.isFree === false ? event.pricing?.price : undefined,
-      currency: event.pricing?.isFree === false ? event.pricing?.currency : undefined,
+      attendeeCount: event.attendeeCount || 0,
+      interestedCount,
+      goingCount,
+      invitedCount,
+      isFree: true, // Simplified for now
+      price: undefined,
+      currency: undefined,
       status: event.status,
-      tags: Array.isArray(event.tags) ? event.tags.map((t: any) => t.tag) : [],
+      tags: [],
       userRsvpStatus: userRsvpForThisEvent,
+      matchmakingSettings: {},
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
       // isUserAttending: isAttending, // Add this once RSVP logic is solid
     };
 

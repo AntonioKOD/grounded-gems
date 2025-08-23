@@ -362,7 +362,7 @@ export async function getEvents(filters: EventFilterOptions = {
       sort: sortDirection === 'desc' ? `-${sort}` : sort,
       page: filters.page || 1,
       limit: filters.limit || 10,
-      depth: 1, // Include relationships with depth of 1
+      depth: 2, // Include relationships with depth of 2 to populate image field
     })
     
     return {

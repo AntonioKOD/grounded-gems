@@ -39,7 +39,7 @@ export const API_CONFIG = {
   
   // Development URLs
   DEV_WEB_URL: 'http://localhost:3000',
-  DEV_MOBILE_URL: 'http://localhost:3001',
+  DEV_MOBILE_URL: 'http://localhost:3000',
   
   // Get the correct base URL for the current environment
   getBaseUrl: (): string => {

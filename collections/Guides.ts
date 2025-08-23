@@ -1,5 +1,6 @@
 import { CollectionConfig } from 'payload'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { sendPushNotification } from '@/lib/push-notifications'
 
 export const Guides: CollectionConfig = {
   slug: 'guides',
@@ -785,13 +786,87 @@ export const Guides: CollectionConfig = {
       }
     ],
     afterChange: [
-      ({ doc, operation, req }) => {
-        // Log successful changes
-        const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
-        const isAdmin = adminEmails.includes(req?.user?.email || '') || req?.user?.role === 'admin'
-        if (isAdmin) {
-          console.log(`✅ Guide ${operation} - ID: ${doc.id}, Status: ${doc.status}`)
+      async ({ doc, operation, req }) => {
+        if (!req.payload) return doc;
+
+        try {
+          // Handle guide publication
+          if (operation === 'update' && doc.status === 'published') {
+            const creator = await req.payload.findByID({
+              collection: 'users',
+              id: doc.creator,
+            });
+
+            // Notify creator about guide publication
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: doc.creator,
+                type: 'guide_published',
+                title: `Your guide "${doc.title}" is now live!`,
+                message: `Your guide "${doc.title}" has been published and is now available to travelers.`,
+                relatedTo: {
+                  relationTo: 'guides',
+                  value: doc.id,
+                },
+                metadata: {
+                  guideTitle: doc.title,
+                  guideId: doc.id,
+                },
+                priority: 'high',
+                read: false,
+              },
+            });
+
+            // Send push notification
+            try {
+              await sendPushNotification(doc.creator, {
+                title: `Guide published: ${doc.title}`,
+                body: `Your guide is now live and available to travelers!`,
+                data: {
+                  type: 'guide_published',
+                  guideId: doc.id,
+                },
+                badge: 1,
+              });
+            } catch (error) {
+              console.error('Error sending guide publication push notification:', error);
+            }
+          }
+
+          // Handle guide featured status
+          if (operation === 'update' && doc.adminNotes?.featured === true) {
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: doc.creator,
+                type: 'guide_featured',
+                title: `Your guide "${doc.title}" is now featured!`,
+                message: `Congratulations! Your guide "${doc.title}" has been selected as a featured guide and will get extra visibility.`,
+                relatedTo: {
+                  relationTo: 'guides',
+                  value: doc.id,
+                },
+                metadata: {
+                  guideTitle: doc.title,
+                  guideId: doc.id,
+                },
+                priority: 'high',
+                read: false,
+              },
+            });
+          }
+
+          // Log successful changes
+          const adminEmails = ['antonio_kodheli@icloud.com', 'ermir1mata@yahoo.com']
+          const isAdmin = adminEmails.includes(req?.user?.email || '') || req?.user?.role === 'admin'
+          if (isAdmin) {
+            console.log(`✅ Guide ${operation} - ID: ${doc.id}, Status: ${doc.status}`)
+          }
+        } catch (error) {
+          console.error('Error creating guide notification:', error);
         }
+
         return doc
       }
     ],

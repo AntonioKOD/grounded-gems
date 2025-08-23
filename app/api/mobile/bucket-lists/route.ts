@@ -12,23 +12,36 @@ import config from '@payload-config'
 // GET /api/v1/mobile/bucket-lists - Get user's bucket lists
 export async function GET(request: NextRequest) {
   try {
-    // Check for Bearer token in Authorization header
-    const authorization = request.headers.get('authorization')
-    
-    if (!authorization || !authorization.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Authentication required' },
-        { status: 401 }
-      )
-    }
-
-    const token = authorization.replace('Bearer ', '')
     const payload = await getPayload({ config })
     
-    // Use Payload's built-in authentication with Bearer token
-    const { user } = await payload.auth({ headers: request.headers })
+    // Get current user - support both Bearer token and cookie authentication
+    let user = null
     
-    if (!user) {
+    try {
+      const authHeader = request.headers.get('Authorization')
+      const cookieHeader = request.headers.get('Cookie')
+      
+      // Check for Bearer token in Authorization header
+      if (authHeader?.startsWith('Bearer ')) {
+        const { user: authUser } = await payload.auth({ headers: request.headers })
+        user = authUser
+        console.log('📱 Mobile Bucket Lists API: Authenticated user via Bearer token:', user?.id)
+      }
+      // Check for payload-token in Cookie header (fallback for mobile apps)
+      else if (cookieHeader?.includes('payload-token=')) {
+        const { user: authUser } = await payload.auth({ headers: request.headers })
+        user = authUser
+        console.log('📱 Mobile Bucket Lists API: Authenticated user via cookie:', user?.id)
+      }
+      
+      if (!user) {
+        return NextResponse.json(
+          { success: false, error: 'Authentication required' },
+          { status: 401 }
+        )
+      }
+    } catch (authError) {
+      console.error('📱 Mobile Bucket Lists API: Authentication error:', authError)
       return NextResponse.json(
         { success: false, error: 'Authentication required' },
         { status: 401 }

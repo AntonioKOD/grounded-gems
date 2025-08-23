@@ -82,11 +82,19 @@ export async function getServerSideUser() {
     }
 
     // Use the utility function to get the correct API URL
+    console.log(`🔧 [AUTH] About to call getApiUrl('/api/users/me')`)
+    console.log(`🔧 [AUTH] getApiUrl function:`, typeof getApiUrl)
+    console.log(`🔧 [AUTH] getApiUrl from utils:`, getApiUrl)
     const apiUrl = getApiUrl('/api/users/me')
-    console.log(`Making request to: ${apiUrl}`)
+    console.log(`🔧 [AUTH] getApiUrl('/api/users/me') returned: ${apiUrl}`)
+    
+    // Force correct URL if it's wrong
+    const correctedApiUrl = apiUrl.includes('3001') ? apiUrl.replace('3001', '3000') : apiUrl
+    console.log(`🔧 [AUTH] Corrected URL: ${correctedApiUrl}`)
+    console.log(`Making request to: ${correctedApiUrl}`)
     
     // Use Promise.race with timeout to prevent slow requests
-    const fetchPromise = fetch(apiUrl, {
+    const fetchPromise = fetch(correctedApiUrl, {
       headers: {
         Cookie: `payload-token=${payloadToken}`,
         "Content-Type": "application/json",
@@ -149,8 +157,11 @@ export async function getMobileUser(request: NextRequest | Request) {
     // Use the mobile-specific API endpoint
     const apiUrl = getApiUrl('/api/mobile/users/me')
     
+    // Force correct URL if it's wrong
+    const correctedApiUrl = apiUrl.includes('3001') ? apiUrl.replace('3001', '3000') : apiUrl
+    
     // Use Promise.race with timeout to prevent slow requests
-    const fetchPromise = fetch(apiUrl, {
+    const fetchPromise = fetch(correctedApiUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",

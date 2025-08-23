@@ -1,6 +1,7 @@
 import { CollectionConfig } from 'payload'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
+import { sendPushNotification } from '@/lib/push-notifications'
 
 export const Payouts: CollectionConfig = {
   slug: 'payouts',
@@ -196,31 +197,99 @@ export const Payouts: CollectionConfig = {
     ],
     afterChange: [
       async ({ doc, operation, req }) => {
-        // If payout status changed to completed, update creator's pending balance
-        if (doc.status === 'completed' && operation === 'update') {
-          try {
-            const payload = await getPayload({ config })
-            
-            // Get the creator
-            const creator = await payload.findByID({
-              collection: 'users',
-              id: doc.creator
-            })
-            
-            if (creator && creator.creatorProfile?.earnings?.pendingBalance) {
-              const newPendingBalance = Math.max(0, creator.creatorProfile.earnings.pendingBalance - doc.amount)
+        if (!req.payload) return doc;
+
+        try {
+          // Handle payout status changes
+          if (operation === 'update' && doc.status === 'completed') {
+            // Update creator's pending balance
+            try {
+              const payload = await getPayload({ config })
               
-              await payload.update({
+              // Get the creator
+              const creator = await payload.findByID({
                 collection: 'users',
-                id: doc.creator,
-                data: {
-                  'creatorProfile.earnings.pendingBalance': newPendingBalance
-                }
+                id: doc.creator
               })
+              
+              if (creator && creator.creatorProfile?.earnings?.pendingBalance) {
+                const newPendingBalance = Math.max(0, creator.creatorProfile.earnings.pendingBalance - doc.amount)
+                
+                await payload.update({
+                  collection: 'users',
+                  id: doc.creator,
+                  data: {
+                    'creatorProfile.earnings.pendingBalance': newPendingBalance
+                  }
+                })
+              }
+            } catch (error) {
+              console.error('Error updating creator pending balance:', error)
             }
-          } catch (error) {
-            console.error('Error updating creator pending balance:', error)
+
+            // Notify creator about completed payout
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: doc.creator,
+                type: 'payout_processed',
+                title: `Payout of $${doc.amount} processed! 💰`,
+                message: `Your payout of $${doc.amount} has been processed and should arrive in ${doc.estimatedArrival}.`,
+                relatedTo: {
+                  relationTo: 'payouts',
+                  value: doc.id,
+                },
+                metadata: {
+                  amount: doc.amount,
+                  method: doc.method,
+                  estimatedArrival: doc.estimatedArrival,
+                },
+                priority: 'high',
+                read: false,
+              },
+            });
+
+            // Send push notification
+            try {
+              await sendPushNotification(doc.creator, {
+                title: `Payout of $${doc.amount} processed! 💰`,
+                body: `Your payout should arrive in ${doc.estimatedArrival}.`,
+                data: {
+                  type: 'payout_processed',
+                  payoutId: doc.id,
+                  amount: doc.amount,
+                },
+                badge: 1,
+              });
+            } catch (error) {
+              console.error('Error sending payout push notification:', error);
+            }
           }
+
+          // Handle failed payouts
+          if (operation === 'update' && doc.status === 'failed') {
+            await req.payload.create({
+              collection: 'notifications',
+              data: {
+                recipient: doc.creator,
+                type: 'payout_failed',
+                title: `Payout failed ❌`,
+                message: `Your payout of $${doc.amount} failed to process. Please check your payment method and try again.`,
+                relatedTo: {
+                  relationTo: 'payouts',
+                  value: doc.id,
+                },
+                metadata: {
+                  amount: doc.amount,
+                  method: doc.method,
+                },
+                priority: 'high',
+                read: false,
+              },
+            });
+          }
+        } catch (error) {
+          console.error('Error creating payout notification:', error);
         }
         
         return doc

@@ -3,11 +3,13 @@ import { getPayload } from 'payload';
 import config from '@payload-config';
 import { z } from 'zod';
 import { getAuthenticatedUser, getMobileUser } from '@/lib/auth-server';
+import { sendPushNotification } from '@/lib/push-notifications';
 
-const rsvpStatusSchema = z.enum(['going', 'interested', 'not_going']);
+const rsvpStatusSchema = z.enum(['going', 'interested', 'not_going', 'invited']);
 
 const rsvpRequestSchema = z.object({
   status: rsvpStatusSchema,
+  invitedUserId: z.string().optional(),
 });
 
 interface RsvpResponse {
@@ -35,7 +37,7 @@ export async function POST(
 ): Promise<NextResponse<RsvpResponse>> {
   try {
     const payload = await getPayload({ config });
-    const { eventId } = context.params;
+    const { eventId } = await context.params;
     const body = await request.json();
 
     const validationResult = rsvpRequestSchema.safeParse(body);
@@ -50,7 +52,7 @@ export async function POST(
         { status: 400 },
       );
     }
-    const { status } = validationResult.data;
+    const { status, invitedUserId } = validationResult.data;
 
     let currentUser = null
     
@@ -77,7 +79,104 @@ export async function POST(
       return NextResponse.json({ success: false, message: 'Event not found', code: 'EVENT_NOT_FOUND' }, { status: 404 });
     }
 
-    // Find existing RSVP
+    // Handle invited users (when current user is inviting someone else)
+    if (status === 'invited' && invitedUserId) {
+      // Check if the invited user already has an RSVP
+      const { docs: existingInvitedRsvps } = await payload.find({
+        collection: 'eventRSVPs',
+        where: {
+          and: [
+            { event: { equals: eventId } },
+            { user: { equals: invitedUserId } },
+          ],
+        },
+        limit: 1,
+      });
+
+      let shouldUpdateCounts = false;
+      
+      if (existingInvitedRsvps.length > 0 && existingInvitedRsvps[0]?.id) {
+        // Update existing RSVP for invited user
+        const rsvpResult = await payload.update({
+          collection: 'eventRSVPs',
+          id: String(existingInvitedRsvps[0].id),
+          data: { 
+            status: 'invited',
+            invitedBy: currentUser.id,
+            invitedAt: new Date().toISOString(),
+          },
+        });
+        console.log(`RSVP updated for invited user ${invitedUserId} to event ${eventId} by ${currentUser.id}`);
+        // Only update counts if the status actually changed
+        if (existingInvitedRsvps[0].status !== 'invited') {
+          shouldUpdateCounts = true;
+        }
+      } else {
+        // Create new RSVP for invited user
+        const rsvpResult = await payload.create({
+          collection: 'eventRSVPs',
+          data: {
+            event: eventId,
+            user: invitedUserId,
+            status: 'invited',
+            invitedBy: currentUser.id,
+            invitedAt: new Date().toISOString(),
+          },
+        });
+        console.log(`RSVP created for invited user ${invitedUserId} to event ${eventId} by ${currentUser.id}`);
+        shouldUpdateCounts = true; // New invitation, definitely update counts
+      }
+
+      // Update event participant counts for invitation
+      if (shouldUpdateCounts) {
+        try {
+          // Use direct database update to avoid triggering beforeChange hooks
+          if (payload.db?.collections?.events) {
+            await payload.db.collections.events.updateOne(
+              { _id: eventId },
+              { $inc: { invitedCount: 1 } }
+            );
+          }
+          
+          console.log(`Updated event ${eventId} invited count via direct DB update`);
+        } catch (updateError) {
+          console.error('Error updating event invited count:', updateError);
+        }
+      }
+
+      // Send push notification to invited user
+      try {
+        await sendPushNotification(invitedUserId, {
+          title: `You're invited to ${event.name}!`,
+          body: `${currentUser.name || 'Someone'} invited you to "${event.name}" on ${new Date(event.startDate).toLocaleDateString()}.`,
+          data: {
+            type: 'event_invitation',
+            eventId: eventId,
+            invitedBy: String(currentUser.id)
+          },
+          badge: 1
+        })
+        console.log(`🔔 [RSVP] Sent invitation push notification to user ${invitedUserId}`)
+      } catch (error) {
+        console.error('Error sending invitation push notification:', error)
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          message: `Successfully invited user to event`,
+          data: {
+            eventId,
+            userId: invitedUserId,
+            status: 'invited',
+            invitedBy: String(currentUser.id),
+          },
+        },
+        { status: 201 },
+      );
+    }
+
+    // Handle regular RSVP (current user's own RSVP)
     const { docs: existingRsvps } = await payload.find({
       collection: 'eventRSVPs',
       where: {
@@ -110,8 +209,81 @@ export async function POST(
       });
       console.log(`RSVP created for event ${eventId}, user ${currentUser.id} with status ${status}`);
     }
+
+    // Send push notification to event organizer when someone joins
+    if (status === 'going' && event.organizer && event.organizer !== currentUser.id) {
+      try {
+        await sendPushNotification(String(event.organizer), {
+          title: `Someone joined your event!`,
+          body: `${currentUser.name || 'Someone'} is going to "${event.name}"!`,
+          data: {
+            type: 'event_rsvp',
+            eventId: eventId,
+            rsvpUserId: String(currentUser.id),
+            rsvpStatus: status
+          },
+          badge: 1
+        })
+        console.log(`🔔 [RSVP] Sent RSVP notification to event organizer`)
+      } catch (error) {
+        console.error('Error sending RSVP notification to organizer:', error)
+      }
+    }
     
-    // TODO: Potentially update event.attendeeCount based on 'going' status change
+    // Update event participant counts based on RSVP status change
+    try {
+      // Get the old status if updating an existing RSVP
+      let oldStatus = null;
+      if (existingRsvps.length > 0 && existingRsvps[0]?.status) {
+        oldStatus = existingRsvps[0].status;
+      }
+      
+      // Use direct database updates to avoid triggering beforeChange hooks
+      const db = payload.db;
+      const updateData: any = {};
+      
+      // Remove from old status count
+      if (oldStatus) {
+        if (oldStatus === 'going') updateData.$inc = { goingCount: -1 };
+        else if (oldStatus === 'interested') updateData.$inc = { interestedCount: -1 };
+        else if (oldStatus === 'invited') updateData.$inc = { invitedCount: -1 };
+      }
+      
+      // Add to new status count
+      if (status === 'going') {
+        if (updateData.$inc) {
+          updateData.$inc.goingCount = (updateData.$inc.goingCount || 0) + 1;
+        } else {
+          updateData.$inc = { goingCount: 1 };
+        }
+      } else if (status === 'interested') {
+        if (updateData.$inc) {
+          updateData.$inc.interestedCount = (updateData.$inc.interestedCount || 0) + 1;
+        } else {
+          updateData.$inc = { interestedCount: 1 };
+        }
+      } else if (status === 'invited') {
+        if (updateData.$inc) {
+          updateData.$inc.invitedCount = (updateData.$inc.invitedCount || 0) + 1;
+        } else {
+          updateData.$inc = { invitedCount: 1 };
+        }
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        if (payload.db?.collections?.events) {
+          await payload.db.collections.events.updateOne(
+            { _id: eventId },
+            updateData
+          );
+        }
+        
+        console.log(`Updated event ${eventId} counts via direct DB update:`, updateData);
+      }
+    } catch (updateError) {
+      console.error('Error updating event participant counts:', updateError);
+      // Don't fail the RSVP operation if count update fails
+    }
 
     return NextResponse.json(
       {

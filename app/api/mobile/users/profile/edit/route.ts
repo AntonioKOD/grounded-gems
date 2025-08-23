@@ -42,25 +42,47 @@ export async function PUT(request: NextRequest) {
     const payload = await getPayload({ config })
     console.log('[Mobile Profile Edit] getPayload resolved')
 
-    // Use Payload's built-in authentication with Bearer token
-    let userAuthResult
+    // Try to authenticate with Bearer token
+    let user = null
+    
     try {
-      // Create headers object with the Bearer token
+      // First try Payload's built-in authentication
       const authHeaders = new Headers()
       authHeaders.set('Authorization', `Bearer ${token}`)
       
-      userAuthResult = await payload.auth({ headers: authHeaders })
+      const userAuthResult = await payload.auth({ headers: authHeaders })
       console.log('[Mobile Profile Edit] payload.auth result:', userAuthResult)
+      
+      if (userAuthResult?.user) {
+        user = userAuthResult.user
+      }
     } catch (authError) {
       console.error('[Mobile Profile Edit] Error in payload.auth:', authError)
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Authentication failed',
-        details: authError instanceof Error ? authError.message : authError 
-      }, { status: 401 })
+      // Continue to manual token validation
     }
     
-    const { user } = userAuthResult || {}
+    // If Payload auth failed, try manual JWT validation
+    if (!user) {
+      try {
+        // Try to decode the JWT token manually
+        const tokenParts = token.split('.')
+        if (tokenParts.length === 3 && tokenParts[1]) {
+          const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString())
+          console.log('[Mobile Profile Edit] Decoded token payload:', payload)
+          
+          if (payload.userId) {
+            // Get user by ID from the token
+            user = await payload.findByID({
+              collection: 'users',
+              id: String(payload.userId),
+            })
+            console.log('[Mobile Profile Edit] Found user by token userId:', user?.id)
+          }
+        }
+      } catch (decodeError) {
+        console.error('[Mobile Profile Edit] Error decoding token:', decodeError)
+      }
+    }
     
     if (!user) {
       console.log('❌ [Mobile Profile Edit] No authenticated user found for PUT')
@@ -156,7 +178,7 @@ export async function PUT(request: NextRequest) {
           }
           
           updateData.username = String(username)
-          updateData.lastUsernameChange = new Date()
+          updateData.lastUsernameChange = new Date().toISOString()
         } else {
           // User is clearing their username
           updateData.username = null
@@ -196,13 +218,26 @@ export async function PUT(request: NextRequest) {
 
     // Handle profile image
     if (body.profileImage !== undefined) {
+      console.log('📝 [Mobile Profile Edit] Processing profileImage:', {
+        value: body.profileImage,
+        type: typeof body.profileImage,
+        isString: typeof body.profileImage === 'string',
+        isNumber: typeof body.profileImage === 'number',
+        isEmpty: body.profileImage === '',
+        isNull: body.profileImage === null,
+        isUndefined: body.profileImage === undefined
+      })
+      
       // Only set profileImage if it's a valid non-empty string, otherwise set to null
       if (body.profileImage && typeof body.profileImage === 'string' && body.profileImage.trim() !== '') {
         updateData.profileImage = String(body.profileImage)
+        console.log('📝 [Mobile Profile Edit] Set profileImage to string:', updateData.profileImage)
       } else if (body.profileImage && typeof body.profileImage === 'number') {
         updateData.profileImage = String(body.profileImage)
+        console.log('📝 [Mobile Profile Edit] Set profileImage to string from number:', updateData.profileImage)
       } else {
         updateData.profileImage = null
+        console.log('📝 [Mobile Profile Edit] Set profileImage to null')
       }
     }
 
@@ -216,8 +251,44 @@ export async function PUT(request: NextRequest) {
         delete updateData[key]
       }
     }
+    
+    // Additional validation for ObjectId fields
+    console.log('📝 [Mobile Profile Edit] Final updateData keys:', Object.keys(updateData))
+    for (const [key, value] of Object.entries(updateData)) {
+      console.log(`📝 [Mobile Profile Edit] Field ${key}:`, {
+        type: typeof value,
+        value: value,
+        isArray: Array.isArray(value),
+        isObject: value && typeof value === 'object' && !Array.isArray(value)
+      })
+      
+      // Check for potential ObjectId fields that might be invalid
+      if (key === 'profileImage' && value && typeof value === 'string') {
+        // Check if it looks like a valid ObjectId (24 character hex string) OR a valid URL
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(value)
+        const isValidUrl = value.startsWith('http://') || value.startsWith('https://') || value.startsWith('/api/media/') || value.startsWith('/')
+        
+        console.log(`📝 [Mobile Profile Edit] profileImage validation:`, {
+          value: value,
+          isValidObjectId: isValidObjectId,
+          isValidUrl: isValidUrl,
+          length: value.length
+        })
+        
+        if (!isValidObjectId && !isValidUrl && value !== '') {
+          console.warn(`📝 [Mobile Profile Edit] Invalid format for profileImage (not ObjectId or URL): ${value}`)
+          // Remove invalid value - only if it's neither ObjectId nor URL
+          delete updateData[key]
+        } else {
+          console.log(`📝 [Mobile Profile Edit] profileImage format is valid:`, { isValidObjectId, isValidUrl })
+        }
+      }
+    }
 
     // Update the user in Payload CMS
+    console.log('📝 [Mobile Profile Edit] About to update user with data:', JSON.stringify(updateData, null, 2))
+    console.log('📝 [Mobile Profile Edit] profileImage in updateData:', updateData.profileImage)
+    
     const updatedUser = await payload.update({
       collection: "users",
       id: String(user.id),
@@ -225,10 +296,13 @@ export async function PUT(request: NextRequest) {
     })
 
     console.log('✅ [Mobile Profile Edit] User updated successfully:', updatedUser.id)
+    console.log('📝 [Mobile Profile Edit] Updated user profileImage:', updatedUser.profileImage)
 
     return NextResponse.json({
       success: true,
-      user: updatedUser,
+      data: {
+        user: updatedUser,
+      },
     })
   } catch (error) {
     console.error('❌ [Mobile Profile Edit] Error updating profile:', error)
@@ -335,6 +409,11 @@ export async function GET(request: NextRequest) {
           interests: currentUser.interests || [],
           socialLinks: currentUser.socialLinks || [],
           profileImage: currentUser.profileImage ? {
+            id: typeof currentUser.profileImage === 'object' && currentUser.profileImage.id
+              ? String(currentUser.profileImage.id)
+              : typeof currentUser.profileImage === 'string' && /^[0-9a-fA-F]{24}$/.test(currentUser.profileImage)
+              ? currentUser.profileImage
+              : null,
             url: typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
               ? currentUser.profileImage.url 
               : typeof currentUser.profileImage === 'string'

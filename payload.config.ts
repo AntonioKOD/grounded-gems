@@ -73,13 +73,13 @@ export default buildConfig({
   // Enable CORS and allow credentials so cookies are sent to the front end
   cors: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001', // Mobile app dev server
+    'http://localhost:3000', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
     'https://www.sacavia.com', // Production web app
     // Add localhost patterns for development
     ...(process.env.NODE_ENV === 'development' ? [
       'http://localhost:3000',
-      'http://localhost:3001',
+      'http://localhost:3000',
       'http://localhost:8081',
     ] : []),
   ],
@@ -87,7 +87,7 @@ export default buildConfig({
   // Whitelist auth endpoints to avoid CSRF errors
   csrf: [
     process.env.FRONTEND_URL || 'http://localhost:3000',
-    'http://localhost:3001', // Mobile app dev server
+    'http://localhost:3000', // Mobile app dev server
     'http://localhost:8081', // Expo dev server
     'https://www.sacavia.com', // Production web app
   ],

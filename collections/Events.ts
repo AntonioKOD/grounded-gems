@@ -1,4 +1,5 @@
 import { CollectionConfig } from 'payload';
+import { sendPushNotification, sendPushNotificationToMultipleUsers } from '@/lib/push-notifications';
 
 export const Events: CollectionConfig = {
   slug: 'events',
@@ -261,9 +262,17 @@ export const Events: CollectionConfig = {
           // Create notifications for event creation/updates
           if (operation === 'create') {
             // Notify location owner about new event
+            // Handle both string ID and populated object
+            const locationId = typeof doc.location === 'string' ? doc.location : doc.location?.id || doc.location?._id
+            
+            if (!locationId) {
+              console.log('No location ID found for event notification')
+              return
+            }
+            
             const location = await req.payload.findByID({
               collection: 'locations',
-              id: doc.location,
+              id: locationId,
             })
 
             if (location.createdBy && location.createdBy !== doc.organizer) {
@@ -297,7 +306,7 @@ export const Events: CollectionConfig = {
                 and: [
                   {
                     location: {
-                      equals: doc.location,
+                      equals: locationId,
                     },
                   },
                   {
@@ -324,6 +333,7 @@ export const Events: CollectionConfig = {
             })
 
             // Create notifications for subscribers
+            const subscriberUserIds: string[] = []
             for (const subscription of subscribers.docs) {
               if (subscription.user !== doc.organizer) {
                 await req.payload.create({
@@ -347,6 +357,45 @@ export const Events: CollectionConfig = {
                     read: false,
                   },
                 })
+                subscriberUserIds.push(subscription.user)
+              }
+            }
+
+            // Send push notifications to subscribers
+            if (subscriberUserIds.length > 0) {
+              try {
+                await sendPushNotificationToMultipleUsers(subscriberUserIds, {
+                  title: `New event at ${location.name}`,
+                  body: `"${doc.name}" is happening on ${new Date(doc.startDate).toLocaleDateString()}. Don't miss out!`,
+                  data: {
+                    type: 'location_event',
+                    eventId: doc.id,
+                    locationId: locationId
+                  },
+                  badge: 1
+                })
+                console.log(`🔔 [Events] Sent push notifications to ${subscriberUserIds.length} subscribers for new event`)
+              } catch (error) {
+                console.error('Error sending push notifications to subscribers:', error)
+              }
+            }
+
+            // Send push notification to location owner
+            if (location.createdBy && location.createdBy !== doc.organizer) {
+              try {
+                await sendPushNotification(location.createdBy, {
+                  title: `New event at ${location.name}`,
+                  body: `"${doc.name}" has been scheduled at your location on ${new Date(doc.startDate).toLocaleDateString()}.`,
+                  data: {
+                    type: 'event_created',
+                    eventId: doc.id,
+                    locationId: locationId
+                  },
+                  badge: 1
+                })
+                console.log(`🔔 [Events] Sent push notification to location owner for new event`)
+              } catch (error) {
+                console.error('Error sending push notification to location owner:', error)
               }
             }
           }
@@ -363,6 +412,7 @@ export const Events: CollectionConfig = {
               },
             })
 
+            const attendeeUserIds: string[] = []
             for (const rsvp of rsvps.docs) {
               await req.payload.create({
                 collection: 'notifications',
@@ -384,6 +434,25 @@ export const Events: CollectionConfig = {
                   read: false,
                 },
               })
+              attendeeUserIds.push(rsvp.user)
+            }
+
+            // Send push notifications to attendees
+            if (attendeeUserIds.length > 0) {
+              try {
+                await sendPushNotificationToMultipleUsers(attendeeUserIds, {
+                  title: `Event cancelled: ${doc.name}`,
+                  body: `Unfortunately, "${doc.name}" scheduled for ${new Date(doc.startDate).toLocaleDateString()} has been cancelled.`,
+                  data: {
+                    type: 'event_cancelled',
+                    eventId: doc.id
+                  },
+                  badge: 1
+                })
+                console.log(`🔔 [Events] Sent cancellation push notifications to ${attendeeUserIds.length} attendees`)
+              } catch (error) {
+                console.error('Error sending cancellation push notifications:', error)
+              }
             }
           }
         } catch (error) {
