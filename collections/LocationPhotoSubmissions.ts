@@ -414,7 +414,7 @@ export const LocationPhotoSubmissions: CollectionConfig = {
                     locationId: doc.location,
                     submissionId: doc.id,
                   },
-                  badge: 1,
+                  badge: "1",
                 });
               } catch (error) {
                 console.error('Error sending photo approval push notification:', error);

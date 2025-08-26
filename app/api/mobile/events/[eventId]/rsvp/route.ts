@@ -154,7 +154,7 @@ export async function POST(
             eventId: eventId,
             invitedBy: String(currentUser.id)
           },
-          badge: 1
+          badge: "1"
         })
         console.log(`🔔 [RSVP] Sent invitation push notification to user ${invitedUserId}`)
       } catch (error) {
@@ -222,7 +222,7 @@ export async function POST(
             rsvpUserId: String(currentUser.id),
             rsvpStatus: status
           },
-          badge: 1
+          badge: "1"
         })
         console.log(`🔔 [RSVP] Sent RSVP notification to event organizer`)
       } catch (error) {

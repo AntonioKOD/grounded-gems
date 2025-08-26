@@ -827,7 +827,7 @@ export const Guides: CollectionConfig = {
                   type: 'guide_published',
                   guideId: doc.id,
                 },
-                badge: 1,
+                badge: "1",
               });
             } catch (error) {
               console.error('Error sending guide publication push notification:', error);

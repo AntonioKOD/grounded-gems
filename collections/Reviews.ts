@@ -205,7 +205,7 @@ export const Reviews: CollectionConfig = {
                       locationId: doc.location,
                       reviewId: doc.id,
                     },
-                    badge: 1,
+                    badge: "1",
                   });
                 } catch (error) {
                   console.error('Error sending review push notification:', error);

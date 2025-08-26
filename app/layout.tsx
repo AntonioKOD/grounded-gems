@@ -1,5 +1,6 @@
 import { GoogleAnalytics } from '@next/third-parties/google'
 import Script from "next/script"
+import NotificationInitializer from '@/components/NotificationInitializer'
 
 export default function RootLayout({
   children,
@@ -36,7 +37,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="167x167" href="/icon-192.png" />
       </head>
       <body className="overflow-x-hidden" suppressHydrationWarning>
-        {children}
+        <NotificationInitializer autoRequestPermission={true} showWelcomeNotification={true}>
+          {children}
+        </NotificationInitializer>
         
         {/* Google Analytics */}
         <GoogleAnalytics gaId="G-QB3W2CL6T7" />

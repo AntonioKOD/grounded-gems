@@ -42,6 +42,7 @@ import { AccountDeletions } from './collections/AccountDeletions'
 import { Reports } from './collections/Reports'
 import { UserBlocks } from './collections/UserBlocks'
 import Analytics from './collections/Analytics'
+import PushSubscriptions from './collections/PushSubscriptions'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -154,5 +155,6 @@ export default buildConfig({
     Reports,
     UserBlocks,
     Analytics,
+    PushSubscriptions,
   ],
 })

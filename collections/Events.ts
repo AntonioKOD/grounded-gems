@@ -372,7 +372,7 @@ export const Events: CollectionConfig = {
                     eventId: doc.id,
                     locationId: locationId
                   },
-                  badge: 1
+                  badge: "1"
                 })
                 console.log(`🔔 [Events] Sent push notifications to ${subscriberUserIds.length} subscribers for new event`)
               } catch (error) {
@@ -391,7 +391,7 @@ export const Events: CollectionConfig = {
                     eventId: doc.id,
                     locationId: locationId
                   },
-                  badge: 1
+                  badge: "1"
                 })
                 console.log(`🔔 [Events] Sent push notification to location owner for new event`)
               } catch (error) {
@@ -447,7 +447,7 @@ export const Events: CollectionConfig = {
                     type: 'event_cancelled',
                     eventId: doc.id
                   },
-                  badge: 1
+                  badge: "1"
                 })
                 console.log(`🔔 [Events] Sent cancellation push notifications to ${attendeeUserIds.length} attendees`)
               } catch (error) {

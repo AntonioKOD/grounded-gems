@@ -136,6 +136,34 @@ export default function NotificationSettings() {
     }
   }
 
+  const handleTestPushNotification = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/notifications/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: 'This is a test push notification from the server!'
+        }),
+      })
+
+      const result = await response.json()
+      
+      if (result.success) {
+        toast.success('Push notification sent successfully!')
+      } else {
+        toast.error(result.error || 'Failed to send push notification')
+      }
+    } catch (error) {
+      console.error('Error sending push notification:', error)
+      toast.error('Failed to send push notification')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const getPermissionStatus = () => {
     switch (permission) {
       case 'granted':
@@ -210,12 +238,21 @@ export default function NotificationSettings() {
             )}
             
             {permission === 'granted' && (
-              <Button 
-                variant="outline" 
-                onClick={handleTestNotification}
-              >
-                Test Notification
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={handleTestNotification}
+                >
+                  Test Browser Notification
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleTestPushNotification}
+                  disabled={isLoading}
+                >
+                  Test Push Notification
+                </Button>
+              </div>
             )}
           </div>
 

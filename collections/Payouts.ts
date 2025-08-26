@@ -259,7 +259,7 @@ export const Payouts: CollectionConfig = {
                   payoutId: doc.id,
                   amount: doc.amount,
                 },
-                badge: 1,
+                badge: "1",
               });
             } catch (error) {
               console.error('Error sending payout push notification:', error);

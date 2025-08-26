@@ -284,7 +284,7 @@ export const GuideReviews: CollectionConfig = {
                     guideId: doc.guide,
                     reviewId: doc.id,
                   },
-                  badge: 1,
+                  badge: "1",
                 });
               } catch (error) {
                 console.error('Error sending guide review push notification:', error);
