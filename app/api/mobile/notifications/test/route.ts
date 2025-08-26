@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { sendPushNotification } from '@/lib/push-notifications'
+import { apnsSender } from '@/lib/apns-config'
 
 // POST /api/mobile/notifications/test - Send a test push notification
 export async function POST(request: NextRequest) {
@@ -53,15 +54,16 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Send test notification to the current user
-    const success = await sendPushNotification(String(user.id), {
+    // Send test notification to the current user using APNs
+    const success = await apnsSender.sendNotificationToUser(String(user.id), {
       title,
       body,
+      badge: 1,
+      sound: 'default',
       data: {
         type: 'test_notification',
-        timestamp: new Date().toISOString()
-      },
-      badge: "1"
+        timestamp: Date.now()
+      }
     })
 
     if (success) {
