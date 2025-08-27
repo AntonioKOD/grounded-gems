@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const readline = require('readline');
+import fs from 'fs';
+import path from 'path';
+import readline from 'readline';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Load environment variables
-require('dotenv').config({ path: '.env.local' });
+import dotenv from 'dotenv';
+dotenv.config({ path: '.env.local' });
 
 console.log('🔧 APNs Configuration Manager');
 console.log('=============================\n');
