@@ -3,7 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 
 // Function to generate username suggestions
-function generateUsernameSuggestions(baseUsername: string, existingUsernames: string[]): string[] {
+function generateUsernameSuggestions(baseUsername: string): string[] {
   const suggestions: string[] = []
   const base = baseUsername.toLowerCase().replace(/[^a-z0-9]/g, '')
   
@@ -12,27 +12,21 @@ function generateUsernameSuggestions(baseUsername: string, existingUsernames: st
   // Add numbers
   for (let i = 1; i <= 5; i++) {
     const suggestion = `${base}${i}`
-    if (!existingUsernames.includes(suggestion)) {
-      suggestions.push(suggestion)
-    }
+    suggestions.push(suggestion)
   }
   
   // Add common suffixes
   const suffixes = ['_', 'x', 'official', 'real', 'the']
   for (const suffix of suffixes) {
     const suggestion = `${base}_${suffix}`
-    if (!existingUsernames.includes(suggestion)) {
-      suggestions.push(suggestion)
-    }
+    suggestions.push(suggestion)
   }
   
   // Add random numbers
   for (let i = 0; i < 3; i++) {
     const randomNum = Math.floor(Math.random() * 1000)
     const suggestion = `${base}${randomNum}`
-    if (!existingUsernames.includes(suggestion)) {
-      suggestions.push(suggestion)
-    }
+    suggestions.push(suggestion)
   }
   
   return suggestions.slice(0, 8) // Limit to 8 suggestions
@@ -45,7 +39,11 @@ export async function GET(request: NextRequest) {
 
     if (!username) {
       return NextResponse.json(
-        { error: 'Username is required' },
+        { 
+          success: false,
+          error: 'Username is required',
+          code: 'MISSING_USERNAME'
+        },
         { status: 400 }
       )
     }
@@ -53,27 +51,33 @@ export async function GET(request: NextRequest) {
     // Validate username format
     if (!/^[a-z0-9_-]+$/.test(username)) {
       return NextResponse.json({
+        success: false,
         available: false,
         error: 'Username can only contain lowercase letters, numbers, hyphens, and underscores',
         errorType: 'INVALID_FORMAT',
+        code: 'INVALID_USERNAME_FORMAT',
         suggestions: []
       })
     }
 
     if (username.length < 3) {
       return NextResponse.json({
+        success: false,
         available: false,
         error: 'Username must be at least 3 characters long',
         errorType: 'TOO_SHORT',
+        code: 'USERNAME_TOO_SHORT',
         suggestions: []
       })
     }
 
     if (username.length > 30) {
       return NextResponse.json({
+        success: false,
         available: false,
         error: 'Username must be less than 30 characters',
         errorType: 'TOO_LONG',
+        code: 'USERNAME_TOO_LONG',
         suggestions: []
       })
     }
@@ -88,10 +92,12 @@ export async function GET(request: NextRequest) {
 
     if (reservedUsernames.includes(username)) {
       return NextResponse.json({
+        success: false,
         available: false,
         error: 'This username is reserved and cannot be used',
         errorType: 'RESERVED',
-        suggestions: generateUsernameSuggestions(username, [])
+        code: 'RESERVED_USERNAME',
+        suggestions: generateUsernameSuggestions(username)
       })
     }
 
@@ -110,6 +116,7 @@ export async function GET(request: NextRequest) {
 
     if (isAvailable) {
       return NextResponse.json({
+        success: true,
         available: true,
         username: username,
         message: 'Username is available!',
@@ -117,22 +124,28 @@ export async function GET(request: NextRequest) {
       })
     } else {
       // Username is taken, generate suggestions
-      const suggestions = generateUsernameSuggestions(username, [username])
+      const suggestions = generateUsernameSuggestions(username)
       
       return NextResponse.json({
+        success: false,
         available: false,
         error: 'Username is already taken',
         errorType: 'TAKEN',
+        code: 'USERNAME_TAKEN',
         suggestions: suggestions,
         message: 'Try one of these alternatives:'
       })
     }
 
   } catch (error) {
-    console.error('Username check error:', error)
+    console.error('Mobile username check error:', error)
     return NextResponse.json(
-      { error: 'Unable to check username availability' },
+      { 
+        success: false,
+        error: 'Unable to check username availability',
+        code: 'SERVER_ERROR'
+      },
       { status: 500 }
     )
   }
-} 
+}

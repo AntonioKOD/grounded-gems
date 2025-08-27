@@ -3,6 +3,36 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { z } from 'zod'
 
+// Function to generate username suggestions
+function generateUsernameSuggestions(baseUsername: string): string[] {
+  const suggestions: string[] = []
+  const base = baseUsername.toLowerCase().replace(/[^a-z0-9]/g, '')
+  
+  if (base.length < 3) return suggestions
+  
+  // Add numbers
+  for (let i = 1; i <= 5; i++) {
+    const suggestion = `${base}${i}`
+    suggestions.push(suggestion)
+  }
+  
+  // Add common suffixes
+  const suffixes = ['_', 'x', 'official', 'real', 'the']
+  for (const suffix of suffixes) {
+    const suggestion = `${base}_${suffix}`
+    suggestions.push(suggestion)
+  }
+  
+  // Add random numbers
+  for (let i = 0; i < 3; i++) {
+    const randomNum = Math.floor(Math.random() * 1000)
+    const suggestion = `${base}${randomNum}`
+    suggestions.push(suggestion)
+  }
+  
+  return suggestions.slice(0, 8) // Limit to 8 suggestions
+}
+
 // Enhanced input validation schema to match web signup
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long'),
@@ -172,27 +202,91 @@ export async function POST(request: NextRequest): Promise<NextResponse<MobileReg
         )
       }
 
-      // Check username availability
-      const existingUsername = await payload.find({
-        collection: 'users',
-        where: {
-          username: {
-            equals: username,
-          },
-        },
-        limit: 1,
-      })
+      // Enhanced username validation
+      if (username) {
+        // Validate username format
+        if (!/^[a-z0-9_-]+$/.test(username)) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Invalid username format',
+              error: 'Username can only contain lowercase letters, numbers, hyphens, and underscores',
+              code: 'INVALID_USERNAME_FORMAT'
+            },
+            { status: 400 }
+          )
+        }
 
-      if (existingUsername.docs.length > 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Username already taken',
-            error: 'This username is already in use',
-            code: 'USERNAME_TAKEN'
+        if (username.length < 3) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Username too short',
+              error: 'Username must be at least 3 characters long',
+              code: 'USERNAME_TOO_SHORT'
+            },
+            { status: 400 }
+          )
+        }
+
+        if (username.length > 30) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Username too long',
+              error: 'Username must be less than 30 characters',
+              code: 'USERNAME_TOO_LONG'
+            },
+            { status: 400 }
+          )
+        }
+
+        // Check for reserved usernames
+        const reservedUsernames = [
+          'admin', 'administrator', 'mod', 'moderator', 'support', 'help',
+          'api', 'www', 'mail', 'email', 'test', 'demo', 'guest', 'user',
+          'root', 'system', 'null', 'undefined', 'sacavia', 'staff',
+          'official', 'verify', 'verified', 'bot', 'service'
+        ]
+
+        if (reservedUsernames.includes(username)) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Reserved username',
+              error: 'This username is reserved and cannot be used',
+              code: 'RESERVED_USERNAME'
+            },
+            { status: 400 }
+          )
+        }
+
+        // Check username availability
+        const existingUsername = await payload.find({
+          collection: 'users',
+          where: {
+            username: {
+              equals: username,
+            },
           },
-          { status: 409 }
-        )
+          limit: 1,
+        })
+
+        if (existingUsername.docs.length > 0) {
+          // Generate username suggestions
+          const suggestions = generateUsernameSuggestions(username)
+          
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'Username already taken',
+              error: 'This username is already in use. Try one of these alternatives:',
+              code: 'USERNAME_TAKEN',
+              suggestions: suggestions
+            },
+            { status: 409 }
+          )
+        }
       }
     } catch (error) {
       console.error('Error checking existing user:', error)
