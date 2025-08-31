@@ -151,9 +151,9 @@ export class FirebaseNotificationSender {
       const config = await import('@/payload.config')
       const payloadInstance = await getPayload({ config: config.default })
 
-      // Get user's FCM tokens from device-tokens collection
+      // Get user's FCM tokens from deviceTokens collection
       const deviceTokens = await payloadInstance.find({
-        collection: 'device-tokens',
+        collection: 'deviceTokens',
         where: {
           and: [
             { user: { equals: userId } },
@@ -173,10 +173,10 @@ export class FirebaseNotificationSender {
       let sentCount = 0
       const errors: string[] = []
 
-      // Send to all user's devices
-      for (const deviceToken of deviceTokens.docs) {
-        try {
-          const success = await this.sendNotification(deviceToken.token, payload)
+              // Send to all user's devices
+        for (const deviceToken of deviceTokens.docs) {
+          try {
+            const success = await this.sendNotification(deviceToken.deviceToken, payload)
           if (success) {
             sentCount++
           }

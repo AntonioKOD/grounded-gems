@@ -61,11 +61,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<TokenRegi
 
     // Check if token already exists for this user
     const existingTokens = await payload.find({
-      collection: 'device-tokens',
+      collection: 'deviceTokens',
       where: {
         and: [
           { user: { equals: user.user.id } },
-          { token: { equals: token } }
+          { deviceToken: { equals: token } }
         ]
       },
       limit: 1
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TokenRegi
     if (existingTokens.docs.length > 0 && existingTokens.docs[0]?.id) {
       // Update existing token with latest device info
       await payload.update({
-        collection: 'device-tokens',
+        collection: 'deviceTokens',
         id: String(existingTokens.docs[0].id),
         data: {
           platform,
@@ -88,10 +88,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<TokenRegi
     } else {
       // Create new token record
       await payload.create({
-        collection: 'device-tokens',
+        collection: 'deviceTokens',
         data: {
           user: user.user.id as string,
-          token,
+          deviceToken: token,
           platform,
           deviceInfo,
           isActive: true,
@@ -105,11 +105,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<TokenRegi
 
     // Deactivate old tokens for this user (keep only the latest)
     const userTokens = await payload.find({
-      collection: 'device-tokens',
+      collection: 'deviceTokens',
       where: {
         and: [
           { user: { equals: user.user.id } },
-          { token: { not_equals: token } }
+          { deviceToken: { not_equals: token } }
         ]
       }
     })
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TokenRegi
     // Deactivate old tokens but keep them for analytics
     for (const oldToken of userTokens.docs) {
       await payload.update({
-        collection: 'device-tokens',
+        collection: 'deviceTokens',
         id: oldToken.id,
         data: {
           isActive: false,

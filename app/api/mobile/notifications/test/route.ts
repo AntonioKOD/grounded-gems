@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Check if user has device tokens
     const deviceTokens = await payload.find({
-      collection: 'device-tokens',
+      collection: 'deviceTokens',
       where: {
         and: [
           { user: { equals: String(user.id) } },
@@ -220,7 +220,7 @@ export async function GET(request: NextRequest) {
     
     // Get user's device tokens
     const deviceTokens = await payload.find({
-      collection: 'device-tokens',
+      collection: 'deviceTokens',
       where: {
         and: [
           { user: { equals: String(user.id) } },
