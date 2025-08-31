@@ -7,7 +7,14 @@
  * and can send test notifications.
  */
 
-require('dotenv').config({ path: '.env.local' })
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+dotenv.config({ path: path.join(path.dirname(__dirname), '.env.local') })
 
 async function testFirebaseConfig() {
   console.log('🔥 Testing Firebase Configuration')
@@ -45,7 +52,8 @@ async function testFirebaseConfig() {
   try {
     console.log('\n📱 Testing Firebase Admin SDK initialization...')
     
-    const { firebaseSender } = require('../lib/firebase-admin')
+    // Import the Firebase config directly
+    const { firebaseSender } = await import('../lib/firebase-admin.ts')
     
     const status = firebaseSender.getStatus()
     console.log('📊 Firebase Status:', status)

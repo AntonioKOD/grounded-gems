@@ -7,9 +7,13 @@
  * for push notifications in your Sacavia backend.
  */
 
-const fs = require('fs')
-const path = require('path')
-const readline = require('readline')
+import fs from 'fs'
+import path from 'path'
+import readline from 'readline'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -49,7 +53,7 @@ async function setupFirebaseEnv() {
     console.log(`📱 Project ID: ${serviceAccount.project_id}`)
     
     // Read existing .env.local file
-    const envPath = path.join(process.cwd(), '.env.local')
+    const envPath = path.join(path.dirname(__dirname), '.env.local')
     let envContent = ''
     
     if (fs.existsSync(envPath)) {
