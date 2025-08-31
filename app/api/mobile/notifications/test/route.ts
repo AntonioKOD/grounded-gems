@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { sendPushNotification } from '@/lib/push-notifications'
+import { firebaseSender } from '@/lib/firebase-admin'
 import { apnsSender } from '@/lib/apns-config'
 
 // POST /api/mobile/notifications/test - Send a test push notification
@@ -39,32 +40,15 @@ export async function POST(request: NextRequest) {
     const { 
       title = '🧪 Server Test Notification', 
       body = 'This is a test push notification sent from the server!',
-      data = {}
+      data = {},
+      useFirebase = true // Default to Firebase, can be overridden
     } = requestBody
 
-    console.log(`🔔 [Test API] Test notification data:`, { title, body, userId: user.id })
-
-    // Check APNs configuration status
-    const apnsStatus = apnsSender.getStatus()
-    
-    if (!apnsStatus.configured) {
-      console.log('🔔 [Test API] APNs not properly configured')
-      return NextResponse.json({ 
-        success: false, 
-        error: 'APNs configuration incomplete',
-        code: 'APNS_NOT_CONFIGURED',
-        details: {
-          configured: apnsStatus.configured,
-          initialized: apnsStatus.initialized,
-          keyExists: apnsStatus.keyExists,
-          environment: apnsStatus.environment
-        }
-      }, { status: 500 })
-    }
+    console.log(`🔔 [Test API] Test notification data:`, { title, body, userId: user.id, useFirebase })
 
     // Check if user has device tokens
     const deviceTokens = await payload.find({
-      collection: 'deviceTokens',
+      collection: 'device-tokens',
       where: {
         and: [
           { user: { equals: String(user.id) } },
@@ -83,14 +67,71 @@ export async function POST(request: NextRequest) {
         details: 'User has no registered device tokens. Make sure the device is properly registered.',
         data: {
           userId: user.id,
-          deviceTokensCount: 0,
-          apnsStatus
+          deviceTokensCount: 0
         }
       }, { status: 400 })
     }
 
-    // Send test notification to the current user using APNs
-    const result = await apnsSender.sendNotificationToUser(String(user.id), {
+    let result: any
+
+    // Try Firebase first (preferred method)
+    if (useFirebase) {
+      const firebaseStatus = firebaseSender.getStatus()
+      console.log('🔔 [Test API] Firebase status:', firebaseStatus)
+      
+      if (firebaseStatus.configured) {
+        console.log('🔔 [Test API] Using Firebase to send notification')
+        result = await firebaseSender.sendNotificationToUser(String(user.id), {
+          title,
+          body,
+          badge: 1,
+          sound: 'default',
+          data: {
+            type: 'test_notification',
+            timestamp: Date.now(),
+            ...data
+          }
+        })
+        
+        if (result.success) {
+          return NextResponse.json({ 
+            success: true, 
+            message: 'Test notification sent successfully via Firebase',
+            data: {
+              userId: user.id,
+              sentCount: result.sentCount,
+              method: 'firebase',
+              deviceTokensCount: deviceTokens.docs.length,
+              environment: process.env.NODE_ENV
+            }
+          })
+        } else {
+          console.log('🔔 [Test API] Firebase failed, trying APNs fallback')
+        }
+      } else {
+        console.log('🔔 [Test API] Firebase not configured, using APNs fallback')
+      }
+    }
+
+    // Fallback to APNs if Firebase fails or is not configured
+    const apnsStatus = apnsSender.getStatus()
+    console.log('🔔 [Test API] APNs status:', apnsStatus)
+    
+    if (!apnsStatus.configured) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'No notification system configured',
+        code: 'NO_NOTIFICATION_SYSTEM',
+        details: {
+          firebaseConfigured: firebaseSender.getStatus().configured,
+          apnsConfigured: apnsStatus.configured,
+          environment: process.env.NODE_ENV
+        }
+      }, { status: 500 })
+    }
+
+    console.log('🔔 [Test API] Using APNs to send notification')
+    result = await apnsSender.sendNotificationToUser(String(user.id), {
       title,
       body,
       badge: 1,
@@ -103,55 +144,41 @@ export async function POST(request: NextRequest) {
     })
 
     if (result.success) {
-      console.log(`🔔 [Test API] Test notification sent successfully to user ${user.id}`)
       return NextResponse.json({ 
         success: true, 
-        message: 'Test notification sent successfully',
+        message: 'Test notification sent successfully via APNs',
         data: {
           userId: user.id,
-          title,
-          body,
           sentCount: result.sentCount,
-          totalCount: result.totalCount,
+          method: 'apns',
           deviceTokensCount: deviceTokens.docs.length,
-          environment: process.env.NODE_ENV,
-          apnsStatus,
-          timestamp: new Date().toISOString()
+          environment: process.env.NODE_ENV
         }
       })
     } else {
-      console.log(`🔔 [Test API] Failed to send test notification to user ${user.id}`)
       return NextResponse.json({ 
         success: false, 
         error: 'Failed to send test notification',
         code: 'NOTIFICATION_FAILED',
-        details: {
-          sentCount: result.sentCount,
-          totalCount: result.totalCount,
-          errors: result.errors
-        },
+        details: result.error || 'Unknown error',
         data: {
           userId: user.id,
+          method: 'apns',
           deviceTokensCount: deviceTokens.docs.length,
-          environment: process.env.NODE_ENV,
-          apnsStatus,
-          timestamp: new Date().toISOString()
+          environment: process.env.NODE_ENV
         }
-      }, { status: 400 })
+      }, { status: 500 })
     }
+
   } catch (error) {
     console.error('🔔 [Test API] Error sending test notification:', error)
     
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorCode = error instanceof Error && 'code' in error ? String(error.code) : 'UNKNOWN_ERROR'
-    
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to send test notification',
-      code: errorCode,
-      details: errorMessage,
+      error: 'Internal server error',
+      code: 'SERVER_ERROR',
+      details: error instanceof Error ? error.message : 'Unknown error',
       data: {
-        timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV
       }
     }, { status: 500 })
@@ -185,12 +212,15 @@ export async function GET(request: NextRequest) {
       }, { status: 401 })
     }
 
+    // Get Firebase status
+    const firebaseStatus = firebaseSender.getStatus()
+    
     // Get APNs status
     const apnsStatus = apnsSender.getStatus()
     
     // Get user's device tokens
     const deviceTokens = await payload.find({
-      collection: 'deviceTokens',
+      collection: 'device-tokens',
       where: {
         and: [
           { user: { equals: String(user.id) } },
@@ -206,7 +236,9 @@ export async function GET(request: NextRequest) {
         userId: user.id,
         deviceTokensCount: deviceTokens.docs.length,
         environment: process.env.NODE_ENV,
+        firebaseStatus,
         apnsStatus,
+        preferredMethod: firebaseStatus.configured ? 'firebase' : 'apns',
         timestamp: new Date().toISOString()
       }
     })
