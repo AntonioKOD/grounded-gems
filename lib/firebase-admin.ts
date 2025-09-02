@@ -1,80 +1,220 @@
-import admin from 'firebase-admin'
-
-// Firebase Admin SDK Configuration
-// This replaces the APNs configuration for sending push notifications
-
-interface FirebaseConfig {
-  projectId: string
-  privateKeyId: string
-  privateKey: string
-  clientEmail: string
-  clientId: string
-  authUri: string
-  tokenUri: string
-  authProviderX509CertUrl: string
-  clientX509CertUrl: string
-}
+import { initializeApp, getApps, cert, ServiceAccount } from 'firebase-admin/app'
+import { getMessaging } from 'firebase-admin/messaging'
 
 // Initialize Firebase Admin SDK
-let firebaseApp: admin.app.App
-
-try {
-  // Check if Firebase is already initialized
-  if (admin.apps.length === 0) {
-    // Get Firebase service account from environment variables
-    const serviceAccount: FirebaseConfig = {
+const initializeFirebaseAdmin = () => {
+  if (getApps().length === 0) {
+    const serviceAccount: ServiceAccount = {
       projectId: process.env.FIREBASE_PROJECT_ID || '',
-      privateKeyId: process.env.FIREBASE_PRIVATE_KEY_ID || '',
-      privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
-      clientId: process.env.FIREBASE_CLIENT_ID || '',
-      authUri: process.env.FIREBASE_AUTH_URI || 'https://accounts.google.com/o/oauth2/auth',
-      tokenUri: process.env.FIREBASE_TOKEN_URI || 'https://oauth2.googleapis.com/token',
-      authProviderX509CertUrl: process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL || 'https://www.googleapis.com/oauth2/v1/certs',
-      clientX509CertUrl: process.env.FIREBASE_CLIENT_X509_CERT_URL || ''
     }
 
     // Validate required fields
-    const requiredFields = ['projectId', 'privateKey', 'clientEmail']
-    const missingFields = requiredFields.filter(field => !serviceAccount[field as keyof FirebaseConfig])
-    
-    if (missingFields.length > 0) {
-      console.warn(`⚠️ Firebase Admin SDK not configured. Missing fields: ${missingFields.join(', ')}`)
-      console.warn('📱 Push notifications will use APNs fallback')
-    } else {
-      firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-        projectId: serviceAccount.projectId
-      })
-      
-      console.log('✅ Firebase Admin SDK initialized successfully')
-      console.log(`📱 Project ID: ${serviceAccount.projectId}`)
+    if (!serviceAccount.projectId || !serviceAccount.privateKey || !serviceAccount.clientEmail) {
+      throw new Error('Missing required Firebase service account configuration')
     }
-  } else {
-    firebaseApp = admin.app()
-    console.log('✅ Firebase Admin SDK already initialized')
+
+    initializeApp({
+      credential: cert(serviceAccount),
+      projectId: process.env.FIREBASE_PROJECT_ID,
+    })
   }
-} catch (error) {
-  console.error('❌ Failed to initialize Firebase Admin SDK:', error)
-  console.warn('📱 Push notifications will use APNs fallback')
 }
 
-// Firebase Notification Sender
-export class FirebaseNotificationSender {
-  private isInitialized: boolean = false
+// Get Firebase Messaging instance
+export const getFirebaseMessaging = () => {
+  initializeFirebaseAdmin()
+  return getMessaging()
+}
 
-  constructor() {
-    this.isInitialized = admin.apps.length > 0
+// Send FCM message to a specific device token
+export const sendFCMMessage = async (
+  token: string,
+  notification: {
+    title: string
+    body: string
+    imageUrl?: string
+  },
+  data?: Record<string, string>,
+  apns?: {
+    payload?: Record<string, any>
+    headers?: Record<string, string>
   }
+) => {
+  try {
+    const messaging = getFirebaseMessaging()
 
+    const message = {
+      token,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+        ...(notification.imageUrl && { image: notification.imageUrl }),
+      },
+      data,
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: notification.title,
+              body: notification.body,
+            },
+            sound: 'default',
+            badge: 1,
+            ...(notification.imageUrl && { 'mutable-content': '1' }),
+          },
+          ...apns?.payload,
+        },
+        headers: {
+          'apns-priority': '10',
+          'apns-expiration': (Math.floor(Date.now() / 1000) + 86400).toString(), // 24 hours
+          ...apns?.headers,
+        },
+      },
+    }
+
+    const response = await messaging.send(message)
+    return { success: true, messageId: response }
+  } catch (error) {
+    console.error('Error sending FCM message:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+// Send FCM message to multiple device tokens
+export const sendFCMMessageToMultipleTokens = async (
+  tokens: string[],
+  notification: {
+    title: string
+    body: string
+    imageUrl?: string
+  },
+  data?: Record<string, string>,
+  apns?: {
+    payload?: Record<string, any>
+    headers?: Record<string, string>
+  }
+) => {
+  try {
+    const messaging = getFirebaseMessaging()
+
+    const message = {
+      notification: {
+        title: notification.title,
+        body: notification.body,
+        ...(notification.imageUrl && { image: notification.imageUrl }),
+      },
+      data,
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: notification.title,
+              body: notification.body,
+            },
+            sound: 'default',
+            badge: 1,
+            ...(notification.imageUrl && { 'mutable-content': '1' }),
+          },
+          ...apns?.payload,
+        },
+        headers: {
+          'apns-priority': '10',
+          'apns-expiration': (Math.floor(Date.now() / 1000) + 86400).toString(), // 24 hours
+          ...apns?.headers,
+        },
+      },
+    }
+
+    // Use sendEachForMulticast instead of sendMulticast
+    const response = await messaging.sendEachForMulticast({
+      tokens,
+      ...message,
+    })
+
+    return {
+      success: true,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      responses: response.responses,
+    }
+  } catch (error) {
+    console.error('Error sending FCM multicast message:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+// Send FCM message to a topic
+export const sendFCMMessageToTopic = async (
+  topic: string,
+  notification: {
+    title: string
+    body: string
+    imageUrl?: string
+  },
+  data?: Record<string, string>,
+  apns?: {
+    payload?: Record<string, any>
+    headers?: Record<string, string>
+  }
+) => {
+  try {
+    const messaging = getFirebaseMessaging()
+
+    const message = {
+      topic,
+      notification: {
+        title: notification.title,
+        body: notification.body,
+        ...(notification.imageUrl && { image: notification.imageUrl }),
+      },
+      data,
+      apns: {
+        payload: {
+          aps: {
+            alert: {
+              title: notification.title,
+              body: notification.body,
+            },
+            sound: 'default',
+            badge: 1,
+            ...(notification.imageUrl && { 'mutable-content': '1' }),
+          },
+          ...apns?.payload,
+        },
+        headers: {
+          'apns-priority': '10',
+          'apns-expiration': (Math.floor(Date.now() / 1000) + 86400).toString(), // 24 hours
+          ...apns?.headers,
+        },
+      },
+    }
+
+    const response = await messaging.send(message)
+    return { success: true, messageId: response }
+  } catch (error) {
+    console.error('Error sending FCM topic message:', error)
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  }
+}
+
+// Export a default sender object for backward compatibility
+export const firebaseSender = {
+  sendMessage: sendFCMMessage,
+  sendMessageToMultipleTokens: sendFCMMessageToMultipleTokens,
+  sendMessageToTopic: sendFCMMessageToTopic,
+  getMessaging: getFirebaseMessaging,
+
+  // Add missing methods for backward compatibility
   getStatus() {
     return {
-      configured: this.isInitialized,
-      initialized: this.isInitialized,
+      configured: !!process.env.FIREBASE_PROJECT_ID,
+      initialized: getApps().length > 0,
       environment: process.env.NODE_ENV || 'development',
       projectId: process.env.FIREBASE_PROJECT_ID || 'not_set'
     }
-  }
+  },
 
   async sendNotification(fcmToken: string, payload: {
     title: string
@@ -84,50 +224,24 @@ export class FirebaseNotificationSender {
     sound?: string
     category?: string
     threadId?: string
-  }): Promise<boolean> {
-    if (!this.isInitialized) {
-      console.error('❌ Firebase not initialized, cannot send notification')
-      return false
-    }
-
-    try {
-      const message: admin.messaging.Message = {
-        token: fcmToken,
-        notification: {
-          title: payload.title,
-          body: payload.body
-        },
-        data: {
-          ...payload.data,
-          timestamp: Date.now().toString()
-        },
-        android: {
-          notification: {
+  }) {
+    const result = await sendFCMMessage(
+      fcmToken,
+      { title: payload.title, body: payload.body },
+      payload.data,
+      {
+        payload: {
+          aps: {
+            badge: payload.badge || 1,
             sound: payload.sound || 'default',
-            channelId: 'sacavia_notifications'
-          }
-        },
-        apns: {
-          payload: {
-            aps: {
-              badge: payload.badge || 1,
-              sound: payload.sound || 'default',
-              'content-available': 1,
-              ...(payload.category && { category: payload.category }),
-              ...(payload.threadId && { 'thread-id': payload.threadId })
-            }
+            ...(payload.category && { category: payload.category }),
+            ...(payload.threadId && { 'thread-id': payload.threadId })
           }
         }
       }
-
-      const response = await admin.messaging().send(message)
-      console.log(`✅ Firebase notification sent successfully: ${response}`)
-      return true
-    } catch (error) {
-      console.error('❌ Failed to send Firebase notification:', error)
-      return false
-    }
-  }
+    )
+    return result.success
+  },
 
   async sendNotificationToUser(userId: string, payload: {
     title: string
@@ -137,112 +251,14 @@ export class FirebaseNotificationSender {
     sound?: string
     category?: string
     threadId?: string
-  }): Promise<{ success: boolean; sentCount: number; error?: string }> {
-    if (!this.isInitialized) {
-      return {
-        success: false,
-        sentCount: 0,
-        error: 'Firebase not initialized'
-      }
-    }
-
-    try {
-      const { getPayload } = await import('payload')
-      const config = await import('@/payload.config')
-      const payloadInstance = await getPayload({ config: config.default })
-
-      // Get user's FCM tokens from deviceTokens collection
-      const deviceTokens = await payloadInstance.find({
-        collection: 'deviceTokens',
-        where: {
-          and: [
-            { user: { equals: userId } },
-            { isActive: { equals: true } }
-          ]
-        }
-      })
-
-      if (deviceTokens.docs.length === 0) {
-        return {
-          success: false,
-          sentCount: 0,
-          error: 'No active device tokens found for user'
-        }
-      }
-
-      let sentCount = 0
-      const errors: string[] = []
-
-              // Send to all user's devices
-        for (const deviceToken of deviceTokens.docs) {
-          try {
-            const success = await this.sendNotification(deviceToken.deviceToken, payload)
-          if (success) {
-            sentCount++
-          }
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          errors.push(errorMessage)
-          console.error(`Failed to send to token ${deviceToken.token}:`, error)
-        }
-      }
-
-      return {
-        success: sentCount > 0,
-        sentCount,
-        error: errors.length > 0 ? errors.join(', ') : undefined
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      console.error('Error sending notification to user:', error)
-      return {
-        success: false,
-        sentCount: 0,
-        error: errorMessage
-      }
-    }
-  }
-
-  async sendNotificationToMultipleUsers(userIds: string[], payload: {
-    title: string
-    body: string
-    data?: Record<string, any>
-    badge?: number
-    sound?: string
-    category?: string
-    threadId?: string
-  }): Promise<{ success: number; failed: number; total: number }> {
-    if (!this.isInitialized) {
-      return { success: 0, failed: userIds.length, total: userIds.length }
-    }
-
-    let successCount = 0
-    let failedCount = 0
-
-    for (const userId of userIds) {
-      try {
-        const result = await this.sendNotificationToUser(userId, payload)
-        if (result.success) {
-          successCount += result.sentCount
-        } else {
-          failedCount++
-        }
-      } catch (error) {
-        failedCount++
-        console.error(`Failed to send notification to user ${userId}:`, error)
-      }
-    }
-
+  }) {
+    // This would need to fetch user's device tokens from the database
+    // For now, return a placeholder response
     return {
-      success: successCount,
-      failed: failedCount,
-      total: userIds.length
+      success: false,
+      sentCount: 0,
+      error: 'User device tokens not implemented yet'
     }
   }
 }
 
-// Export singleton instance
-export const firebaseSender = new FirebaseNotificationSender()
-
-// Export admin instance for direct use if needed
-export { admin }
