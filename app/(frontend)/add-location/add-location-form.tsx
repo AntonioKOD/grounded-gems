@@ -24,6 +24,7 @@ import {
   Save,
   Settings,
   Tag,
+  Trophy,
   Trash2,
   Upload,
   Users,
@@ -113,6 +114,11 @@ export default function AddLocationForm() {
   const [slugEdited, setSlugEdited] = useState(false)
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false)
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<{ isDuplicate: boolean; message?: string; existingLocation?: any } | null>(null)
+  
+  // Contest entry state
+  const [attested18, setAttested18] = useState(false)
+  const [showContestDialog, setShowContestDialog] = useState(false)
+  const [isContestSubmitting, setIsContestSubmitting] = useState(false)
 
   // Basic info
   const [locationName, setLocationName] = useState("")
@@ -1002,6 +1008,132 @@ export default function AddLocationForm() {
       setIsSubmitting(false)
     }
   }
+
+  // Handle contest entry submission
+  const handleContestEntry = async () => {
+    if (!attested18) {
+      toast({
+        title: "Age Verification Required",
+        description: "You must be 18 or older to enter contests.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsContestSubmitting(true);
+    setShowContestDialog(false);
+
+    try {
+      // Prepare form data for contest entry
+      const contestFormData = {
+        // Basic
+        name: locationName,
+        slug: locationSlug || generateSlug(locationName),
+        description: locationDescription || "",
+        shortDescription: shortDescription || undefined,
+        featuredImage: locationImage || undefined,
+        gallery: gallery.length > 0
+          ? gallery.map((item) => ({
+              image: item.image,
+              caption: item.caption || undefined,
+            }))
+          : undefined,
+        categories: selectedCategories.length > 0 ? selectedCategories : [],
+        tags: tags.length > 0 ? tags.map(t => t.tag) : undefined,
+        
+        // Address
+        address: {
+          street: address.street,
+          city: address.city,
+          state: address.state,
+          zip: address.zip,
+          country: address.country,
+        },
+        neighborhood: address.neighborhood || undefined,
+        
+        // Contact & Business
+        contactInfo: {
+          phone: contactInfo.phone || undefined,
+          email: contactInfo.email || undefined,
+          website: contactInfo.website || undefined,
+          socialMedia: {
+            facebook: contactInfo.socialMedia.facebook || undefined,
+            twitter: contactInfo.socialMedia.twitter || undefined,
+            instagram: contactInfo.socialMedia.instagram || undefined,
+            linkedin: contactInfo.socialMedia.linkedin || undefined,
+          },
+        },
+        businessHours: businessHours.map(hour => ({
+          day: hour.day,
+          open: hour.open || "",
+          close: hour.close || "",
+          isClosed: hour.closed || false,
+        })),
+        priceRange: ["free", "budget", "moderate", "expensive", "luxury"].includes(priceRange || "")
+          ? (priceRange as "free" | "budget" | "moderate" | "expensive" | "luxury")
+          : undefined,
+        bestTimeToVisit: bestTimeToVisit.length > 0 ? bestTimeToVisit.map(t => t.season) : undefined,
+        insiderTips: insiderTips || undefined,
+        accessibility: {
+          wheelchairAccess: accessibility.wheelchairAccess || undefined,
+          parking: accessibility.parking || undefined,
+          other: accessibility.other || undefined,
+        },
+        isFeatured: isFeatured || undefined,
+        isVerified: isVerified || undefined,
+        hasBusinessPartnership: hasPartnership || undefined,
+        partnershipDetails: hasPartnership
+          ? {
+              partnerName: partnershipDetails.partnerName || undefined,
+              partnerContact: partnershipDetails.partnerContact || undefined,
+              details: partnershipDetails.details || undefined,
+            }
+          : undefined,
+        meta: {
+          title: meta.title || undefined,
+          description: meta.description || undefined,
+          keywords: meta.keywords || undefined,
+        },
+        privacy: privacy,
+        privateAccess: privacy === 'private' && privateAccess.length > 0 ? privateAccess : undefined,
+        
+        // Contest entry specific
+        attested18: true,
+      };
+
+      // Call contest checkout API
+      const response = await fetch('/api/contest/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user?.id || '',
+        },
+        body: JSON.stringify(contestFormData),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.url) {
+        // Redirect to Stripe checkout
+        window.location.href = result.url;
+      } else {
+        throw new Error(result.error || 'Failed to create contest entry');
+      }
+
+    } catch (error) {
+      console.error('Error creating contest entry:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      toast({
+        title: "Contest Entry Failed",
+        description: `Failed to create contest entry: ${errorMessage}`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsContestSubmitting(false);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto pb-20 md:pb-12">
@@ -2237,6 +2369,19 @@ export default function AddLocationForm() {
               <Save className="mr-2 h-5 w-5" />
               Save as Draft
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-green-600 text-green-600 hover:bg-green-600/5 h-14 md:h-12 text-base font-medium w-full md:w-auto order-3"
+              onClick={(e) => {
+                e.preventDefault()
+                setShowContestDialog(true)
+              }}
+              disabled={isSubmitting || !locationName || !locationDescription || selectedCategories.length === 0}
+            >
+              <Trophy className="mr-2 h-5 w-5" />
+              Enter Contest
+            </Button>
             <div className="flex-1 flex justify-center md:justify-end order-3">
               <Button
                 type="button"
@@ -2344,6 +2489,68 @@ export default function AddLocationForm() {
             </Button>
             <Button variant="outline" onClick={() => router.push("/map")}>
               View All Locations
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Contest Entry Dialog */}
+      <Dialog open={showContestDialog} onOpenChange={setShowContestDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-green-600">
+              <Trophy className="mr-2 h-5 w-5" />
+              Enter Location in Contest
+            </DialogTitle>
+            <DialogDescription>
+              Enter your location in the Sacavia Contest for a chance to win prizes and recognition!
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">What happens next?</h4>
+              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                <li>• Your location will be created and entered into contests</li>
+                <li>• You'll be redirected to secure payment ($20.00)</li>
+                <li>• After payment, your entry becomes contest eligible</li>
+                <li>• Users can vote for your location on the contest platform</li>
+              </ul>
+            </div>
+            
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="attested18"
+                checked={attested18}
+                onCheckedChange={(checked) => setAttested18(checked as boolean)}
+                className="mt-1"
+              />
+              <label htmlFor="attested18" className="text-sm text-gray-700 dark:text-gray-300">
+                I confirm that I am 18 years or older and eligible to enter contests
+              </label>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowContestDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleContestEntry}
+              disabled={!attested18 || isContestSubmitting}
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              {isContestSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Trophy className="mr-2 h-4 w-4" />
+                  Enter Contest ($20.00)
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

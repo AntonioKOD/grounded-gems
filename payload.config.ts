@@ -43,6 +43,8 @@ import { Reports } from './collections/Reports'
 import { UserBlocks } from './collections/UserBlocks'
 import Analytics from './collections/Analytics'
 import PushSubscriptions from './collections/PushSubscriptions'
+import { Experiences } from './collections/Experiences'
+import { ContestUpvotes } from './collections/ContestUpvotes'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -156,5 +158,7 @@ export default buildConfig({
     UserBlocks,
     Analytics,
     PushSubscriptions,
+    Experiences,
+    ContestUpvotes,
   ],
 })

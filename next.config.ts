@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   
+
+  
   // Enable output standalone for better performance
   output: 'standalone',
   

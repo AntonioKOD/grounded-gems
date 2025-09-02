@@ -58,6 +58,7 @@
     "out",
     "dist",
     "android",
-    "ios"
+    "ios",
+    "contest-app"
   ]
 }

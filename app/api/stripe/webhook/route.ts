@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
-import config from '@/payload.config'
+import payloadConfig from '@/payload.config'
 import Stripe from 'stripe'
+
+// Disable body parsing for Stripe webhook signature verification
+export const dynamic = 'force-dynamic'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: '2025-05-28.basil',
@@ -18,7 +21,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const payload = await getPayload({ config })
+  const payload = await getPayload({ config: payloadConfig })
   const sig = request.headers.get('stripe-signature')
   const body = await request.text()
 
@@ -53,6 +56,10 @@ export async function POST(request: NextRequest) {
         
       case 'charge.dispute.created':
         await handleDisputeCreated(event.data.object as Stripe.Dispute, payload)
+        break
+        
+      case 'checkout.session.completed':
+        await handleContestCheckoutCompleted(event.data.object as Stripe.Checkout.Session, payload)
         break
         
       case 'invoice.payment_succeeded':
@@ -310,5 +317,96 @@ async function handleDisputeCreated(dispute: Stripe.Dispute, payload: any) {
     console.log('Dispute created for purchase:', purchase.id)
   } catch (error) {
     console.error('Error handling dispute:', error)
+  }
+}
+
+async function handleContestCheckoutCompleted(session: Stripe.Checkout.Session, payload: any) {
+  try {
+    // Only process paid sessions
+    if (session.payment_status !== 'paid') {
+      console.log('Contest checkout session not paid:', session.id, 'Status:', session.payment_status)
+      return
+    }
+
+    // Extract metadata
+    const { experienceId, userId, type } = session.metadata || {}
+    
+    if (!experienceId || !userId || type !== 'contest_entry') {
+      console.log('Contest checkout session missing required metadata:', session.id, session.metadata)
+      return
+    }
+
+    console.log('🎯 Processing contest checkout completion:', {
+      sessionId: session.id,
+      experienceId,
+      userId,
+      amount: session.amount_total,
+      currency: session.currency
+    })
+
+    // Check if experience is already contest eligible (idempotency)
+    const experience = await payload.findByID({
+      collection: 'experiences',
+      id: experienceId
+    })
+
+    if (!experience) {
+      console.error('❌ Experience not found for contest checkout:', experienceId)
+      return
+    }
+
+    if (experience.contestEligible) {
+      console.log('✅ Experience already contest eligible, skipping update:', experienceId)
+      return
+    }
+
+    // Update experience to contest eligible
+    await payload.update({
+      collection: 'experiences',
+      id: experienceId,
+      data: {
+        contestEligible: true,
+        status: 'PUBLISHED'
+      }
+    })
+
+    console.log('✅ Experience updated to contest eligible:', experienceId)
+
+    // Log payment record (minimal since no payments collection exists)
+    const paymentRecord = {
+      userId,
+      experienceId,
+      provider: 'stripe',
+      providerRef: session.id,
+      amount: session.amount_total,
+      currency: session.currency,
+      status: 'succeeded',
+      type: 'contest_entry',
+      createdAt: new Date().toISOString()
+    }
+
+    console.log('💰 Payment record logged:', paymentRecord)
+
+    // Send notification to user about successful contest entry
+    await payload.create({
+      collection: 'notifications',
+      data: {
+        recipient: userId,
+        type: 'contest_entry_success',
+        title: 'Contest Entry Successful! 🏆',
+        message: `Your experience "${experience.title}" has been successfully entered into contests!`,
+        priority: 'high',
+        relatedTo: {
+          relationTo: 'experiences',
+          value: experienceId
+        }
+      }
+    })
+
+    console.log('✅ Contest checkout completed successfully for experience:', experienceId)
+
+  } catch (error) {
+    console.error('❌ Error handling contest checkout completion:', error)
+    throw error // Re-throw to trigger webhook failure response
   }
 } 
