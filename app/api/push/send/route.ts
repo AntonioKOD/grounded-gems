@@ -217,27 +217,32 @@ export async function POST(request: NextRequest) {
 
     // Log the notification in the notifications collection
     try {
-      await payload.create({
-        collection: 'notifications',
-        data: {
-          title: notification.title,
-          body: notification.body,
-          type: 'push',
-          recipient: type === 'user' ? target : undefined, // Use 'recipient' instead of 'recipients'
-          read: false,
-          data: data || {},
-          metadata: {
-            notificationType: type,
-            target,
-            result,
-            sentCount: result.sentCount,
-            failedCount: result.failedCount,
-            status: result.success ? 'sent' : 'failed'
+      // Only log notifications that have a valid recipient (user notifications)
+      if (type === 'user' && target) {
+        await payload.create({
+          collection: 'notifications',
+          data: {
+            title: notification.title,
+            message: notification.body, // Use 'message' instead of 'body'
+            type: 'push', // Add 'push' as a valid type option
+            recipient: target, // Only set recipient for user notifications
+            read: false,
+            metadata: {
+              notificationType: type,
+              target,
+              result,
+              sentCount: result.sentCount,
+              failedCount: result.failedCount,
+              status: result.success ? 'sent' : 'failed'
+            }
           }
-        }
-      })
+        })
+        console.log('✅ [Push] Notification logged to database')
+      } else {
+        console.log('ℹ️ [Push] Skipping notification logging for non-user notification type:', type)
+      }
     } catch (logError) {
-      console.warn('Failed to log notification:', logError)
+      console.warn('❌ [Push] Failed to log notification:', logError)
     }
 
     // Return appropriate status code based on success

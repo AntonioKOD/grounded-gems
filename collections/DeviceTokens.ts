@@ -45,6 +45,7 @@ const DeviceTokens: CollectionConfig = {
       name: 'deviceToken',
       type: 'text',
       required: true,
+      unique: true,
       admin: {
         description: 'FCM device token (unique identifier)',
       },
@@ -53,6 +54,13 @@ const DeviceTokens: CollectionConfig = {
           return 'Device token must be at least 10 characters long'
         }
         return true
+      },
+    },
+    {
+      name: 'apnsToken',
+      type: 'text',
+      admin: {
+        description: 'Native iOS APNs device token (for direct APNs notifications)',
       },
     },
     {

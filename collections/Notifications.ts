@@ -129,6 +129,8 @@ export const Notifications: CollectionConfig = {
         { label: "System Maintenance", value: "system_maintenance" },
         { label: "Feature Update", value: "feature_update" },
         { label: "Welcome", value: "welcome" },
+        // Push notification type
+        { label: "Push Notification", value: "push" },
       ],
     },
     {
