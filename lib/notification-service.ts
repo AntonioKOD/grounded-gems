@@ -55,14 +55,23 @@ export class NotificationService {
    */
   static async sendToUser(notification: UserNotification) {
     try {
-      // This would typically fetch the user's device tokens from the database
-      // For now, we'll assume the notification service handles this
-      const response = await fetch('/api/fcm/send-notification', {
-        method: 'PUT',
+      // Send notification using the push API
+      const response = await fetch('/api/push/send', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(notification),
+        body: JSON.stringify({
+          type: 'user',
+          target: notification.userId,
+          notification: {
+            title: notification.title,
+            body: notification.body,
+            imageUrl: notification.imageUrl
+          },
+          data: notification.data,
+          apns: notification.apns
+        }),
       })
 
       return await response.json()
@@ -77,12 +86,23 @@ export class NotificationService {
    */
   static async sendToUsers(notification: BulkNotification) {
     try {
-      const response = await fetch('/api/fcm/send-notification', {
+      // Send notification to multiple users using the push API
+      const response = await fetch('/api/push/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(notification),
+        body: JSON.stringify({
+          type: 'user',
+          target: notification.userIds.join(','), // For multiple users, we'll need to handle this differently
+          notification: {
+            title: notification.title,
+            body: notification.body,
+            imageUrl: notification.imageUrl
+          },
+          data: notification.data,
+          apns: notification.apns
+        }),
       })
 
       return await response.json()

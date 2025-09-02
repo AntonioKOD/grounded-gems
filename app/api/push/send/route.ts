@@ -217,32 +217,48 @@ export async function POST(request: NextRequest) {
 
     // Log the notification in the notifications collection
     try {
-      // Only log notifications that have a valid recipient (user notifications)
+      // Log all notifications to the database for tracking
       if (type === 'user' && target) {
-        await payload.create({
-          collection: 'notifications',
-          data: {
-            title: notification.title,
-            message: notification.body, // Use 'message' instead of 'body'
-            type: 'push', // Add 'push' as a valid type option
-            recipient: target, // Only set recipient for user notifications
-            read: false,
-            metadata: {
-              notificationType: type,
-              target,
-              result,
-              sentCount: result.sentCount,
-              failedCount: result.failedCount,
-              status: result.success ? 'sent' : 'failed'
+        // Validate that target is a valid MongoDB ObjectId (24 character hex string)
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(target)
+        
+        if (isValidObjectId) {
+          // For user notifications with valid ObjectId, we can set a specific recipient
+          await payload.create({
+            collection: 'notifications',
+            data: {
+              title: notification.title,
+              message: notification.body,
+              type: 'push',
+              recipient: target,
+              read: false,
+              metadata: {
+                notificationType: type,
+                target,
+                result,
+                sentCount: result.sentCount,
+                failedCount: result.failedCount,
+                status: result.success ? 'sent' : 'failed'
+              }
             }
-          }
-        })
-        console.log('✅ [Push] Notification logged to database')
-      } else {
-        console.log('ℹ️ [Push] Skipping notification logging for non-user notification type:', type)
+          })
+          console.log('✅ [Push] User notification logged to database for recipient:', target)
+        } else {
+          // For user notifications with invalid ObjectId, skip logging since recipient is required
+          console.log('⚠️ [Push] Target is not a valid ObjectId, skipping database logging:', target)
+          console.log('⚠️ [Push] To log notifications, use valid 24-character MongoDB ObjectIds')
+        }
+      } else if (type === 'token' || type === 'topic') {
+        // For token/topic notifications, we can't log them without a recipient
+        // since the recipient field is required. We'll skip logging these for now.
+        console.log('ℹ️ [Push] Skipping database logging for token/topic notifications (no recipient)')
       }
     } catch (logError) {
       console.warn('❌ [Push] Failed to log notification:', logError)
+      console.warn('❌ [Push] Error details:', {
+        message: logError instanceof Error ? logError.message : 'Unknown error',
+        stack: logError instanceof Error ? logError.stack : undefined
+      })
     }
 
     // Return appropriate status code based on success
