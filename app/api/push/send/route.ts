@@ -223,16 +223,16 @@ export async function POST(request: NextRequest) {
           title: notification.title,
           body: notification.body,
           type: 'push',
-          platform: 'all', // or determine from target type
-          recipients: type === 'user' ? [target] : [],
-          sentCount: result.sentCount,
-          failedCount: result.failedCount,
+          recipient: type === 'user' ? target : undefined, // Use 'recipient' instead of 'recipients'
+          read: false,
           data: data || {},
-          status: result.success ? 'sent' : 'failed',
           metadata: {
             notificationType: type,
             target,
-            result
+            result,
+            sentCount: result.sentCount,
+            failedCount: result.failedCount,
+            status: result.success ? 'sent' : 'failed'
           }
         }
       })

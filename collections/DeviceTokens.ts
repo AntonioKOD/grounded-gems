@@ -45,7 +45,6 @@ const DeviceTokens: CollectionConfig = {
       name: 'deviceToken',
       type: 'text',
       required: true,
-      unique: true,
       admin: {
         description: 'FCM device token (unique identifier)',
       },
@@ -217,10 +216,6 @@ const DeviceTokens: CollectionConfig = {
     ],
   },
   indexes: [
-    {
-      fields: ['deviceToken'],
-      unique: true,
-    },
     {
       fields: ['user', 'isActive'],
     },
