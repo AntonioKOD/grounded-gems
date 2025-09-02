@@ -4,21 +4,59 @@ import { getMessaging } from 'firebase-admin/messaging'
 // Initialize Firebase Admin SDK
 const initializeFirebaseAdmin = () => {
   if (getApps().length === 0) {
-    const serviceAccount: ServiceAccount = {
-      projectId: process.env.FIREBASE_PROJECT_ID || '',
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
-    }
+    try {
+      // Try to use the full service account JSON first
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        console.log('🔐 [Firebase] Using service account JSON from environment variable')
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON)
+        
+        initializeApp({
+          credential: cert(serviceAccount),
+          projectId: serviceAccount.project_id || process.env.FIREBASE_PROJECT_ID,
+        })
+        
+        console.log('✅ [Firebase] Initialized with service account JSON')
+        return
+      }
 
-    // Validate required fields
-    if (!serviceAccount.projectId || !serviceAccount.privateKey || !serviceAccount.clientEmail) {
-      throw new Error('Missing required Firebase service account configuration')
-    }
+      // Fallback to individual environment variables
+      console.log('🔐 [Firebase] Using individual environment variables')
+      
+      const serviceAccount: ServiceAccount = {
+        projectId: process.env.FIREBASE_PROJECT_ID || '',
+        privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
+      }
 
-    initializeApp({
-      credential: cert(serviceAccount),
-      projectId: process.env.FIREBASE_PROJECT_ID,
-    })
+      // Validate required fields
+      if (!serviceAccount.projectId || !serviceAccount.privateKey || !serviceAccount.clientEmail) {
+        const missingFields = []
+        if (!serviceAccount.projectId) missingFields.push('FIREBASE_PROJECT_ID')
+        if (!serviceAccount.privateKey) missingFields.push('FIREBASE_PRIVATE_KEY')
+        if (!serviceAccount.clientEmail) missingFields.push('FIREBASE_CLIENT_EMAIL')
+        
+        throw new Error(`Missing required Firebase service account configuration: ${missingFields.join(', ')}`)
+      }
+
+      // Log configuration (without sensitive data)
+      console.log('🔐 [Firebase] Configuration:')
+      console.log(`  - Project ID: ${serviceAccount.projectId}`)
+      console.log(`  - Client Email: ${serviceAccount.clientEmail}`)
+      console.log(`  - Private Key: ${serviceAccount.privateKey ? '✅ Set' : '❌ Missing'}`)
+
+      initializeApp({
+        credential: cert(serviceAccount),
+        projectId: process.env.FIREBASE_PROJECT_ID,
+      })
+      
+      console.log('✅ [Firebase] Initialized with environment variables')
+      
+    } catch (error) {
+      console.error('❌ [Firebase] Failed to initialize:', error)
+      throw new Error(`Firebase initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  } else {
+    console.log('✅ [Firebase] Already initialized')
   }
 }
 
