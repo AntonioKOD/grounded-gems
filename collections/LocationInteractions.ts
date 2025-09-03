@@ -69,6 +69,7 @@ export const LocationInteractions: CollectionConfig = {
             let title = '';
             let message = '';
             let priority = 'normal';
+            let visitCount = null; // Declare visitCount in broader scope
 
             switch (doc.type) {
               case 'like':
@@ -76,6 +77,13 @@ export const LocationInteractions: CollectionConfig = {
                 notificationType = 'location_liked';
                 title = `${user.name || 'Someone'} liked your location`;
                 message = `${user.name || 'A user'} liked "${location.name}"`;
+                break;
+              
+              case 'save':
+                shouldNotify = true;
+                notificationType = 'location_saved';
+                title = `${user.name || 'Someone'} saved your location`;
+                message = `${user.name || 'A user'} saved "${location.name}" to their favorites`;
                 break;
               
               case 'share':
@@ -95,7 +103,7 @@ export const LocationInteractions: CollectionConfig = {
               
               case 'visit':
                 // Only notify for special milestones (every 10th visit, 50th, 100th, etc.)
-                const visitCount = await req.payload.count({
+                visitCount = await req.payload.count({
                   collection: 'locationInteractions',
                   where: {
                     location: {
@@ -115,39 +123,80 @@ export const LocationInteractions: CollectionConfig = {
                   priority = 'high';
                 }
                 break;
+              
+              case 'subscribe':
+                shouldNotify = true;
+                notificationType = 'location_followed';
+                title = `${user.name || 'Someone'} subscribed to your location`;
+                message = `${user.name || 'A user'} subscribed to updates from "${location.name}"`;
+                break;
+              
+              case 'unsubscribe':
+                // Don't notify for unsubscribes
+                shouldNotify = false;
+                break;
             }
 
             if (shouldNotify) {
-              await req.payload.create({
-                collection: 'notifications',
-                data: {
-                  recipient: location.createdBy,
-                  type: notificationType,
-                  title,
-                  message,
-                  relatedTo: {
-                    relationTo: 'locations',
-                    value: locationId,
+              try {
+                // Use notification hooks for automatic push notifications
+                const { notificationHooks } = await import('@/lib/notification-hooks');
+                
+                if (notificationType === 'location_milestone' && visitCount) {
+                  await notificationHooks.onMilestoneReached(
+                    location.createdBy,
+                    'visit_count',
+                    `${visitCount.totalDocs} visits`,
+                    locationId,
+                    location.name
+                  );
+                } else {
+                  await notificationHooks.onLocationInteraction(
+                    location.createdBy,
+                    userId,
+                    user.name || 'Someone',
+                    locationId,
+                    location.name,
+                    doc.type as 'like' | 'save' | 'share' | 'check_in' | 'review' | 'subscribe'
+                  );
+                }
+                
+                console.log('✅ [LocationInteractions] Notification sent via hooks for', doc.type);
+              } catch (notificationError) {
+                console.warn('Failed to send notification via hooks:', notificationError);
+                
+                // Fallback to manual notification creation if hooks fail
+                await req.payload.create({
+                  collection: 'notifications',
+                  data: {
+                    recipient: location.createdBy,
+                    type: notificationType,
+                    title,
+                    message,
+                    relatedTo: {
+                      relationTo: 'locations',
+                      value: locationId,
+                    },
+                    actionBy: userId,
+                    metadata: {
+                      interactionType: doc.type,
+                      locationName: location.name,
+                      userName: user.name,
+                      coordinates: doc.coordinates,
+                      visitCount: notificationType === 'location_milestone' ? 
+                        (await req.payload.count({
+                          collection: 'locationInteractions',
+                          where: {
+                            location: { equals: locationId },
+                            type: { equals: 'visit' },
+                          },
+                        })).totalDocs : undefined,
+                    },
+                    priority,
+                    read: false,
                   },
-                  actionBy: userId,
-                  metadata: {
-                    interactionType: doc.type,
-                    locationName: location.name,
-                    userName: user.name,
-                    coordinates: doc.coordinates,
-                    visitCount: notificationType === 'location_milestone' ? 
-                      (await req.payload.count({
-                        collection: 'locationInteractions',
-                        where: {
-                          location: { equals: locationId },
-                          type: { equals: 'visit' },
-                        },
-                      })).totalDocs : undefined,
-                  },
-                  priority,
-                  read: false,
-                },
-              });
+                });
+              }
             }
           }
         } catch (error) {

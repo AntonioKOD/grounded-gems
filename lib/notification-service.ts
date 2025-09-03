@@ -226,30 +226,151 @@ export class NotificationService {
       // Send push notification to all user's devices
       for (const tokenDoc of deviceTokens.docs) {
         try {
-          // Ensure all data values are strings for FCM compatibility
-          const fcmData = this.convertMetadataToStrings(notification.data || {})
+          // Determine token type and send accordingly
+          // For iOS, prioritize FCM token since that's what the app registers
+          let token = null
+          const platform = tokenDoc.platform || 'ios'
           
-          const result = await sendFCMMessage(
-            tokenDoc.deviceToken,
-            {
-              title: notification.title,
-              body: notification.body,
-              imageUrl: notification.imageUrl
-            },
-            fcmData,
-            notification.apns
-          )
-          
-          if (result.success) {
-            successCount++
-            console.log(`✅ [NotificationService] Push notification sent to device ${tokenDoc.deviceToken.substring(0, 20)}...`)
+          if (platform === 'ios') {
+            // iOS app registers FCM tokens, so use that first
+            token = tokenDoc.fcmToken || tokenDoc.deviceToken || tokenDoc.apnsToken
           } else {
-            failedCount++
-            console.log(`❌ [NotificationService] Failed to send push notification to device ${tokenDoc.deviceToken.substring(0, 20)}...: ${result.error}`)
+            // For other platforms, use deviceToken first
+            token = tokenDoc.deviceToken || tokenDoc.fcmToken || tokenDoc.apnsToken
+          }
+          
+          if (!token) {
+            console.log(`⚠️ [NotificationService] No valid token found for device ${tokenDoc.id}`)
+            continue
+          }
+
+          console.log(`📱 [NotificationService] Sending to device ${tokenDoc.id} (${platform}) with token: ${token.substring(0, 20)}...`)
+          
+          // For iOS devices, always try FCM first since that's what the app registers
+          if (platform === 'ios') {
+            try {
+              // Send via FCM for iOS devices (this is what the app registers)
+              const fcmData = this.convertMetadataToStrings(notification.data || {})
+              const result = await sendFCMMessage(
+                token,
+                {
+                  title: notification.title,
+                  body: notification.body,
+                  imageUrl: notification.imageUrl
+                },
+                fcmData,
+                {
+                  payload: {
+                    aps: {
+                      badge: 1,
+                      sound: 'default',
+                      'content-available': 1
+                    }
+                  }
+                }
+              )
+              
+              if (result.success) {
+                successCount++
+                console.log(`✅ [NotificationService] FCM notification sent to iOS device ${tokenDoc.id}`)
+              } else {
+                failedCount++
+                console.log(`❌ [NotificationService] Failed to send FCM notification to iOS device ${tokenDoc.id}: ${result.error}`)
+                
+                // Check if this is an invalid token error
+                if (result.error && (
+                  result.error.includes('invalid-argument') ||
+                  result.error.includes('not a valid FCM registration token') ||
+                  result.error.includes('registration token is not valid')
+                )) {
+                  console.log(`🚨 [NotificationService] Invalid FCM token detected for device ${tokenDoc.id}, marking for cleanup`)
+                  await this.deactivateToken(String(tokenDoc.id), 'Invalid FCM token - automatically deactivated')
+                }
+              }
+            } catch (fcmError) {
+              console.warn(`⚠️ [NotificationService] FCM failed for iOS device ${tokenDoc.id}, trying APNs fallback:`, fcmError)
+              
+              // Check if this is an invalid token error
+              const errorMessage = fcmError instanceof Error ? fcmError.message : String(fcmError)
+              if (errorMessage.includes('invalid-argument') ||
+                  errorMessage.includes('not a valid FCM registration token') ||
+                  errorMessage.includes('registration token is not valid')) {
+                console.log(`🚨 [NotificationService] Invalid FCM token detected for device ${tokenDoc.id}, marking for cleanup`)
+                await this.deactivateToken(String(tokenDoc.id), 'Invalid FCM token - automatically deactivated')
+              }
+              
+              // Fallback to APNs if FCM fails and APNs token is available
+              if (tokenDoc.apnsToken) {
+                try {
+                  const { sendAPNsNotification } = await import('@/lib/apns-config')
+                  const apnsResult = await sendAPNsNotification(tokenDoc.apnsToken, {
+                    title: notification.title,
+                    body: notification.body,
+                    data: notification.data || {},
+                    badge: 1,
+                    sound: 'default'
+                  })
+                  
+                  if (apnsResult) {
+                    successCount++
+                    console.log(`✅ [NotificationService] APNs fallback successful for device ${tokenDoc.id}`)
+                  } else {
+                    failedCount++
+                    console.log(`❌ [NotificationService] APNs fallback failed for device ${tokenDoc.id}`)
+                  }
+                } catch (apnsError) {
+                  failedCount++
+                  console.error(`❌ [NotificationService] Both FCM and APNs failed for iOS device ${tokenDoc.id}:`, apnsError)
+                }
+              } else {
+                failedCount++
+                console.error(`❌ [NotificationService] FCM failed and no APNs token available for device ${tokenDoc.id}`)
+              }
+            }
+          } else {
+            // Send via FCM for other platforms
+            const fcmData = this.convertMetadataToStrings(notification.data || {})
+            const result = await sendFCMMessage(
+              token,
+              {
+                title: notification.title,
+                body: notification.body,
+                imageUrl: notification.imageUrl
+              },
+              fcmData,
+              notification.apns
+            )
+            
+            if (result.success) {
+              successCount++
+              console.log(`✅ [NotificationService] FCM notification sent to ${platform} device ${tokenDoc.id}`)
+            } else {
+              failedCount++
+              console.log(`❌ [NotificationService] Failed to send FCM notification to ${platform} device ${tokenDoc.id}: ${result.error}`)
+              
+              // Check if this is an invalid token error
+              if (result.error && (
+                result.error.includes('invalid-argument') ||
+                result.error.includes('not a valid FCM registration token') ||
+                result.error.includes('registration token is not valid')
+              )) {
+                console.log(`🚨 [NotificationService] Invalid FCM token detected for device ${tokenDoc.id}, marking for cleanup`)
+                await this.deactivateToken(String(tokenDoc.id), 'Invalid FCM token - automatically deactivated')
+              }
+            }
           }
         } catch (error) {
           failedCount++
-          console.error(`❌ [NotificationService] Error sending push notification to device ${tokenDoc.deviceToken.substring(0, 20)}...:`, error)
+          console.error(`❌ [NotificationService] Error sending push notification to device ${tokenDoc.id}:`, error)
+          
+          // Check if this is an invalid token error
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          if (errorMessage.includes('invalid-argument') ||
+              errorMessage.includes('not a valid FCM registration token') ||
+              errorMessage.includes('registration token is not valid')) {
+            console.log(`🚨 [NotificationService] Invalid FCM token detected for device ${tokenDoc.id}, marking for cleanup`)
+            await this.deactivateToken(String(tokenDoc.id), 'Invalid FCM token - automatically deactivated')
+          }
         }
       }
       
@@ -514,6 +635,148 @@ export class NotificationService {
       } : undefined,
       priority: 'normal'
     })
+  }
+
+  /**
+   * Validate FCM token format and clean up invalid tokens
+   */
+  static async validateAndCleanupTokens() {
+    try {
+      const payload = await getPayload({ config })
+      
+      console.log('🧹 [NotificationService] Starting token validation and cleanup...')
+      
+      // Get all active device tokens
+      const deviceTokens = await payload.find({
+        collection: 'deviceTokens',
+        where: {
+          isActive: { equals: true }
+        },
+        limit: 1000
+      })
+      
+      console.log(`🧹 [NotificationService] Found ${deviceTokens.docs.length} active device tokens to validate`)
+      
+      let validTokens = 0
+      let invalidTokens = 0
+      let cleanedUpTokens = 0
+      
+      for (const tokenDoc of deviceTokens.docs) {
+        try {
+          const platform = tokenDoc.platform || 'ios'
+          let token = null
+          
+          if (platform === 'ios') {
+            token = tokenDoc.fcmToken || tokenDoc.deviceToken || tokenDoc.apnsToken
+          } else {
+            token = tokenDoc.deviceToken || tokenDoc.fcmToken || tokenDoc.apnsToken
+          }
+          
+          if (!token) {
+            console.log(`⚠️ [Token Validation] No token found for device ${tokenDoc.id}, marking as inactive`)
+            await this.deactivateToken(String(tokenDoc.id), 'No token found')
+            cleanedUpTokens++
+            continue
+          }
+          
+          // Basic FCM token format validation
+          if (token.startsWith('fcm_') || token.length > 140) {
+            // This looks like a valid FCM token format
+            validTokens++
+            continue
+          }
+          
+          // For iOS, also check APNs token format
+          if (platform === 'ios' && tokenDoc.apnsToken && tokenDoc.apnsToken.length === 64) {
+            // Valid APNs token format
+            validTokens++
+            continue
+          }
+          
+          // If we get here, the token format is suspicious
+          console.log(`⚠️ [Token Validation] Suspicious token format for device ${tokenDoc.id}: ${token.substring(0, 20)}...`)
+          
+          // Try to send a test notification to validate the token
+          try {
+            const { sendFCMMessage } = await import('@/lib/firebase-admin')
+            const testResult = await sendFCMMessage(
+              token,
+              {
+                title: 'Test',
+                body: 'Token validation test'
+              },
+              { test: 'validation' }
+            )
+            
+            if (testResult.success) {
+              validTokens++
+              console.log(`✅ [Token Validation] Token ${tokenDoc.id} validated successfully`)
+            } else {
+              throw new Error(testResult.error)
+            }
+          } catch (validationError) {
+            const errorMessage = validationError instanceof Error ? validationError.message : String(validationError)
+            
+            if (errorMessage.includes('invalid-argument') ||
+                errorMessage.includes('not a valid FCM registration token') ||
+                errorMessage.includes('registration token is not valid')) {
+              
+              console.log(`🚨 [Token Validation] Invalid token confirmed for device ${tokenDoc.id}, deactivating`)
+              await this.deactivateToken(String(tokenDoc.id), 'Invalid FCM token - validation failed')
+              cleanedUpTokens++
+              invalidTokens++
+            } else {
+              // Other error, might be temporary, keep the token
+              validTokens++
+              console.log(`⚠️ [Token Validation] Token ${tokenDoc.id} validation failed with non-token error: ${errorMessage}`)
+            }
+          }
+          
+        } catch (error) {
+          console.error(`❌ [Token Validation] Error validating token ${tokenDoc.id}:`, error)
+          // Don't deactivate on validation errors, might be temporary
+        }
+      }
+      
+      console.log(`🧹 [Token Validation] Validation complete: ${validTokens} valid, ${invalidTokens} invalid, ${cleanedUpTokens} cleaned up`)
+      
+      return {
+        success: true,
+        validTokens,
+        invalidTokens,
+        cleanedUpTokens,
+        totalTokens: deviceTokens.docs.length
+      }
+      
+    } catch (error) {
+      console.error('❌ [Token Validation] Token validation failed:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+  }
+  
+  /**
+   * Deactivate a device token
+   */
+  private static async deactivateToken(tokenId: string, reason: string) {
+    try {
+      const payload = await getPayload({ config })
+      
+      await payload.update({
+        collection: 'deviceTokens',
+        id: tokenId,
+        data: {
+          isActive: false,
+          lastError: reason,
+          deactivatedAt: new Date().toISOString()
+        }
+      })
+      
+      console.log(`✅ [Token Cleanup] Deactivated device token ${tokenId}: ${reason}`)
+      return true
+    } catch (error) {
+      console.error(`❌ [Token Cleanup] Failed to deactivate token ${tokenId}:`, error)
+      return false
+    }
   }
 }
 

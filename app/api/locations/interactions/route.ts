@@ -185,6 +185,43 @@ export async function POST(req: NextRequest) {
           break;
       }
 
+      // Send push notification to location creator using notification hooks
+      try {
+        const location = await payload.findByID({
+          collection: 'locations',
+          id: locationId,
+        });
+
+        if (location && location.createdBy && location.createdBy !== interaction.user) {
+          const creatorId = typeof location.createdBy === 'string' 
+            ? location.createdBy 
+            : location.createdBy?.id;
+
+          if (creatorId) {
+            const user = await payload.findByID({
+              collection: 'users',
+              id: interaction.user,
+            });
+
+            // Use notification hooks for automatic push notifications
+            const { notificationHooks } = await import('@/lib/notification-hooks');
+            await notificationHooks.onLocationInteraction(
+              creatorId,
+              interaction.user,
+              user?.name || 'Someone',
+              locationId,
+              location.name,
+              interactionType as 'like' | 'save' | 'share' | 'check_in' | 'review' | 'subscribe'
+            );
+            
+            console.log('✅ [Location Interactions API] Notification sent via hooks for', interactionType);
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send location interaction notification:', notificationError);
+        // Don't fail the interaction creation if notification fails
+      }
+
       // Clean up request tracking
       pendingRequests.delete(requestKey);
 

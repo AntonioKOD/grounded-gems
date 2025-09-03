@@ -52,7 +52,7 @@ export const Posts: CollectionConfig = {
 
         // --- Handle new post creation (mentions and video thumbnails) ---
         if (operation === 'create') {
-          // Handle mentions
+          // Handle mentions using notification hooks
           const mentions = extractMentions(doc.content);
           if (mentions.length) {
             const mentionedUserIds = await findUserIdsByUsernames(req.payload, mentions);
@@ -61,17 +61,34 @@ export const Posts: CollectionConfig = {
               : await req.payload.findByID({ collection: 'users', id: normalizeId(doc.author) });
 
             for (const userId of mentionedUserIds) {
-              await req.payload.create({
-                collection: 'notifications',
-                data: {
-                  recipient: userId,
-                  type: 'mention',
-                  title: `${author.name} mentioned you in a post`,
-                  message: doc.content.slice(0, 100) + (doc.content.length > 100 ? '...' : ''),
-                  relatedTo: { relationTo: 'posts', value: doc.id },
-                  read: false,
-                },
-              });
+              try {
+                // Use notification hooks for automatic push notifications
+                const { notificationHooks } = await import('@/lib/notification-hooks');
+                await notificationHooks.onUserMention(
+                  userId,
+                  author.id,
+                  author.name,
+                  doc.id,
+                  'post'
+                );
+                
+                console.log(`✅ [Posts] Mention notification sent via hooks to user ${userId}`);
+              } catch (notificationError) {
+                console.warn('Failed to send mention notification via hooks:', notificationError);
+                
+                // Fallback to manual notification creation if hooks fail
+                await req.payload.create({
+                  collection: 'notifications',
+                  data: {
+                    recipient: userId,
+                    type: 'mention',
+                    title: `${author.name} mentioned you in a post`,
+                    message: doc.content.slice(0, 100) + (doc.content.length > 100 ? '...' : ''),
+                    relatedTo: { relationTo: 'posts', value: doc.id },
+                    read: false,
+                  },
+                });
+              }
             }
           }
 
@@ -199,23 +216,41 @@ export const Posts: CollectionConfig = {
                 },
               });
 
-              // Mentions in comment
+              // Mentions in comment using notification hooks
               const mentions = extractMentions((comment as any).content);
               if (mentions.length) {
                 const mentionedUserIds = await findUserIdsByUsernames(req.payload, mentions);
                 for (const userId of mentionedUserIds) {
                   if (userId === authorId) continue;
-                  await req.payload.create({
-                    collection: 'notifications',
-                    data: {
-                      recipient: userId,
-                      type: 'mention',
-                      title: `${commenter.name} mentioned you in a comment`,
-                      message: (comment as any).content.slice(0, 100) + (((comment as any).content || '').length > 100 ? '...' : ''),
-                      relatedTo: { relationTo: 'posts', value: doc.id },
-                      read: false,
-                    },
-                  });
+                  
+                  try {
+                    // Use notification hooks for automatic push notifications
+                    const { notificationHooks } = await import('@/lib/notification-hooks');
+                    await notificationHooks.onUserMention(
+                      userId, // recipientId - who gets the notification
+                      String(commenter.id), // mentionerId - who mentioned them (convert to string)
+                      commenter.name, // mentionerName - name of the person who mentioned them
+                      doc.id, // postId - the post ID
+                      'post' // postType - type of post
+                    );
+                    
+                    console.log(`✅ [Posts] Comment mention notification sent via hooks to user ${userId}`);
+                  } catch (notificationError) {
+                    console.warn('Failed to send comment mention notification via hooks:', notificationError);
+                    
+                    // Fallback to manual notification creation if hooks fail
+                    await req.payload.create({
+                      collection: 'notifications',
+                      data: {
+                        recipient: userId,
+                        type: 'mention',
+                        title: `${commenter.name} mentioned you in a comment`,
+                        message: (comment as any).content.slice(0, 100) + (((comment as any).content || '').length > 100 ? '...' : ''),
+                        relatedTo: { relationTo: 'posts', value: doc.id },
+                        read: false,
+                      },
+                    });
+                  }
                 }
               }
             } catch (err) {

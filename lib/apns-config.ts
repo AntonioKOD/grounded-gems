@@ -339,3 +339,25 @@ export class APNsNotificationSender {
 
 // Export singleton instance
 export const apnsSender = new APNsNotificationSender()
+
+// Standalone function for sending APNs notifications
+export async function sendAPNsNotification(
+  deviceToken: string,
+  payload: {
+    title: string
+    body: string
+    data?: Record<string, any>
+    badge?: number
+    sound?: string
+    category?: string
+    threadId?: string
+  }
+): Promise<boolean> {
+  try {
+    const sender = new APNsNotificationSender()
+    return await sender.sendNotification(deviceToken, payload)
+  } catch (error) {
+    console.error('❌ Error in sendAPNsNotification:', error)
+    return false
+  }
+}

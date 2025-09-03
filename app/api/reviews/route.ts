@@ -154,6 +154,41 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // Notify location creator about the new review (if not the same user)
+    if (locationId && authorId !== locationId) {
+      try {
+        const location = await payload.findByID({
+          collection: 'locations',
+          id: locationId,
+        });
+
+        if (location && location.createdBy && location.createdBy !== authorId) {
+          const creatorId = typeof location.createdBy === 'string' 
+            ? location.createdBy 
+            : location.createdBy?.id;
+
+          if (creatorId) {
+            // Use notification hooks for automatic push notifications
+            const { notificationHooks } = await import('@/lib/notification-hooks');
+            await notificationHooks.onNewReview(
+              creatorId,
+              authorId,
+              user.name || 'Someone',
+              locationId,
+              location.name,
+              rating,
+              content
+            );
+            
+            console.log('✅ [Reviews API] Review notification sent via hooks');
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send review notification:', notificationError);
+        // Don't fail the review creation if notification fails
+      }
+    }
+
     return NextResponse.json({
       success: true,
       review,

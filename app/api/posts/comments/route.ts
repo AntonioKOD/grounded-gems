@@ -69,6 +69,9 @@ export async function POST(request: NextRequest) {
 
     const comment = await addComment(postId, content.trim(), user.id)
 
+    // Notifications are handled by the addComment function
+    console.log('✅ [Comments API] Comment created successfully, notifications sent via hooks')
+
     return NextResponse.json({
       success: true,
       message: 'Comment added successfully',

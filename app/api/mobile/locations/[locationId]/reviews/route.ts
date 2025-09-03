@@ -113,6 +113,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
     console.log('[REVIEWS] Created review:', review)
 
+    // Notify location creator about the new review (if not the same user)
+    try {
+      const location = await payload.findByID({
+        collection: 'locations',
+        id: locationId,
+      });
+
+      if (location && location.createdBy && location.createdBy !== user.id) {
+        const creatorId = typeof location.createdBy === 'string' 
+          ? location.createdBy 
+          : location.createdBy?.id;
+
+        if (creatorId) {
+          // Use notification hooks for automatic push notifications
+          const { notificationHooks } = await import('@/lib/notification-hooks');
+          await notificationHooks.onNewReview(
+            creatorId,
+            user.id,
+            user.name || 'Someone',
+            locationId,
+            location.name,
+            rating,
+            content
+          );
+          
+          console.log('✅ [Mobile Reviews API] Review notification sent via hooks');
+        }
+      }
+    } catch (notificationError) {
+      console.warn('Failed to send review notification:', notificationError);
+      // Don't fail the review creation if notification fails
+    }
+
     // No need to manually update location stats here; handled by hooks
 
     return NextResponse.json({ success: true, data: { review } })

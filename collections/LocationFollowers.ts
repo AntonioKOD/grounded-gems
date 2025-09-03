@@ -130,29 +130,46 @@ export const LocationFollowers: CollectionConfig = {
             id: doc.user,
           });
 
-          // Notify location owner about new follower
+          // Notify location owner about new follower using notification hooks
           if (location.createdBy && location.createdBy !== doc.user) {
-            await req.payload.create({
-              collection: 'notifications',
-              data: {
-                recipient: location.createdBy,
-                type: 'location_followed',
-                title: `${user.name || 'Someone'} is now following ${location.name}`,
-                message: `${user.name || 'A user'} started following "${location.name}" and will receive updates about your location.`,
-                relatedTo: {
-                  relationTo: 'locations',
-                  value: doc.location,
+            try {
+              const { notificationHooks } = await import('@/lib/notification-hooks');
+              await notificationHooks.onLocationInteraction(
+                location.createdBy,
+                doc.user,
+                user.name || 'Someone',
+                doc.location,
+                location.name,
+                'subscribe'
+              );
+              
+              console.log('✅ [LocationFollowers] Subscription notification sent via hooks');
+            } catch (notificationError) {
+              console.warn('Failed to send location subscription notification:', notificationError);
+              
+              // Fallback to manual notification creation if hooks fail
+              await req.payload.create({
+                collection: 'notifications',
+                data: {
+                  recipient: location.createdBy,
+                  type: 'location_followed',
+                  title: `${user.name || 'Someone'} is now following ${location.name}`,
+                  message: `${user.name || 'A user'} started following "${location.name}" and will receive updates about your location.`,
+                  relatedTo: {
+                    relationTo: 'locations',
+                    value: doc.location,
+                  },
+                  actionBy: doc.user,
+                  metadata: {
+                    locationName: location.name,
+                    followerName: user.name,
+                    notificationPreferences: doc.notificationPreferences,
+                  },
+                  priority: 'normal',
+                  read: false,
                 },
-                actionBy: doc.user,
-                metadata: {
-                  locationName: location.name,
-                  followerName: user.name,
-                  notificationPreferences: doc.notificationPreferences,
-                },
-                priority: 'normal',
-                read: false,
-              },
-            });
+              });
+            }
           }
 
           // Update location follower count

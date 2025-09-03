@@ -1741,7 +1741,7 @@ export async function addComment(postId: string, content: string, userId: string
     })
 
     // Send push notification to post owner if commenting on someone else's post
-    if (post.createdBy && post.createdBy !== userId) {
+    if (post.author && post.author !== userId) {
       try {
         const { notificationHooks } = await import('@/lib/notification-hooks')
         const commenter = await payload.findByID({
@@ -1749,15 +1749,22 @@ export async function addComment(postId: string, content: string, userId: string
           id: userId,
         })
         
-        await notificationHooks.onUserComment(
-          post.author,
-          userId,
-          commenter?.name || 'Someone',
-          postId,
-          'post',
-          content
-        )
-        console.log(`✅ [addComment] Comment notification sent to post owner ${post.author}`)
+        // Get the post author ID (handle both string and object formats)
+        const postAuthorId = typeof post.author === 'string' ? post.author : post.author?.id
+        
+        if (postAuthorId) {
+          await notificationHooks.onUserComment(
+            postAuthorId,
+            userId,
+            commenter?.name || 'Someone',
+            postId,
+            'post',
+            content
+          )
+          console.log(`✅ [addComment] Comment notification sent to post owner ${postAuthorId}`)
+        } else {
+          console.warn('⚠️ [addComment] Could not determine post author ID for notification')
+        }
       } catch (notificationError) {
         console.warn('Failed to send comment notification:', notificationError)
         // Don't fail the comment operation if notification fails
@@ -2956,6 +2963,43 @@ export async function subscribeToLocation(userId: string, locationId: string, no
           updatedAt: new Date()
         }
       });
+
+      // Notify location creator about the subscription (if not the same user)
+      try {
+        const location = await payload.findByID({
+          collection: 'locations',
+          id: locationId,
+        });
+
+        if (location && location.createdBy && location.createdBy !== userId) {
+          const creatorId = typeof location.createdBy === 'string' 
+            ? location.createdBy 
+            : location.createdBy?.id;
+
+          if (creatorId) {
+            const user = await payload.findByID({
+              collection: 'users',
+              id: userId,
+            });
+
+            // Use notification hooks for automatic push notifications
+            const { notificationHooks } = await import('@/lib/notification-hooks');
+            await notificationHooks.onLocationInteraction(
+              creatorId,
+              userId,
+              user?.name || 'Someone',
+              locationId,
+              location.name,
+              'subscribe'
+            );
+            
+            console.log('✅ [subscribeToLocation] Subscription notification sent via hooks');
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send subscription notification:', notificationError);
+        // Don't fail the subscription operation if notification fails
+      }
     }
     
     return true;
@@ -3041,6 +3085,43 @@ export async function saveLocation(userId: string, locationId: string): Promise<
           createdAt: new Date()
         }
       });
+
+      // Notify location creator about the save (if not the same user)
+      try {
+        const location = await payload.findByID({
+          collection: 'locations',
+          id: locationId,
+        });
+
+        if (location && location.createdBy && location.createdBy !== userId) {
+          const creatorId = typeof location.createdBy === 'string' 
+            ? location.createdBy 
+            : location.createdBy?.id;
+
+          if (creatorId) {
+            const user = await payload.findByID({
+              collection: 'users',
+              id: userId,
+            });
+
+            // Use notification hooks for automatic push notifications
+            const { notificationHooks } = await import('@/lib/notification-hooks');
+            await notificationHooks.onLocationInteraction(
+              creatorId,
+              userId,
+              user?.name || 'Someone',
+              locationId,
+              location.name,
+              'save'
+            );
+            
+            console.log('✅ [saveLocation] Save notification sent via hooks');
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send save notification:', notificationError);
+        // Don't fail the save operation if notification fails
+      }
     }
     
     return true;
