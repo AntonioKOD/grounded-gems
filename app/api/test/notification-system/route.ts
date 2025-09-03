@@ -7,7 +7,8 @@ export async function POST(request: NextRequest) {
       testType = 'all',
       targetUserId = '68ac67b87879e7096031cace',
       testUserId = '68ac67b87879e7096031cace', // Use valid ObjectId
-      testUserName = 'Test User'
+      testUserName = 'Test User',
+      targetEmail = 'antonio_kodheli@icloud.com' // New target email
     } = await request.json()
 
     console.log('🧪 [Notification System Test] Starting test:', testType)

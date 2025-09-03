@@ -123,17 +123,17 @@ export async function POST(request: NextRequest) {
     ])
 
     // Send push notification if liking (not when unliking)
-    if (shouldLike && post.createdBy && post.createdBy !== user.id) {
+    if (shouldLike && post.author && post.author !== user.id) {
       try {
         const { notificationHooks } = await import('@/lib/notification-hooks')
         await notificationHooks.onUserLike(
-          post.createdBy,
+          post.author,
           String(user.id),
           currentUser.name || 'Someone',
           postId,
           'post'
         )
-        console.log(`✅ [Posts Like API] Like notification sent to post owner ${post.createdBy}`)
+        console.log(`✅ [Posts Like API] Like notification sent to post owner ${post.author}`)
       } catch (notificationError) {
         console.warn('Failed to send like notification:', notificationError)
         // Don't fail the like operation if notification fails

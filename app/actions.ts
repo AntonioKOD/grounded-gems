@@ -1750,14 +1750,14 @@ export async function addComment(postId: string, content: string, userId: string
         })
         
         await notificationHooks.onUserComment(
-          post.createdBy,
+          post.author,
           userId,
           commenter?.name || 'Someone',
           postId,
           'post',
           content
         )
-        console.log(`✅ [addComment] Comment notification sent to post owner ${post.createdBy}`)
+        console.log(`✅ [addComment] Comment notification sent to post owner ${post.author}`)
       } catch (notificationError) {
         console.warn('Failed to send comment notification:', notificationError)
         // Don't fail the comment operation if notification fails
