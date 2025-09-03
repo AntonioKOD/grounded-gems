@@ -160,6 +160,24 @@ export async function POST(
 
     const newLikeCount = newLikes.length
 
+    // Send push notification to post owner
+    if (post.createdBy && post.createdBy !== user.id) {
+      try {
+        const { notificationHooks } = await import('@/lib/notification-hooks')
+        await notificationHooks.onUserLike(
+          post.createdBy,
+          user.id,
+          user.name || 'Someone',
+          postId,
+          'post'
+        )
+        console.log(`✅ [Mobile Posts Like API] Like notification sent to post owner ${post.createdBy}`)
+      } catch (notificationError) {
+        console.warn('Failed to send like notification:', notificationError)
+        // Don't fail the like operation if notification fails
+      }
+    }
+
     const response: MobileLikeResponse = {
       success: true,
       message: 'Post liked successfully',

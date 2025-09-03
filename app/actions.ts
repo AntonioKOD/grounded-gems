@@ -1740,6 +1740,30 @@ export async function addComment(postId: string, content: string, userId: string
       },
     })
 
+    // Send push notification to post owner if commenting on someone else's post
+    if (post.createdBy && post.createdBy !== userId) {
+      try {
+        const { notificationHooks } = await import('@/lib/notification-hooks')
+        const commenter = await payload.findByID({
+          collection: 'users',
+          id: userId,
+        })
+        
+        await notificationHooks.onUserComment(
+          post.createdBy,
+          userId,
+          commenter?.name || 'Someone',
+          postId,
+          'post',
+          content
+        )
+        console.log(`✅ [addComment] Comment notification sent to post owner ${post.createdBy}`)
+      } catch (notificationError) {
+        console.warn('Failed to send comment notification:', notificationError)
+        // Don't fail the comment operation if notification fails
+      }
+    }
+
     // Revalidate relevant paths
     revalidatePath('/feed')
     revalidatePath(`/post/${postId}`)
@@ -4563,6 +4587,30 @@ export async function addCommentReply(postId: string, parentCommentId: string, c
       },
     })
 
+    // Send push notification to parent comment author if replying to someone else's comment
+    if (parentComment.author && parentComment.author !== userId) {
+      try {
+        const { notificationHooks } = await import('@/lib/notification-hooks')
+        const replier = await payload.findByID({
+          collection: 'users',
+          id: userId,
+        })
+        
+        await notificationHooks.onUserComment(
+          parentComment.author,
+          userId,
+          replier?.name || 'Someone',
+          postId,
+          'post',
+          content
+        )
+        console.log(`✅ [addCommentReply] Reply notification sent to comment author ${parentComment.author}`)
+      } catch (notificationError) {
+        console.warn('Failed to send reply notification:', notificationError)
+        // Don't fail the reply operation if notification fails
+      }
+    }
+
     // Revalidate relevant paths
     revalidatePath('/feed')
     revalidatePath(`/post/${postId}`)
@@ -4655,6 +4703,59 @@ export async function likeCommentOrReply(postId: string, commentId: string, isLi
         comments: updatedComments,
       },
     })
+
+    // Send push notification if liking (not when unliking)
+    if (isLiking) {
+      try {
+        const { notificationHooks } = await import('@/lib/notification-hooks')
+        
+        if (isReply) {
+          // Find the reply author for reply likes
+          for (const comment of updatedComments) {
+            if (comment.replies && Array.isArray(comment.replies)) {
+              const reply = comment.replies.find((r: any) => r.id === commentId)
+              if (reply && reply.author && reply.author !== userId) {
+                const liker = await payload.findByID({
+                  collection: 'users',
+                  id: userId,
+                })
+                
+                await notificationHooks.onUserLike(
+                  reply.author,
+                  userId,
+                  liker?.name || 'Someone',
+                  commentId,
+                  'comment'
+                )
+                console.log(`✅ [likeCommentOrReply] Reply like notification sent to reply author ${reply.author}`)
+                break
+              }
+            }
+          }
+        } else {
+          // Find the comment author for comment likes
+          const comment = updatedComments.find((c: any) => c.id === commentId)
+          if (comment && comment.author && comment.author !== userId) {
+            const liker = await payload.findByID({
+              collection: 'users',
+              id: userId,
+            })
+            
+            await notificationHooks.onUserLike(
+              comment.author,
+              userId,
+              liker?.name || 'Someone',
+              commentId,
+              'comment'
+            )
+            console.log(`✅ [likeCommentOrReply] Comment like notification sent to comment author ${comment.author}`)
+          }
+        }
+      } catch (notificationError) {
+        console.warn('Failed to send comment/reply like notification:', notificationError)
+        // Don't fail the like operation if notification fails
+      }
+    }
 
     // Revalidate relevant paths
     revalidatePath('/feed')

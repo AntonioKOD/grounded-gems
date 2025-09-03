@@ -394,41 +394,9 @@ export const Users: CollectionConfig = {
       async ({ req, doc, previousDoc, operation }) => {
         if (operation !== 'update' || !req.payload || !previousDoc) return doc;
 
-        const prevFollowers: any[] = previousDoc.followers || [];
-        const newFollowers: any[] = doc.followers || [];
-
-        // Determine newly added follower IDs
-        const added = newFollowers
-          .map(normalizeId)
-          .filter(id => !prevFollowers.map(normalizeId).includes(id));
-
-        for (const followerId of added) {
-          try {
-            // Do not notify if user follows themselves
-            if (followerId === doc.id) continue;
-
-            // Fetch follower details
-            const follower = await req.payload.findByID({
-              collection: 'users',
-              id: followerId,
-            });
-
-            // Create notification for the user being followed
-            await req.payload.create({
-              collection: 'notifications',
-              data: {
-                recipient: doc.id,
-                type: 'follow',
-                title: `${follower.name} started following you`,
-                relatedTo: { relationTo: 'users', value: followerId },
-                read: false,
-              },
-            });
-          } catch (error) {
-            req.payload.logger.error('Error creating follow notification:', error);
-          }
-        }
-
+        // Note: Follow notifications are now handled by the centralized notification service
+        // in the API routes to avoid duplicates and ensure consistent formatting
+        
         return doc;
       },
     ],
