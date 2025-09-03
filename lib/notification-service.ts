@@ -39,6 +39,24 @@ export interface NotificationData {
 
 export class NotificationService {
   /**
+   * Convert metadata values to strings for FCM compatibility
+   * FCM requires all data values to be strings
+   */
+  private static convertMetadataToStrings(metadata: Record<string, any>): Record<string, string> {
+    const stringMetadata: Record<string, string> = {}
+    
+    for (const [key, value] of Object.entries(metadata)) {
+      if (value !== null && value !== undefined) {
+        stringMetadata[key] = String(value)
+      } else {
+        stringMetadata[key] = ''
+      }
+    }
+    
+    return stringMetadata
+  }
+
+  /**
    * Create a notification in the database AND send push notification
    */
   static async createNotification(data: NotificationData) {
@@ -71,7 +89,7 @@ export class NotificationService {
         data: {
           notificationId: String(notification.id),
           type: data.type,
-          ...data.metadata
+          ...this.convertMetadataToStrings(data.metadata || {})
         }
       })
 
@@ -208,6 +226,9 @@ export class NotificationService {
       // Send push notification to all user's devices
       for (const tokenDoc of deviceTokens.docs) {
         try {
+          // Ensure all data values are strings for FCM compatibility
+          const fcmData = this.convertMetadataToStrings(notification.data || {})
+          
           const result = await sendFCMMessage(
             tokenDoc.deviceToken,
             {
@@ -215,7 +236,7 @@ export class NotificationService {
               body: notification.body,
               imageUrl: notification.imageUrl
             },
-            notification.data,
+            fcmData,
             notification.apns
           )
           
@@ -258,7 +279,7 @@ export class NotificationService {
       metadata: {
         followerId,
         followerName,
-        followerAvatar,
+        followerAvatar: followerAvatar || '',
         action: 'view_profile'
       },
       relatedTo: {
@@ -422,8 +443,8 @@ export class NotificationService {
       metadata: {
         milestoneType,
         milestoneValue,
-        locationId,
-        locationName,
+        locationId: locationId || '',
+        locationName: locationName || '',
         action: 'view_milestone'
       },
       relatedTo: locationId ? {
@@ -471,8 +492,8 @@ export class NotificationService {
       message: reminderText,
       metadata: {
         reminderType,
-        relatedId,
-        relatedType,
+        relatedId: relatedId || '',
+        relatedType: relatedType || '',
         action: 'view_reminder'
       },
       relatedTo: relatedId && relatedType ? {
