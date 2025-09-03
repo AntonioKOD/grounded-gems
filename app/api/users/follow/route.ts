@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { isUserBlocked } from '@/lib/blocked-users-helper'
+import { notificationService } from '@/lib/notification-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -133,46 +134,86 @@ export async function POST(request: NextRequest) {
       collection: 'users',
       id: user.id,
       data: {
-        following: updatedFollowing
+        following: updatedFollowing,
       },
-      overrideAccess: true // Skip access control for this update
+      overrideAccess: true
     })
 
-    console.log('✅ Updated current user following list')
-
-    // Add current user to the other user's followers list
-    const userToFollowFollowers = Array.isArray(userToFollow.followers) ? userToFollow.followers : []
-    const uniqueFollowers = [...new Set(userToFollowFollowers.map(normalizeId))]
-    const updatedFollowers = [...uniqueFollowers, user.id]
+    // Add current user to target user's followers list
+    const targetUserFollowers = Array.isArray(userToFollow.followers) ? userToFollow.followers : []
+    const uniqueFollowers = [...new Set(targetUserFollowers.map(normalizeId))]
+    const updatedTargetFollowers = [...uniqueFollowers, user.id]
     
-    console.log('🔍 Updated followers list for target user:', updatedFollowers)
-    
-    // Update target user's followers list
     await payload.update({
       collection: 'users',
       id: userId,
       data: {
-        followers: updatedFollowers
+        followers: updatedTargetFollowers,
       },
-      overrideAccess: true // Skip access control for this update
+      overrideAccess: true
     })
 
-    console.log('✅ Updated target user followers list')
+    // Calculate new followers count for target user
+    const followersResult = await payload.find({
+      collection: 'users',
+      where: {
+        following: { contains: userId }
+      },
+      limit: 0,
+    })
 
-    // Return updated counts for immediate UI update
-    return NextResponse.json({ 
+    // Create follow notification and send push notification using the service
+    try {
+      const notificationResult = await notificationService.notifyNewFollower(
+        userId,
+        String(user.id),
+        user.name || 'Someone',
+        user.profileImage ? 
+          (typeof user.profileImage === 'object' && user.profileImage.url
+            ? user.profileImage.url 
+            : typeof user.profileImage === 'string'
+            ? user.profileImage
+            : null) : null
+      )
+
+      if (notificationResult.success) {
+        console.log(`✅ [Follow API] Follow notification created and sent successfully for ${userId} from ${user.id}`)
+      } else {
+        console.log(`⚠️ [Follow API] Follow notification failed: ${notificationResult.error}`)
+      }
+    } catch (notificationError) {
+      console.warn('Failed to create follow notification:', notificationError)
+      // Don't fail the follow operation if notification fails
+    }
+
+    const response = {
       success: true,
-      message: 'Successfully followed user',
+      message: 'User followed successfully',
       data: {
-        currentUserFollowingCount: updatedFollowing.length,
-        targetUserFollowersCount: updatedFollowers.length
+        isFollowing: true,
+        followersCount: followersResult.totalDocs,
+        userId: userId,
+      },
+    }
+
+    return NextResponse.json(response, {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
       }
     })
 
   } catch (error) {
-    console.error('❌ Error following user:', error)
+    console.error('Follow error:', error)
+    
     return NextResponse.json(
-      { error: 'Failed to follow user' },
+      {
+        success: false,
+        message: 'Internal server error',
+        error: 'Follow service unavailable',
+        code: 'SERVER_ERROR'
+      },
       { status: 500 }
     )
   }

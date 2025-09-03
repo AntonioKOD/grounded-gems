@@ -181,31 +181,26 @@ export async function POST(
 
     // Create follow notification using centralized service
     try {
-      const notificationResult = await notificationService.createNotification({
-        recipient: targetUserId,
-        type: 'follow',
-        title: 'New Follower',
-        message: `${currentUser.name || 'Someone'} started following you`,
-        metadata: {
-          followerId: currentUser.id,
-          followerName: currentUser.name,
-          followerAvatar: currentUser.profileImage ? 
-            (typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
-              ? currentUser.profileImage.url 
-              : typeof currentUser.profileImage === 'string'
-              ? currentUser.profileImage
-              : null) : null
-        },
-        read: false,
-      })
+      const notificationResult = await notificationService.notifyNewFollower(
+        targetUserId,
+        String(currentUser.id),
+        currentUser.name || 'Someone',
+        currentUser.profileImage ? 
+          (typeof currentUser.profileImage === 'object' && currentUser.profileImage.url
+            ? currentUser.profileImage.url 
+            : typeof currentUser.profileImage === 'string'
+            ? currentUser.profileImage
+            : null) : null
+      )
 
       if (notificationResult.success) {
-        console.log(`✅ [Follow API] Created follow notification for ${targetUserId} from ${currentUser.id}`)
+        console.log(`✅ [Follow API] Follow notification created and sent successfully for ${targetUserId} from ${currentUser.id}`)
       } else {
-        console.log(`⚠️ [Follow API] ${notificationResult.error}`)
+        console.log(`⚠️ [Follow API] Follow notification failed: ${notificationResult.error}`)
       }
     } catch (notificationError) {
       console.warn('Failed to create follow notification:', notificationError)
+      // Don't fail the follow operation if notification fails
     }
 
     const response: MobileFollowResponse = {

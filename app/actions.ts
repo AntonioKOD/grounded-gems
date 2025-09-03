@@ -12,6 +12,7 @@ import { Notification } from "@/types/notification";
 import {Where} from "payload";
 import { PayloadRequest } from "payload";
 import { getAuthenticatedUserForServerActions } from "@/lib/auth-server";
+import { notificationHooks } from '@/lib/notification-hooks'
 
 // Extend the Post interface to include shareCount
 declare module "@/types/feed" {
@@ -3380,105 +3381,119 @@ export async function recordLocationInteraction(
       : location.createdBy?.id
 
     if (creatorId && creatorId !== user.id) {
-      // Create notification based on interaction type
-      const notificationData = {
-        recipient: creatorId,
-        actionBy: user.id,
-        relatedTo: {
-          relationTo: 'locations',
-          value: locationId,
-        },
-        metadata: {
-          locationName: location.name,
-          interactionType,
-          ...metadata,
-        },
-        read: false,
-        priority: 'normal',
-      }
+      try {
+        // Use notification hooks for automatic push notifications
+        await notificationHooks.onLocationInteraction(
+          creatorId,
+          user.id,
+          user.name || 'Someone',
+          locationId,
+          location.name,
+          interactionType as 'like' | 'save' | 'share' | 'check_in' | 'review' | 'subscribe'
+        )
+        
+        console.log('✅ [Location Interaction] Notification sent via hooks for', interactionType)
+      } catch (notificationError) {
+        console.error('Error sending notification via hooks:', notificationError)
+        
+        // Fallback to manual notification creation if hooks fail
+        try {
+          const notificationData = {
+            recipient: creatorId,
+            actionBy: user.id,
+            relatedTo: {
+              relationTo: 'locations',
+              value: locationId,
+            },
+            metadata: {
+              locationName: location.name,
+              interactionType,
+              ...metadata,
+            },
+            read: false,
+            priority: 'normal',
+          }
 
-      switch (interactionType) {
-        case 'like':
-          Object.assign(notificationData, {
-            type: 'location_liked',
-            title: `Someone liked your location!`,
-            message: `${user.name} liked your location "${location.name}".`,
-          })
-          break
-        case 'share':
-          Object.assign(notificationData, {
-            type: 'location_shared',
-            title: `Someone shared your location!`,
-            message: `${user.name} shared your location "${location.name}".`,
-          })
-          break
-        case 'check_in':
-          Object.assign(notificationData, {
-            type: 'location_visited',
-            title: `Someone checked in at your location!`,
-            message: `${user.name} checked in at "${location.name}".`,
+          switch (interactionType) {
+            case 'like':
+              Object.assign(notificationData, {
+                type: 'location_liked',
+                title: `Someone liked your location!`,
+                message: `${user.name} liked your location "${location.name}".`,
+              })
+              break
+            case 'share':
+              Object.assign(notificationData, {
+                type: 'location_shared',
+                title: `Someone shared your location!`,
+                message: `${user.name} shared your location "${location.name}".`,
+              })
+              break
+            case 'check_in':
+              Object.assign(notificationData, {
+                type: 'location_visited',
+                title: `Someone checked in at your location!`,
+                message: `${user.name} checked in at "${location.name}".`,
+              })
+              
+              // Notify friends about check-in
+              try {
+                const userWithFollowers = await payload.findByID({
+                  collection: 'users',
+                  id: user.id,
+                  depth: 0,
+                })
+                
+                if (userWithFollowers.followers && userWithFollowers.followers.length > 0) {
+                  await notifyFriendCheckIn(locationId, user.id, userWithFollowers.followers.slice(0, 10)) // Limit to 10 friends
+                }
+              } catch (friendNotificationError) {
+                console.error('Error notifying friends about check-in:', friendNotificationError)
+              }
+              break
+            case 'visit':
+              Object.assign(notificationData, {
+                type: 'location_visited',
+                title: `Someone visited your location!`,
+                message: `${user.name} visited "${location.name}".`,
+              })
+              break
+            case 'save':
+              Object.assign(notificationData, {
+                type: 'location_saved',
+                title: `Someone saved your location!`,
+                message: `${user.name} saved your location "${location.name}".`,
+              })
+              break
+            default:
+              // For other interaction types, create a generic notification
+              Object.assign(notificationData, {
+                type: 'location_interaction',
+                title: `New activity at your location!`,
+                message: `${user.name} interacted with your location "${location.name}".`,
+              })
+          }
+
+          console.log('Creating fallback notification for location creator:', {
+            creatorId,
+            interactionType,
+            locationName: location.name,
+            actionBy: user.name
           })
           
-          // Notify friends about check-in
-          try {
-            const userWithFollowers = await payload.findByID({
-              collection: 'users',
-              id: user.id,
-              depth: 0,
-            })
-            
-            if (userWithFollowers.followers && userWithFollowers.followers.length > 0) {
-              await notifyFriendCheckIn(locationId, user.id, userWithFollowers.followers.slice(0, 10)) // Limit to 10 friends
-            }
-          } catch (friendNotificationError) {
-            console.error('Error notifying friends about check-in:', friendNotificationError)
-          }
-          break
-        case 'visit':
-          Object.assign(notificationData, {
-            type: 'location_visited',
-            title: `Someone visited your location!`,
-            message: `${user.name} visited "${location.name}".`,
+          const notification = await payload.create({
+            collection: 'notifications',
+            data: notificationData,
           })
-          break
-        case 'save':
-          Object.assign(notificationData, {
-            type: 'location_saved',
-            title: `Someone saved your location!`,
-            message: `${user.name} saved your location "${location.name}".`,
+          
+          console.log('Fallback notification created successfully:', notification.id)
+        } catch (fallbackError) {
+          console.error('Error creating fallback notification for location creator:', {
+            error: fallbackError,
+            creatorId,
+            locationId
           })
-          break
-        default:
-          // For other interaction types, create a generic notification
-          Object.assign(notificationData, {
-            type: 'location_interaction',
-            title: `New activity at your location!`,
-            message: `${user.name} interacted with your location "${location.name}".`,
-          })
-      }
-
-      try {
-        console.log('Creating notification for location creator:', {
-          creatorId,
-          interactionType,
-          locationName: location.name,
-          actionBy: user.name
-        })
-        
-        const notification = await payload.create({
-          collection: 'notifications',
-          data: notificationData,
-        })
-        
-        console.log('Notification created successfully:', notification.id)
-      } catch (notificationError) {
-        console.error('Error creating notification for location creator:', {
-          error: notificationError,
-          notificationData,
-          creatorId,
-          locationId
-        })
-        // Don't fail the main operation if notification fails
+        }
       }
     }
 

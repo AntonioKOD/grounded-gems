@@ -1,4 +1,6 @@
-import { sendFCMMessage, sendFCMMessageToMultipleTokens } from './firebase-admin'
+import { sendFCMMessage } from './firebase-admin'
+import { getPayload } from 'payload'
+import config from '@/payload.config'
 
 export interface NotificationPayload {
   title: string
@@ -19,27 +21,64 @@ export interface BulkNotification extends NotificationPayload {
   userIds: string[]
 }
 
+export interface NotificationData {
+  recipient: string
+  type: string
+  title: string
+  message?: string
+  metadata?: Record<string, any>
+  read?: boolean
+  relatedTo?: {
+    relationTo: string
+    value: string
+  }
+  actionBy?: string
+  priority?: 'low' | 'normal' | 'high'
+  actionRequired?: boolean
+}
+
 export class NotificationService {
   /**
-   * Create a notification in the database
+   * Create a notification in the database AND send push notification
    */
-  static async createNotification(data: {
-    recipient: string
-    type: string
-    title: string
-    message?: string
-    metadata?: Record<string, any>
-    read?: boolean
-  }) {
+  static async createNotification(data: NotificationData) {
     try {
-      // For now, return a placeholder response
-      // This would typically create a notification in the database
-      console.log(`Creating notification: ${data.type} for ${data.recipient}`)
+      const payload = await getPayload({ config })
       
+      // Create notification in database
+      const notification = await payload.create({
+        collection: 'notifications',
+        data: {
+          recipient: data.recipient,
+          type: data.type,
+          title: data.title,
+          message: data.message,
+          metadata: data.metadata,
+          read: data.read || false,
+          relatedTo: data.relatedTo,
+          actionBy: data.actionBy,
+          priority: data.priority || 'normal',
+          actionRequired: data.actionRequired || false,
+        },
+      })
+
+      console.log(`✅ [NotificationService] Created ${data.type} notification for user ${data.recipient}`)
+
+      // Send push notification to user's devices
+      await this.sendPushNotificationToUser(data.recipient, {
+        title: data.title,
+        body: data.message || data.title,
+        data: {
+          notificationId: String(notification.id),
+          type: data.type,
+          ...data.metadata
+        }
+      })
+
       return {
         success: true,
-        id: `notification_${Date.now()}`,
-        message: 'Notification created successfully'
+        id: notification.id,
+        message: 'Notification created and sent successfully'
       }
     } catch (error) {
       console.error('Error creating notification:', error)
@@ -51,7 +90,7 @@ export class NotificationService {
   }
 
   /**
-   * Send notification to a single user
+   * Send push notification to a single user
    */
   static async sendToUser(notification: UserNotification) {
     try {
@@ -82,19 +121,44 @@ export class NotificationService {
   }
 
   /**
-   * Send notification to multiple users
+   * Send push notification to multiple users
    */
   static async sendToUsers(notification: BulkNotification) {
     try {
-      // Send notification to multiple users using the push API
+      const results = []
+      
+      for (const userId of notification.userIds) {
+        const result = await this.sendToUser({
+          ...notification,
+          userId
+        })
+        results.push({ userId, result })
+      }
+
+      return {
+        success: true,
+        results,
+        totalSent: results.length
+      }
+    } catch (error) {
+      console.error('Error sending notifications to users:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Send push notification to all users
+   */
+  static async sendToAll(notification: NotificationPayload) {
+    try {
       const response = await fetch('/api/push/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          type: 'user',
-          target: notification.userIds.join(','), // For multiple users, we'll need to handle this differently
+          type: 'topic',
+          topic: 'all_users',
           notification: {
             title: notification.title,
             body: notification.body,
@@ -107,259 +171,318 @@ export class NotificationService {
 
       return await response.json()
     } catch (error) {
-      console.error('Error sending notification to users:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Send notification to all users
-   */
-  static async sendToAll(notification: NotificationPayload) {
-    try {
-      const response = await fetch('/api/fcm/send-notification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...notification,
-          sendToAll: true,
-        }),
-      })
-
-      return await response.json()
-    } catch (error) {
       console.error('Error sending notification to all users:', error)
       throw error
     }
   }
 
   /**
-   * Send welcome notification to new users
+   * Send push notification directly to a user's devices
    */
-  static async sendWelcomeNotification(userId: string, userName: string) {
-    return this.sendToUser({
-      userId,
-      title: 'Welcome to Sacavia! 🎉',
-      body: `Hi ${userName}, we're excited to have you on board. Start exploring amazing places and experiences!`,
-      data: {
-        type: 'welcome',
-        userId,
-        action: 'explore',
-      },
-      apns: {
-        payload: {
-          category: 'welcome',
-          'thread-id': 'welcome',
+  static async sendPushNotificationToUser(userId: string, notification: NotificationPayload) {
+    try {
+      const payload = await getPayload({ config })
+      
+      // Get all active device tokens for the user
+      const deviceTokens = await payload.find({
+        collection: 'deviceTokens',
+        where: {
+          and: [
+            { user: { equals: userId } },
+            { isActive: { equals: true } }
+          ]
         },
-      },
-    })
+        limit: 100
+      })
+
+      if (deviceTokens.docs.length === 0) {
+        console.log(`📱 [NotificationService] No active device tokens found for user ${userId}`)
+        return { success: false, message: 'No active devices found' }
+      }
+
+      console.log(`📱 [NotificationService] Sending push notification to ${deviceTokens.docs.length} devices for user ${userId}`)
+      
+      let successCount = 0
+      let failedCount = 0
+      
+      // Send push notification to all user's devices
+      for (const tokenDoc of deviceTokens.docs) {
+        try {
+          const result = await sendFCMMessage(
+            tokenDoc.deviceToken,
+            {
+              title: notification.title,
+              body: notification.body,
+              imageUrl: notification.imageUrl
+            },
+            notification.data,
+            notification.apns
+          )
+          
+          if (result.success) {
+            successCount++
+            console.log(`✅ [NotificationService] Push notification sent to device ${tokenDoc.deviceToken.substring(0, 20)}...`)
+          } else {
+            failedCount++
+            console.log(`❌ [NotificationService] Failed to send push notification to device ${tokenDoc.deviceToken.substring(0, 20)}...: ${result.error}`)
+          }
+        } catch (error) {
+          failedCount++
+          console.error(`❌ [NotificationService] Error sending push notification to device ${tokenDoc.deviceToken.substring(0, 20)}...:`, error)
+        }
+      }
+      
+      console.log(`📱 [NotificationService] Push notification results: ${successCount} sent, ${failedCount} failed`)
+      
+      return {
+        success: successCount > 0,
+        sentCount: successCount,
+        failedCount: failedCount,
+        totalDevices: deviceTokens.docs.length
+      }
+    } catch (error) {
+      console.error('Error sending push notification to user:', error)
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
   }
 
   /**
-   * Send new follower notification
+   * Create and send follow notification
    */
-  static async sendNewFollowerNotification(
-    userId: string,
-    followerName: string,
-    followerId: string
-  ) {
-    return this.sendToUser({
-      userId,
+  static async notifyNewFollower(recipientId: string, followerId: string, followerName: string, followerAvatar?: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'follow',
       title: 'New Follower! 👥',
-      body: `${followerName} started following you`,
-      data: {
-        type: 'new_follower',
+      message: `${followerName} started following you`,
+      metadata: {
         followerId,
-        userId,
-        action: 'view_profile',
+        followerName,
+        followerAvatar,
+        action: 'view_profile'
       },
-      apns: {
-        payload: {
-          category: 'social',
-          'thread-id': 'followers',
-        },
+      relatedTo: {
+        relationTo: 'users',
+        value: followerId
       },
+      actionBy: followerId,
+      priority: 'normal'
     })
   }
 
   /**
-   * Send new post notification
+   * Create and send like notification
    */
-  static async sendNewPostNotification(
-    userId: string,
-    authorName: string,
-    postId: string,
-    postTitle?: string
-  ) {
-    return this.sendToUser({
-      userId,
-      title: 'New Post from Followed User 📝',
-      body: `${authorName} shared ${postTitle ? `"${postTitle}"` : 'a new post'}`,
-      data: {
-        type: 'new_post',
+  static async notifyNewLike(recipientId: string, likerId: string, likerName: string, postId: string, postType: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'like',
+      title: 'New Like! ❤️',
+      message: `${likerName} liked your ${postType}`,
+      metadata: {
+        likerId,
+        likerName,
         postId,
-        authorId: userId,
-        action: 'view_post',
+        postType,
+        action: 'view_post'
       },
-      apns: {
-        payload: {
-          category: 'content',
-          'thread-id': 'posts',
-        },
+      relatedTo: {
+        relationTo: postType === 'post' ? 'posts' : 'locations',
+        value: postId
       },
+      actionBy: likerId,
+      priority: 'low'
     })
   }
 
   /**
-   * Send event reminder notification
+   * Create and send comment notification
    */
-  static async sendEventReminderNotification(
-    userId: string,
-    eventName: string,
-    eventId: string,
-    eventTime: string
-  ) {
-    return this.sendToUser({
-      userId,
-      title: 'Event Reminder! 📅',
-      body: `Don't forget: ${eventName} is starting soon`,
-      data: {
-        type: 'event_reminder',
-        eventId,
-        eventTime,
-        action: 'view_event',
+  static async notifyNewComment(recipientId: string, commenterId: string, commenterName: string, postId: string, postType: string, commentText: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'comment',
+      title: 'New Comment! 💬',
+      message: `${commenterName} commented: "${commentText.substring(0, 50)}${commentText.length > 50 ? '...' : ''}"`,
+      metadata: {
+        commenterId,
+        commenterName,
+        postId,
+        postType,
+        commentText,
+        action: 'view_post'
       },
-      apns: {
-        payload: {
-          category: 'event',
-          'thread-id': 'events',
-        },
+      relatedTo: {
+        relationTo: postType === 'post' ? 'posts' : 'locations',
+        value: postId
       },
+      actionBy: commenterId,
+      priority: 'normal'
     })
   }
 
   /**
-   * Send location recommendation notification
+   * Create and send mention notification
    */
-  static async sendLocationRecommendationNotification(
-    userId: string,
-    locationName: string,
-    locationId: string,
-    reason: string
-  ) {
-    return this.sendToUser({
-      userId,
-      title: 'New Place for You! 🗺️',
-      body: `We think you'll love ${locationName}. ${reason}`,
-      data: {
-        type: 'location_recommendation',
-        locationId,
-        reason,
-        action: 'view_location',
+  static async notifyMention(recipientId: string, mentionerId: string, mentionerName: string, postId: string, postType: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'mention',
+      title: 'You were mentioned! @',
+      message: `${mentionerName} mentioned you in a ${postType}`,
+      metadata: {
+        mentionerId,
+        mentionerName,
+        postId,
+        postType,
+        action: 'view_post'
       },
-      apns: {
-        payload: {
-          category: 'recommendation',
-          'thread-id': 'recommendations',
-        },
+      relatedTo: {
+        relationTo: postType === 'post' ? 'posts' : 'locations',
+        value: postId
       },
+      actionBy: mentionerId,
+      priority: 'normal'
     })
   }
 
   /**
-   * Send achievement notification
+   * Create and send location interaction notification
    */
-  static async sendAchievementNotification(
-    userId: string,
-    achievementName: string,
-    achievementDescription: string
-  ) {
-    return this.sendToUser({
-      userId,
-      title: 'Achievement Unlocked! 🏆',
-      body: `${achievementName}: ${achievementDescription}`,
-      data: {
-        type: 'achievement',
-        achievementName,
-        action: 'view_achievements',
-      },
-      apns: {
-        payload: {
-          category: 'achievement',
-          'thread-id': 'achievements',
-        },
-      },
-    })
-  }
+  static async notifyLocationInteraction(recipientId: string, interactorId: string, interactorName: string, locationId: string, locationName: string, interactionType: string) {
+    const interactionEmojis: Record<string, string> = {
+      'like': '❤️',
+      'save': '🔖',
+      'share': '📤',
+      'check_in': '📍',
+      'review': '⭐',
+      'subscribe': '🔔'
+    }
 
-  /**
-   * Send weekly digest notification
-   */
-  static async sendWeeklyDigestNotification(
-    userId: string,
-    highlights: string[]
-  ) {
-    const highlightText = highlights.slice(0, 2).join(', ')
-    const remainingCount = Math.max(0, highlights.length - 2)
+    const emoji = interactionEmojis[interactionType] || '📱'
     
-    let body = `This week: ${highlightText}`
-    if (remainingCount > 0) {
-      body += ` and ${remainingCount} more highlights`
-    }
-
-    return this.sendToUser({
-      userId,
-      title: 'Your Weekly Recap 📊',
-      body,
-      data: {
-        type: 'weekly_digest',
-        highlightsCount: highlights.length.toString(),
-        action: 'view_digest',
+    return this.createNotification({
+      recipient: recipientId,
+      type: `location_${interactionType}`,
+      title: `Location ${interactionType.charAt(0).toUpperCase() + interactionType.slice(1)}! ${emoji}`,
+      message: `${interactorName} ${interactionType.replace('_', ' ')}d your location "${locationName}"`,
+      metadata: {
+        interactorId,
+        interactorName,
+        locationId,
+        locationName,
+        interactionType,
+        action: 'view_location'
       },
-      apns: {
-        payload: {
-          category: 'digest',
-          'thread-id': 'weekly_digest',
-        },
+      relatedTo: {
+        relationTo: 'locations',
+        value: locationId
       },
+      actionBy: interactorId,
+      priority: 'normal'
     })
   }
 
   /**
-   * Send system maintenance notification
+   * Create and send event request notification
    */
-  static async sendSystemMaintenanceNotification(
-    userIds: string[],
-    maintenanceMessage: string,
-    estimatedDuration?: string
-  ) {
-    const title = 'System Maintenance 🔧'
-    let body = maintenanceMessage
-    if (estimatedDuration) {
-      body += ` Estimated duration: ${estimatedDuration}`
-    }
+  static async notifyEventRequest(recipientId: string, requesterId: string, requesterName: string, locationId: string, locationName: string, eventTitle: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'event_request_received',
+      title: 'New Event Request! 🎉',
+      message: `${requesterName} wants to host "${eventTitle}" at your location "${locationName}"`,
+      metadata: {
+        requesterId,
+        requesterName,
+        locationId,
+        locationName,
+        eventTitle,
+        action: 'view_event_request'
+      },
+      relatedTo: {
+        relationTo: 'eventRequests',
+        value: locationId
+      },
+      actionBy: requesterId,
+      priority: 'high',
+      actionRequired: true
+    })
+  }
 
-    return this.sendToUsers({
-      userIds,
-      title,
-      body,
-      data: {
-        type: 'system_maintenance',
-        estimatedDuration: estimatedDuration || '',
-        action: 'view_status',
+  /**
+   * Create and send milestone notification
+   */
+  static async notifyMilestone(recipientId: string, milestoneType: string, milestoneValue: string, locationId?: string, locationName?: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'location_milestone',
+      title: 'Milestone Reached! 🎯',
+      message: `Congratulations! You've reached ${milestoneType}: ${milestoneValue}${locationName ? ` at "${locationName}"` : ''}`,
+      metadata: {
+        milestoneType,
+        milestoneValue,
+        locationId,
+        locationName,
+        action: 'view_milestone'
       },
-      apns: {
-        payload: {
-          category: 'system',
-          'thread-id': 'system',
-        },
+      relatedTo: locationId ? {
+        relationTo: 'locations',
+        value: locationId
+      } : undefined,
+      priority: 'normal'
+    })
+  }
+
+  /**
+   * Create and send journey invite notification
+   */
+  static async notifyJourneyInvite(recipientId: string, inviterId: string, inviterName: string, journeyId: string, journeyTitle: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'journey_invite',
+      title: 'Journey Invitation! 🗺️',
+      message: `${inviterName} invited you to join "${journeyTitle}"`,
+      metadata: {
+        inviterId,
+        inviterName,
+        journeyId,
+        journeyTitle,
+        action: 'view_journey_invite'
       },
+      relatedTo: {
+        relationTo: 'gemJourneys',
+        value: journeyId
+      },
+      actionBy: inviterId,
+      priority: 'high',
+      actionRequired: true
+    })
+  }
+
+  /**
+   * Create and send reminder notification
+   */
+  static async notifyReminder(recipientId: string, reminderType: string, reminderText: string, relatedId?: string, relatedType?: string) {
+    return this.createNotification({
+      recipient: recipientId,
+      type: 'reminder',
+      title: 'Reminder! ⏰',
+      message: reminderText,
+      metadata: {
+        reminderType,
+        relatedId,
+        relatedType,
+        action: 'view_reminder'
+      },
+      relatedTo: relatedId && relatedType ? {
+        relationTo: relatedType,
+        value: relatedId
+      } : undefined,
+      priority: 'normal'
     })
   }
 }
 
-// Export a default instance for backward compatibility
 export const notificationService = NotificationService
 
