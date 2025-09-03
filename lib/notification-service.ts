@@ -382,9 +382,21 @@ export class NotificationService {
 
     const emoji = interactionEmojis[interactionType] || '📱'
     
+    // Map interaction types to valid notification types
+    const typeMapping: Record<string, string> = {
+      'like': 'location_liked',
+      'save': 'location_saved',
+      'share': 'location_shared',
+      'check_in': 'location_visited',
+      'review': 'location_reviewed',
+      'subscribe': 'location_followed'
+    }
+    
+    const notificationType = typeMapping[interactionType] || 'location_interaction'
+    
     return this.createNotification({
       recipient: recipientId,
-      type: `location_${interactionType}`,
+      type: notificationType,
       title: `Location ${interactionType.charAt(0).toUpperCase() + interactionType.slice(1)}! ${emoji}`,
       message: `${interactorName} ${interactionType.replace('_', ' ')}d your location "${locationName}"`,
       metadata: {

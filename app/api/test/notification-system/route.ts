@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const { 
       testType = 'all',
       targetUserId = '68ac67b87879e7096031cace',
-      testUserId = 'test-user-123',
+      testUserId = '68ac67b87879e7096031cace', // Use valid ObjectId
       testUserName = 'Test User'
     } = await request.json()
 
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-post-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'post'
         )
         results.push({ type: 'like', success: true, result })
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-post-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'post',
           'This is a test comment to verify the notification system is working properly!'
         )
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-post-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'post'
         )
         results.push({ type: 'mention', success: true, result })
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           'like'
         )
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           'Test Event'
         )
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           'First Location',
           '1 location published',
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location'
         )
         results.push({ type: 'milestone', success: true, result })
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-journey-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Journey'
         )
         results.push({ type: 'journey_invite', success: true, result })
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           'location_visit',
           'Time to visit Test Location again!',
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'locations'
         )
         results.push({ type: 'reminder', success: true, result })
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onLocationPublished(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           testUserId,
           testUserName
@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onLocationVerified(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           testUserId,
           testUserName
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onLocationFeatured(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           'Outstanding user experience and unique features'
         )
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
           targetUserId,
           testUserId,
           testUserName,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           5,
           'Amazing place! Highly recommend visiting.'
@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onBusinessHoursUpdate(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           testUserId,
           testUserName,
@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onSpecialOffer(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           '50% Off Weekend Special',
           'Get 50% off all items this weekend only!',
@@ -278,7 +278,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await notificationHooks.onProximityAlert(
           targetUserId,
-          'test-location-123',
+          '507f1f77bcf86cd799439011', // Use valid ObjectId
           'Test Location',
           '0.5 miles'
         )
