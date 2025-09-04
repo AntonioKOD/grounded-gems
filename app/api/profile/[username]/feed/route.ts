@@ -6,13 +6,14 @@ import config from '@/payload.config'
 export const dynamic = 'force-dynamic'
 
 /**
- * Profile Feed API Route
+ * Normalized Profile Feed API Route
  * 
- * Returns a normalized feed for a specific user with cover images/thumbnails
- * Supports pagination and proper media URL handling
+ * Returns a user's posts in reverse chronological order with normalized shape:
+ * - items[]: { id, caption, createdAt, cover: { type: "IMAGE"|"VIDEO", url }, media[]: [{ id, type, url, thumbnailUrl, width, height, durationSec }] }
+ * - nextCursor: for pagination
  * 
  * Usage:
- * GET /api/profile/[username]/feed?page=1&limit=20
+ * GET /api/profile/[username]/feed?take=24&cursor=postId
  */
 
 export async function GET(
@@ -24,11 +25,10 @@ export async function GET(
     const { searchParams } = new URL(request.url)
     
     // Parse query parameters
-    const page = parseInt(searchParams.get('page') || '1', 10)
-    const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10), 50) // Max 50 per page
-    const offset = (page - 1) * limit
+    const take = Math.min(parseInt(searchParams.get('take') || '24', 10), 50) // Max 50 per request
+    const cursor = searchParams.get('cursor') || null
     
-    console.log(`📱 [ProfileFeed] Loading feed for user: ${username}, page: ${page}, limit: ${limit}`)
+    console.log(`📱 [NormalizedProfileFeed] Loading feed for user: ${username}, take: ${take}, cursor: ${cursor}`)
     
     const payload = await getPayload({ config })
     
@@ -56,145 +56,79 @@ export async function GET(
       )
     }
     
-    console.log(`📱 [ProfileFeed] Found user: ${user.name} (${user.id})`)
+    console.log(`📱 [NormalizedProfileFeed] Found user: ${user.name} (${user.id})`)
     
-    // Get user's posts with pagination
-    console.log(`📱 [ProfileFeed] Querying posts for user ID: ${user.id}`)
+    // Build query for posts
+    let whereClause: any = {
+      author: { equals: user.id }
+    }
+    
+    // Add cursor-based pagination
+    if (cursor) {
+      try {
+        // Get the cursor post to find its createdAt timestamp
+        const cursorPost = await payload.findByID({
+          collection: 'posts',
+          id: cursor
+        })
+        
+        if (cursorPost) {
+          whereClause.createdAt = { less_than: cursorPost.createdAt }
+        }
+      } catch (error) {
+        console.warn(`📱 [NormalizedProfileFeed] Invalid cursor: ${cursor}`, error)
+        // Continue without cursor if invalid
+      }
+    }
+    
+    // Query posts with depth to populate media relations
     const postsResult = await payload.find({
       collection: 'posts',
-      where: {
-        author: { equals: user.id }
-      },
+      where: whereClause,
       sort: '-createdAt',
-      limit,
-      page,
-      depth: 1, // Load relationships but not too deep
+      limit: take + 1, // Get one extra to determine if there's a next page
+      depth: 2, // Populate media relations
     })
     
-    console.log(`📱 [ProfileFeed] Found ${postsResult.docs.length} posts for user`)
+    console.log(`📱 [NormalizedProfileFeed] Found ${postsResult.docs.length} posts for user`)
+    
+    // Check if there are more posts (pagination)
+    const hasMore = postsResult.docs.length > take
+    const posts = hasMore ? postsResult.docs.slice(0, take) : postsResult.docs
+    const nextCursor = hasMore ? posts[posts.length - 1]?.id : null
     
     // Normalize posts for feed display
-    const normalizedPosts = postsResult.docs.map(post => {
+    const items = posts.map(post => {
       try {
-        console.log(`📱 [ProfileFeed] Processing post ${post.id}:`, {
-          hasImage: !!post.image,
-          hasVideo: !!post.video,
-          hasPhotos: !!post.photos,
-          hasVideoThumbnail: !!post.videoThumbnail,
-          imageType: typeof post.image,
-          videoType: typeof post.video
-        })
-        const cover = getPostCover(post)
+        const normalizedMedia = normalizePostMedia(post)
+        const cover = getPostCover(normalizedMedia)
         
         return {
           id: post.id,
-          title: post.title || null,
-          content: post.content || '',
-          type: post.type || 'post',
-          cover: cover,
-          hasVideo: hasVideoContent(post),
-          likeCount: post.likeCount || 0,
-          commentCount: post.commentCount || 0,
-          saveCount: post.saveCount || 0,
-          shareCount: post.shareCount || 0,
+          caption: post.content || '',
           createdAt: post.createdAt,
-          updatedAt: post.updatedAt,
-          user: {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            profileImage: user.profileImage?.url || null,
-            isVerified: user.isVerified || false,
-            isCreator: user.isCreator || false,
-          },
-          location: post.location ? {
-            id: post.location.id,
-            name: post.location.name,
-            address: post.location.address,
-            city: post.location.city,
-            state: post.location.state,
-            country: post.location.country,
-          } : null,
-          tags: post.tags || [],
-          media: {
-            images: getPostImages(post),
-            videos: getPostVideos(post),
-            totalCount: getTotalMediaCount(post)
-          }
+          cover: cover,
+          media: normalizedMedia
         }
       } catch (error) {
-        console.error(`📱 [ProfileFeed] Error processing post ${post.id}:`, error)
-        // Return a simplified version if there's an error
+        console.error(`📱 [NormalizedProfileFeed] Error processing post ${post.id}:`, error)
+        // Return a minimal version if there's an error
         return {
           id: post.id,
-          title: post.title || null,
-          content: post.content || '',
-          type: post.type || 'post',
-          cover: null,
-          hasVideo: false,
-          likeCount: post.likeCount || 0,
-          commentCount: post.commentCount || 0,
-          saveCount: post.saveCount || 0,
-          shareCount: post.shareCount || 0,
+          caption: post.content || '',
           createdAt: post.createdAt,
-          updatedAt: post.updatedAt,
-          user: {
-            id: user.id,
-            name: user.name,
-            username: user.username,
-            profileImage: user.profileImage?.url || null,
-            isVerified: user.isVerified || false,
-            isCreator: user.isCreator || false,
-          },
-          location: null,
-          tags: [],
-          media: {
-            images: [],
-            videos: [],
-            totalCount: 0
-          }
+          cover: null,
+          media: []
         }
-      }
-    })
-    
-    // Get total count for pagination
-    const totalResult = await payload.count({
-      collection: 'posts',
-      where: {
-        author: { equals: user.id }
       }
     })
     
     const response = {
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          name: user.name,
-          username: user.username,
-          profileImage: user.profileImage?.url || null,
-          bio: user.bio || null,
-          isVerified: user.isVerified || false,
-          isCreator: user.isCreator || false,
-          stats: {
-            postsCount: totalResult.totalDocs,
-            followersCount: user.followers?.length || 0,
-            followingCount: user.following?.length || 0,
-          }
-        },
-        posts: normalizedPosts,
-        pagination: {
-          page,
-          limit,
-          total: totalResult.totalDocs,
-          totalPages: Math.ceil(totalResult.totalDocs / limit),
-          hasNext: page < Math.ceil(totalResult.totalDocs / limit),
-          hasPrev: page > 1
-        }
-      }
+      items,
+      nextCursor
     }
     
-    console.log(`📱 [ProfileFeed] Returning ${normalizedPosts.length} posts with pagination info`)
+    console.log(`📱 [NormalizedProfileFeed] Returning ${items.length} items, nextCursor: ${nextCursor}`)
     
     return NextResponse.json(response, {
       headers: {
@@ -203,7 +137,7 @@ export async function GET(
     })
     
   } catch (error) {
-    console.error('📱 [ProfileFeed] Error:', error)
+    console.error('📱 [NormalizedProfileFeed] Error:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -212,138 +146,153 @@ export async function GET(
 }
 
 /**
- * Get the cover image/thumbnail for a post
- * Priority: single image > first photo > video thumbnail > single video
+ * Normalize all media from a post into a unified array
+ * Handles multiple possible media fields: featuredImage, image, photos[], media[], video, videos[]
  */
-function getPostCover(post: any): string | null {
-  // 1. Single image (highest priority)
-  if (post.image?.url) {
-    return absoluteMediaURL(post.image.url)
+function normalizePostMedia(post: any): Array<{
+  id: string
+  type: 'IMAGE' | 'VIDEO'
+  url: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  durationSec?: number
+}> {
+  const media: Array<{
+    id: string
+    type: 'IMAGE' | 'VIDEO'
+    url: string
+    thumbnailUrl?: string
+    width?: number
+    height?: number
+    durationSec?: number
+  }> = []
+  
+  // Helper function to add media item
+  const addMediaItem = (item: any, type: 'IMAGE' | 'VIDEO') => {
+    if (!item) return
+    
+    let mediaItem: any = {
+      id: typeof item === 'string' ? item : item.id,
+      type,
+      url: absoluteMediaURL(typeof item === 'string' ? item : item.url)
+    }
+    
+    // Add additional properties if available
+    if (typeof item === 'object' && item !== null) {
+      if (item.thumbnailUrl) {
+        mediaItem.thumbnailUrl = absoluteMediaURL(item.thumbnailUrl)
+      }
+      if (item.width) mediaItem.width = item.width
+      if (item.height) mediaItem.height = item.height
+      if (item.durationSec) mediaItem.durationSec = item.durationSec
+    }
+    
+    media.push(mediaItem)
   }
   
-  // 2. First photo from photos array
-  if (post.photos && post.photos.length > 0) {
-    const firstPhoto = post.photos[0]
-    if (typeof firstPhoto === 'string') {
-      return absoluteMediaURL(firstPhoto)
-    } else if (firstPhoto?.url) {
-      return absoluteMediaURL(firstPhoto.url)
+  // 1. Single image field
+  if (post.image) {
+    addMediaItem(post.image, 'IMAGE')
+  }
+  
+  // 2. Photos array
+  if (post.photos && Array.isArray(post.photos)) {
+    post.photos.forEach((photo: any) => {
+      addMediaItem(photo, 'IMAGE')
+    })
+  }
+  
+  // 3. Single video field
+  if (post.video) {
+    addMediaItem(post.video, 'VIDEO')
+  }
+  
+  // 4. Videos array (if it exists)
+  if (post.videos && Array.isArray(post.videos)) {
+    post.videos.forEach((video: any) => {
+      addMediaItem(video, 'VIDEO')
+    })
+  }
+  
+  // 5. Generic media array (if it exists)
+  if (post.media && Array.isArray(post.media)) {
+    post.media.forEach((item: any) => {
+      const type = isVideoFile(item.url || item) ? 'VIDEO' : 'IMAGE'
+      addMediaItem(item, type)
+    })
+  }
+  
+  // 6. Featured image (if it exists)
+  if (post.featuredImage) {
+    addMediaItem(post.featuredImage, 'IMAGE')
+  }
+  
+  return media
+}
+
+/**
+ * Get the cover image/thumbnail for a post with priority:
+ * 1) first IMAGE
+ * 2) first VIDEO thumbnailUrl
+ * 3) video url if no thumbnail
+ * 4) null if no media
+ */
+function getPostCover(media: Array<{
+  id: string
+  type: 'IMAGE' | 'VIDEO'
+  url: string
+  thumbnailUrl?: string
+  width?: number
+  height?: number
+  durationSec?: number
+}>): { type: 'IMAGE' | 'VIDEO', url: string } | null {
+  if (!media || media.length === 0) {
+    return null
+  }
+  
+  // 1. First IMAGE
+  const firstImage = media.find(item => item.type === 'IMAGE')
+  if (firstImage) {
+    return {
+      type: 'IMAGE',
+      url: firstImage.url
     }
   }
   
-  // 3. Video thumbnail
-  if (post.videoThumbnail?.url) {
-    return absoluteMediaURL(post.videoThumbnail.url)
+  // 2. First VIDEO with thumbnailUrl
+  const firstVideoWithThumbnail = media.find(item => 
+    item.type === 'VIDEO' && item.thumbnailUrl
+  )
+  if (firstVideoWithThumbnail) {
+    return {
+      type: 'VIDEO',
+      url: firstVideoWithThumbnail.thumbnailUrl!
+    }
   }
   
-  // 4. Single video (as fallback)
-  if (post.video?.url) {
-    return absoluteMediaURL(post.video.url)
+  // 3. First VIDEO url if no thumbnail
+  const firstVideo = media.find(item => item.type === 'VIDEO')
+  if (firstVideo) {
+    return {
+      type: 'VIDEO',
+      url: firstVideo.url
+    }
   }
   
   return null
 }
 
 /**
- * Get video thumbnail URL
- */
-function getVideoThumbnailUrl(videoUrl: string): string | null {
-  if (!videoUrl) return null
-  
-  // If it's a media ID, we'd need to look it up
-  // For now, return null and let the client handle it
-  return null
-}
-
-/**
- * Check if a file is an image based on extension or MIME type
- */
-function isImageFile(filename: string): boolean {
-  if (!filename) return false
-  
-  const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.avif', '.heic', '.heif']
-  const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'))
-  
-  return imageExtensions.includes(extension)
-}
-
-/**
- * Check if post has video content
- */
-function hasVideoContent(post: any): boolean {
-  // Check for video field
-  if (post.video?.url) return true
-  
-  return false
-}
-
-/**
- * Check if a file is a video based on extension
+ * Check if a file is a video based on extension or MIME type
  */
 function isVideoFile(filename: string): boolean {
   if (!filename) return false
   
-  const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.m4v', '.3gp', '.3g2']
+  const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi', '.m4v', '.3gp', '.3g2', '.ts', '.mts', '.m2ts']
   const extension = filename.toLowerCase().substring(filename.lastIndexOf('.'))
   
   return videoExtensions.includes(extension)
-}
-
-/**
- * Get all images from a post
- */
-function getPostImages(post: any): string[] {
-  const images: string[] = []
-  
-  // Single image
-  if (post.image?.url) {
-    images.push(absoluteMediaURL(post.image.url))
-  }
-  
-  // Photos array
-  if (post.photos && post.photos.length > 0) {
-    post.photos.forEach((photo: any) => {
-      if (typeof photo === 'string') {
-        images.push(absoluteMediaURL(photo))
-      } else if (photo?.url) {
-        images.push(absoluteMediaURL(photo.url))
-      }
-    })
-  }
-  
-  return images
-}
-
-/**
- * Get all videos from a post
- */
-function getPostVideos(post: any): string[] {
-  const videos: string[] = []
-  
-  // Single video
-  if (post.video?.url) {
-    videos.push(absoluteMediaURL(post.video.url))
-  }
-  
-  return videos
-}
-
-/**
- * Get total media count for a post
- */
-function getTotalMediaCount(post: any): number {
-  let count = 0
-  
-  // Single image
-  if (post.image?.url) count++
-  
-  // Photos array
-  if (post.photos) count += post.photos.length
-  
-  // Single video
-  if (post.video?.url) count++
-  
-  return count
 }
 
 /**
@@ -358,6 +307,6 @@ function absoluteMediaURL(url: string): string {
   }
   
   // Convert relative URL to absolute
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.SERVER_URL || 'http://localhost:3000'
   return new URL(url, baseUrl).toString()
 }

@@ -11,6 +11,167 @@ import mime from 'mime'
 ffmpeg.setFfmpegPath(ffmpegStatic as string)
 
 /**
+ * Utility function to create absolute URL from relative path
+ */
+function absoluteUrl(relativePath: string): string {
+  if (/^https?:\/\//i.test(relativePath)) {
+    return relativePath
+  }
+  const base = process.env.NEXT_PUBLIC_BASE_URL || process.env.SERVER_URL || 'http://localhost:3000'
+  return new URL(relativePath, base).toString()
+}
+
+/**
+ * Utility function to stream a response to a file
+ */
+async function streamToFile(stream: ReadableStream, filePath: string): Promise<void> {
+  const file = fs.createWriteStream(filePath)
+  const reader = stream.getReader()
+  
+  try {
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      file.write(Buffer.from(value))
+    }
+  } finally {
+    file.end()
+    await new Promise((resolve) => file.on('close', () => resolve(undefined)))
+  }
+}
+
+/**
+ * Enhanced video thumbnail generation with storage detection
+ */
+export async function generateVideoThumbnailEnhanced(
+  videoDoc: any, 
+  payload: any
+): Promise<string | null> {
+  try {
+    console.log('🎬 Enhanced: Starting video thumbnail generation for:', videoDoc.id)
+    console.log('🎬 Enhanced: Video details:', {
+      id: videoDoc.id,
+      filename: videoDoc.filename,
+      url: videoDoc.url,
+      mimeType: videoDoc.mimeType,
+      type: videoDoc.type
+    })
+    
+    // Check if this is a video and doesn't already have a thumbnail
+    if (videoDoc.type !== 'video' || videoDoc.thumbnailUrl) {
+      console.log('🎬 Enhanced: Skipping - not a video or already has thumbnail')
+      return null
+    }
+    
+    // Detect storage type
+    const isUsingVercelBlob = !!process.env.BLOB_READ_WRITE_TOKEN
+    console.log('🎬 Enhanced: Storage type:', isUsingVercelBlob ? 'Vercel Blob' : 'Local Disk')
+    
+    // Get video file path/URL
+    const videoUrl = videoDoc.url
+    if (!videoUrl) {
+      console.log('🎬 Enhanced: No video URL available')
+      return null
+    }
+    
+    // Create temporary directory for processing
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'video-thumb-'))
+    const outputPath = path.join(tmpDir, 'thumbnail.jpg')
+    
+    try {
+      // Determine input path based on storage type
+      let inputPath: string
+      
+      if (isUsingVercelBlob || videoUrl.startsWith('http')) {
+        // Download remote video to temp file
+        inputPath = path.join(tmpDir, 'input.mp4')
+        const absoluteVideoUrl = absoluteUrl(videoUrl)
+        console.log('🎬 Enhanced: Downloading video from:', absoluteVideoUrl)
+        
+        const response = await fetch(absoluteVideoUrl)
+        if (!response.ok || !response.body) {
+          throw new Error(`Failed to download video: ${response.statusText}`)
+        }
+        
+        await streamToFile(response.body, inputPath)
+        console.log('🎬 Enhanced: Video downloaded successfully')
+      } else {
+        // Local file path
+        inputPath = path.join(process.cwd(), 'public', videoUrl.replace(/^\//, ''))
+        if (!fs.existsSync(inputPath)) {
+          console.log('🎬 Enhanced: Local video file not found:', inputPath)
+          return null
+        }
+        console.log('🎬 Enhanced: Using local video file:', inputPath)
+      }
+      
+      // Extract frame using fluent-ffmpeg
+      await extractFrameWithFFmpeg(inputPath, outputPath)
+      
+      if (!fs.existsSync(outputPath)) {
+        console.log('🎬 Enhanced: Thumbnail file was not created')
+        return null
+      }
+      
+      // Read the generated thumbnail
+      const thumbnailBuffer = fs.readFileSync(outputPath)
+      console.log('🎬 Enhanced: Thumbnail generated, size:', thumbnailBuffer.length, 'bytes')
+      
+      // Generate thumbnail filename
+      const thumbnailFilename = `thumb_${path.parse(videoDoc.filename || 'video').name}_${Date.now()}.jpg`
+      
+      let thumbnailUrl: string
+      
+      if (isUsingVercelBlob) {
+        // For Vercel Blob storage, create a media document
+        const thumbnailDoc = await payload.create({
+          collection: 'media',
+          data: {
+            alt: `Video thumbnail for ${videoDoc.alt || videoDoc.filename || 'video'}`,
+            uploadedBy: videoDoc.uploadedBy,
+            uploadSource: 'system',
+            folder: 'thumbnails',
+            type: 'image',
+          },
+          file: {
+            data: thumbnailBuffer,
+            mimetype: 'image/jpeg',
+            name: thumbnailFilename,
+            size: thumbnailBuffer.length,
+          },
+        })
+        
+        thumbnailUrl = thumbnailDoc.url || `/api/media/file/${thumbnailFilename}`
+        console.log('🎬 Enhanced: Thumbnail saved to Vercel Blob:', thumbnailUrl)
+      } else {
+        // For local storage, save to public directory
+        const thumbDir = path.join(process.cwd(), 'public', 'thumbnails')
+        fs.mkdirSync(thumbDir, { recursive: true })
+        const finalPath = path.join(thumbDir, thumbnailFilename)
+        fs.writeFileSync(finalPath, thumbnailBuffer)
+        
+        thumbnailUrl = `/thumbnails/${thumbnailFilename}`
+        console.log('🎬 Enhanced: Thumbnail saved locally:', thumbnailUrl)
+      }
+      
+      return thumbnailUrl
+      
+    } finally {
+      // Cleanup temp directory
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      } catch (cleanupError) {
+        console.warn('🎬 Enhanced: Failed to cleanup temp directory:', cleanupError)
+      }
+    }
+    
+  } catch (error) {
+    console.error('🎬 Enhanced: Error generating video thumbnail:', error)
+    return null
+  }
+}
+
+/**
  * Generate a video frame thumbnail from the first frame of the video
  * Uses fluent-ffmpeg for reliable frame extraction
  */
@@ -158,11 +319,13 @@ async function createVideoFrameThumbnailWithFFmpeg(videoDoc: any, payload: any):
 }
 
 /**
- * Extract a frame from video using fluent-ffmpeg
+ * Extract a frame from video using fluent-ffmpeg with enhanced error handling
  */
 function extractFrameWithFFmpeg(inputPath: string, outputPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
+    console.log('🎬 FFmpeg: Starting frame extraction from:', inputPath)
+    
+    const command = ffmpeg(inputPath)
       .inputOptions(['-ss', '00:00:01']) // Seek to 1 second
       .outputOptions([
         '-vframes', '1', // Extract only 1 frame
@@ -170,15 +333,40 @@ function extractFrameWithFFmpeg(inputPath: string, outputPath: string): Promise<
         '-vf', 'scale=400:300:force_original_aspect_ratio=decrease,pad=400:300:(ow-iw)/2:(oh-ih)/2' // Scale and pad to 400x300
       ])
       .output(outputPath)
+      .on('start', (commandLine) => {
+        console.log('🎬 FFmpeg: Command started:', commandLine)
+      })
+      .on('progress', (progress) => {
+        console.log('🎬 FFmpeg: Progress:', progress.percent + '% done')
+      })
       .on('end', () => {
-        console.log('🎬 FFmpeg: Frame extraction completed')
+        console.log('🎬 FFmpeg: Frame extraction completed successfully')
         resolve()
       })
       .on('error', (error) => {
-        console.error('🎬 FFmpeg: Frame extraction failed:', error)
+        console.error('🎬 FFmpeg: Frame extraction failed:', error.message)
         reject(error)
       })
-      .run()
+      .on('stderr', (stderrLine) => {
+        console.log('🎬 FFmpeg: stderr:', stderrLine)
+      })
+    
+    // Set timeout to prevent hanging
+    const timeout = setTimeout(() => {
+      console.error('🎬 FFmpeg: Frame extraction timed out after 30 seconds')
+      command.kill('SIGKILL')
+      reject(new Error('Frame extraction timed out'))
+    }, 30000)
+    
+    command.on('end', () => {
+      clearTimeout(timeout)
+    })
+    
+    command.on('error', () => {
+      clearTimeout(timeout)
+    })
+    
+    command.run()
   })
 }
 

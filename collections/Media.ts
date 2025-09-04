@@ -262,55 +262,55 @@ const handleLivePhotoConversionAsync = async (doc: any, req: any) => {
   }
 }
 
-// Async function to handle video thumbnail generation without blocking the upload
-const handleVideoThumbnailAsync = async (doc: any, req: any) => {
+// Enhanced video thumbnail generation with storage detection
+const handleVideoThumbnailGeneration = async (doc: any, req: any) => {
   try {
-    console.log('🎬 Starting async video thumbnail generation:', doc.filename)
+    console.log('🎬 Starting enhanced video thumbnail generation:', doc.filename)
     console.log('🎬 Video document details:', {
       id: doc.id,
       filename: doc.filename,
       mimeType: doc.mimeType,
-      isVideo: doc.isVideo,
+      type: doc.type,
       url: doc.url,
-      hasThumbnail: !!doc.videoThumbnail
+      hasThumbnail: !!doc.thumbnailUrl
     })
     
-    // Reduced delay for faster processing
+    // Small delay to ensure file is fully written
     await new Promise(resolve => setTimeout(resolve, 500))
     
-    // Generate thumbnail
-    const { generateVideoThumbnailManually } = await import('@/lib/video-thumbnail-generator')
-    const thumbnailId = await generateVideoThumbnailManually(doc, req.payload)
+    // Generate thumbnail using the enhanced system
+    const { generateVideoThumbnailEnhanced } = await import('@/lib/video-thumbnail-generator')
+    const thumbnailUrl = await generateVideoThumbnailEnhanced(doc, req.payload)
     
-    if (thumbnailId) {
-      console.log('🎬 Video thumbnail created successfully:', thumbnailId)
+    if (thumbnailUrl) {
+      console.log('🎬 Video thumbnail created successfully:', thumbnailUrl)
       
-      // Update the video document with the thumbnail reference
+      // Update the video document with the thumbnail URL
       try {
         await req.payload.update({
           collection: 'media',
           id: doc.id,
           data: {
-            videoThumbnail: thumbnailId,
+            thumbnailUrl: thumbnailUrl,
           },
         })
-        console.log('🎬 Video document updated with thumbnail reference')
+        console.log('🎬 Video document updated with thumbnail URL')
       } catch (updateError) {
-        console.error('🎬 Error updating video document with thumbnail:', updateError)
+        console.error('🎬 Error updating video document with thumbnail URL:', updateError)
       }
     } else {
       console.log('🎬 Video thumbnail creation failed')
       
       // Create a placeholder thumbnail if generation fails
       try {
-        const placeholderId = await createPlaceholderThumbnail(doc, req.payload)
-        if (placeholderId) {
-          console.log('🎬 Placeholder thumbnail created:', placeholderId)
+        const placeholderUrl = await createPlaceholderThumbnailEnhanced(doc, req.payload)
+        if (placeholderUrl) {
+          console.log('🎬 Placeholder thumbnail created:', placeholderUrl)
           await req.payload.update({
             collection: 'media',
             id: doc.id,
             data: {
-              videoThumbnail: placeholderId,
+              thumbnailUrl: placeholderUrl,
             },
           })
         }
@@ -320,18 +320,18 @@ const handleVideoThumbnailAsync = async (doc: any, req: any) => {
     }
     
   } catch (error) {
-    console.error('🎬 Error in async video processing:', error)
+    console.error('🎬 Error in enhanced video processing:', error)
     
     // Try to create a placeholder thumbnail as fallback
     try {
-      const placeholderId = await createPlaceholderThumbnail(doc, req.payload)
-      if (placeholderId) {
-        console.log('🎬 Fallback placeholder thumbnail created:', placeholderId)
+      const placeholderUrl = await createPlaceholderThumbnailEnhanced(doc, req.payload)
+      if (placeholderUrl) {
+        console.log('🎬 Fallback placeholder thumbnail created:', placeholderUrl)
         await req.payload.update({
           collection: 'media',
           id: doc.id,
           data: {
-            videoThumbnail: placeholderId,
+            thumbnailUrl: placeholderUrl,
           },
         })
       }
@@ -341,10 +341,10 @@ const handleVideoThumbnailAsync = async (doc: any, req: any) => {
   }
 }
 
-// Helper function to create a placeholder thumbnail
-const createPlaceholderThumbnail = async (doc: any, payload: any): Promise<string | null> => {
+// Enhanced placeholder thumbnail creation with storage detection
+const createPlaceholderThumbnailEnhanced = async (doc: any, payload: any): Promise<string | null> => {
   try {
-    console.log('🎬 Creating placeholder thumbnail for video:', doc.filename)
+    console.log('🎬 Creating enhanced placeholder thumbnail for video:', doc.filename)
     
     // Create a simple placeholder image
     const canvas = require('canvas')
@@ -382,31 +382,47 @@ const createPlaceholderThumbnail = async (doc: any, payload: any): Promise<strin
     ctx.textAlign = 'center'
     ctx.fillText('Video', width / 2, height - 30)
     
-    const buffer = canvasInstance.toBuffer('image/png')
-    const thumbnailFilename = `placeholder_${doc.filename?.replace(/\.[^/.]+$/, '') || 'video'}.png`
+    const buffer = canvasInstance.toBuffer('image/jpeg')
+    const thumbnailFilename = `placeholder_${doc.filename?.replace(/\.[^/.]+$/, '') || 'video'}_${Date.now()}.jpg`
     
-    // Create thumbnail media document
-    const thumbnailDoc = await payload.create({
-      collection: 'media',
-      data: {
-        alt: `Placeholder thumbnail for ${doc.alt || doc.filename || 'video'}`,
-        uploadedBy: doc.uploadedBy,
-        uploadSource: 'system',
-        folder: 'thumbnails',
-      },
-      file: {
-        data: buffer,
-        mimetype: 'image/png',
-        name: thumbnailFilename,
-        size: buffer.length,
-      },
-    })
+    // Detect storage type and handle accordingly
+    const isUsingVercelBlob = !!process.env.BLOB_READ_WRITE_TOKEN
     
-    console.log('🎬 Placeholder thumbnail created successfully:', thumbnailDoc.id)
-    return thumbnailDoc.id
+    if (isUsingVercelBlob) {
+      // For Vercel Blob storage, create a media document and return its URL
+      const thumbnailDoc = await payload.create({
+        collection: 'media',
+        data: {
+          alt: `Placeholder thumbnail for ${doc.alt || doc.filename || 'video'}`,
+          uploadedBy: doc.uploadedBy,
+          uploadSource: 'system',
+          folder: 'thumbnails',
+          type: 'image',
+        },
+        file: {
+          data: buffer,
+          mimetype: 'image/jpeg',
+          name: thumbnailFilename,
+          size: buffer.length,
+        },
+      })
+      
+      console.log('🎬 Placeholder thumbnail created in Vercel Blob:', thumbnailDoc.id)
+      return thumbnailDoc.url || `/api/media/file/${thumbnailFilename}`
+    } else {
+      // For local storage, save to public directory and return URL
+      const thumbDir = path.join(process.cwd(), 'public', 'thumbnails')
+      fs.mkdirSync(thumbDir, { recursive: true })
+      const finalPath = path.join(thumbDir, thumbnailFilename)
+      fs.writeFileSync(finalPath, buffer)
+      
+      const thumbnailUrl = `/thumbnails/${thumbnailFilename}`
+      console.log('🎬 Placeholder thumbnail saved locally:', thumbnailUrl)
+      return thumbnailUrl
+    }
     
   } catch (error) {
-    console.error('🎬 Error creating placeholder thumbnail:', error)
+    console.error('🎬 Error creating enhanced placeholder thumbnail:', error)
     return null
   }
 }
@@ -505,6 +521,19 @@ export const Media: CollectionConfig = {
       type: 'text',
     },
     {
+      name: 'type',
+      type: 'select',
+      options: [
+        { label: 'Image', value: 'image' },
+        { label: 'Video', value: 'video' },
+      ],
+      admin: {
+        position: 'sidebar',
+        description: 'Media type (auto-detected)',
+        readOnly: true,
+      },
+    },
+    {
       name: 'uploadedBy',
       type: 'relationship',
       relationTo: 'users',
@@ -519,6 +548,7 @@ export const Media: CollectionConfig = {
         { label: 'Web', value: 'web' },
         { label: 'Mobile', value: 'mobile' },
         { label: 'Admin', value: 'admin' },
+        { label: 'System', value: 'system' },
       ],
       defaultValue: 'web',
       admin: {
@@ -530,6 +560,38 @@ export const Media: CollectionConfig = {
       type: 'text',
       admin: {
         position: 'sidebar',
+      },
+    },
+    {
+      name: 'width',
+      type: 'number',
+      admin: {
+        description: 'Media width in pixels',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'height',
+      type: 'number',
+      admin: {
+        description: 'Media height in pixels',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'durationSec',
+      type: 'number',
+      admin: {
+        description: 'Video duration in seconds (for videos only)',
+        readOnly: true,
+      },
+    },
+    {
+      name: 'thumbnailUrl',
+      type: 'text',
+      admin: {
+        description: 'Direct URL to video thumbnail (JPEG) - auto-generated for videos',
+        readOnly: true,
       },
     },
     {
@@ -560,15 +622,7 @@ export const Media: CollectionConfig = {
       type: 'upload',
       relationTo: 'media',
       admin: {
-        description: 'Auto-generated thumbnail for video files',
-        readOnly: true,
-      },
-    },
-    {
-      name: 'thumbnailUrl',
-      type: 'text',
-      admin: {
-        description: 'Direct URL to video thumbnail (JPEG)',
+        description: 'Auto-generated thumbnail for video files (legacy field)',
         readOnly: true,
       },
     },
@@ -576,7 +630,7 @@ export const Media: CollectionConfig = {
       name: 'isVideo',
       type: 'checkbox',
       admin: {
-        description: 'Indicates if this is a video file',
+        description: 'Indicates if this is a video file (legacy field)',
         readOnly: true,
       },
     },
@@ -588,13 +642,20 @@ export const Media: CollectionConfig = {
           operation,
           mimeType: data.mimeType,
           filename: data.filename,
-          isVideo: data.isVideo
+          type: data.type
         })
         
-        // Mark videos as isVideo during creation
-        if (operation === 'create' && data.mimeType?.startsWith('video/')) {
-          console.log('🎬 Media beforeChange: Marking as video:', data.filename)
-          data.isVideo = true
+        // Set media type based on MIME type
+        if (operation === 'create') {
+          if (data.mimeType?.startsWith('video/')) {
+            console.log('🎬 Media beforeChange: Setting type to video:', data.filename)
+            data.type = 'video'
+            data.isVideo = true // Keep legacy field for backward compatibility
+          } else if (data.mimeType?.startsWith('image/')) {
+            console.log('🎬 Media beforeChange: Setting type to image:', data.filename)
+            data.type = 'image'
+            data.isVideo = false // Keep legacy field for backward compatibility
+          }
         }
         
         // Store original format for Live Photos
@@ -626,14 +687,14 @@ export const Media: CollectionConfig = {
         }
         
         // Process videos on create that don't already have a thumbnail
-        if (operation === 'create' && doc.isVideo && !doc.videoThumbnail) {
+        if (operation === 'create' && doc.type === 'video' && !doc.thumbnailUrl) {
           console.log('🎬 Media afterChange: Processing video for thumbnail generation')
-          await handleVideoThumbnailAsync(doc, req)
+          await handleVideoThumbnailGeneration(doc, req)
         } else {
           console.log('🎬 Media afterChange: Skipping thumbnail generation:', {
             reason: operation !== 'create' ? 'not create operation' : 
-                   !doc.isVideo ? 'not a video' : 
-                   doc.videoThumbnail ? 'already has thumbnail' : 'unknown'
+                   doc.type !== 'video' ? 'not a video' : 
+                   doc.thumbnailUrl ? 'already has thumbnail' : 'unknown'
           })
         }
         
