@@ -565,6 +565,14 @@ export const Media: CollectionConfig = {
       },
     },
     {
+      name: 'thumbnailUrl',
+      type: 'text',
+      admin: {
+        description: 'Direct URL to video thumbnail (JPEG)',
+        readOnly: true,
+      },
+    },
+    {
       name: 'isVideo',
       type: 'checkbox',
       admin: {

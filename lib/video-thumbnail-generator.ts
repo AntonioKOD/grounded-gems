@@ -1,11 +1,18 @@
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 import { createCanvas, loadImage } from 'canvas'
 import { spawn } from 'child_process'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegStatic from 'ffmpeg-static'
+import mime from 'mime'
+
+// Set FFmpeg path
+ffmpeg.setFfmpegPath(ffmpegStatic as string)
 
 /**
  * Generate a video frame thumbnail from the first frame of the video
- * Uses multiple approaches to extract video frames
+ * Uses fluent-ffmpeg for reliable frame extraction
  */
 export async function generateVideoThumbnailManually(
   videoDoc: any, 
@@ -22,12 +29,20 @@ export async function generateVideoThumbnailManually(
       hasThumbnail: !!videoDoc.videoThumbnail
     })
     
-    // Try to extract actual video frame first
-    const thumbnailId = await createVideoFrameThumbnail(videoDoc, payload)
+    // Try to extract actual video frame using fluent-ffmpeg first
+    const thumbnailId = await createVideoFrameThumbnailWithFFmpeg(videoDoc, payload)
     
     if (thumbnailId) {
       console.log('🎬 Manual: Video frame thumbnail created successfully:', thumbnailId)
       return thumbnailId
+    }
+    
+    // Fallback to existing method
+    const fallbackId = await createVideoFrameThumbnail(videoDoc, payload)
+    
+    if (fallbackId) {
+      console.log('🎬 Manual: Fallback video frame thumbnail created successfully:', fallbackId)
+      return fallbackId
     }
     
     // If frame extraction fails, create a placeholder
@@ -47,6 +62,137 @@ export async function generateVideoThumbnailManually(
     console.error('🎬 Manual: Error in generateVideoThumbnailManually:', error)
     return null
   }
+}
+
+/**
+ * Create a video frame thumbnail using fluent-ffmpeg
+ */
+async function createVideoFrameThumbnailWithFFmpeg(videoDoc: any, payload: any): Promise<string | null> {
+  try {
+    console.log('🎬 FFmpeg: Creating video frame thumbnail with fluent-ffmpeg')
+    
+    // Get the video file path
+    const videoUrl = videoDoc.url
+    if (!videoUrl) {
+      console.log('🎬 FFmpeg: No video URL available')
+      return null
+    }
+    
+    // Create temporary directory for processing
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'video-thumb-'))
+    const outputPath = path.join(tmpDir, 'thumbnail.jpg')
+    
+    // Determine input path (local file or download from URL)
+    let inputPath: string
+    
+    if (videoUrl.startsWith('http')) {
+      // Download remote video to temp file
+      inputPath = path.join(tmpDir, 'input.mp4')
+      await downloadFile(videoUrl, inputPath)
+    } else {
+      // Local file path
+      inputPath = path.join(process.cwd(), 'public', videoUrl.replace(/^\//, ''))
+      if (!fs.existsSync(inputPath)) {
+        console.log('🎬 FFmpeg: Local video file not found:', inputPath)
+        return null
+      }
+    }
+    
+    // Extract frame using fluent-ffmpeg
+    await extractFrameWithFFmpeg(inputPath, outputPath)
+    
+    if (!fs.existsSync(outputPath)) {
+      console.log('🎬 FFmpeg: Thumbnail file was not created')
+      return null
+    }
+    
+    // Read the generated thumbnail
+    const thumbnailBuffer = fs.readFileSync(outputPath)
+    
+    // Create thumbnail filename
+    const thumbnailFilename = `thumb_${path.parse(videoDoc.filename || 'video').name}_${Date.now()}.jpg`
+    
+    // Save thumbnail to public directory
+    const thumbDir = path.join(process.cwd(), 'public', 'thumbnails')
+    fs.mkdirSync(thumbDir, { recursive: true })
+    const finalPath = path.join(thumbDir, thumbnailFilename)
+    fs.copyFileSync(outputPath, finalPath)
+    
+    // Create thumbnail media document
+    const thumbnailDoc = await payload.create({
+      collection: 'media',
+      data: {
+        alt: `Video thumbnail for ${videoDoc.alt || videoDoc.filename || 'video'}`,
+        uploadedBy: videoDoc.uploadedBy,
+        uploadSource: 'system',
+        folder: 'thumbnails',
+      },
+      file: {
+        data: thumbnailBuffer,
+        mimetype: 'image/jpeg',
+        name: thumbnailFilename,
+        size: thumbnailBuffer.length,
+      },
+    })
+    
+    // Update the original video document with thumbnail reference and URL
+    await payload.update({
+      collection: 'media',
+      id: videoDoc.id,
+      data: {
+        videoThumbnail: thumbnailDoc.id,
+        thumbnailUrl: `/thumbnails/${thumbnailFilename}`,
+      },
+    })
+    
+    // Cleanup temp directory
+    fs.rmSync(tmpDir, { recursive: true, force: true })
+    
+    console.log('🎬 FFmpeg: Video frame thumbnail created and linked successfully')
+    return thumbnailDoc.id
+    
+  } catch (error) {
+    console.error('🎬 FFmpeg: Error creating video frame thumbnail:', error)
+    return null
+  }
+}
+
+/**
+ * Extract a frame from video using fluent-ffmpeg
+ */
+function extractFrameWithFFmpeg(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .inputOptions(['-ss', '00:00:01']) // Seek to 1 second
+      .outputOptions([
+        '-vframes', '1', // Extract only 1 frame
+        '-q:v', '2', // High quality
+        '-vf', 'scale=400:300:force_original_aspect_ratio=decrease,pad=400:300:(ow-iw)/2:(oh-ih)/2' // Scale and pad to 400x300
+      ])
+      .output(outputPath)
+      .on('end', () => {
+        console.log('🎬 FFmpeg: Frame extraction completed')
+        resolve()
+      })
+      .on('error', (error) => {
+        console.error('🎬 FFmpeg: Frame extraction failed:', error)
+        reject(error)
+      })
+      .run()
+  })
+}
+
+/**
+ * Download a file from URL to local path
+ */
+async function downloadFile(url: string, outputPath: string): Promise<void> {
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.statusText}`)
+  }
+  
+  const buffer = await response.arrayBuffer()
+  fs.writeFileSync(outputPath, Buffer.from(buffer))
 }
 
 /**
