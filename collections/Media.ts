@@ -629,8 +629,103 @@ export const Media: CollectionConfig = {
           })
         }
         
+        // Broadcast real-time events for media changes
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          if (operation === 'create') {
+            // Broadcast new media creation
+            const newMediaMessage: any = {
+              messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              eventType: RealTimeEventType.MEDIA_CREATED,
+              data: {
+                media: {
+                  id: doc.id,
+                  filename: doc.filename,
+                  mimeType: doc.mimeType,
+                  url: doc.url,
+                  isVideo: doc.isVideo,
+                  width: doc.width,
+                  height: doc.height,
+                  createdAt: doc.createdAt
+                }
+              }
+            };
+
+            broadcastMessage(newMediaMessage, {
+              queueForOffline: true
+            });
+
+            console.log(`📡 [Media] Real-time event broadcasted: MEDIA_CREATED for media ${doc.id}`);
+          }
+
+          if (operation === 'update') {
+            // Check if media processing status changed
+            const processingChanged = 
+              doc.conversionStatus !== doc.conversionStatus ||
+              doc.videoThumbnail !== doc.videoThumbnail;
+
+            if (processingChanged) {
+              const processingUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.MEDIA_UPDATED,
+                data: {
+                  mediaId: doc.id,
+                  updates: {
+                    conversionStatus: doc.conversionStatus,
+                    hasVideoThumbnail: !!doc.videoThumbnail,
+                    videoThumbnail: doc.videoThumbnail?.url,
+                    lastUpdated: new Date().toISOString()
+                  }
+                }
+              };
+
+              broadcastMessage(processingUpdateMessage, {
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Media] Real-time event broadcasted: MEDIA_PROCESSING_UPDATED for media ${doc.id}`);
+            }
+          }
+
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time events for media:', realtimeError);
+        }
+
         return doc
       },
     ],
+    afterDelete: [
+      async ({ req, doc, id }) => {
+        if (!req.payload) return;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          const mediaDeletedMessage: any = {
+            messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            eventType: RealTimeEventType.MEDIA_DELETED,
+            data: {
+              mediaId: id,
+              removeFromFeeds: true,
+              cleanupRequired: true
+            }
+          };
+
+          broadcastMessage(mediaDeletedMessage, {
+            queueForOffline: true
+          });
+
+          console.log(`📡 [Media] Real-time event broadcasted: MEDIA_DELETED for media ${id}`);
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time event for media deletion:', realtimeError);
+        }
+      }
+    ]
   },
 }

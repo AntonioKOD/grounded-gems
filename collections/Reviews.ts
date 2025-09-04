@@ -152,9 +152,17 @@ export const Reviews: CollectionConfig = {
         }
         return data
       },
+      async ({ data, req, operation }) => {
+        // Auto-update updatedAt timestamp
+        if (operation === 'update') {
+          data.updatedAt = new Date().toISOString()
+        }
+        
+        return data
+      }
     ],
     afterChange: [
-      async ({ doc, req, operation }) => {
+      async ({ doc, req, operation, previousDoc }) => {
         if (!req.payload) return doc;
 
         try {
@@ -285,6 +293,87 @@ export const Reviews: CollectionConfig = {
               console.error('[REVIEWS HOOK] Failed to update location stats:', err)
             }
           }
+
+          // Broadcast real-time events for review changes
+          try {
+            const { broadcastMessage } = await import('@/lib/wsServer');
+            const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+            
+            if (operation === 'create') {
+              // Broadcast new review creation
+              const newReviewMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.REVIEW_CREATED,
+                actorId: doc.author,
+                data: {
+                  review: {
+                    id: doc.id,
+                    title: doc.title,
+                    content: doc.content,
+                    rating: doc.rating,
+                    reviewType: doc.reviewType,
+                    author: {
+                      id: doc.author,
+                      name: 'User' // Will be populated with actual user data
+                    },
+                    createdAt: doc.createdAt,
+                    targetId: doc.location || doc.event || doc.special,
+                    targetType: doc.reviewType
+                  }
+                }
+              };
+
+              broadcastMessage(newReviewMessage, {
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Reviews] Real-time event broadcasted: REVIEW_CREATED for review ${doc.id}`);
+            }
+
+            if (operation === 'update' && previousDoc) {
+              // Check if review content changed
+              const contentChanged = 
+                doc.title !== previousDoc.title ||
+                doc.content !== previousDoc.content ||
+                doc.rating !== previousDoc.rating ||
+                doc.status !== previousDoc.status;
+
+              if (contentChanged) {
+                const reviewUpdatedMessage: any = {
+                  messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                  timestamp: new Date().toISOString(),
+                  eventType: RealTimeEventType.REVIEW_UPDATED,
+                  actorId: doc.author,
+                  data: {
+                    reviewId: doc.id,
+                    updates: {
+                      title: doc.title,
+                      content: doc.content,
+                      rating: doc.rating,
+                      status: doc.status
+                    },
+                    previousData: {
+                      title: previousDoc.title,
+                      content: previousDoc.content,
+                      rating: previousDoc.rating,
+                      status: previousDoc.status
+                    }
+                  }
+                };
+
+                broadcastMessage(reviewUpdatedMessage, {
+                  queueForOffline: true
+                });
+
+                console.log(`📡 [Reviews] Real-time event broadcasted: REVIEW_UPDATED for review ${doc.id}`);
+              }
+            }
+
+          } catch (realtimeError) {
+            console.warn('Failed to broadcast real-time events for review:', realtimeError);
+          }
+
         } catch (error) {
           console.error('Error creating review notification:', error);
         }
@@ -293,7 +382,7 @@ export const Reviews: CollectionConfig = {
       }
     ],
     afterDelete: [
-      async ({ doc }) => {
+      async ({ doc, req, id }) => {
         if (doc.reviewType === 'location' && doc.location) {
           try {
             const { getPayload } = await import('payload')
@@ -330,6 +419,34 @@ export const Reviews: CollectionConfig = {
             console.log(`[REVIEWS HOOK] Updated location ${locationId} after delete: rating=${averageRating}, count=${reviewCount}`)
           } catch (err) {
             console.error('[REVIEWS HOOK] Failed to update location stats after delete:', err)
+          }
+        }
+
+        // Broadcast real-time event for review deletion
+        if (req.payload) {
+          try {
+            const { broadcastMessage } = await import('@/lib/wsServer');
+            const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+            
+            const reviewDeletedMessage: any = {
+              messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              eventType: RealTimeEventType.REVIEW_DELETED,
+              data: {
+                reviewId: id,
+                reviewType: doc.reviewType,
+                targetId: doc.location || doc.event || doc.special,
+                removeFromFeeds: true
+              }
+            };
+
+            broadcastMessage(reviewDeletedMessage, {
+              queueForOffline: true
+            });
+
+            console.log(`📡 [Reviews] Real-time event broadcasted: REVIEW_DELETED for review ${id}`);
+          } catch (realtimeError) {
+            console.warn('Failed to broadcast real-time event for review deletion:', realtimeError);
           }
         }
       }

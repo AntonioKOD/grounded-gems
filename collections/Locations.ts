@@ -308,9 +308,173 @@ export const Locations: CollectionConfig = {
           console.error('Error syncing gallery to communityPhotos:', err);
         }
 
+        // Broadcast real-time events for location changes
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          if (operation === 'create') {
+            // Broadcast new location creation
+            const newLocationMessage: any = {
+              messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              eventType: RealTimeEventType.LOCATION_CREATED,
+              actorId: creatorId,
+              data: {
+                location: {
+                  id: doc.id,
+                  name: doc.name,
+                  description: doc.description,
+                  featuredImage: doc.featuredImage?.url,
+                  coordinates: doc.coordinates,
+                  category: doc.category,
+                  createdBy: creatorId,
+                  createdAt: doc.createdAt
+                }
+              }
+            };
+
+            broadcastMessage(newLocationMessage, {
+              excludeUserIds: creatorId ? [creatorId] : [],
+              queueForOffline: true
+            });
+
+            console.log(`📡 [Locations] Real-time event broadcasted: LOCATION_CREATED for location ${doc.id}`);
+          }
+
+          if (operation === 'update' && previousDoc) {
+            // Check if location status changed
+            const statusChanged = 
+              doc.status !== previousDoc.status ||
+              doc.isVerified !== previousDoc.isVerified ||
+              doc.isFeatured !== previousDoc.isFeatured;
+
+            if (statusChanged) {
+              const statusUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.LOCATION_STATUS_CHANGED,
+                actorId: creatorId,
+                data: {
+                  locationId: doc.id,
+                  status: {
+                    status: doc.status,
+                    isVerified: doc.isVerified,
+                    isFeatured: doc.isFeatured
+                  },
+                  previousStatus: {
+                    status: previousDoc.status,
+                    isVerified: previousDoc.isVerified,
+                    isFeatured: previousDoc.isFeatured
+                  }
+                }
+              };
+
+              broadcastMessage(statusUpdateMessage, {
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Locations] Real-time event broadcasted: LOCATION_STATUS_CHANGED for location ${doc.id}`);
+            }
+
+            // Check if location content changed
+            const contentChanged = 
+              doc.name !== previousDoc.name ||
+              doc.description !== previousDoc.description ||
+              doc.featuredImage !== previousDoc.featuredImage ||
+              JSON.stringify(doc.gallery) !== JSON.stringify(previousDoc.gallery);
+
+            if (contentChanged) {
+              const contentUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.LOCATION_DETAILS_UPDATED,
+                actorId: creatorId,
+                data: {
+                  locationId: doc.id,
+                  updates: {
+                    name: doc.name,
+                    description: doc.description,
+                    featuredImage: doc.featuredImage?.url,
+                    galleryCount: Array.isArray(doc.gallery) ? doc.gallery.length : 0
+                  }
+                }
+              };
+
+              broadcastMessage(contentUpdateMessage, {
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Locations] Real-time event broadcasted: LOCATION_CONTENT_UPDATED for location ${doc.id}`);
+            }
+
+            // Check if location ratings changed
+            const ratingsChanged = 
+              doc.averageRating !== previousDoc.averageRating ||
+              doc.reviewCount !== previousDoc.reviewCount;
+
+            if (ratingsChanged) {
+              const ratingsUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.LOCATION_RATING_UPDATED,
+                data: {
+                  locationId: doc.id,
+                  ratings: {
+                    averageRating: doc.averageRating,
+                    reviewCount: doc.reviewCount
+                  },
+                  previousRatings: {
+                    averageRating: previousDoc.averageRating,
+                    reviewCount: previousDoc.reviewCount
+                  }
+                }
+              };
+
+              broadcastMessage(ratingsUpdateMessage, {
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Locations] Real-time event broadcasted: LOCATION_RATINGS_UPDATED for location ${doc.id}`);
+            }
+          }
+
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time events for location:', realtimeError);
+        }
+
         return doc;
       },
     ],
+    afterDelete: [
+      async ({ req, doc, id }) => {
+        if (!req.payload) return;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          const locationDeletedMessage: any = {
+            messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            eventType: RealTimeEventType.LOCATION_DELETED,
+            data: {
+              locationId: id,
+              removeFromFeeds: true,
+              cleanupRequired: true
+            }
+          };
+
+          broadcastMessage(locationDeletedMessage, {
+            queueForOffline: true
+          });
+
+          console.log(`📡 [Locations] Real-time event broadcasted: LOCATION_DELETED for location ${id}`);
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time event for location deletion:', realtimeError);
+        }
+      }
+    ]
   },
   fields: [
     { name: 'name', type: 'text', required: true },

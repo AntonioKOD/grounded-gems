@@ -258,4 +258,143 @@ export const Notifications: CollectionConfig = {
       fields: ["recipient", "read", "createdAt"],
     },
   ],
+  hooks: {
+    beforeChange: [
+      async ({ data, req, operation }) => {
+        // Auto-update updatedAt timestamp
+        if (operation === 'update') {
+          data.updatedAt = new Date().toISOString()
+        }
+        
+        return data
+      }
+    ],
+    afterChange: [
+      async ({ req, doc, previousDoc, operation }) => {
+        if (!req.payload) return doc;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          if (operation === 'create') {
+            // Broadcast new notification to the recipient
+            const newNotificationMessage: any = {
+              messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              eventType: RealTimeEventType.NOTIFICATION_CREATED,
+              actorId: doc.actionBy,
+              targetUserId: doc.recipient,
+              data: {
+                notification: {
+                  id: doc.id,
+                  type: doc.type,
+                  title: doc.title,
+                  message: doc.message,
+                  priority: doc.priority,
+                  actionRequired: doc.actionRequired,
+                  relatedTo: doc.relatedTo,
+                  createdAt: doc.createdAt
+                },
+                recipientId: doc.recipient
+              }
+            };
+
+            broadcastMessage(newNotificationMessage, {
+              targetUserIds: [doc.recipient],
+              queueForOffline: true
+            });
+
+            console.log(`📡 [Notifications] Real-time event broadcasted: NOTIFICATION_CREATED for user ${doc.recipient}`);
+          }
+
+          if (operation === 'update' && previousDoc) {
+            // Check if notification was read
+            const readStatusChanged = doc.read !== previousDoc.read;
+
+            if (readStatusChanged) {
+              const readStatusMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.NOTIFICATION_READ,
+                targetUserId: doc.recipient,
+                data: {
+                  notificationId: doc.id,
+                  isRead: doc.read,
+                  readAt: doc.read ? new Date().toISOString() : null
+                }
+              };
+
+              broadcastMessage(readStatusMessage, {
+                targetUserIds: [doc.recipient],
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Notifications] Real-time event broadcasted: NOTIFICATION_READ_STATUS_CHANGED for notification ${doc.id}`);
+            }
+
+            // Check if action status changed
+            const actionStatusChanged = doc.actionStatus !== previousDoc.actionStatus;
+
+            if (actionStatusChanged) {
+              const actionStatusMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.NOTIFICATION_UPDATED,
+                targetUserId: doc.recipient,
+                data: {
+                  notificationId: doc.id,
+                  actionStatus: doc.actionStatus,
+                  previousActionStatus: previousDoc.actionStatus
+                }
+              };
+
+              broadcastMessage(actionStatusMessage, {
+                targetUserIds: [doc.recipient],
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Notifications] Real-time event broadcasted: NOTIFICATION_ACTION_STATUS_CHANGED for notification ${doc.id}`);
+            }
+          }
+
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time events for notification:', realtimeError);
+        }
+
+        return doc;
+      }
+    ],
+    afterDelete: [
+      async ({ req, doc, id }) => {
+        if (!req.payload) return;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          const notificationDeletedMessage: any = {
+            messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            eventType: RealTimeEventType.NOTIFICATION_DELETED,
+            targetUserId: doc.recipient,
+            data: {
+              notificationId: id,
+              recipientId: doc.recipient,
+              removeFromFeeds: true
+            }
+          };
+
+          broadcastMessage(notificationDeletedMessage, {
+            targetUserIds: [doc.recipient],
+            queueForOffline: true
+          });
+
+          console.log(`📡 [Notifications] Real-time event broadcasted: NOTIFICATION_DELETED for notification ${id}`);
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time event for notification deletion:', realtimeError);
+        }
+      }
+    ]
+  }
 }

@@ -462,6 +462,35 @@ export const Events: CollectionConfig = {
         return doc
       },
     ],
+    afterDelete: [
+      async ({ req, doc, id }) => {
+        if (!req.payload) return;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          const eventDeletedMessage: any = {
+            messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            eventType: RealTimeEventType.EVENT_DELETED,
+            data: {
+              eventId: String(id),
+              removeFromFeeds: true,
+              cleanupRequired: true
+            }
+          };
+
+          broadcastMessage(eventDeletedMessage, {
+            queueForOffline: true
+          });
+
+          console.log(`📡 [Events] Real-time event broadcasted: EVENT_DELETED for event ${id}`);
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time event for event deletion:', realtimeError);
+        }
+      }
+    ]
   },
   fields: [
     { name: 'name', type: 'text', required: true },

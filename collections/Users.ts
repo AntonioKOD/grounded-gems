@@ -317,6 +317,14 @@ export const Users: CollectionConfig = {
         }
         
         return data
+      },
+      async ({ data, req, operation }) => {
+        // Auto-update updatedAt timestamp
+        if (operation === 'update') {
+          data.updatedAt = new Date().toISOString()
+        }
+        
+        return data
       }
     ],
     afterRead: [
@@ -399,7 +407,190 @@ export const Users: CollectionConfig = {
         
         return doc;
       },
+      async ({ req, doc, previousDoc, operation }) => {
+        if (!req.payload) return doc;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          // Handle user profile updates
+          if (operation === 'update' && previousDoc) {
+            // Check if profile data changed
+            const profileChanged = 
+              doc.name !== previousDoc.name ||
+              doc.avatar !== previousDoc.avatar ||
+              doc.bio !== previousDoc.bio ||
+              doc.location !== previousDoc.location ||
+              doc.isVerified !== previousDoc.isVerified ||
+              doc.isBusinessOwner !== previousDoc.isBusinessOwner;
+
+            if (profileChanged) {
+              const profileUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.USER_PROFILE_UPDATED,
+                actorId: doc.id,
+                data: {
+                  userId: doc.id,
+                  updates: {
+                    name: doc.name,
+                    avatar: doc.avatar?.url,
+                    bio: doc.bio,
+                    location: doc.location,
+                    isVerified: doc.isVerified,
+                    isBusinessOwner: doc.isBusinessOwner
+                  },
+                  previousData: {
+                    name: previousDoc.name,
+                    avatar: previousDoc.avatar?.url,
+                    bio: previousDoc.bio,
+                    location: previousDoc.location,
+                    isVerified: previousDoc.isVerified,
+                    isBusinessOwner: previousDoc.isBusinessOwner
+                  }
+                }
+              };
+
+              broadcastMessage(profileUpdateMessage, {
+                targetUserIds: [doc.id],
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Users] Real-time event broadcasted: USER_PROFILE_UPDATED for user ${doc.id}`);
+            }
+
+            // Check if user status changed
+            const statusChanged = 
+              doc.isOnline !== previousDoc.isOnline ||
+              doc.lastSeen !== previousDoc.lastSeen ||
+              doc.status !== previousDoc.status;
+
+            if (statusChanged) {
+              const statusUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.USER_STATUS_CHANGED,
+                actorId: doc.id,
+                data: {
+                  userId: doc.id,
+                  status: {
+                    isOnline: doc.isOnline,
+                    lastSeen: doc.lastSeen,
+                    status: doc.status
+                  },
+                  previousStatus: {
+                    isOnline: previousDoc.isOnline,
+                    lastSeen: previousDoc.lastSeen,
+                    status: previousDoc.status
+                  }
+                }
+              };
+
+              broadcastMessage(statusUpdateMessage, {
+                excludeUserIds: [doc.id],
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Users] Real-time event broadcasted: USER_STATUS_CHANGED for user ${doc.id}`);
+            }
+
+            // Check if user preferences changed
+            const preferencesChanged = 
+              JSON.stringify(doc.preferences) !== JSON.stringify(previousDoc.preferences) ||
+              doc.notificationSettings !== previousDoc.notificationSettings ||
+              doc.privacySettings !== previousDoc.privacySettings;
+
+            if (preferencesChanged) {
+              const preferencesUpdateMessage: any = {
+                messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                timestamp: new Date().toISOString(),
+                eventType: RealTimeEventType.USER_PREFERENCES_CHANGED,
+                actorId: doc.id,
+                data: {
+                  userId: doc.id,
+                  preferences: doc.preferences,
+                  notificationSettings: doc.notificationSettings,
+                  privacySettings: doc.privacySettings,
+                  previousPreferences: previousDoc.preferences,
+                  previousNotificationSettings: previousDoc.notificationSettings,
+                  previousPrivacySettings: previousDoc.privacySettings
+                }
+              };
+
+              broadcastMessage(preferencesUpdateMessage, {
+                targetUserIds: [doc.id],
+                queueForOffline: true
+              });
+
+              console.log(`📡 [Users] Real-time event broadcasted: USER_PREFERENCES_CHANGED for user ${doc.id}`);
+            }
+          }
+
+          // Handle new user creation
+          if (operation === 'create') {
+            const newUserMessage: any = {
+              messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              timestamp: new Date().toISOString(),
+              eventType: RealTimeEventType.USER_CREATED,
+              actorId: doc.id,
+              data: {
+                user: {
+                  id: doc.id,
+                  name: doc.name,
+                  email: doc.email,
+                  avatar: doc.avatar?.url,
+                  isVerified: doc.isVerified,
+                  isBusinessOwner: doc.isBusinessOwner,
+                  createdAt: doc.createdAt
+                }
+              }
+            };
+
+            broadcastMessage(newUserMessage, {
+              excludeUserIds: [doc.id],
+              queueForOffline: true
+            });
+
+            console.log(`📡 [Users] Real-time event broadcasted: USER_CREATED for user ${doc.id}`);
+          }
+
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time events for user:', realtimeError);
+        }
+
+        return doc;
+      }
     ],
+    afterDelete: [
+      async ({ req, doc, id }) => {
+        if (!req.payload) return;
+
+        try {
+          const { broadcastMessage } = await import('@/lib/wsServer');
+          const { createBaseMessage, RealTimeEventType } = await import('@/lib/realtimeEvents');
+          
+          const userDeletedMessage: any = {
+            messageId: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+            timestamp: new Date().toISOString(),
+            eventType: RealTimeEventType.USER_DELETED,
+            data: {
+              userId: id,
+              removeFromFeeds: true,
+              cleanupRequired: true
+            }
+          };
+
+          broadcastMessage(userDeletedMessage, {
+            queueForOffline: true
+          });
+
+          console.log(`📡 [Users] Real-time event broadcasted: USER_DELETED for user ${id}`);
+        } catch (realtimeError) {
+          console.warn('Failed to broadcast real-time event for user deletion:', realtimeError);
+        }
+      }
+    ]
   },
   fields: [
     { name: 'name', type: 'text', required: true },
@@ -1163,5 +1354,5 @@ export const Users: CollectionConfig = {
         description: 'API key for business webhook access'
       }
     },
-  ],
+  ]
 };
