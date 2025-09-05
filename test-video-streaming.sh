@@ -42,3 +42,4 @@ echo "- HEAD request should show Accept-Ranges: bytes and Content-Type: video/mp
 echo "- Range requests should return 206 Partial Content with Content-Range header"
 echo "- Invalid range should return 416 Range Not Satisfiable"
 echo "- Full request should return 200 OK"
+

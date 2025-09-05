@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import ProfileFeedViewer from './ProfileFeedViewer'
 
 // Types for the normalized profile feed API
 interface MediaItem {
@@ -62,24 +64,37 @@ const VideoBadge = () => (
 )
 
 // Individual grid tile component
-const GridTile = ({ item, username }: { item: ProfileFeedItem; username: string }) => {
+const GridTile = ({ 
+  item, 
+  username, 
+  onClick 
+}: { 
+  item: ProfileFeedItem
+  username: string
+  onClick: (postId: string) => void
+}) => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    onClick(item.id)
+  }
+
   if (!item.cover) {
     return (
-      <Link 
-        href={`/u/${username}/p/${item.id}`}
-        className="group block aspect-square bg-gray-100 rounded-lg overflow-hidden hover:scale-105 transition-transform duration-200 ease-out"
+      <button
+        onClick={handleClick}
+        className="group block aspect-square bg-gray-100 rounded-lg overflow-hidden hover:scale-105 transition-transform duration-200 ease-out w-full"
       >
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
           <span className="text-gray-400 text-sm">No media</span>
         </div>
-      </Link>
+      </button>
     )
   }
 
   return (
-    <Link 
-      href={`/u/${username}/p/${item.id}`}
-      className="group block aspect-square rounded-lg overflow-hidden hover:scale-105 transition-transform duration-200 ease-out relative"
+    <button
+      onClick={handleClick}
+      className="group block aspect-square rounded-lg overflow-hidden hover:scale-105 transition-transform duration-200 ease-out relative w-full"
     >
       <Image
         src={item.cover.url}
@@ -95,18 +110,25 @@ const GridTile = ({ item, username }: { item: ProfileFeedItem; username: string 
       
       {/* Subtle hover overlay */}
       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-200" />
-    </Link>
+    </button>
   )
 }
 
 // Main ProfileGrid component
 export default function ProfileGrid({ username, className = '' }: ProfileGridProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  
   const [items, setItems] = useState<ProfileFeedItem[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
+  
+  // Viewer state
+  const [isViewerOpen, setIsViewerOpen] = useState(false)
+  const [viewerPostId, setViewerPostId] = useState<string | null>(null)
   
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
@@ -150,6 +172,41 @@ export default function ProfileGrid({ username, className = '' }: ProfileGridPro
       setLoading(false)
       setLoadingMore(false)
     }
+  }, [username])
+
+  // Handle URL changes for deep linking
+  useEffect(() => {
+    const postId = searchParams.get('p')
+    if (postId && items.length > 0) {
+      const postExists = items.some(item => item.id === postId)
+      if (postExists) {
+        setViewerPostId(postId)
+        setIsViewerOpen(true)
+      }
+    } else if (!postId && isViewerOpen) {
+      setIsViewerOpen(false)
+      setViewerPostId(null)
+    }
+  }, [searchParams, items, isViewerOpen])
+
+  // Handle tile click
+  const handleTileClick = useCallback((postId: string) => {
+    setViewerPostId(postId)
+    setIsViewerOpen(true)
+    
+    // Update URL with shallow routing
+    const newUrl = `/u/${username}/p/${postId}`
+    window.history.pushState(null, '', newUrl)
+  }, [username])
+
+  // Handle viewer close
+  const handleViewerClose = useCallback(() => {
+    setIsViewerOpen(false)
+    setViewerPostId(null)
+    
+    // Update URL back to profile page
+    const newUrl = `/u/${username}`
+    window.history.replaceState(null, '', newUrl)
   }, [username])
 
   // Initial load
@@ -224,36 +281,55 @@ export default function ProfileGrid({ username, className = '' }: ProfileGridPro
   }
 
   return (
-    <div className={className}>
-      {/* Main grid */}
-      <div className="grid grid-cols-3 gap-2">
-        {items.map((item) => (
-          <GridTile key={item.id} item={item} username={username} />
-        ))}
+    <>
+      <div className={className}>
+        {/* Main grid */}
+        <div className="grid grid-cols-3 gap-2">
+          {items.map((item) => (
+            <GridTile 
+              key={item.id} 
+              item={item} 
+              username={username} 
+              onClick={handleTileClick}
+            />
+          ))}
+        </div>
+
+        {/* Loading more indicator */}
+        {loadingMore && (
+          <div className="flex justify-center py-8">
+            <div className="flex items-center space-x-2 text-gray-500">
+              <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
+              <span>Loading more posts...</span>
+            </div>
+          </div>
+        )}
+
+        {/* Intersection observer target */}
+        {hasMore && !loadingMore && (
+          <div ref={loadMoreRef} className="h-4" />
+        )}
+
+        {/* End of feed indicator */}
+        {!hasMore && items.length > 0 && (
+          <div className="flex justify-center py-8">
+            <p className="text-gray-400 text-sm">You've reached the end</p>
+          </div>
+        )}
       </div>
 
-      {/* Loading more indicator */}
-      {loadingMore && (
-        <div className="flex justify-center py-8">
-          <div className="flex items-center space-x-2 text-gray-500">
-            <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin" />
-            <span>Loading more posts...</span>
-          </div>
-        </div>
+      {/* Profile Feed Viewer */}
+      {isViewerOpen && (
+        <ProfileFeedViewer
+          username={username}
+          initialItems={items}
+          initialCursor={nextCursor}
+          isOpen={isViewerOpen}
+          onClose={handleViewerClose}
+          initialPostId={viewerPostId || undefined}
+        />
       )}
-
-      {/* Intersection observer target */}
-      {hasMore && !loadingMore && (
-        <div ref={loadMoreRef} className="h-4" />
-      )}
-
-      {/* End of feed indicator */}
-      {!hasMore && items.length > 0 && (
-        <div className="flex justify-center py-8">
-          <p className="text-gray-400 text-sm">You've reached the end</p>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
