@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import ProfileGrid from '@/components/ProfileGrid'
 
 export default function TestProfileViewerPage() {
@@ -19,7 +20,9 @@ export default function TestProfileViewerPage() {
 
         <div className="bg-white rounded-lg shadow-sm p-6">
           <h2 className="text-xl font-semibold mb-4">@antonio_kodheli</h2>
-          <ProfileGrid username="antonio_kodheli" />
+          <Suspense fallback={<div className="text-center py-8">Loading profile...</div>}>
+            <ProfileGrid username="antonio_kodheli" />
+          </Suspense>
         </div>
 
         <div className="mt-8 p-4 bg-blue-50 rounded-lg">

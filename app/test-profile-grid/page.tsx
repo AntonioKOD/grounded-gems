@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import ProfileGrid from '@/components/ProfileGrid'
 
 export default function TestProfileGridPage() {
@@ -18,10 +19,12 @@ export default function TestProfileGridPage() {
           <h2 className="text-xl font-semibold text-gray-800 mb-4">
             @antonio_kodheli
           </h2>
-          <ProfileGrid 
-            username="antonio_kodheli" 
-            className="max-w-2xl mx-auto"
-          />
+          <Suspense fallback={<div className="text-center py-8">Loading profile grid...</div>}>
+            <ProfileGrid 
+              username="antonio_kodheli" 
+              className="max-w-2xl mx-auto"
+            />
+          </Suspense>
         </div>
 
         {/* Instructions */}
