@@ -22,7 +22,6 @@ export default function robots(): MetadataRoute.Robots {
           '/add-location',
           '/post/create',
           '/events/create',
-          '/bucket-list/create',
           '*.json',
           '/test-*'
         ],
@@ -44,7 +43,6 @@ export default function robots(): MetadataRoute.Robots {
           '/add-location',
           '/post/create',
           '/events/create',
-          '/bucket-list/create',
           '*.json',
           '/test-*'
         ],
@@ -66,7 +64,6 @@ export default function robots(): MetadataRoute.Robots {
           '/add-location',
           '/post/create',
           '/events/create',
-          '/bucket-list/create',
           '*.json',
           '/test-*'
         ],

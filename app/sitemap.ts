@@ -56,12 +56,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/bucket-list`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.7,
-    },
-    {
       url: `${baseUrl}/notifications`,
       lastModified: new Date(),
       changeFrequency: 'weekly',
@@ -122,21 +116,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
     })
 
-    // Get published bucket lists
-    const bucketListsResult = await payload.find({
-      collection: 'bucketLists',
-      where: {
-        isPublic: {
-          equals: true
-        }
-      },
-      limit: 1000,
-      select: {
-        slug: true,
-        id: true,
-        updatedAt: true
-      }
-    })
 
     // Add location pages
     const locationPages: MetadataRoute.Sitemap = locationsResult.docs.map((location) => ({
@@ -162,13 +141,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }))
 
-    // Add bucket list pages
-    const bucketListPages: MetadataRoute.Sitemap = bucketListsResult.docs.map((bucketList) => ({
-      url: `${baseUrl}/bucket-list/${bucketList.slug || bucketList.id}`,
-      lastModified: new Date(bucketList?.updatedAt as string),
-      changeFrequency: 'monthly' as const,
-      priority: 0.6,
-    }))
 
     // Combine all pages
     return [
@@ -176,7 +148,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       ...locationPages,
       ...eventPages,
       ...postPages,
-      ...bucketListPages,
     ]
 
   } catch (error) {

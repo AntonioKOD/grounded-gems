@@ -59,10 +59,8 @@ import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-moda
 import type { 
   User, 
   ReviewItem as Review, 
-  BucketList, 
   LocationDetailProps,
-  WriteReviewModalProps,
-  AddToBucketListModalProps
+  WriteReviewModalProps
 } from "./location-detail-types"
 import {
   formatAddress,
@@ -77,7 +75,6 @@ import {
   handleSaveLocation,
   handleReviewHelpful,
   fetchCurrentUser,
-  fetchUserBucketLists,
   fetchLocationReviews,
   processGalleryImages
 } from "./location-detail-utils"
@@ -492,32 +489,24 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     likes: 0,
     saves: 0
   })
-  const [userBucketLists, setUserBucketLists] = useState<BucketList[]>([])
-
-  const [isLoadingBucketLists, setIsLoadingBucketLists] = useState(false)
   const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
   const [isSubmitTipModalOpen, setIsSubmitTipModalOpen] = useState(false)
 
   console.log('🔴 DESKTOP: LocationDetailDesktop rendered:', {
     locationName: location?.name,
     isOpen,
-    currentUser: currentUser?.id,
-    userBucketListsCount: userBucketLists.length,
-    isLoadingBucketLists
+    currentUser: currentUser?.id
   })
 
   // Add this to the window for debugging
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).debugModal = {
-
-
-        userBucketLists,
         currentUser,
         location: location?.name
       }
     }
-  }, [userBucketLists, currentUser, location])
+  }, [currentUser, location])
 
   useEffect(() => {
     if (isOpen && location) {
@@ -528,12 +517,6 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }, [isOpen, location])
 
-  // Fetch bucket lists when user is available
-  useEffect(() => {
-    if (currentUser) {
-      loadUserBucketLists()
-    }
-  }, [currentUser])
 
   // Initialize helpful states when reviews change
   useEffect(() => {
@@ -561,20 +544,6 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
     }
   }
 
-  const loadUserBucketLists = async () => {
-    if (!currentUser) {
-      console.log('No current user for fetching bucket lists')
-      return
-    }
-    
-    setIsLoadingBucketLists(true)
-    console.log('Fetching bucket lists for user:', currentUser.id)
-    const bucketLists = await fetchUserBucketLists(currentUser.id)
-    console.log('Fetched bucket lists:', bucketLists?.length || 0, 'lists')
-    console.log('Bucket lists data:', bucketLists)
-    setUserBucketLists(bucketLists)
-    setIsLoadingBucketLists(false)
-  }
 
   const loadInteractionCounts = async () => {
     if (!location) return

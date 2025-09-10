@@ -1,7 +1,10 @@
 "use client"
 
+// React and Next.js imports
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
+
+// UI Components and Icons
 import { Search, Filter, X, List, Map as MapIcon, Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,44 +12,81 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { addedLocations } from "./map-data"
-import { searchLocations, locationMatchesCategories } from "./search-utils"
+
+// Map-specific components
 import InteractiveMap from "./interactive-map"
 import LocationList from "./location-list"
 import LocationDetail from "./location-detail"
 import LocationDetailMobile from "./location-detail-mobile"
 import LocationBottomSheet from "./location-bottom-sheet"
 import ClusterBottomSheet from "./cluster-bottom-sheet"
+
+// Data and utilities
+import { addedLocations } from "./map-data"
+import { searchLocations, locationMatchesCategories } from "./search-utils"
 import type { Location } from "./map-data"
 
-// Simple mobile detection
+/**
+ * Mobile Device Detection Utility
+ * 
+ * Simple utility to detect if the user is on a mobile device.
+ * Used to conditionally render mobile-specific UI components.
+ */
 const isMobileDevice = () => {
   if (typeof window === 'undefined') return false
   return window.innerWidth <= 768
 }
 
-// Helper function to calculate distance (Haversine formula)
-// This should ideally be in a utility file and imported.
+/**
+ * Distance Calculation Utility (Haversine Formula)
+ * 
+ * Calculates the great-circle distance between two points on Earth.
+ * Returns distance in meters.
+ * 
+ * @param lat1 - Latitude of first point
+ * @param lon1 - Longitude of first point  
+ * @param lat2 - Latitude of second point
+ * @param lon2 - Longitude of second point
+ * @returns Distance in meters
+ */
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-  const R = 6371e3; // metres
-  const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI/180; // Convert to radians
   const φ2 = lat2 * Math.PI/180;
   const Δφ = (lat2-lat1) * Math.PI/180;
   const Δλ = (lon2-lon1) * Math.PI/180;
 
+  // Haversine formula
   const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
             Math.cos(φ1) * Math.cos(φ2) *
             Math.sin(Δλ/2) * Math.sin(Δλ/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-  const d = R * c; // in metres
+  const d = R * c; // Distance in meters
   return d;
 }
 
+/**
+ * Map Explorer Component
+ * 
+ * The main interactive map interface that allows users to:
+ * - Browse locations on an interactive map
+ * - Search and filter locations by category
+ * - View location details in various formats (desktop/mobile)
+ * - Toggle between map and list views
+ * - Handle location clustering and spiderification
+ * 
+ * Features:
+ * - Responsive design for desktop and mobile
+ * - Real-time search and filtering
+ * - Location clustering for better performance
+ * - Bottom sheets for mobile interaction
+ * - URL state management for deep linking
+ */
 export default function MapExplorer() {
   const searchParams = useSearchParams()
   
-  // Redirect loop prevention
+  // Redirect loop prevention state
   const [redirectAttempts, setRedirectAttempts] = useState(0)
   const maxRedirectAttempts = 3
 

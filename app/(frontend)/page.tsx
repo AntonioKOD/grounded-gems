@@ -1,21 +1,35 @@
+// Next.js and React imports
 import { Metadata } from "next"
 import Link from "next/link"
+import Image from "next/image"
+
+// UI Icons
 import { Users, MapPin, Calendar, Star } from "lucide-react"
-// Import components
+
+// Page Components
 import Hero from "@/components/hero"
 import AnimatedStats from "@/components/animated-stats"
 import GeolocationLocations from "@/components/geolocation-locations"
+
+// SEO Components
 import { WebsiteStructuredData, OrganizationStructuredData } from "@/components/seo/enhanced-structured-data"
 
-// Import server actions and types
+// Server Actions and Data Fetching
 import { getUpcomingEvents, getPublicLocations, getFeaturedCategories, getPlatformStats } from "@/app/(frontend)/home-page-actions/actions"
 import { getCategoryIcon } from "@/components/ui/category-icons"
-import Image from "next/image"
 
-// Prevent static generation
+// Force dynamic rendering to ensure fresh data on each request
 export const dynamic = "force-dynamic"
 export const revalidate = 60 // Revalidate at most once per minute
 
+/**
+ * Homepage Metadata Configuration
+ * 
+ * SEO metadata specifically for the homepage, including:
+ * - Page title and description
+ * - Open Graph tags for social sharing
+ * - Optimized for local discovery and travel keywords
+ */
 export const metadata: Metadata = {
   title: "Sacavia | Find the Best Places to Visit and Things to Do",
   description: "Discover amazing restaurants, attractions, events and hidden gems near you. See what locals recommend and find your next favorite spot.",
@@ -26,16 +40,29 @@ export const metadata: Metadata = {
   },
 }
 
+/**
+ * Homepage Component
+ * 
+ * The main landing page that showcases:
+ * - Hero section with call-to-action
+ * - Platform statistics and social proof
+ * - Nearby locations discovery (primary feature)
+ * - Featured categories for browsing
+ * - Upcoming events
+ * - SEO structured data
+ * 
+ * Uses server-side data fetching to ensure fresh content and good SEO.
+ */
 export default async function HomePage() {
-  // Fetch data - get more locations initially
+  // Fetch all homepage data in parallel for optimal performance
   const [upcomingEvents, publicLocations, featuredCategories, platformStats] = await Promise.all([
-    getUpcomingEvents(6),
-    getPublicLocations(6), // Increased to show more locations
-    getFeaturedCategories(8), // Get 8 featured categories
-    getPlatformStats() // Get real platform statistics
+    getUpcomingEvents(6),        // Get 6 upcoming events
+    getPublicLocations(6),       // Get 6 public locations for nearby discovery
+    getFeaturedCategories(8),    // Get 8 featured categories for browsing
+    getPlatformStats()           // Get real platform statistics for social proof
   ])
 
-  // Use real location data from database
+  // Use real location data from database for nearby discovery
   const locationSamples = publicLocations
 
   // Transform fetched categories into display format

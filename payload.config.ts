@@ -21,7 +21,6 @@ import { EventRequests } from './collections/EventRequests'
 import { LocationInteractions } from './collections/LocationInteractions'
 import { MatchmakingSessions } from './collections/MatchmakingSessions'
 import { Journeys } from './collections/Journeys'
-import { BucketLists } from './collections/BucketLists'
 import DeviceTokens from './collections/DeviceTokens'
 import { LocationPhotoSubmissions } from './collections/LocationPhotoSubmissions'
 import { BusinessClaims } from './collections/BusinessClaims'
@@ -136,7 +135,6 @@ export default buildConfig({
     LocationInteractions,
     MatchmakingSessions,
     Journeys,
-    BucketLists,
     DeviceTokens,
     LocationPhotoSubmissions,
     BusinessClaims,

@@ -240,9 +240,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
       })
       userStats.postsCount = posts.totalDocs
 
-      // Get saved locations count (bucket lists)
-      const bucketLists = await payload.find({
-        collection: 'bucket-lists',
+      // Get saved locations count (using saved locations instead of bucket lists)
+      const savedLocations = await payload.find({
+        collection: 'saved-locations',
         where: {
           user: {
             equals: user.id
@@ -250,7 +250,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MobileUser
         },
         limit: 0
       })
-      userStats.savedPostsCount = bucketLists.totalDocs
+      userStats.savedPostsCount = savedLocations.totalDocs
 
     } catch (statsError) {
       console.warn('Warning: Could not fetch user stats:', statsError)

@@ -57,7 +57,6 @@ import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-moda
 import type { 
   User, 
   ReviewItem, 
-  BucketList, 
   LocationDetailMobileProps,
   WriteReviewModalProps,
 
@@ -80,7 +79,6 @@ import {
   handleSaveLocation,
   handleReviewHelpful,
   fetchCurrentUser,
-  fetchUserBucketLists,
   fetchLocationReviews,
   processGalleryImages
 } from "./location-detail-utils"

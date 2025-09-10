@@ -30,17 +30,6 @@ export interface ReviewItem {
   usersWhoMarkedUnhelpful?: string[]
 }
 
-// Shared BucketList interface
-export interface BucketList {
-  id: string
-  name: string
-  description?: string
-  type: 'personal' | 'shared'
-  stats: {
-    totalItems: number
-    completedItems: number
-  }
-}
 
 // Shared props interfaces
 export interface LocationDetailProps {
@@ -69,13 +58,6 @@ export interface WriteReviewModalProps {
   onSuccess: () => void
 }
 
-export interface AddToBucketListModalProps {
-  isOpen: boolean
-  onClose: () => void
-  location: Location | null
-  userBucketLists: BucketList[]
-  onSuccess: () => void
-}
 
 // Re-export Media type
 export type { Media } from "./map-data" 

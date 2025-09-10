@@ -233,23 +233,6 @@ export const fetchCurrentUser = async (): Promise<User | null> => {
   }
 }
 
-export const fetchUserBucketLists = async (userId: string) => {
-  try {
-    const response = await fetch(`/api/bucket-lists?userId=${userId}`, {
-      credentials: 'include'
-    })
-    if (response.ok) {
-      const data = await response.json()
-      return data.bucketLists || []
-    } else {
-      console.error('Failed to fetch bucket lists:', response.status)
-      return []
-    }
-  } catch (error) {
-    console.error('Error fetching bucket lists:', error)
-    return []
-  }
-}
 
 export const fetchLocationReviews = async (locationId: string, limit: number = 10, page: number = 1) => {
   try {
