@@ -112,7 +112,7 @@ const priorityConfig = {
 const sourceConfig = {
   ai_generated: {
     icon: Bot,
-    label: 'AI Generated',
+    label: 'Local Insights',
     color: 'text-gray-600'
   },
   user_submitted: {

@@ -110,8 +110,7 @@ const LoginForm = memo(function LoginForm() {
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/feed"
   const isVerified = searchParams.get("verified") === "true"
-  const { isAuthenticated, isLoading } = useAuth()
-  const { preloadUser } = useAuth()
+  const { isAuthenticated, isLoading, preloadUser } = useAuth()
 
   // Prevent redirect loops by checking if redirect path is current path
   const safeRedirectPath = useMemo(() => {

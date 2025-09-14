@@ -671,7 +671,7 @@ export const Locations: CollectionConfig = {
           type: 'select',
           defaultValue: 'ai_generated',
           options: [
-            { label: '🤖 AI Generated', value: 'ai_generated' },
+            { label: '💡 Local Insights', value: 'ai_generated' },
             { label: '👥 User Submitted', value: 'user_submitted' },
             { label: '🏢 Business Provided', value: 'business_provided' },
             { label: '✅ Staff Verified', value: 'staff_verified' },

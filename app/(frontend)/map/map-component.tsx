@@ -800,7 +800,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
                 <!-- Show all locations as clickable items -->
                 <div class="space-y-2 max-h-48 overflow-y-auto">
                   ${cluster.locations.map(loc => `
-                    <div class="location-item flex items-center gap-3 p-2 bg-muted/50 rounded-lg hover:bg-muted/80 transition-colors cursor-pointer" data-location-id="${loc.id}">
+                    <div class="location-item flex items-center gap-3 p-2 bg-gray-100/50 rounded-lg hover:bg-gray-100/80 transition-colors cursor-pointer" data-location-id="${loc.id}">
                       <img 
                         src="${getLocationImageUrl(loc)}" 
                         alt="${loc.name}"
@@ -942,7 +942,7 @@ const MapComponent = memo<MapComponentProps>(function MapComponent({
                 
                 <!-- Action buttons -->
                 <div class="flex justify-between items-center pt-2">
-                  <button class="location-preview-btn directions-btn px-3 py-1.5 bg-muted text-muted-foreground rounded-lg text-xs font-medium hover:bg-muted/80 transition-colors">
+                  <button class="location-preview-btn directions-btn px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors">
                     Directions
                   </button>
                   <button onclick="handleViewDetailsClick('${location.id}')" 
