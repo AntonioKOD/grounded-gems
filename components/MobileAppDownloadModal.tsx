@@ -1,10 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { X, Download, Star, Smartphone, MapPin, Users, Heart } from 'lucide-react'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { X } from 'lucide-react'
 import { useIsMobile } from '@/hooks/use-mobile'
 
 const APP_STORE_URL = 'https://apps.apple.com/us/app/sacavia/id6748926294'
@@ -68,74 +66,70 @@ export default function MobileAppDownloadModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md mx-4">
-        <DialogHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
-              <Smartphone className="w-8 h-8 text-white" />
-            </div>
-          </div>
-          <DialogTitle className="text-xl font-bold text-gray-900">
-            Get the Sacavia App
-          </DialogTitle>
-        </DialogHeader>
-        
-        <div className="space-y-4">
-          <p className="text-gray-600 text-center">
-            Experience Sacavia with our native mobile app for the best discovery experience.
-          </p>
+      <DialogContent className="sm:max-w-md mx-4 p-0 border-0 bg-transparent">
+        <div className="relative">
+          {/* Close button */}
+          <button
+            onClick={handleClose}
+            className="absolute -top-2 -right-2 z-10 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-50 transition-colors"
+          >
+            <X className="w-4 h-4 text-gray-600" />
+          </button>
           
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <MapPin className="w-5 h-5 text-blue-500" />
-              <div>
-                <p className="font-medium text-sm">Discover Places</p>
-                <p className="text-xs text-gray-500">Find amazing local spots near you</p>
-              </div>
+          {/* Card */}
+          <div className="max-w-[350px] mx-auto bg-gradient-to-br from-[#ff6b6b] to-[#4ecdc4] p-5 rounded-[20px] border border-[#4ecdc4]/30 shadow-xl">
+            <div className="text-center mb-6">
+              <span className="text-white/90 text-sm font-semibold">Download Now!</span>
+              <h2 className="text-white text-2xl font-bold mt-2 leading-tight">
+                Download our mobile application.
+              </h2>
+              <p className="text-white/80 text-sm mt-2 leading-relaxed">
+                Download Sacavia mobile app for iOS & Android to discover amazing places and connect with your community.
+              </p>
             </div>
             
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Users className="w-5 h-5 text-green-500" />
-              <div>
-                <p className="font-medium text-sm">Connect with People</p>
-                <p className="text-xs text-gray-500">Meet locals and fellow explorers</p>
-              </div>
+            <div className="flex items-center justify-center gap-3">
+              {/* App Store Button */}
+              <a 
+                href={APP_STORE_URL}
+                onClick={handleDownload}
+                className="flex items-center justify-between bg-white rounded-[10px] p-2 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+              >
+                <div className="w-6 h-6 flex items-center justify-center">
+                  <svg width="24" height="24" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M26.5058 27.625C25.33 29.3817 24.0833 31.0958 22.185 31.1242C20.2866 31.1667 19.6775 30.005 17.5241 30.005C15.3566 30.005 14.6908 31.0958 12.8916 31.1667C11.0358 31.2375 9.6333 29.2967 8.4433 27.5825C6.0208 24.0833 4.16497 17.6375 6.6583 13.3025C7.8908 11.1492 10.1008 9.78916 12.495 9.74666C14.3083 9.71833 16.0366 10.9792 17.1558 10.9792C18.2608 10.9792 20.3575 9.46333 22.5533 9.68999C23.4741 9.73249 26.0525 10.0583 27.71 12.495C27.5825 12.58 24.6358 14.3083 24.6641 17.8925C24.7066 22.1708 28.4183 23.6017 28.4608 23.6158C28.4183 23.715 27.8658 25.6558 26.5058 27.625ZM18.4166 4.95833C19.4508 3.78249 21.165 2.88999 22.5816 2.83333C22.7658 4.49083 22.1 6.16249 21.1083 7.35249C20.1308 8.55666 18.5158 9.49166 16.9291 9.36416C16.7166 7.73499 17.51 6.03499 18.4166 4.95833Z" fill="#000" />
+                  </svg>
+                </div>
+                <div className="flex flex-col ml-2">
+                  <span className="text-[#4ecdc4] text-xs font-semibold">Download from</span>
+                  <span className="text-black text-sm font-bold">App Store</span>
+                </div>
+              </a>
+              
+              {/* Google Play Button (for Android users) */}
+              {!isIOS && (
+                <a 
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    // For now, redirect to App Store since we only have iOS app
+                    handleDownload()
+                  }}
+                  className="flex items-center justify-between bg-[#4ecdc4] rounded-[10px] p-2 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+                >
+                  <div className="w-6 h-6 flex items-center justify-center">
+                    <svg width="24" height="24" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M4 28.9958V4.9125C4 4.07667 4.48167 3.34 5.19 3L19.1442 16.9542L5.19 30.9083C4.48167 30.5542 4 29.8317 4 28.9958ZM23.5642 21.3742L8.32083 30.1858L20.3483 18.1583L23.5642 21.3742ZM28.31 15.2683C28.7917 15.6508 29.1458 16.2458 29.1458 16.9542C29.1458 17.6625 28.8342 18.2292 28.3383 18.6258L25.0942 20.4958L21.5525 16.9542L25.0942 13.4125L28.31 15.2683ZM8.32083 3.7225L23.5642 12.5342L20.3483 15.75L8.32083 3.7225Z" fill="white" />
+                    </svg>
+                  </div>
+                  <div className="flex flex-col ml-2">
+                    <span className="text-white/80 text-xs font-semibold">Get it on</span>
+                    <span className="text-white text-sm font-bold">Google Play</span>
+                  </div>
+                </a>
+              )}
             </div>
-            
-            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-              <Heart className="w-5 h-5 text-red-500" />
-              <div>
-                <p className="font-medium text-sm">Share Your Favorites</p>
-                <p className="text-xs text-gray-500">Recommend places you love</p>
-              </div>
-            </div>
           </div>
-          
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-            <span>4.8 rating on App Store</span>
-          </div>
-          
-          <div className="flex gap-3">
-            <Button 
-              onClick={handleDownload}
-              className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              {isIOS ? 'Download for iOS' : 'Download App'}
-            </Button>
-            <Button 
-              onClick={handleClose}
-              variant="outline"
-              className="px-3"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-          
-          <p className="text-xs text-gray-400 text-center">
-            Free to download • No ads • Privacy focused
-          </p>
         </div>
       </DialogContent>
     </Dialog>

@@ -693,7 +693,7 @@ export class FeedAlgorithm {
         }]
       }
 
-      return sortedUsers.map(({ user, postsCount, followersCount, mutualConnections, distance }) => ({
+      return await Promise.all(sortedUsers.map(async ({ user, postsCount, followersCount, mutualConnections, distance }) => ({
         id: `people_${user.id}`,
         type: 'people_suggestion',
         createdAt: user.createdAt,
@@ -703,7 +703,7 @@ export class FeedAlgorithm {
           id: user.id,
           name: user.name || 'Anonymous User',
           username: user.username || user.name?.toLowerCase().replace(/\s+/g, '') || 'user',
-          bio: user.bio || this.generateUserBio(user),
+          bio: user.bio || await this.generateUserBio(user),
           avatar: this.processMediaUrl(user.profileImage || user.avatar) || undefined,
           followersCount: followersCount,
           postsCount: postsCount,
@@ -721,7 +721,7 @@ export class FeedAlgorithm {
           reviewCount: 0, // Will be calculated separately if needed
           distance: distance ? `${Math.round(distance)} mi away` : undefined
         }
-      }))
+      })))
     } catch (error) {
       console.error('Error fetching people suggestions:', error)
       return []
@@ -731,7 +731,7 @@ export class FeedAlgorithm {
   /**
    * Generate a personalized bio for users who don't have one
    */
-  private generateUserBio(user: any): string {
+  private async generateUserBio(user: any): Promise<string> {
     const interests = user.interests || []
     const isCreator = user.isCreator || user.role === 'creator' || false
     const isVerified = user.creatorProfile?.verification?.isVerified || false
@@ -745,11 +745,45 @@ export class FeedAlgorithm {
     }
     
     if (interests.length > 0) {
-      const topInterests = interests.slice(0, 2).join(' & ')
-      return `Passionate about ${topInterests}. Always exploring and sharing amazing discoveries!`
+      try {
+        // Convert category IDs to names
+        const categoryNames = await this.convertCategoryIdsToNames(interests.slice(0, 2))
+        if (categoryNames.length > 0) {
+          const topInterests = categoryNames.join(' & ')
+          return `Passionate about ${topInterests}. Always exploring and sharing amazing discoveries!`
+        }
+      } catch (error) {
+        console.error('Error converting category IDs to names:', error)
+        // Fallback to original behavior if conversion fails
+        const topInterests = interests.slice(0, 2).join(' & ')
+        return `Passionate about ${topInterests}. Always exploring and sharing amazing discoveries!`
+      }
     }
     
     return `Passionate explorer sharing amazing discoveries and authentic experiences.`
+  }
+
+  /**
+   * Convert category IDs to category names
+   */
+  private async convertCategoryIdsToNames(categoryIds: string[]): Promise<string[]> {
+    if (!categoryIds || categoryIds.length === 0) return []
+    
+    try {
+      const categories = await this.payload.find({
+        collection: 'categories',
+        where: {
+          id: { in: categoryIds }
+        },
+        limit: categoryIds.length,
+        depth: 0
+      })
+      
+      return categories.docs.map((cat: any) => cat.name).filter(Boolean)
+    } catch (error) {
+      console.error('Error fetching category names:', error)
+      return []
+    }
   }
 
   /**
