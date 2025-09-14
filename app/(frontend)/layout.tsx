@@ -17,6 +17,7 @@ import PerformanceMonitor from '@/components/performance/performance-monitor'
 import { Metadata } from "next"
 import NoNavWrapper from '@/components/ui/NoNavWrapper'
 import { UserProvider } from '@/context/user-context'
+import MobileAppModalWrapper from '@/components/MobileAppModalWrapper'
 
 export const metadata: Metadata = {
   title: {
@@ -97,6 +98,7 @@ export default async function RootLayout(props: { children: React.ReactNode }) {
                   </MainContentWrapper>
                   <Toaster />
                 </NoNavWrapper>
+                <MobileAppModalWrapper />
               </NotificationProvider>
             </UserProvider>
           </StoreProvider>
