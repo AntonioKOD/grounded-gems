@@ -44,6 +44,7 @@ import Analytics from './collections/Analytics'
 import PushSubscriptions from './collections/PushSubscriptions'
 import { Experiences } from './collections/Experiences'
 import { ContestUpvotes } from './collections/ContestUpvotes'
+import { ContestPayments } from './collections/ContestPayments'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -158,5 +159,6 @@ export default buildConfig({
     PushSubscriptions,
     Experiences,
     ContestUpvotes,
+    ContestPayments,
   ],
 })

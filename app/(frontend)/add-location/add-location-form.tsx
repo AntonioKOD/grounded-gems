@@ -68,6 +68,7 @@ import { Separator } from "@/components/ui/separator"
 import { createLocation, type LocationFormData, type DayOfWeek } from "@/app/actions"
 import { getCategories } from "@/app/actions"
 import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
+import { PayPalContestPayment } from "@/components/payments/paypal-contest-payment"
 import PrivateAccessSelector from "@/components/location/private-access-selector"
 
 interface UserData {
@@ -119,6 +120,7 @@ export default function AddLocationForm() {
   const [attested18, setAttested18] = useState(false)
   const [showContestDialog, setShowContestDialog] = useState(false)
   const [isContestSubmitting, setIsContestSubmitting] = useState(false)
+  const [showPayPalPayment, setShowPayPalPayment] = useState(false)
 
   // Basic info
   const [locationName, setLocationName] = useState("")
@@ -1020,120 +1022,58 @@ export default function AddLocationForm() {
       return;
     }
 
-    setIsContestSubmitting(true);
+    // Show PayPal payment dialog
     setShowContestDialog(false);
+    setShowPayPalPayment(true);
+  }
 
-    try {
-      // Prepare form data for contest entry
-      const contestFormData = {
-        // Basic
-        name: locationName,
-        slug: locationSlug || generateSlug(locationName),
-        description: locationDescription || "",
-        shortDescription: shortDescription || undefined,
-        featuredImage: locationImage || undefined,
-        gallery: gallery.length > 0
-          ? gallery.map((item) => ({
-              image: item.image,
-              caption: item.caption || undefined,
-            }))
-          : undefined,
-        categories: selectedCategories.length > 0 ? selectedCategories : [],
-        tags: tags.length > 0 ? tags.map(t => t.tag) : undefined,
-        
-        // Address
-        address: {
-          street: address.street,
-          city: address.city,
-          state: address.state,
-          zip: address.zip,
-          country: address.country,
-        },
-        neighborhood: address.neighborhood || undefined,
-        
-        // Contact & Business
-        contactInfo: {
-          phone: contactInfo.phone || undefined,
-          email: contactInfo.email || undefined,
-          website: contactInfo.website || undefined,
-          socialMedia: {
-            facebook: contactInfo.socialMedia.facebook || undefined,
-            twitter: contactInfo.socialMedia.twitter || undefined,
-            instagram: contactInfo.socialMedia.instagram || undefined,
-            linkedin: contactInfo.socialMedia.linkedin || undefined,
-          },
-        },
-        businessHours: businessHours.map(hour => ({
-          day: hour.day,
-          open: hour.open || "",
-          close: hour.close || "",
-          isClosed: hour.closed || false,
-        })),
-        priceRange: ["free", "budget", "moderate", "expensive", "luxury"].includes(priceRange || "")
-          ? (priceRange as "free" | "budget" | "moderate" | "expensive" | "luxury")
-          : undefined,
-        bestTimeToVisit: bestTimeToVisit.length > 0 ? bestTimeToVisit.map(t => t.season) : undefined,
-        insiderTips: insiderTips || undefined,
-        accessibility: {
-          wheelchairAccess: accessibility.wheelchairAccess || undefined,
-          parking: accessibility.parking || undefined,
-          other: accessibility.other || undefined,
-        },
-        isFeatured: isFeatured || undefined,
-        isVerified: isVerified || undefined,
-        hasBusinessPartnership: hasPartnership || undefined,
-        partnershipDetails: hasPartnership
-          ? {
-              partnerName: partnershipDetails.partnerName || undefined,
-              partnerContact: partnershipDetails.partnerContact || undefined,
-              details: partnershipDetails.details || undefined,
-            }
-          : undefined,
-        meta: {
-          title: meta.title || undefined,
-          description: meta.description || undefined,
-          keywords: meta.keywords || undefined,
-        },
-        privacy: privacy,
-        privateAccess: privacy === 'private' && privateAccess.length > 0 ? privateAccess : undefined,
-        
-        // Contest entry specific
-        attested18: true,
-      };
+  // Handle PayPal payment success
+  const handlePayPalSuccess = (paymentData: any) => {
+    setShowPayPalPayment(false);
+    toast({
+      title: "Contest Entry Successful! 🎉",
+      description: "Your location has been entered into the contest. Good luck!",
+    });
+    
+    // Redirect to contest app
+    setTimeout(() => {
+      window.open('https://vote.sacavia.com', '_blank');
+    }, 2000);
+  }
 
-      // Call contest checkout API
-      const response = await fetch('/api/contest/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-        },
-        body: JSON.stringify(contestFormData),
-      });
+  // Handle PayPal payment error
+  const handlePayPalError = (error: string) => {
+    toast({
+      title: "Payment Failed",
+      description: error,
+      variant: "destructive",
+    });
+  }
 
-      const result = await response.json();
+  // Handle PayPal payment cancel
+  const handlePayPalCancel = () => {
+    setShowPayPalPayment(false);
+    toast({
+      title: "Payment Cancelled",
+      description: "You can try again anytime.",
+    });
+  }
 
-      if (result.success && result.url) {
-        // Redirect to Stripe checkout
-        window.location.href = result.url;
-      } else {
-        throw new Error(result.error || 'Failed to create contest entry');
-      }
-
-    } catch (error) {
-      console.error('Error creating contest entry:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
-      toast({
-        title: "Contest Entry Failed",
-        description: `Failed to create contest entry: ${errorMessage}`,
-        variant: "destructive",
-      });
-    } finally {
-      setIsContestSubmitting(false);
-    }
-  };
+  // Get location data for PayPal payment
+  const getLocationDataForPayment = () => {
+    return {
+      name: locationName,
+      description: locationDescription || "",
+      address: {
+        city: address.city,
+        state: address.state,
+        country: address.country,
+      },
+      featuredImage: locationImage || undefined,
+      categories: selectedCategories,
+      tags: tags.map(t => t.tag),
+    };
+  }
 
   return (
     <div className="max-w-4xl mx-auto pb-20 md:pb-12">
@@ -2553,6 +2493,30 @@ export default function AddLocationForm() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* PayPal Payment Dialog */}
+      <Dialog open={showPayPalPayment} onOpenChange={setShowPayPalPayment}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-blue-600">
+              <Trophy className="mr-2 h-5 w-5" />
+              Complete Contest Entry
+            </DialogTitle>
+            <DialogDescription>
+              Complete your payment to enter your location in the Sacavia Contest
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <PayPalContestPayment
+              locationData={getLocationDataForPayment()}
+              onSuccess={handlePayPalSuccess}
+              onError={handlePayPalError}
+              onCancel={handlePayPalCancel}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
