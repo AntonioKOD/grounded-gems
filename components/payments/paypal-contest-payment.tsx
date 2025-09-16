@@ -143,7 +143,7 @@ function PayPalButton({ locationData, onSuccess, onError, onCancel }: PayPalCont
 }
 
 export function PayPalContestPayment({ locationData, onSuccess, onError, onCancel }: PayPalContestPaymentProps) {
-  const paypalClientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || 'ATJ9T3M-nmctumSZAIXVqs1TJfwCky7-2YZiPOB__rYJwJw7dpk3PGkEv_S1XB8jZAGGDzT1i7QRn480';
+  const paypalClientId = 'ATJ9T3M-nmctumSZAIXVqs1TJfwCky7-2YZiPOB__rYJwJw7dpk3PGkEv_S1XB8jZAGGDzT1i7QRn480'; // Hardcoded for sandbox
 
   return (
     <Card className="w-full max-w-md mx-auto">

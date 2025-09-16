@@ -267,9 +267,6 @@ export const ContestPayments: CollectionConfig = {
     {
       fields: ['paymentMethod'],
     },
-    {
-      fields: ['createdAt'],
-    },
   ],
   timestamps: true,
 };

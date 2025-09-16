@@ -2,12 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@/payload.config';
 
-// PayPal SDK
-const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || 'ATJ9T3M-nmctumSZAIXVqs1TJfwCky7-2YZiPOB__rYJwJw7dpk3PGkEv_S1XB8jZAGGDzT1i7QRn480';
-const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET || 'EO0QAx6SeLRP0BIY493VDH4Ti_z3__Ni81n81PV5Lw1xM9ff9Sznaka_Y9C4s3d5RMpxKIf0NPNVK5nC';
-const PAYPAL_BASE_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api-m.paypal.com' 
-  : 'https://api-m.sandbox.paypal.com';
+// PayPal SDK - Hardcoded for sandbox
+const PAYPAL_CLIENT_ID = 'ATJ9T3M-nmctumSZAIXVqs1TJfwCky7-2YZiPOB__rYJwJw7dpk3PGkEv_S1XB8jZAGGDzT1i7QRn480';
+const PAYPAL_CLIENT_SECRET = 'EO0QAx6SeLRP0BIY493VDH4Ti_z3__Ni81n81PV5Lw1xM9ff9Sznaka_Y9C4s3d5RMpxKIf0NPNVK5nC';
+const PAYPAL_BASE_URL = 'https://api-m.sandbox.paypal.com'; // Always use sandbox for now
 
 const CONTEST_ENTRY_PRICE = 20.00;
 
