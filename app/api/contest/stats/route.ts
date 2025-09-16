@@ -144,10 +144,10 @@ export async function GET(request: NextRequest) {
         votesLast24h: recentVotesResult.totalDocs
       },
       prizePool: {
-        total: 50000,
-        grandPrize: 25000,
-        cityWinners: 20000, // 10 cities × $2000
-        categoryWinners: 5000 // 5 categories × $1000
+        total: 5000,
+        grandPrize: 3000,
+        cityWinners: 1500, // 3 cities × $500
+        categoryWinners: 500 // 1 category × $500
       },
       contestStatus: {
         isActive,

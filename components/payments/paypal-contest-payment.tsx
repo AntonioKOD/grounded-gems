@@ -117,20 +117,22 @@ function PayPalButton({ locationData, onSuccess, onError, onCancel }: PayPalCont
 
   return (
     <div className="space-y-4">
-      <PayPalButtons
-        createOrder={createOrder}
-        onApprove={onApprove}
-        onError={onPayPalError}
-        onCancel={onCancel}
-        disabled={isProcessing}
-        style={{
-          layout: 'vertical',
-          color: 'blue',
-          shape: 'rect',
-          label: 'paypal',
-          height: 45,
-        }}
-      />
+      <div className="w-full">
+        <PayPalButtons
+          createOrder={createOrder}
+          onApprove={onApprove}
+          onError={onPayPalError}
+          onCancel={onCancel}
+          disabled={isProcessing}
+          style={{
+            layout: 'vertical',
+            color: 'blue',
+            shape: 'rect',
+            label: 'paypal',
+            height: 50,
+          }}
+        />
+      </div>
       
       {isProcessing && (
         <div className="flex items-center justify-center p-4 bg-blue-50 rounded-lg">
@@ -146,30 +148,32 @@ export function PayPalContestPayment({ locationData, onSuccess, onError, onCance
   const paypalClientId = 'ATJ9T3M-nmctumSZAIXVqs1TJfwCky7-2YZiPOB__rYJwJw7dpk3PGkEv_S1XB8jZAGGDzT1i7QRn480'; // Hardcoded for sandbox
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        <div className="flex items-center justify-center mb-2">
+    <div className="w-full max-w-lg mx-auto bg-white rounded-lg shadow-lg">
+      {/* Header */}
+      <div className="text-center p-6 border-b">
+        <div className="flex items-center justify-center mb-3">
           <Trophy className="h-8 w-8 text-yellow-500 mr-2" />
-          <CardTitle className="text-xl">Contest Entry Payment</CardTitle>
+          <h2 className="text-2xl font-bold text-gray-900">Contest Entry Payment</h2>
         </div>
-        <CardDescription>
+        <p className="text-gray-600">
           Enter your location in the Sacavia Hidden Gems Contest
-        </CardDescription>
-      </CardHeader>
+        </p>
+      </div>
       
-      <CardContent className="space-y-6">
+      {/* Content */}
+      <div className="p-6 space-y-6">
         {/* Location Summary */}
         <div className="bg-gray-50 p-4 rounded-lg">
           <h4 className="font-semibold text-gray-900 mb-2">{locationData.name}</h4>
-          <p className="text-sm text-gray-600 mb-2">{locationData.description}</p>
+          <p className="text-sm text-gray-600 mb-2 line-clamp-2">{locationData.description}</p>
           <p className="text-sm text-gray-500">
             📍 {locationData.address.city}, {locationData.address.state}
           </p>
         </div>
 
         {/* Price Display */}
-        <div className="text-center">
-          <div className="text-3xl font-bold text-gray-900">${CONTEST_ENTRY_PRICE.toFixed(2)}</div>
+        <div className="text-center py-4">
+          <div className="text-4xl font-bold text-gray-900 mb-1">${CONTEST_ENTRY_PRICE.toFixed(2)}</div>
           <p className="text-sm text-gray-500">Contest Entry Fee</p>
         </div>
 
@@ -180,38 +184,25 @@ export function PayPalContestPayment({ locationData, onSuccess, onError, onCance
         </div>
 
         {/* PayPal Payment */}
-        <PayPalScriptProvider
-          options={{
-            clientId: paypalClientId,
-            currency: 'USD',
-            intent: 'capture',
-          }}
-        >
-          <PayPalButton
-            locationData={locationData}
-            onSuccess={onSuccess}
-            onError={onError}
-            onCancel={onCancel}
-          />
-        </PayPalScriptProvider>
-
-        {/* Alternative Payment Method */}
-        <div className="text-center">
-          <Button
-            variant="outline"
-            onClick={() => {
-              // Redirect to Stripe checkout as alternative
-              window.location.href = '/api/contest/checkout';
+        <div className="py-4">
+          <PayPalScriptProvider
+            options={{
+              clientId: paypalClientId,
+              currency: 'USD',
+              intent: 'capture',
             }}
-            className="w-full"
           >
-            <CreditCard className="h-4 w-4 mr-2" />
-            Pay with Card (Stripe)
-          </Button>
+            <PayPalButton
+              locationData={locationData}
+              onSuccess={onSuccess}
+              onError={onError}
+              onCancel={onCancel}
+            />
+          </PayPalScriptProvider>
         </div>
 
         {/* Terms */}
-        <div className="text-xs text-gray-500 text-center">
+        <div className="text-xs text-gray-500 text-center pt-4 border-t">
           By proceeding, you agree to our{' '}
           <a href="/terms" className="underline hover:text-gray-700">
             Terms of Service
@@ -221,7 +212,7 @@ export function PayPalContestPayment({ locationData, onSuccess, onError, onCance
             Privacy Policy
           </a>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

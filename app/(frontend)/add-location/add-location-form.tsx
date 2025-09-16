@@ -68,7 +68,6 @@ import { Separator } from "@/components/ui/separator"
 import { createLocation, type LocationFormData, type DayOfWeek } from "@/app/actions"
 import { getCategories } from "@/app/actions"
 import { HierarchicalCategorySelector } from "@/components/ui/hierarchical-category-selector"
-import { PayPalContestPayment } from "@/components/payments/paypal-contest-payment"
 import PrivateAccessSelector from "@/components/location/private-access-selector"
 
 interface UserData {
@@ -120,7 +119,6 @@ export default function AddLocationForm() {
   const [attested18, setAttested18] = useState(false)
   const [showContestDialog, setShowContestDialog] = useState(false)
   const [isContestSubmitting, setIsContestSubmitting] = useState(false)
-  const [showPayPalPayment, setShowPayPalPayment] = useState(false)
 
   // Basic info
   const [locationName, setLocationName] = useState("")
@@ -1022,42 +1020,50 @@ export default function AddLocationForm() {
       return;
     }
 
-    // Show PayPal payment dialog
-    setShowContestDialog(false);
-    setShowPayPalPayment(true);
+    // Automatically add location to contest (no payment required)
+    try {
+      setShowContestDialog(false);
+      setIsContestSubmitting(true);
+
+      const response = await fetch('/api/contest/add-location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationData: getLocationDataForPayment(),
+        }),
+      });
+
+      if (response.ok) {
+        toast({
+          title: "🎉 Contest Entry Successful!",
+          description: "Your location has been added to the contest! Check your email for confirmation.",
+        });
+        // Redirect to contest app
+        setTimeout(() => {
+          window.open('https://vote.sacavia.com', '_blank');
+        }, 2000);
+      } else {
+        const error = await response.json();
+        toast({
+          title: "Error",
+          description: error.message || 'Failed to add location to contest',
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error adding location to contest:', error);
+      toast({
+        title: "Error",
+        description: 'Failed to add location to contest',
+        variant: "destructive",
+      });
+    } finally {
+      setIsContestSubmitting(false);
+    }
   }
 
-  // Handle PayPal payment success
-  const handlePayPalSuccess = (paymentData: any) => {
-    setShowPayPalPayment(false);
-    toast({
-      title: "Contest Entry Successful! 🎉",
-      description: "Your location has been entered into the contest. Good luck!",
-    });
-    
-    // Redirect to contest app
-    setTimeout(() => {
-      window.open('https://vote.sacavia.com', '_blank');
-    }, 2000);
-  }
-
-  // Handle PayPal payment error
-  const handlePayPalError = (error: string) => {
-    toast({
-      title: "Payment Failed",
-      description: error,
-      variant: "destructive",
-    });
-  }
-
-  // Handle PayPal payment cancel
-  const handlePayPalCancel = () => {
-    setShowPayPalPayment(false);
-    toast({
-      title: "Payment Cancelled",
-      description: "You can try again anytime.",
-    });
-  }
 
   // Get location data for PayPal payment
   const getLocationDataForPayment = () => {
@@ -2451,10 +2457,11 @@ export default function AddLocationForm() {
             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
               <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">What happens next?</h4>
               <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li>• Your location will be created and entered into contests</li>
-                <li>• You'll be redirected to secure payment ($20.00)</li>
-                <li>• After payment, your entry becomes contest eligible</li>
+                <li>• Your location will be created and entered into the contest (FREE!)</li>
+                <li>• You'll receive a confirmation email with contest details</li>
+                <li>• Your entry becomes immediately contest eligible</li>
                 <li>• Users can vote for your location on the contest platform</li>
+                <li>• Win up to $5,000 in prizes!</li>
               </ul>
             </div>
             
@@ -2488,7 +2495,7 @@ export default function AddLocationForm() {
               ) : (
                 <>
                   <Trophy className="mr-2 h-4 w-4" />
-                  Enter Contest ($20.00)
+                  Enter Contest (Free)
                 </>
               )}
             </Button>
@@ -2496,29 +2503,6 @@ export default function AddLocationForm() {
         </DialogContent>
       </Dialog>
 
-      {/* PayPal Payment Dialog */}
-      <Dialog open={showPayPalPayment} onOpenChange={setShowPayPalPayment}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-blue-600">
-              <Trophy className="mr-2 h-5 w-5" />
-              Complete Contest Entry
-            </DialogTitle>
-            <DialogDescription>
-              Complete your payment to enter your location in the Sacavia Contest
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="py-4">
-            <PayPalContestPayment
-              locationData={getLocationDataForPayment()}
-              onSuccess={handlePayPalSuccess}
-              onError={handlePayPalError}
-              onCancel={handlePayPalCancel}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Reset Confirmation Dialog */}
       <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
