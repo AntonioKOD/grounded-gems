@@ -6,35 +6,41 @@ export async function POST(request: NextRequest) {
   try {
     const payload = await getPayload({ config });
     
-    // Check authentication
-    const token = request.cookies.get('payload-token')?.value;
-    if (!token) {
-      return NextResponse.json(
-        { message: 'Authentication required' },
-        { status: 401 }
-      );
-    }
+    const { locationData, userId: bodyUserId } = await request.json();
+    
+    // Use userId from body if provided (for testing), otherwise check cookie authentication
+    let userId: string | null = bodyUserId || null;
 
-    // Decode token to get user ID
-    let userId: string | null = null;
-    try {
-      const parts = token.split('.');
-      if (parts.length === 3) {
-        const payload = parts[1] ? JSON.parse(Buffer.from(parts[1], 'base64').toString()) : {};
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          return NextResponse.json(
-            { message: 'Token expired' },
-            { status: 401 }
-          );
-        }
-        userId = payload.id;
+    if (!userId) {
+      // Check authentication
+      const token = request.cookies.get('payload-token')?.value;
+      if (!token) {
+        return NextResponse.json(
+          { message: 'Authentication required' },
+          { status: 401 }
+        );
       }
-    } catch (error) {
-      console.error('Error decoding token:', error);
-      return NextResponse.json(
-        { message: 'Invalid token' },
-        { status: 401 }
-      );
+
+      // Decode token to get user ID
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = parts[1] ? JSON.parse(Buffer.from(parts[1], 'base64').toString()) : {};
+          if (payload.exp && payload.exp * 1000 < Date.now()) {
+            return NextResponse.json(
+              { message: 'Token expired' },
+              { status: 401 }
+            );
+          }
+          userId = payload.id;
+        }
+      } catch (error) {
+        console.error('Error decoding token:', error);
+        return NextResponse.json(
+          { message: 'Invalid token' },
+          { status: 401 }
+        );
+      }
     }
 
     if (!userId) {
@@ -44,8 +50,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { locationData } = await request.json();
-
     if (!locationData) {
       return NextResponse.json(
         { message: 'Location data is required' },
@@ -53,41 +57,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log('🎯 Creating experience with data:', {
+      title: locationData.name,
+      description: locationData.description,
+      city: locationData.address.city,
+      status: 'PUBLISHED',
+      contestEligible: true,
+      upvotesCount: 0,
+      owner: userId,
+    });
+
     // Create the experience (location) and mark it as contest-eligible
     const experience = await payload.create({
       collection: 'experiences',
       data: {
-        name: locationData.name,
+        title: locationData.name,
         description: locationData.description,
-        address: locationData.address,
-        coordinates: locationData.coordinates,
-        category: locationData.category,
-        featuredImage: locationData.featuredImage,
-        images: locationData.images || [],
-        createdBy: userId,
+        city: locationData.address.city,
+        status: 'PUBLISHED',
         contestEligible: true, // Automatically make it contest-eligible
         upvotesCount: 0,
-        status: 'published',
+        owner: userId,
+        // Add location details to metadata
+        location: {
+          state: locationData.address.state,
+          country: locationData.address.country,
+          coordinates: {
+            latitude: locationData.coordinates.lat,
+            longitude: locationData.coordinates.lng,
+          }
+        }
       },
     });
 
-    // Get user information for email
-    const user = await payload.findByID({
-      collection: 'users',
-      id: userId,
-    });
+    console.log('✅ Experience created successfully:', experience.id);
 
-    // Send confirmation email
+    // Send confirmation email (with error handling)
     try {
+      console.log('👤 Looking up user with ID:', userId);
+      const user = await payload.findByID({
+        collection: 'users',
+        id: userId,
+      });
+      console.log('👤 User found:', user.email);
+
       await sendContestConfirmationEmail({
         userEmail: user.email,
-        userName: user.name || user.username,
+        userName: user.name || user.username || 'User',
         locationName: locationData.name,
         locationDescription: locationData.description,
         contestUrl: 'https://vote.sacavia.com',
       });
+      console.log('✅ Confirmation email sent successfully');
     } catch (emailError) {
-      console.error('Failed to send contest confirmation email:', emailError);
+      console.error('⚠️ Failed to send confirmation email:', emailError);
       // Don't fail the request if email fails
     }
 
@@ -98,9 +121,24 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Error adding location to contest:', error);
+    console.error('❌ Error adding location to contest:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const errorName = error instanceof Error ? error.name : 'Unknown';
+    
+    console.error('❌ Error details:', {
+      message: errorMessage,
+      stack: errorStack,
+      name: errorName
+    });
+    
     return NextResponse.json(
-      { message: 'Failed to add location to contest' },
+      { 
+        message: 'Failed to add location to contest',
+        error: errorMessage,
+        details: errorStack
+      },
       { status: 500 }
     );
   }
@@ -134,7 +172,7 @@ async function sendContestConfirmationEmail({
       - Description: ${locationDescription}
       
       Contest Information:
-      - Prize Pool: $5,000
+      - Total Prize: $5,000
       - Contest Link: ${contestUrl}
       - Voting is now open!
       

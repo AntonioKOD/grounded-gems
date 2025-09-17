@@ -965,17 +965,32 @@ export default function AddLocationForm() {
         createdBy: user?.id,
       }
 
-      // Call your createLocation function with the prepared data
-      const newLoc = await createLocation(formData)
-      console.log("Location created successfully:", newLoc)
+      // Call the contest add-location API to create an experience
+      const response = await fetch('/api/contest/add-location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationData: formData
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to add location to contest')
+      }
+
+      const newLoc = await response.json()
+      console.log("Location added to contest successfully:", newLoc)
 
       // Show success dialog
       setShowSuccessDialog(true)
 
       // Show success toast
       toast({
-        title: "Location Added",
-        description: `${locationName} has been successfully ${saveAsDraft ? "saved as draft" : "published"}.`,
+        title: "Location Added to Contest",
+        description: `${locationName} has been successfully added to the contest and is now eligible for voting!`,
       })
     } catch (error) {
       // Error handling remains the same

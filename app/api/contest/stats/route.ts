@@ -145,9 +145,9 @@ export async function GET(request: NextRequest) {
       },
       prizePool: {
         total: 5000,
-        grandPrize: 3000,
-        cityWinners: 1500, // 3 cities × $500
-        categoryWinners: 500 // 1 category × $500
+        grandPrize: 5000,
+        cityWinners: 0, // No separate city prizes
+        categoryWinners: 0 // No separate category prizes
       },
       contestStatus: {
         isActive,
