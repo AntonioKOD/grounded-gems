@@ -78,14 +78,16 @@ export async function POST(request: NextRequest) {
         contestEligible: true, // Automatically make it contest-eligible
         upvotesCount: 0,
         owner: userId,
-        // Add location details to metadata
+        // Add location details to metadata (coordinates are optional)
         location: {
           state: locationData.address.state,
           country: locationData.address.country,
-          coordinates: {
-            latitude: locationData.coordinates.lat,
-            longitude: locationData.coordinates.lng,
-          }
+          ...(locationData.coordinates && {
+            coordinates: {
+              latitude: locationData.coordinates.lat,
+              longitude: locationData.coordinates.lng,
+            }
+          })
         }
       },
     });

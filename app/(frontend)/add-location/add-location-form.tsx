@@ -115,10 +115,7 @@ export default function AddLocationForm() {
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false)
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<{ isDuplicate: boolean; message?: string; existingLocation?: any } | null>(null)
   
-  // Contest entry state
-  const [attested18, setAttested18] = useState(false)
-  const [showContestDialog, setShowContestDialog] = useState(false)
-  const [isContestSubmitting, setIsContestSubmitting] = useState(false)
+  // Contest entry state (removed - all locations are automatically contest-eligible)
 
   // Basic info
   const [locationName, setLocationName] = useState("")
@@ -989,8 +986,8 @@ export default function AddLocationForm() {
 
       // Show success toast
       toast({
-        title: "Location Added to Contest",
-        description: `${locationName} has been successfully added to the contest and is now eligible for voting!`,
+        title: "🎉 Location Created & Added to Contest!",
+        description: `${locationName} has been successfully created and automatically added to the contest! Check your email for contest details and share with friends to get votes!`,
       })
     } catch (error) {
       // Error handling remains the same
@@ -1024,60 +1021,6 @@ export default function AddLocationForm() {
     }
   }
 
-  // Handle contest entry submission
-  const handleContestEntry = async () => {
-    if (!attested18) {
-      toast({
-        title: "Age Verification Required",
-        description: "You must be 18 or older to enter contests.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Automatically add location to contest (no payment required)
-    try {
-      setShowContestDialog(false);
-      setIsContestSubmitting(true);
-
-      const response = await fetch('/api/contest/add-location', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          locationData: getLocationDataForPayment(),
-        }),
-      });
-
-      if (response.ok) {
-        toast({
-          title: "🎉 Contest Entry Successful!",
-          description: "Your location has been added to the contest! Check your email for confirmation.",
-        });
-        // Redirect to contest app
-        setTimeout(() => {
-          window.open('https://vote.sacavia.com', '_blank');
-        }, 2000);
-      } else {
-        const error = await response.json();
-        toast({
-          title: "Error",
-          description: error.message || 'Failed to add location to contest',
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error adding location to contest:', error);
-      toast({
-        title: "Error",
-        description: 'Failed to add location to contest',
-        variant: "destructive",
-      });
-    } finally {
-      setIsContestSubmitting(false);
-    }
-  }
 
 
   // Get location data for PayPal payment
@@ -2330,19 +2273,6 @@ export default function AddLocationForm() {
               <Save className="mr-2 h-5 w-5" />
               Save as Draft
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-green-600 text-green-600 hover:bg-green-600/5 h-14 md:h-12 text-base font-medium w-full md:w-auto order-3"
-              onClick={(e) => {
-                e.preventDefault()
-                setShowContestDialog(true)
-              }}
-              disabled={isSubmitting || !locationName || !locationDescription || selectedCategories.length === 0}
-            >
-              <Trophy className="mr-2 h-5 w-5" />
-              Enter Contest
-            </Button>
             <div className="flex-1 flex justify-center md:justify-end order-3">
               <Button
                 type="button"
@@ -2432,12 +2362,22 @@ export default function AddLocationForm() {
           <DialogHeader>
             <DialogTitle className="flex items-center text-green-600">
               <CheckCircle2 className="mr-2 h-5 w-5" />
-              Location Added Successfully
+              🎉 Location Created & Added to Contest!
             </DialogTitle>
             <DialogDescription>
-              Your location has been {formSubmitType === "draft" ? "saved as a draft" : "published"} successfully.
+              Your location has been successfully created and automatically added to the Sacavia Hidden Gems Contest! 
+              Check your email for contest details and share with friends to get votes. Win up to $5,000 in prizes!
             </DialogDescription>
           </DialogHeader>
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <h4 className="font-semibold text-green-800 mb-2">What's Next?</h4>
+            <ul className="text-sm text-green-700 space-y-1">
+              <li>• Check your email for contest confirmation</li>
+              <li>• Share your location with friends to get votes</li>
+              <li>• Visit the contest platform to see your entry</li>
+              <li>• Win up to $5,000 in prizes!</li>
+            </ul>
+          </div>
           <DialogFooter>
             <Button
               onClick={() => {
@@ -2448,6 +2388,9 @@ export default function AddLocationForm() {
             >
               Add Another Location
             </Button>
+            <Button variant="outline" onClick={() => window.open('https://vote.sacavia.com', '_blank')}>
+              View Contest
+            </Button>
             <Button variant="outline" onClick={() => router.push("/map")}>
               View All Locations
             </Button>
@@ -2455,68 +2398,6 @@ export default function AddLocationForm() {
         </DialogContent>
       </Dialog>
 
-      {/* Contest Entry Dialog */}
-      <Dialog open={showContestDialog} onOpenChange={setShowContestDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-green-600">
-              <Trophy className="mr-2 h-5 w-5" />
-              Enter Location in Contest
-            </DialogTitle>
-            <DialogDescription>
-              Enter your location in the Sacavia Contest for a chance to win prizes and recognition!
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-              <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">What happens next?</h4>
-              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li>• Your location will be created and entered into the contest (FREE!)</li>
-                <li>• You'll receive a confirmation email with contest details</li>
-                <li>• Your entry becomes immediately contest eligible</li>
-                <li>• Users can vote for your location on the contest platform</li>
-                <li>• Win up to $5,000 in prizes!</li>
-              </ul>
-            </div>
-            
-            <div className="flex items-start space-x-2">
-              <Checkbox
-                id="attested18"
-                checked={attested18}
-                onCheckedChange={(checked) => setAttested18(checked as boolean)}
-                className="mt-1"
-              />
-              <label htmlFor="attested18" className="text-sm text-gray-700 dark:text-gray-300">
-                I confirm that I am 18 years or older and eligible to enter contests
-              </label>
-            </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowContestDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleContestEntry}
-              disabled={!attested18 || isContestSubmitting}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isContestSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Trophy className="mr-2 h-4 w-4" />
-                  Enter Contest (Free)
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
 
       {/* Reset Confirmation Dialog */}
