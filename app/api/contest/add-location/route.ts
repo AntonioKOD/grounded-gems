@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🎯 Creating experience with data:', {
+    console.log('🎯 Creating experience and location with data:', {
       title: locationData.name,
       description: locationData.description,
       city: locationData.address.city,
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       owner: userId,
     });
 
-    // Create the experience (location) and mark it as contest-eligible
+    // Create the experience (for contest) and mark it as contest-eligible
     const experience = await payload.create({
       collection: 'experiences',
       data: {
@@ -94,6 +94,53 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Experience created successfully:', experience.id);
 
+    // Also create a location entry for persistence (so it survives after contest ends)
+    const location = await payload.create({
+      collection: 'locations',
+      data: {
+        name: locationData.name,
+        slug: locationData.slug || locationData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        description: locationData.description,
+        shortDescription: locationData.shortDescription,
+        featuredImage: locationData.featuredImage,
+        gallery: locationData.gallery,
+        categories: locationData.categories,
+        tags: locationData.tags,
+        address: {
+          street: locationData.address.street,
+          city: locationData.address.city,
+          state: locationData.address.state,
+          zip: locationData.address.zip,
+          country: locationData.address.country,
+        },
+        neighborhood: locationData.neighborhood,
+        contactInfo: locationData.contactInfo,
+        businessHours: locationData.businessHours,
+        priceRange: locationData.priceRange,
+        bestTimeToVisit: locationData.bestTimeToVisit,
+        insiderTips: locationData.insiderTips,
+        accessibility: locationData.accessibility,
+        createdBy: userId,
+        privacy: locationData.privacy || 'public',
+        privateAccess: locationData.privateAccess,
+        status: 'published',
+        isFeatured: false,
+        isVerified: false,
+        hasBusinessPartnership: locationData.hasBusinessPartnership,
+        partnershipDetails: locationData.partnershipDetails,
+        meta: locationData.meta,
+        // Add coordinates if available
+        ...(locationData.coordinates && {
+          coordinates: {
+            latitude: locationData.coordinates.lat,
+            longitude: locationData.coordinates.lng,
+          }
+        })
+      },
+    });
+
+    console.log('✅ Location created successfully:', location.id);
+
     // Send confirmation email (with error handling)
     try {
       console.log('👤 Looking up user with ID:', userId);
@@ -119,7 +166,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       experienceId: experience.id,
-      message: 'Location successfully added to contest',
+      locationId: location.id,
+      message: 'Location successfully added to contest and saved to locations database',
     });
 
   } catch (error) {

@@ -8,7 +8,6 @@ export const dynamic = 'force-dynamic';
 // Upvote request schema
 const upvoteSchema = z.object({
   experienceId: z.string().min(1),
-  userId: z.string().min(1),
 });
 
 // Upvote response interface
@@ -37,12 +36,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { experienceId, userId } = validation.data;
-
-    console.log('👍 Upvote request:', { experienceId, userId });
+    const { experienceId } = validation.data;
 
     // Initialize PayloadCMS
     const payload = await getPayload({ config });
+
+    // Authenticate user using JWT token
+    let userId: string | null = null;
+    
+    try {
+      const authResult = await payload.auth({ headers: request.headers });
+      if (authResult.user) {
+        userId = authResult.user.id;
+        console.log('👍 Upvote request from authenticated user:', { experienceId, userId });
+      }
+    } catch (authError) {
+      console.error('❌ Authentication failed:', authError);
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Authentication required',
+          upvoted: false,
+          upvotesCount: 0,
+        },
+        { status: 401 }
+      );
+    }
 
     // Check if the experience exists and is contest eligible
     const experience = await payload.findByID({
@@ -208,7 +230,6 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const experienceId = searchParams.get('experienceId');
-    const userId = searchParams.get('userId');
 
     if (!experienceId) {
       return NextResponse.json(
@@ -220,10 +241,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('🔍 Checking upvote status:', { experienceId, userId });
-
     // Initialize PayloadCMS
     const payload = await getPayload({ config });
+
+    // Authenticate user using JWT token (optional for status check)
+    let userId: string | null = null;
+    
+    try {
+      const authResult = await payload.auth({ headers: request.headers });
+      if (authResult.user) {
+        userId = authResult.user.id;
+        console.log('🔍 Checking upvote status for authenticated user:', { experienceId, userId });
+      }
+    } catch (authError) {
+      console.log('🔍 Checking upvote status without authentication:', { experienceId });
+    }
 
     // Get upvotes count for the experience
     const upvotesResult = await payload.find({
