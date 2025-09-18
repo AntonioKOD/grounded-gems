@@ -65,6 +65,31 @@ export default buildConfig({
   },
   db: mongooseAdapter({
     url: process.env.DATABASE_URI || '',
+    // Enhanced connection options for 10,000+ users
+    connectOptions: {
+      // Connection pool settings
+      maxPoolSize: 50, // Maximum number of connections in the pool
+      minPoolSize: 5,  // Minimum number of connections in the pool
+      maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+      serverSelectionTimeoutMS: 5000, // How long to try selecting a server
+      socketTimeoutMS: 45000, // How long a send or receive on a socket can take
+      connectTimeoutMS: 10000, // How long to wait for initial connection
+      heartbeatFrequencyMS: 10000, // How often to check server status
+      
+      // Performance optimizations
+      // Note: bufferMaxEntries and bufferCommands are mongoose-specific options
+      // and not available in the ConnectOptions interface
+      
+      // Retry settings
+      retryWrites: true,
+      retryReads: true,
+      
+      // Compression
+      compressors: ['zlib'],
+      
+      // Read preferences for better performance
+      readPreference: 'primary', // Use primary for index creation compatibility
+    },
   }),
   sharp,
   serverURL: process.env.NODE_ENV === 'production' 

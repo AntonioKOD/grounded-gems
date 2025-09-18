@@ -35,7 +35,10 @@
     "test-categories": "node test-category-sync.js",
     "fix-live-photos": "node scripts/fix-live-photos.js",
     "setup-firebase": "node scripts/setup-firebase-env.js",
-    "test-firebase": "node scripts/test-firebase.js"
+    "test-firebase": "node scripts/test-firebase.js",
+    "init-database": "tsx scripts/init-database.ts",
+    "db:indexes": "tsx scripts/init-database.ts",
+    "db:monitor": "tsx -e \"import('./lib/database-monitoring').then(m => m.initializeDatabaseMonitoring())\""
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
