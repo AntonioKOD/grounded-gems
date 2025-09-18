@@ -2,8 +2,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
 import config from '@payload-config';
 import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 
 export const dynamic = 'force-dynamic';
+
+// Helper function to verify JWT token
+async function verifyPayloadToken(token: string) {
+  try {
+    const secret = process.env.PAYLOAD_SECRET;
+    if (!secret) {
+      console.error('❌ PAYLOAD_SECRET not found in environment variables');
+      return null;
+    }
+    
+    const decoded = jwt.verify(token, secret) as any;
+    
+    if (decoded && typeof decoded === 'object' && 'id' in decoded) {
+      return {
+        id: decoded.id as string,
+        email: decoded.email as string
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ JWT verification failed:', error);
+    return null;
+  }
+}
 
 // Upvote request schema
 const upvoteSchema = z.object({
@@ -21,9 +47,14 @@ interface UpvoteResponse {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 Upvote POST request received');
+    
     // Parse and validate request body
     const body = await request.json();
+    console.log('📝 Request body:', body);
+    
     const validation = upvoteSchema.safeParse(body);
+    console.log('✅ Validation result:', validation.success);
     
     if (!validation.success) {
       return NextResponse.json(
@@ -44,14 +75,20 @@ export async function POST(request: NextRequest) {
     // Authenticate user using JWT token
     let userId: string | null = null;
     
-    try {
-      const authResult = await payload.auth({ headers: request.headers });
-      if (authResult.user) {
-        userId = authResult.user.id;
+    // Check for JWT token in cookies
+    const token = request.cookies.get('payload-token')?.value;
+    
+    if (token) {
+      console.log('🔑 Found JWT token in cookies');
+      const userData = await verifyPayloadToken(token);
+      if (userData) {
+        userId = userData.id;
         console.log('👍 Upvote request from authenticated user:', { experienceId, userId });
+      } else {
+        console.log('❌ JWT token verification failed');
       }
-    } catch (authError) {
-      console.error('❌ Authentication failed:', authError);
+    } else {
+      console.log('❌ No JWT token found in cookies');
     }
 
     if (!userId) {
@@ -67,12 +104,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if the experience exists and is contest eligible
+    console.log('🔍 Looking up experience with ID:', experienceId);
+    
     const experience = await payload.findByID({
       collection: 'experiences',
       id: experienceId,
     });
 
+    console.log('🔍 Experience lookup result:', experience ? 'Found' : 'Not found');
+    
     if (!experience) {
+      console.log('❌ Experience not found with ID:', experienceId);
       return NextResponse.json(
         { 
           success: false, 
@@ -93,12 +135,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user exists
+    console.log('🔍 Looking up user with ID:', userId);
+    
     const user = await payload.findByID({
       collection: 'users',
       id: userId,
     });
 
+    console.log('🔍 User lookup result:', user ? 'Found' : 'Not found');
+    
     if (!user) {
+      console.log('❌ User not found with ID:', userId);
       return NextResponse.json(
         { 
           success: false, 
@@ -247,13 +294,16 @@ export async function GET(request: NextRequest) {
     // Authenticate user using JWT token (optional for status check)
     let userId: string | null = null;
     
-    try {
-      const authResult = await payload.auth({ headers: request.headers });
-      if (authResult.user) {
-        userId = authResult.user.id;
+    // Check for JWT token in cookies
+    const token = request.cookies.get('payload-token')?.value;
+    
+    if (token) {
+      const userData = await verifyPayloadToken(token);
+      if (userData) {
+        userId = userData.id;
         console.log('🔍 Checking upvote status for authenticated user:', { experienceId, userId });
       }
-    } catch (authError) {
+    } else {
       console.log('🔍 Checking upvote status without authentication:', { experienceId });
     }
 
