@@ -44,8 +44,13 @@ export default function SimpleAddLocationForm() {
       throw new Error('Please provide a complete address')
     }
 
+    const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || process.env.NEXT_SECRET_MAPBOX_ACCESS_TOKEN
+    if (!mapboxToken || mapboxToken === 'your-mapbox-access-token-here') {
+      throw new Error('Mapbox access token is not configured. Please contact support.')
+    }
+
     const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddress)}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(fullAddress)}.json?access_token=${mapboxToken}`
     )
 
     if (!response.ok) {

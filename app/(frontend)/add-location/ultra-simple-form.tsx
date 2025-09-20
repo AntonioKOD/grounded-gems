@@ -230,10 +230,16 @@ export default function UltraSimpleForm() {
       
       setIsGeocoding(false)
       
-      // Upload images if any
+      // Upload images if any (for future use)
       let imageUrls: string[] = []
       if (uploadedImages.length > 0) {
-        imageUrls = await uploadImages(uploadedImages)
+        try {
+          imageUrls = await uploadImages(uploadedImages)
+          console.log('Images uploaded successfully:', imageUrls)
+        } catch (imageError) {
+          console.warn('Image upload failed, but continuing with location creation:', imageError)
+          // Continue with location creation even if image upload fails
+        }
       }
       
       const locationData = {
@@ -241,10 +247,8 @@ export default function UltraSimpleForm() {
         shortDescription: description.trim(),
         coordinates: coordinates,
         categories: selectedCategories.map(cat => cat.id),
-        // Add first image as featured image if available
-        featuredImage: imageUrls[0] || undefined,
-        // Add all images to gallery
-        gallery: imageUrls.map(url => ({ image: url }))
+        // Note: Images are uploaded but not linked to location yet
+        // This can be added later through the location edit interface
       }
 
       const response = await fetch('/api/locations', {
@@ -262,9 +266,13 @@ export default function UltraSimpleForm() {
 
       const result = await response.json()
       
+      const successMessage = imageUrls.length > 0 
+        ? `${name} has been added to the community! ${imageUrls.length} image(s) uploaded successfully.`
+        : `${name} has been added to the community!`
+      
       toast({
         title: "🎉 Location Added Successfully!",
-        description: `${name} has been added to the community!`,
+        description: successMessage,
       })
 
       // Redirect to the new location

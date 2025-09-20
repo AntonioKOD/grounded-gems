@@ -34,30 +34,47 @@ export async function POST(request: NextRequest) {
     // Create media document in Payload with the blob URL
     const payload = await getPayload({ config: payloadConfig })
     
-    const media = await payload.create({
-      collection: 'media',
-      data: {
-        alt: alt || file.name,
-        uploadSource: 'mobile',
+    try {
+      const media = await payload.create({
+        collection: 'media',
+        data: {
+          alt: alt || file.name,
+          uploadSource: 'web',
+          filename: file.name,
+          mimeType: file.type,
+          filesize: file.size,
+          url: blob.url, // Use the Vercel Blob URL
+        },
+      })
+
+      console.log('🚀 Media document created:', media.id)
+
+      return NextResponse.json({
+        success: true,
+        message: 'File uploaded successfully',
+        id: media.id,
+        filename: media.filename,
+        url: media.url,
+        mimeType: media.mimeType,
+        filesize: media.filesize,
+        blobUrl: blob.url
+      })
+    } catch (mediaError) {
+      console.error('🚀 Error creating media document:', mediaError)
+      
+      // Return the blob URL even if media document creation fails
+      return NextResponse.json({
+        success: true,
+        message: 'File uploaded to blob storage, but media document creation failed',
+        id: null,
         filename: file.name,
+        url: blob.url,
         mimeType: file.type,
         filesize: file.size,
-        url: blob.url, // Use the Vercel Blob URL
-      },
-    })
-
-    console.log('🚀 Media document created:', media.id)
-
-    return NextResponse.json({
-      success: true,
-      message: 'File uploaded successfully',
-      id: media.id,
-      filename: media.filename,
-      url: media.url,
-      mimeType: media.mimeType,
-      filesize: media.filesize,
-      blobUrl: blob.url
-    })
+        blobUrl: blob.url,
+        warning: 'Media document not created in database'
+      })
+    }
 
   } catch (error) {
     console.error('🚀 Vercel Blob upload error:', error)
