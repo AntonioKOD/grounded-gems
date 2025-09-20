@@ -124,8 +124,9 @@ async function handleBlobStorageRequest(
   request: NextRequest
 ): Promise<NextResponse> {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN!
-  const blobHostname = blobToken.replace('vercel_blob_rw_', '') + '.public.blob.vercel-storage.com'
-  const blobUrl = `https://${blobHostname}/${filename}`
+  // Extract the store ID from the token (format: vercel_blob_rw_STOREID_TOKEN)
+  const storeId = blobToken.split('_')[3] // Gets the store ID part
+  const blobUrl = `https://${storeId}.public.blob.vercel-storage.com/${filename}`
   
   console.log(`📦 Blob URL: ${blobUrl}`)
   

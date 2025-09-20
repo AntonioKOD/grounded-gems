@@ -59,7 +59,7 @@ export default function OptimizedImage({
     const processedUrl = getPayloadImageUrl(src)
     
     // If it's still a problematic URL, use placeholder
-    if (!processedUrl || processedUrl === '/placeholder-image.svg') {
+    if (!processedUrl || processedUrl === '/placeholder.svg') {
       return '/placeholder.svg'
     }
     
@@ -106,11 +106,10 @@ export default function OptimizedImage({
     // Reset states when src changes to a potentially valid URL
     setHasError(false)
     setIsLoading(true)
-  
     
     // Debug logging for blob storage URLs
-    if (src.includes('.blob.vercel-storage.com') || src.includes('/api/media/')) {
-      console.log('🖼️ OptimizedImage: Loading blob storage image:', src)
+    if (src && (src.includes('.blob.vercel-storage.com') || src.includes('/api/media/'))) {
+      console.log('🖼️ OptimizedImage: Loading image:', src)
     }
   }, [src, isKnownBrokenUrl])
 
@@ -123,9 +122,8 @@ export default function OptimizedImage({
       console.warn('💡 Development hint: If using PayloadCMS with Vercel Blob Storage, ensure BLOB_READ_WRITE_TOKEN is set in .env.local')
       setHasError(true)
       setIsLoading(false)
-    
       onError?.()
-    }, 3000) // Reduced timeout for faster fallback
+    }, 5000) // Increased timeout to 5 seconds for better reliability
 
     return () => clearTimeout(timeout)
   }, [isLoading, hasError, src, onError])
@@ -167,7 +165,7 @@ export default function OptimizedImage({
     setIsLoading(false)
     
     // If this isn't already the fallback, try switching to fallback
-    if (actualSrc !== '/placeholder-image.svg') {
+    if (actualSrc !== '/placeholder.svg') {
       console.log('OptimizedImage: Switching to fallback image')
     }
     

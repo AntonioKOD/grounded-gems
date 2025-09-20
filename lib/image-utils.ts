@@ -467,7 +467,7 @@ function transformToBlobUrl(url: string): string {
  */
 export function getPayloadImageUrl(imageUrl: string | undefined | null): string {
   if (!imageUrl) {
-    return '/placeholder-image.svg'
+    return '/placeholder.svg'
   }
 
   // If it's already a blob storage URL, return as is (highest priority)
@@ -484,8 +484,10 @@ export function getPayloadImageUrl(imageUrl: string | undefined | null): string 
     
     // If we have blob storage configured, use blob URL
     if (process.env.BLOB_READ_WRITE_TOKEN) {
-      const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
-      const blobUrl = `https://${blobHostname}.public.blob.vercel-storage.com/${filename}`
+      const blobToken = process.env.BLOB_READ_WRITE_TOKEN
+      // Extract the store ID from the token (format: vercel_blob_rw_STOREID_TOKEN)
+      const storeId = blobToken.split('_')[3] // Gets the store ID part
+      const blobUrl = `https://${storeId}.public.blob.vercel-storage.com/${filename}`
       
       if (isDevelopment) {
         console.log('📸 Transforming to blob storage URL:', {
