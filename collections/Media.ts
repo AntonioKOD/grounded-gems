@@ -618,6 +618,15 @@ export const Media: CollectionConfig = {
       },
     },
     {
+      name: 'isBlobUrl',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: {
+        description: 'Indicates if the URL is already a blob storage URL',
+        readOnly: true,
+      },
+    },
+    {
       name: 'videoThumbnail',
       type: 'upload',
       relationTo: 'media',
@@ -681,8 +690,8 @@ export const Media: CollectionConfig = {
           conversionStatus: doc.conversionStatus
         })
 
-        // Ensure blob storage URLs are used for all media
-        if (operation === 'create' && process.env.BLOB_READ_WRITE_TOKEN && doc.url) {
+        // Ensure blob storage URLs are used for all media (skip if already a blob URL)
+        if (operation === 'create' && process.env.BLOB_READ_WRITE_TOKEN && doc.url && !doc.isBlobUrl) {
           try {
             // Check if URL is already a blob storage URL
             if (!doc.url.includes('blob.vercel-storage.com')) {
@@ -709,6 +718,8 @@ export const Media: CollectionConfig = {
           } catch (error) {
             console.error('❌ Failed to update media URL to blob storage:', error)
           }
+        } else if (doc.isBlobUrl) {
+          console.log('🔄 Skipping blob URL conversion - already a blob URL:', doc.url)
         }
         
         // Handle Live Photo conversion to JPEG

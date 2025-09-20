@@ -44,6 +44,8 @@ export async function POST(request: NextRequest) {
           mimeType: file.type,
           filesize: file.size,
           url: blob.url, // Use the Vercel Blob URL
+          // Add a flag to indicate this is already a blob URL to prevent afterChange hook issues
+          isBlobUrl: true,
         },
       })
 

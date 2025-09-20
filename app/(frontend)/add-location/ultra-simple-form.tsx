@@ -117,6 +117,7 @@ export default function UltraSimpleForm() {
     const uploadPromises = files.map(async (file) => {
       const formData = new FormData()
       formData.append('file', file)
+      formData.append('alt', file.name)
       
       const response = await fetch('/api/upload/blob', {
         method: 'POST',
@@ -128,7 +129,11 @@ export default function UltraSimpleForm() {
       }
       
       const result = await response.json()
-      return result.url
+      return {
+        id: result.id,
+        url: result.url,
+        filename: result.filename
+      }
     })
     
     return Promise.all(uploadPromises)
@@ -230,12 +235,13 @@ export default function UltraSimpleForm() {
       
       setIsGeocoding(false)
       
-      // Upload images if any (for future use)
-      let imageUrls: string[] = []
+      // Upload images if any
+      let mediaIds: string[] = []
       if (uploadedImages.length > 0) {
         try {
-          imageUrls = await uploadImages(uploadedImages)
-          console.log('Images uploaded successfully:', imageUrls)
+          const uploadResults = await uploadImages(uploadedImages)
+          mediaIds = uploadResults.filter(result => result.id).map(result => result.id)
+          console.log('Images uploaded successfully, media IDs:', mediaIds)
         } catch (imageError) {
           console.warn('Image upload failed, but continuing with location creation:', imageError)
           // Continue with location creation even if image upload fails
@@ -247,8 +253,13 @@ export default function UltraSimpleForm() {
         shortDescription: description.trim(),
         coordinates: coordinates,
         categories: selectedCategories.map(cat => cat.id),
-        // Note: Images are uploaded but not linked to location yet
-        // This can be added later through the location edit interface
+        // Link uploaded images to the location
+        featuredImage: mediaIds[0] || undefined,
+        gallery: mediaIds.map((mediaId, index) => ({
+          image: mediaId,
+          isPrimary: index === 0,
+          order: index
+        }))
       }
 
       const response = await fetch('/api/locations', {
@@ -266,8 +277,8 @@ export default function UltraSimpleForm() {
 
       const result = await response.json()
       
-      const successMessage = imageUrls.length > 0 
-        ? `${name} has been added to the community! ${imageUrls.length} image(s) uploaded successfully.`
+      const successMessage = mediaIds.length > 0 
+        ? `${name} has been added to the community! ${mediaIds.length} image(s) uploaded successfully.`
         : `${name} has been added to the community!`
       
       toast({
