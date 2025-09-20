@@ -226,7 +226,14 @@ export default async function LocationPage({ params }: PageProps) {
   const resolvedParams = await params
   const parsedParams = parseLocationParam(resolvedParams.id)
   
+  console.log('🔍 LocationPage Debug:', {
+    originalParam: resolvedParams.id,
+    parsedParams,
+    hasParsedParams: !!parsedParams
+  })
+  
   if (!parsedParams) {
+    console.log('❌ No parsed params, calling notFound()')
     notFound()
   }
 
@@ -234,13 +241,22 @@ export default async function LocationPage({ params }: PageProps) {
   const payload = await getPayload({ config })
 
   try {
+    console.log('🔍 Searching for location:', { slug, id, usingId: !!id })
+    
     const locationResult = await payload.find({
       collection: 'locations',
       where: id ? { id: { equals: id } } : { slug: { equals: slug } },
       limit: 1,
     })
 
+    console.log('🔍 Location search result:', {
+      found: locationResult.docs.length,
+      totalDocs: locationResult.totalDocs,
+      hasDocs: !!locationResult.docs.length
+    })
+
     if (!locationResult.docs.length) {
+      console.log('❌ No location found, calling notFound()')
       notFound()
     }
 
@@ -900,7 +916,12 @@ export default async function LocationPage({ params }: PageProps) {
       </div>
     )
   } catch (error) {
-    console.error('Error fetching location:', error)
+    console.error('❌ Error fetching location:', error)
+    console.error('❌ Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      name: error instanceof Error ? error.name : undefined
+    })
     notFound()
   }
 } 

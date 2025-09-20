@@ -1338,7 +1338,8 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
 
   // Check if this is an unclaimed business (simple view)
   const isUnclaimed = location?.ownership?.claimStatus === 'unclaimed'
-  const isSimpleBusiness = isUnclaimed && !location?.isVerified && !location?.isFeatured
+  // Show simple view for any unclaimed location, or if ownership field is missing (default to unclaimed)
+  const isSimpleBusiness = isUnclaimed || !location?.ownership
 
   console.log('🔴 MAIN: LocationDetail props:', {
     locationName: location?.name,
@@ -1347,11 +1348,14 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
     isResponsiveMobile,
     shouldShowMobile,
     isUnclaimed,
-    isSimpleBusiness
+    isSimpleBusiness,
+    ownership: location?.ownership,
+    isVerified: location?.isVerified,
+    isFeatured: location?.isFeatured
   })
 
   // Use simple modal for unclaimed businesses
-  if (isSimpleBusiness) {
+  if (isSimpleBusiness && location) {
     console.log('🔴 MAIN: Rendering simple modal for unclaimed business')
     return (
       <SimpleLocationModal 
