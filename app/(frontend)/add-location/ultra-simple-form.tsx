@@ -248,10 +248,39 @@ export default function UltraSimpleForm() {
         }
       }
       
+      // Parse address string into address object
+      const parseAddressString = (addressString: string) => {
+        if (!addressString.trim()) return null
+        
+        // Try to parse the address into components
+        // This is a simple parser - could be enhanced with more sophisticated parsing
+        const parts = addressString.split(',').map(part => part.trim())
+        
+        if (parts.length >= 2) {
+          return {
+            street: parts[0] || '',
+            city: parts[1] || '',
+            state: parts[2] || '',
+            zip: parts[3] || '',
+            country: parts[4] || 'US' // Default to US if not specified
+          }
+        } else {
+          // If we can't parse it properly, store the full address in the street field
+          return {
+            street: addressString,
+            city: '',
+            state: '',
+            zip: '',
+            country: 'US'
+          }
+        }
+      }
+
       const locationData = {
         name: name.trim(),
         shortDescription: description.trim(),
         coordinates: coordinates,
+        address: parseAddressString(address),
         categories: selectedCategories.map(cat => cat.id),
         // Link uploaded images to the location
         featuredImage: mediaIds[0] || undefined,

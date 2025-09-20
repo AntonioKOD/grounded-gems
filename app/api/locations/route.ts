@@ -10,7 +10,8 @@ const ALLOWED_FIELDS = new Set([
   'featuredImage',
   'gallery',
   'insiderTips',
-  'categories'
+  'categories',
+  'address'
 ])
 
 // Governance fields that should be rejected
@@ -300,6 +301,125 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { error: 'Failed to create location' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get authenticated user
+    const { user } = await payload.auth({ headers: request.headers })
+    
+    if (!user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Parse query parameters to get location IDs
+    const { searchParams } = new URL(request.url)
+    const whereParam = searchParams.get('where')
+    
+    if (!whereParam) {
+      return NextResponse.json(
+        { error: 'Location IDs are required' },
+        { status: 400 }
+      )
+    }
+
+    // Parse the where parameter to extract location IDs
+    let locationIds: string[] = []
+    try {
+      const whereData = JSON.parse(decodeURIComponent(whereParam))
+      
+      // Handle the complex where structure from the URL
+      if (whereData.and && Array.isArray(whereData.and)) {
+        for (const condition of whereData.and) {
+          if (condition.id && condition.id.in && Array.isArray(condition.id.in)) {
+            locationIds = [...locationIds, ...condition.id.in]
+          }
+        }
+      }
+    } catch (parseError) {
+      // If JSON parsing fails, try to extract IDs from the URL directly
+      const idMatches = whereParam.match(/id.*?in.*?\[(\d+)\]/g)
+      if (idMatches) {
+        locationIds = idMatches.map(match => {
+          const idMatch = match.match(/\[(\d+)\]/)
+          return idMatch ? idMatch[1] : null
+        }).filter(Boolean) as string[]
+      }
+    }
+
+    if (locationIds.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid location IDs found' },
+        { status: 400 }
+      )
+    }
+
+    // Check permissions for each location
+    const locations = await payload.find({
+      collection: 'locations',
+      where: {
+        id: {
+          in: locationIds
+        }
+      },
+      limit: 1000
+    })
+
+    // Filter locations that the user can delete
+    const deletableLocations = locations.docs.filter(location => {
+      // Admins can delete any location
+      if (user.role === 'admin') return true
+      
+      // Users can delete their own locations
+      if (location.createdBy === user.id) return true
+      
+      // Claimed owners can delete their locations (if approved)
+      if (location.ownership?.ownerId === user.id && 
+          location.ownership?.claimStatus === 'approved') return true
+      
+      return false
+    })
+
+    if (deletableLocations.length === 0) {
+      return NextResponse.json(
+        { error: 'No locations found that you have permission to delete' },
+        { status: 403 }
+      )
+    }
+
+    // Delete the locations
+    const deletedLocations = []
+    for (const location of deletableLocations) {
+      try {
+        await payload.delete({
+          collection: 'locations',
+          id: location.id
+        })
+        deletedLocations.push(location.id)
+      } catch (deleteError) {
+        console.error(`Failed to delete location ${location.id}:`, deleteError)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully deleted ${deletedLocations.length} location(s)`,
+      deletedCount: deletedLocations.length,
+      deletedIds: deletedLocations
+    })
+
+  } catch (error) {
+    console.error('Error deleting locations:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete locations' },
       { status: 500 }
     )
   }

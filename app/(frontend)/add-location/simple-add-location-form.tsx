@@ -119,6 +119,7 @@ export default function SimpleAddLocationForm() {
         name: name.trim(),
         shortDescription: shortDescription.trim(),
         coordinates: coordinates,
+        address: address, // Address is already in the correct object format
         // Categories
         categories: selectedCategories.map(cat => cat.id),
         // Optional insider tip
