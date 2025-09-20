@@ -1,5 +1,5 @@
-import SimpleAddLocationForm from './simple-add-location-form'
+import UltraSimpleForm from './ultra-simple-form'
 
 export default function AddLocationPage() {
-  return <SimpleAddLocationForm />
+  return <UltraSimpleForm />
 }

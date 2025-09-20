@@ -56,6 +56,7 @@ import { PhotoSubmissionModal } from "@/components/location/photo-submission-mod
 import LocationDetailMobile from "./location-detail-mobile"
 import StructuredInsiderTips from "@/components/location/structured-insider-tips"
 import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
+import { SimpleLocationModal } from "@/components/location/simple-location-modal"
 import type { 
   User, 
   ReviewItem as Review, 
@@ -1335,13 +1336,31 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
   // Determine if we should show mobile version
   const shouldShowMobile = isMobile || isResponsiveMobile
 
+  // Check if this is an unclaimed business (simple view)
+  const isUnclaimed = location?.ownership?.claimStatus === 'unclaimed'
+  const isSimpleBusiness = isUnclaimed && !location?.isVerified && !location?.isFeatured
+
   console.log('🔴 MAIN: LocationDetail props:', {
     locationName: location?.name,
     isOpen,
     isMobileProp: isMobile,
     isResponsiveMobile,
-    shouldShowMobile
+    shouldShowMobile,
+    isUnclaimed,
+    isSimpleBusiness
   })
+
+  // Use simple modal for unclaimed businesses
+  if (isSimpleBusiness) {
+    console.log('🔴 MAIN: Rendering simple modal for unclaimed business')
+    return (
+      <SimpleLocationModal 
+        location={location} 
+        isOpen={isOpen} 
+        onClose={onClose}
+      />
+    )
+  }
 
   if (shouldShowMobile) {
     console.log('🔴 MAIN: Rendering mobile version')

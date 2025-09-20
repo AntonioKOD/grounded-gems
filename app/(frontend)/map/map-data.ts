@@ -111,6 +111,14 @@ export interface Location {
   isFeatured?: boolean
   isVerified?: boolean
 
+  // Ownership
+  ownership?: {
+    claimStatus?: 'unclaimed' | 'pending' | 'approved' | 'rejected'
+    ownerId?: string
+    claimedAt?: string
+    claimEmail?: string
+  }
+
   averageRating?: number
   reviewCount?: number
 
