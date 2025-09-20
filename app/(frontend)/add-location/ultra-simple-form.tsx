@@ -23,6 +23,10 @@ export default function UltraSimpleForm() {
   const [isGeocoding, setIsGeocoding] = useState(false)
   const [uploadedImages, setUploadedImages] = useState<File[]>([])
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
+  const [geocodingError, setGeocodingError] = useState<string | null>(null)
+  const [useManualCoordinates, setUseManualCoordinates] = useState(false)
+  const [manualLatitude, setManualLatitude] = useState("")
+  const [manualLongitude, setManualLongitude] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Form state - minimal fields only
@@ -68,22 +72,44 @@ export default function UltraSimpleForm() {
       throw new Error('Please provide an address')
     }
 
-    const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(addressString)}.json?access_token=${process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}`
-    )
-
-    if (!response.ok) {
-      throw new Error('Failed to geocode address')
+    // Check if Mapbox token is available
+    const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || process.env.NEXT_SECRET_MAPBOX_ACCESS_TOKEN
+    if (!mapboxToken || mapboxToken === 'your-mapbox-access-token-here') {
+      throw new Error('Mapbox access token is not configured. Please contact support.')
     }
 
-    const data = await response.json()
-    
-    if (!data.features || data.features.length === 0) {
-      throw new Error('Address not found. Please check your address and try again.')
-    }
+    try {
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(addressString)}.json?access_token=${mapboxToken}`
+      )
 
-    const [longitude, latitude] = data.features[0].geometry.coordinates
-    return { latitude, longitude }
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Mapbox API error:', response.status, errorText)
+        throw new Error(`Failed to geocode address (${response.status}). Please check your address and try again.`)
+      }
+
+      const data = await response.json()
+      
+      if (!data.features || data.features.length === 0) {
+        throw new Error('Address not found. Please check your address and try again.')
+      }
+
+      const [longitude, latitude] = data.features[0].geometry.coordinates
+      
+      // Validate coordinates
+      if (typeof latitude !== 'number' || typeof longitude !== 'number' || 
+          isNaN(latitude) || isNaN(longitude)) {
+        throw new Error('Invalid coordinates returned. Please try a different address.')
+      }
+
+      return { latitude, longitude }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new Error('Network error while geocoding address. Please check your connection and try again.')
+    }
   }
 
   // Upload images to server
@@ -139,7 +165,7 @@ export default function UltraSimpleForm() {
       return
     }
 
-    if (!address.trim()) {
+    if (!useManualCoordinates && !address.trim()) {
       toast({
         title: "Validation Error",
         description: "Address is required",
@@ -148,12 +174,60 @@ export default function UltraSimpleForm() {
       return
     }
 
+    if (useManualCoordinates && (!manualLatitude.trim() || !manualLongitude.trim())) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter both latitude and longitude",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
     setIsGeocoding(true)
+    setGeocodingError(null)
 
     try {
-      // Geocode the address
-      const coordinates = await geocodeAddress(address)
+      let coordinates: { latitude: number; longitude: number }
+      
+      if (useManualCoordinates) {
+        // Use manual coordinates
+        const lat = parseFloat(manualLatitude)
+        const lng = parseFloat(manualLongitude)
+        
+        if (isNaN(lat) || isNaN(lng)) {
+          throw new Error('Please enter valid latitude and longitude numbers')
+        }
+        
+        if (lat < -90 || lat > 90) {
+          throw new Error('Latitude must be between -90 and 90')
+        }
+        
+        if (lng < -180 || lng > 180) {
+          throw new Error('Longitude must be between -180 and 180')
+        }
+        
+        coordinates = { latitude: lat, longitude: lng }
+      } else {
+        // Geocode the address
+        try {
+          coordinates = await geocodeAddress(address)
+        } catch (geocodingErr) {
+          setIsGeocoding(false)
+          setGeocodingError(geocodingErr instanceof Error ? geocodingErr.message : 'Geocoding failed')
+          
+          // Show error but don't prevent submission - let user choose manual coordinates
+          toast({
+            title: "Address not found",
+            description: "We couldn't find that address. You can enter coordinates manually or try a different address.",
+            variant: "destructive",
+          })
+          
+          setUseManualCoordinates(true)
+          return // Stop here to let user enter manual coordinates
+        }
+      }
+      
       setIsGeocoding(false)
       
       // Upload images if any
@@ -295,7 +369,11 @@ export default function UltraSimpleForm() {
               <Input
                 id="address"
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                onChange={(e) => {
+                  setAddress(e.target.value)
+                  setGeocodingError(null)
+                  setUseManualCoordinates(false)
+                }}
                 placeholder="e.g., 123 Main St, Boston, MA 02101"
                 className="h-12 text-base"
                 required
@@ -303,6 +381,83 @@ export default function UltraSimpleForm() {
               <p className="text-xs text-gray-500">
                 We'll automatically find the exact location from your address.
               </p>
+              
+              {/* Geocoding Error Display */}
+              {geocodingError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600 mb-2">{geocodingError}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setUseManualCoordinates(true)}
+                    className="text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Enter coordinates manually
+                  </Button>
+                </div>
+              )}
+              
+              {/* Manual Coordinates Input */}
+              {useManualCoordinates && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-blue-600" />
+                    <Label className="text-sm font-medium text-blue-800">
+                      Enter coordinates manually
+                    </Label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="latitude" className="text-xs text-blue-700">
+                        Latitude
+                      </Label>
+                      <Input
+                        id="latitude"
+                        type="number"
+                        step="any"
+                        value={manualLatitude}
+                        onChange={(e) => setManualLatitude(e.target.value)}
+                        placeholder="42.3601"
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="longitude" className="text-xs text-blue-700">
+                        Longitude
+                      </Label>
+                      <Input
+                        id="longitude"
+                        type="number"
+                        step="any"
+                        value={manualLongitude}
+                        onChange={(e) => setManualLongitude(e.target.value)}
+                        placeholder="-71.0589"
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setUseManualCoordinates(false)
+                        setGeocodingError(null)
+                        setManualLatitude("")
+                        setManualLongitude("")
+                      }}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-100"
+                    >
+                      Try address again
+                    </Button>
+                    <p className="text-xs text-blue-600 flex items-center">
+                      💡 You can find coordinates on Google Maps by right-clicking on a location
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Categories */}
