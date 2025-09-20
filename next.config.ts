@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
     // Use custom loader for better mobile and Payload CMS compatibility
     loader: 'custom',
     loaderFile: './lib/image-loader.ts',
-    unoptimized: false, // Enable optimization with custom loader
+    unoptimized: false, // Re-enable optimization now that we have production fallback
     remotePatterns: [
       {
         protocol: 'https',

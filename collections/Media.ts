@@ -680,6 +680,36 @@ export const Media: CollectionConfig = {
           originalFormat: doc.originalFormat,
           conversionStatus: doc.conversionStatus
         })
+
+        // Ensure blob storage URLs are used for all media
+        if (operation === 'create' && process.env.BLOB_READ_WRITE_TOKEN && doc.url) {
+          try {
+            // Check if URL is already a blob storage URL
+            if (!doc.url.includes('blob.vercel-storage.com')) {
+              console.log('🔄 Converting media URL to blob storage URL:', {
+                originalUrl: doc.url,
+                filename: doc.filename
+              })
+              
+              // Construct blob storage URL
+              const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
+              const blobUrl = `https://${blobHostname}.public.blob.vercel-storage.com/${doc.filename}`
+              
+              // Update the document with blob URL
+              await req.payload.update({
+                collection: 'media',
+                id: doc.id,
+                data: {
+                  url: blobUrl
+                }
+              })
+              
+              console.log('✅ Updated media URL to blob storage:', blobUrl)
+            }
+          } catch (error) {
+            console.error('❌ Failed to update media URL to blob storage:', error)
+          }
+        }
         
         // Handle Live Photo conversion to JPEG
         if (operation === 'create' && (doc.mimeType === 'image/heic' || doc.mimeType === 'image/heif')) {

@@ -82,10 +82,17 @@ export default function sacaviaImageLoader({ src, width, quality }: ImageLoaderP
   if (src.startsWith('/api/media/') || src.startsWith('/media/')) {
     const optimizedSrc = `${baseUrl}${src}`;
     
-    // For our custom /api/media/file/[filename] route, don't add query params
-    // as they break the route parameter matching
+    // For our custom /api/media/file/[filename] route, add optimization parameters
     if (src.startsWith('/api/media/file/')) {
-      return optimizedSrc;
+      try {
+        const url = new URL(optimizedSrc);
+        url.searchParams.set('w', width.toString());
+        url.searchParams.set('q', q.toString());
+        url.searchParams.set('fm', 'webp');
+        return url.toString();
+      } catch {
+        return optimizedSrc;
+      }
     }
     
     // Add optimization parameters for other media files

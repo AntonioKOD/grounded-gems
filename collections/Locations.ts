@@ -35,14 +35,26 @@ export const Locations: CollectionConfig = {
       return !!req.user;
     },
     update: async ({ req }) => {
-      // Users can update their own locations, admins can update any
+      // Users can update their own locations, admins can update any, claimed owners can update
       if (!req.user) return false;
       
+      // Admins can update any location
       if (req.user.role === 'admin') return true;
       
+      // Return query conditions for creator and claimed owner access
       return {
-        createdBy: { equals: req.user.id }
-      };
+        or: [
+          // Creator access
+          { createdBy: { equals: req.user.id } },
+          // Claimed owner access (pending or approved status)
+          {
+            and: [
+              { 'ownership.ownerId': { equals: req.user.id } },
+              { 'ownership.claimStatus': { in: ['pending', 'approved'] } }
+            ]
+          }
+        ]
+      } as any;
     },
     delete: async ({ req }) => {
       // Users can delete their own locations, admins can delete any
@@ -58,7 +70,20 @@ export const Locations: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
-      async ({ data, operation }) => {
+      async ({ data, operation, req }) => {
+        // Force defaults on create
+        if (operation === 'create') {
+          data.status = 'published';
+          data.privacy = 'public';
+          data.isVerified = false;
+          data.source = 'community';
+          
+          // Set createdBy if user exists
+          if (req.user) {
+            data.createdBy = req.user.id;
+          }
+        }
+        
         // Ensure proper image ordering and primary image management
         if (data.gallery && Array.isArray(data.gallery)) {
           // Sort gallery by order
@@ -479,8 +504,15 @@ export const Locations: CollectionConfig = {
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },
-    { name: 'description', type: 'text', required: true },
-    { name: 'shortDescription', type: 'text' },
+    { name: 'description', type: 'text' },
+    { 
+      name: 'shortDescription', 
+      type: 'text', 
+      required: true,
+      admin: {
+        description: '<= 300 chars'
+      }
+    },
     {
       name: 'featuredImage',
       type: 'upload',
@@ -568,8 +600,8 @@ export const Locations: CollectionConfig = {
       name: 'coordinates',
       type: 'group',
       fields: [
-        { name: 'latitude', type: 'number' },
-        { name: 'longitude', type: 'number' },
+        { name: 'latitude', type: 'number', required: true },
+        { name: 'longitude', type: 'number', required: true },
       ],
     },
     { name: 'neighborhood', type: 'text' },
@@ -745,6 +777,20 @@ export const Locations: CollectionConfig = {
     },
     { name: 'createdBy', type: 'relationship', relationTo: 'users' },
     {
+      name: 'source',
+      type: 'select',
+      defaultValue: 'community',
+      options: [
+        { label: 'Community', value: 'community' },
+        { label: 'Owner', value: 'owner' },
+        { label: 'Admin', value: 'admin' },
+        { label: 'Import', value: 'import' },
+      ],
+      admin: {
+        description: 'Source of this location data'
+      }
+    },
+    {
       name: 'privacy',
       type: 'select',
       defaultValue: 'public',
@@ -881,6 +927,29 @@ export const Locations: CollectionConfig = {
           type: 'textarea',
           admin: {
             description: 'Reason for rejection (if applicable)'
+          }
+        },
+        {
+          name: 'claimEmail',
+          type: 'text',
+          admin: {
+            description: 'Email address used for claiming this location'
+          }
+        },
+        {
+          name: 'claimToken',
+          type: 'text',
+          admin: {
+            readOnly: true,
+            description: 'Token used for location claim verification'
+          }
+        },
+        {
+          name: 'claimTokenExpires',
+          type: 'date',
+          admin: {
+            readOnly: true,
+            description: 'Expiration date for the claim token'
           }
         }
       ]

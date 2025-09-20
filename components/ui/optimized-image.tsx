@@ -60,7 +60,7 @@ export default function OptimizedImage({
     
     // If it's still a problematic URL, use placeholder
     if (!processedUrl || processedUrl === '/placeholder-image.svg') {
-      return '/placeholder-image.svg'
+      return '/placeholder.svg'
     }
     
     return processedUrl
@@ -71,7 +71,25 @@ export default function OptimizedImage({
     if (!src) return true
     // Known broken URL patterns - removed old domain since we're transforming them to blob URLs
     const brokenPatterns = [
-              'localhost:3000/', // Development backend
+      'localhost:3000/', // Development backend
+      // Add patterns for known orphaned files
+      'profile-21.jpg',
+      'IMG_5220.jpeg',
+      'video0-1.mp4',
+      'image0-4.jpg',
+      '471397050_17881949370194933_2073590004579394643_n-1.jpeg',
+      'AFF2341B-BC13-4DE7-9C76-FE5DC521E2F7.jpeg',
+      'profile-29.jpg',
+      'IMG_3615.jpeg',
+      // Add the specific media IDs that are orphaned
+      '68ad13f116af4a7d031e5e9b',
+      '6876f41cf2377412ccaa4277',
+      '68c0283c97a2dbccf98e17c3',
+      '68cb6eb2bd952f240f2b7286',
+      '684518e59742d9d7b7441495',
+      '6862ff259576f5428824b070',
+      '68c4ea1aa33d2a172a7a4903',
+      '6863017f514ad58f9bf7bcca'
     ]
     return brokenPatterns.some(pattern => src.includes(pattern))
   }, [src])
@@ -188,29 +206,8 @@ export default function OptimizedImage({
 
   // Check if we should use unoptimized based on the URL
   const shouldUseUnoptimized = useMemo(() => {
-    if (unoptimized) return true
-    if (isKnownBrokenUrl) return true
-    
-    // Use unoptimized for external URLs to avoid Next.js optimization issues
-    // Be more aggressive - unoptimize any non-local URL
-    // For iOS and Capacitor apps, consider any non-production domain as external
-    const isLocalUrl = src.includes('localhost') || 
-                      src.includes('127.0.0.1') || 
-                      src.includes('192.168.') ||
-                      src.includes('10.0.')
-    
-    if (src.includes('://') && !isLocalUrl && !src.includes('sacavia.com')) {
-      console.log('🖼️ OptimizedImage: Using unoptimized for external URL:', src)
-      return true
-    }
-    
-    // Also unoptimize any API media URLs
-    if (src.includes('/api/media/') || src.includes('sacavia.com') || src.includes('.blob.vercel-storage.com')) {
-      console.log('🖼️ OptimizedImage: Using unoptimized for API/blob URL:', src)
-      return true
-    }
-    
-    return false
+    // Use unoptimized only for broken URLs or when explicitly set
+    return unoptimized || isKnownBrokenUrl
   }, [src, unoptimized, isKnownBrokenUrl])
 
   // Container classes

@@ -86,6 +86,12 @@ interface LocationData {
   isVerified?: boolean
   isFeatured?: boolean
   insiderTips?: InsiderTip[]
+  ownership?: {
+    ownerId?: string
+    claimStatus?: 'unclaimed' | 'pending' | 'approved'
+    claimedAt?: string
+    claimEmail?: string
+  }
 }
 
 interface PageProps {
@@ -555,9 +561,11 @@ export default async function LocationPage({ params }: PageProps) {
                   <LocationHeroButtons 
                     locationName={location.name}
                     description={location.description || ''}
+                    locationId={location.id}
                     coordinates={location.coordinates}
                     contactInfo={location.contactInfo}
                     locationUrl={locationUrl}
+                    ownership={location.ownership}
                   />
                 </div>
               </div>

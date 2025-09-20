@@ -20,11 +20,11 @@ function startCacheCleanup() {
   
   cleanupInterval = setInterval(() => {
     const now = Date.now()
-    for (const [key, item] of memoryCache.entries()) {
+    memoryCache.forEach((item, key) => {
       if (now > item.expires) {
         memoryCache.delete(key)
       }
-    }
+    })
   }, 60000) // Clean up every minute
 }
 

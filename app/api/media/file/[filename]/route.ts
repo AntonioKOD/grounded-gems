@@ -39,7 +39,13 @@ export async function GET(
     const url = request.url
     const range = request.headers.get('range')
     
-    console.log(`📦 [${method}] ${url} - Range: ${range || 'none'}`)
+    // Parse optimization parameters from query string
+    const searchParams = request.nextUrl.searchParams
+    const width = searchParams.get('w')
+    const quality = searchParams.get('q')
+    const format = searchParams.get('fm')
+    
+    console.log(`📦 [${method}] ${url} - Range: ${range || 'none'} - Width: ${width || 'none'} - Quality: ${quality || 'none'} - Format: ${format || 'none'}`)
 
     // First check if we have blob storage enabled
     if (process.env.BLOB_READ_WRITE_TOKEN) {
@@ -53,8 +59,54 @@ export async function GET(
       }
     }
 
+    // If we're in development and file not found locally, try production domain
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`📦 Trying production domain for: ${filename}`)
+      try {
+        // Build production URL with optimization parameters
+        const productionUrl = new URL(`https://www.sacavia.com/api/media/file/${filename}`)
+        if (width) productionUrl.searchParams.set('w', width)
+        if (quality) productionUrl.searchParams.set('q', quality)
+        if (format) productionUrl.searchParams.set('fm', format)
+        
+        const productionResponse = await fetch(productionUrl.toString(), {
+          headers: range ? { 'Range': range } : {}
+        })
+        
+        if (productionResponse.ok) {
+          console.log(`✅ Found file on production: ${filename}`)
+          return new NextResponse(productionResponse.body, {
+            status: productionResponse.status,
+            headers: {
+              'Content-Type': productionResponse.headers.get('content-type') || 'application/octet-stream',
+              'Content-Length': productionResponse.headers.get('content-length') || '',
+              'Accept-Ranges': 'bytes',
+              'Cache-Control': 'public, max-age=31536000',
+              ...(range && productionResponse.status === 206 ? {
+                'Content-Range': productionResponse.headers.get('content-range') || '',
+              } : {})
+            }
+          })
+        }
+      } catch (productionError) {
+        console.log(`📦 Production domain also failed for: ${filename}`)
+      }
+    }
+
     // Local file serving with robust range support
-    return await handleLocalFileRequest(filename, range, request)
+    try {
+      return await handleLocalFileRequest(filename, range, request)
+    } catch (localError) {
+      console.log(`📦 File not found locally: ${filename}`)
+      // Return a 404 with a helpful message
+      return new NextResponse('File not found', { 
+        status: 404,
+        headers: {
+          'Content-Type': 'text/plain',
+          'Cache-Control': 'no-cache'
+        }
+      })
+    }
 
   } catch (error) {
     console.error('❌ Error serving media file:', error)
@@ -72,7 +124,7 @@ async function handleBlobStorageRequest(
   request: NextRequest
 ): Promise<NextResponse> {
   const blobToken = process.env.BLOB_READ_WRITE_TOKEN!
-  const blobHostname = blobToken?.split('_')[3]?.toLowerCase() + '.public.blob.vercel-storage.com'
+  const blobHostname = blobToken.replace('vercel_blob_rw_', '') + '.public.blob.vercel-storage.com'
   const blobUrl = `https://${blobHostname}/${filename}`
   
   console.log(`📦 Blob URL: ${blobUrl}`)
@@ -88,8 +140,12 @@ async function handleBlobStorageRequest(
   })
   
   if (!fileResponse.ok) {
-    console.log(`❌ Blob storage request failed: ${fileResponse.status}`)
-    return new NextResponse('File not found in blob storage', { status: 404 })
+    // Only log 404s in development, not production
+    if (process.env.NODE_ENV === 'development' && fileResponse.status === 404) {
+      console.log(`📦 File not found in blob storage: ${filename}`)
+    }
+    // Throw error to trigger fallback to local file serving
+    throw new Error(`Blob storage request failed with status: ${fileResponse.status}`)
   }
 
   const contentType = fileResponse.headers.get('content-type') || getContentType(filename)

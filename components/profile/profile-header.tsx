@@ -82,7 +82,7 @@ export default function ProfileHeader({
     <div className="space-y-6">
       {/* Cover image */}
       <div className="relative h-48 w-full rounded-xl overflow-hidden">
-        <Image src="/generic-book-cover.png" alt="Cover" fill className="object-cover" />
+        <Image src="/generic-book-cover.png" alt="Cover" fill className="object-cover" unoptimized />
       </div>
 
       {/* Profile info */}

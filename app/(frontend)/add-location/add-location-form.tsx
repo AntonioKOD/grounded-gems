@@ -5,7 +5,7 @@ import type React from "react"
 import { useEffect, useState, useRef, use } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   AlertTriangle,
   Building,
@@ -76,12 +76,19 @@ interface UserData {
   email: string
 }
 
-export default function AddLocationForm() {
+export default function ClaimLocationForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const slugInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const galleryFileInputRef = useRef<HTMLInputElement>(null)
+
+  // Claim mode state
+  const [isClaimMode, setIsClaimMode] = useState(false)
+  const [claimLocationId, setClaimLocationId] = useState<string | null>(null)
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false)
+
 
   // State for categories and user data
   const [categories, setCategories] = useState<{
@@ -140,6 +147,12 @@ export default function AddLocationForm() {
     zip: "",
     country: "USA",
     neighborhood: "",
+  })
+
+  // Coordinates
+  const [coordinates, setCoordinates] = useState({
+    latitude: 0,
+    longitude: 0,
   })
 
   // Contact & Business
@@ -235,6 +248,169 @@ export default function AddLocationForm() {
   const [file, setFile] = useState<File | null>(null)
   // Add these state variables for better image handling
   const [locationImagePreview, setLocationImagePreview] = useState<string | null>(null)
+
+  // Handle URL params for claim mode
+  useEffect(() => {
+    const mode = searchParams.get('mode')
+    const locationId = searchParams.get('locationId')
+    
+    if (mode === 'claim' && locationId) {
+      setIsClaimMode(true)
+      setClaimLocationId(locationId)
+    }
+  }, [searchParams])
+
+  // Fetch location data in claim mode
+  useEffect(() => {
+    const fetchLocationData = async () => {
+      if (!isClaimMode || !claimLocationId) return
+      
+      setIsLoadingLocation(true)
+      try {
+        const response = await fetch(`/api/locations/${claimLocationId}`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch location data')
+        }
+        
+        const data = await response.json()
+        const location = data.location
+        
+        // Prefill all form fields with location data
+        setLocationName(location.name || '')
+        setLocationSlug(location.slug || '')
+        setLocationDescription(location.description || '')
+        setShortDescription(location.shortDescription || '')
+        
+        // Set categories
+        if (location.categories && Array.isArray(location.categories)) {
+          const categoryIds = location.categories.map((cat: any) => 
+            typeof cat === 'string' ? cat : cat.id
+          )
+          setSelectedCategories(categoryIds)
+        }
+        
+        // Set featured image
+        if (location.featuredImage) {
+          setLocationImage(typeof location.featuredImage === 'string' ? location.featuredImage : location.featuredImage.id)
+        }
+        
+        // Set gallery
+        if (location.gallery && Array.isArray(location.gallery)) {
+          const galleryData = location.gallery.map((item: any) => ({
+            image: typeof item.image === 'string' ? item.image : item.image?.id,
+            caption: item.caption || '',
+            tempId: Math.random().toString(36).substring(7)
+          }))
+          setGallery(galleryData)
+        }
+        
+        // Set tags
+        if (location.tags && Array.isArray(location.tags)) {
+          setTags(location.tags)
+        }
+        
+        // Set address
+        if (location.address) {
+          setAddress({
+            street: location.address.street || '',
+            city: location.address.city || '',
+            state: location.address.state || '',
+            zip: location.address.zip || '',
+            country: location.address.country || 'USA',
+            neighborhood: location.neighborhood || '',
+          })
+        }
+        
+        // Set coordinates
+        if (location.coordinates) {
+          setCoordinates({
+            latitude: location.coordinates.latitude || 0,
+            longitude: location.coordinates.longitude || 0,
+          })
+        }
+        
+        // Set contact info
+        if (location.contactInfo) {
+          setContactInfo({
+            phone: location.contactInfo.phone || '',
+            email: location.contactInfo.email || '',
+            website: location.contactInfo.website || '',
+            socialMedia: {
+              facebook: location.contactInfo.socialMedia?.facebook || '',
+              twitter: location.contactInfo.socialMedia?.twitter || '',
+              instagram: location.contactInfo.socialMedia?.instagram || '',
+              linkedin: location.contactInfo.socialMedia?.linkedin || '',
+            },
+          })
+        }
+        
+        // Set business hours
+        if (location.businessHours && Array.isArray(location.businessHours)) {
+          setBusinessHours(location.businessHours)
+        }
+        
+        // Set price range
+        if (location.priceRange) {
+          setPriceRange(location.priceRange)
+        }
+        
+        // Set best time to visit
+        if (location.bestTimeToVisit && Array.isArray(location.bestTimeToVisit)) {
+          setBestTimeToVisit(location.bestTimeToVisit)
+        }
+        
+        // Set accessibility
+        if (location.accessibility) {
+          setAccessibility({
+            wheelchairAccess: location.accessibility.wheelchairAccess || false,
+            parking: location.accessibility.parking || false,
+            other: location.accessibility.other || '',
+          })
+        }
+        
+        // Set partnership details
+        if (location.hasBusinessPartnership) {
+          setHasPartnership(true)
+          if (location.partnershipDetails) {
+            setPartnershipDetails({
+              partnerName: location.partnershipDetails.partnerName || '',
+              partnerContact: location.partnershipDetails.partnerContact || '',
+              details: location.partnershipDetails.details || '',
+            })
+          }
+        }
+        
+        // Set meta data
+        if (location.meta) {
+          setMeta({
+            title: location.meta.title || '',
+            description: location.meta.description || '',
+            keywords: location.meta.keywords || '',
+          })
+        }
+        
+        // Set status flags
+        setIsFeatured(location.isFeatured || false)
+        setIsVerified(location.isVerified || false)
+        
+        toast({
+          title: "Success",
+          description: "Location data loaded successfully",
+        })
+      } catch (error) {
+        console.error('Error fetching location data:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load location data",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingLocation(false)
+      }
+    }
+    
+    fetchLocationData()
+  }, [isClaimMode, claimLocationId, toast])
 
   // Fetch categories and user data on component mount
   useEffect(() => {
@@ -841,7 +1017,8 @@ export default function AddLocationForm() {
     }
 
     // Check for duplicates unless saving as draft
-    if (!saveAsDraft) {
+    // Skip duplicate check in claim mode
+    if (!saveAsDraft && !isClaimMode) {
       const fullAddress = [address.street, address.city, address.state, address.zip, address.country]
         .filter(Boolean)
         .join(', ')
@@ -962,33 +1139,74 @@ export default function AddLocationForm() {
         createdBy: user?.id,
       }
 
-      // Call the contest add-location API to create an experience
-      const response = await fetch('/api/contest/add-location', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          locationData: formData
+      let response
+      let result
+
+      if (isClaimMode && claimLocationId) {
+        // Update existing location in claim mode and assign ownership
+        if (!user) {
+          throw new Error('User authentication required for claiming')
+        }
+
+        const claimData = {
+          ...formData,
+          ownership: {
+            ownerId: user.id,
+            claimStatus: 'approved',
+            claimedAt: new Date().toISOString()
+          }
+        }
+
+        response = await fetch(`/api/locations/${claimLocationId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(claimData)
         })
-      })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Failed to add location to contest')
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || 'Failed to claim location')
+        }
+
+        result = await response.json()
+        console.log("Location claimed successfully:", result)
+
+        // Show success toast for claim
+        toast({
+          title: "🎉 Location Claimed Successfully!",
+          description: `You now own ${locationName}! You can manage it from your dashboard.`,
+        })
+      } else {
+        // Create new location (existing behavior)
+        response = await fetch('/api/contest/add-location', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            locationData: formData
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || 'Failed to add location to contest')
+        }
+
+        result = await response.json()
+        console.log("Location added to contest successfully:", result)
+
+        // Show success dialog for new location
+        setShowSuccessDialog(true)
+
+        // Show success toast for new location
+        toast({
+          title: "🎉 Location Created & Added to Contest!",
+          description: `${locationName} has been successfully created and automatically added to the contest! Check your email for contest details and share with friends to get votes!`,
+        })
       }
-
-      const newLoc = await response.json()
-      console.log("Location added to contest successfully:", newLoc)
-
-      // Show success dialog
-      setShowSuccessDialog(true)
-
-      // Show success toast
-      toast({
-        title: "🎉 Location Created & Added to Contest!",
-        description: `${locationName} has been successfully created and automatically added to the contest! Check your email for contest details and share with friends to get votes!`,
-      })
     } catch (error) {
       // Error handling remains the same
       console.error("Error creating location:", error)
@@ -1023,6 +1241,7 @@ export default function AddLocationForm() {
 
 
 
+
   // Get location data for PayPal payment
   const getLocationDataForPayment = () => {
     return {
@@ -1044,7 +1263,9 @@ export default function AddLocationForm() {
       {/* Mobile-optimized Form progress indicator */}
       <div className="mb-4 md:mb-6 px-4 md:px-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 sm:mb-0">Add New Location</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 sm:mb-0">
+            {isClaimMode ? 'Claim & Complete Your Location' : 'Add New Location'}
+          </h1>
           <Badge variant={formProgress >= 75 ? "default" : formProgress >= 50 ? "secondary" : "outline"} className="text-sm font-medium">
             {formProgress}% Complete
           </Badge>
@@ -1052,6 +1273,26 @@ export default function AddLocationForm() {
         <Progress value={formProgress} className="h-3 md:h-2 rounded-full" />
         <p className="text-sm text-gray-600 mt-2 md:hidden">Fill out the required fields to complete your location</p>
       </div>
+
+      {/* Claim mode banner */}
+      {isClaimMode && (
+        <div className="mb-6 px-4 md:px-0">
+          <Alert className="border-blue-200 bg-blue-50">
+            <Building className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">You're updating your claimed listing.</span>
+                {isLoadingLocation && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading location data...
+                  </div>
+                )}
+              </div>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       <Card className="shadow-lg border-0 overflow-hidden mx-4 md:mx-0">
         <CardHeader className="bg-gradient-to-r from-[#FF6B6B]/10 to-white border-b px-4 md:px-6 py-4 md:py-6">
@@ -2243,6 +2484,7 @@ export default function AddLocationForm() {
 
           {/* Mobile-optimized sticky footer */}
           <CardFooter className="sticky bottom-0 bg-white border-t border-gray-200 p-4 md:p-6 flex flex-col gap-3 md:flex-row md:gap-3 shadow-lg md:shadow-none">
+            
             <Button
               type="submit"
               className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90 transition-all duration-300 h-14 md:h-12 text-base font-medium w-full md:w-auto order-1"
@@ -2256,7 +2498,7 @@ export default function AddLocationForm() {
               ) : (
                 <span className="flex items-center">
                   <CheckCircle2 className="mr-2 h-5 w-5" />
-                  Add Location
+                  {isClaimMode ? 'Claim & Complete Location' : 'Add Location'}
                 </span>
               )}
             </Button>
@@ -2350,7 +2592,11 @@ export default function AddLocationForm() {
               onClick={() => handleSubmit(formSubmitType === "draft")}
               className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
             >
-              {formSubmitType === "draft" ? "Save as Draft" : "Publish Location"}
+              {formSubmitType === "draft" 
+                ? "Save as Draft" 
+                : isClaimMode 
+                  ? "Update Location" 
+                  : "Publish Location"}
             </Button>
           </DialogFooter>
         </DialogContent>

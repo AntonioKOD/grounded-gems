@@ -9,7 +9,7 @@
 
 import { createDatabaseIndexes } from '../lib/database-indexes'
 import { initializeDatabaseMonitoring } from '../lib/database-monitoring'
-import { checkCacheHealth } from '../lib/cache'
+import * as cacheModule from '../lib/cache'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
@@ -28,7 +28,7 @@ async function initializeDatabase() {
     
     // Step 2: Check cache connection
     console.log('🔗 Checking cache connection...')
-    const cacheHealthy = await checkCacheHealth()
+    const cacheHealthy = await cacheModule.checkCacheHealth()
     if (cacheHealthy) {
       console.log('✅ In-memory cache connection successful')
     } else {

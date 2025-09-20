@@ -470,17 +470,41 @@ export function getPayloadImageUrl(imageUrl: string | undefined | null): string 
     return '/placeholder-image.svg'
   }
 
-  // Transform old domain references to local URLs
-  if (imageUrl.includes('groundedgems.com/api/media/file/')) {
+  // If it's already a blob storage URL, return as is (highest priority)
+  if (imageUrl.includes('blob.vercel-storage.com')) {
+    return imageUrl
+  }
+
+  // Transform old domain references to blob storage URLs
+  if (imageUrl.includes('groundedgems.com/api/media/file/') || 
+      imageUrl.includes('localhost:3000/api/media/file/') ||
+      imageUrl.includes('/api/media/file/')) {
+    
     const filename = imageUrl.split('/api/media/file/')[1]
+    
+    // If we have blob storage configured, use blob URL
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
+      const blobUrl = `https://${blobHostname}.public.blob.vercel-storage.com/${filename}`
+      
+      if (isDevelopment) {
+        console.log('📸 Transforming to blob storage URL:', {
+          from: imageUrl,
+          to: blobUrl
+        })
+      }
+      return blobUrl
+    }
+    
+    // Fallback to local URL if no blob storage
     const localUrl = `/api/media/file/${filename}`
     if (isDevelopment) {
-      console.log('📸 Transforming old domain URL in getPayloadImageUrl:', {
+      console.log('📸 Transforming to local URL (no blob storage):', {
         from: imageUrl,
         to: localUrl
       })
     }
-    imageUrl = localUrl
+    return localUrl
   }
 
   // If it's already a full URL, return as is
@@ -488,16 +512,25 @@ export function getPayloadImageUrl(imageUrl: string | undefined | null): string 
     return imageUrl
   }
 
-  // If it's a relative URL from Payload, construct the full URL
+  // If it's a relative URL from Payload, try to convert to blob storage first
   if (imageUrl.startsWith('/api/media/') || imageUrl.startsWith('/media/')) {
+    // Extract filename from the path
+    const filename = imageUrl.split('/').pop()
+    
+    if (filename && process.env.BLOB_READ_WRITE_TOKEN) {
+      const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
+      return `https://${blobHostname}.public.blob.vercel-storage.com/${filename}`
+    }
+    
+    // Fallback to local URL
     const baseUrl = getBaseUrlSafely()
     return `${baseUrl}${imageUrl}`
   }
 
-  // If it starts with just a filename or path, assume it's from Payload media
-  if (!imageUrl.startsWith('/')) {
-    const baseUrl = getBaseUrlSafely()
-    return `${baseUrl}/api/media/${imageUrl}`
+  // If it starts with just a filename, try blob storage first
+  if (!imageUrl.startsWith('/') && process.env.BLOB_READ_WRITE_TOKEN) {
+    const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
+    return `https://${blobHostname}.public.blob.vercel-storage.com/${imageUrl}`
   }
 
   // For any other relative path, use the base URL

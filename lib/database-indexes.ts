@@ -6,7 +6,7 @@
  */
 
 import { getPayload } from 'payload'
-import config from '@payload-config'
+import config from '../payload.config'
 
 export interface IndexDefinition {
   collection: string
@@ -283,12 +283,12 @@ export async function createDatabaseIndexes(): Promise<void> {
   for (const indexDef of DATABASE_INDEXES) {
     try {
       // Get the MongoDB collection directly
-      if (!payload.db?.connection?.db) {
+      if (!(payload.db as any).connection?.db) {
         console.error(`❌ Database connection not available for ${indexDef.collection}`)
         continue
       }
       
-      const collection = payload.db.connection.db.collection(indexDef.collection)
+      const collection = (payload.db as any).connection.db.collection(indexDef.collection)
       
       // Create the index
       await collection.createIndex(indexDef.index, indexDef.options)
@@ -313,12 +313,12 @@ export async function dropDatabaseIndexes(): Promise<void> {
   
   for (const indexDef of DATABASE_INDEXES) {
     try {
-      if (!payload.db?.connection?.db) {
+      if (!(payload.db as any).connection?.db) {
         console.error(`❌ Database connection not available for ${indexDef.collection}`)
         continue
       }
       
-      const collection = payload.db.connection.db.collection(indexDef.collection)
+      const collection = (payload.db as any).connection.db.collection(indexDef.collection)
       
       if (indexDef.options?.name) {
         await collection.dropIndex(indexDef.options.name)
@@ -342,12 +342,12 @@ export async function checkIndexUsage(): Promise<void> {
   
   for (const indexDef of DATABASE_INDEXES) {
     try {
-      if (!payload.db?.connection?.db) {
+      if (!(payload.db as any).connection?.db) {
         console.error(`❌ Database connection not available for ${indexDef.collection}`)
         continue
       }
       
-      const collection = payload.db.connection.db.collection(indexDef.collection)
+      const collection = (payload.db as any).connection.db.collection(indexDef.collection)
       const indexes = await collection.indexes()
       
       console.log(`📊 Indexes for ${indexDef.collection}:`, indexes.length, 'indexes found')
