@@ -9,7 +9,8 @@ const ALLOWED_FIELDS = new Set([
   'coordinates',
   'featuredImage',
   'gallery',
-  'insiderTips'
+  'insiderTips',
+  'categories'
 ])
 
 // Governance fields that should be rejected
@@ -161,21 +162,69 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate slug from name
-    const generateSlug = (name: string): string => {
-      return name
+    // Validate categories if provided
+    if (filteredData.categories) {
+      if (!Array.isArray(filteredData.categories)) {
+        return NextResponse.json(
+          { error: 'Categories must be an array' },
+          { status: 400 }
+        )
+      }
+
+      if (filteredData.categories.length > 5) {
+        return NextResponse.json(
+          { error: 'Maximum 5 categories allowed' },
+          { status: 400 }
+        )
+      }
+
+      // Validate each category ID
+      for (const categoryId of filteredData.categories) {
+        if (typeof categoryId !== 'string' || categoryId.trim().length === 0) {
+          return NextResponse.json(
+            { error: 'Each category must be a valid ID string' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
+    // Generate slug from name and description
+    const generateSlug = (name: string, description?: string): string => {
+      // Combine name and description for better slug generation
+      const combinedText = `${name} ${description || ''}`
         .toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-')
         .replace(/-+/g, '-')
         .trim()
+      
+      // Ensure slug is not too long (max 100 chars)
+      return combinedText.length > 100 ? combinedText.substring(0, 100).replace(/-+$/, '') : combinedText
     }
+
+    // Generate metadata from name and description
+    const generateMetadata = (name: string, description: string) => {
+      const metaTitle = `${name} - Discover with Sacavia`
+      const metaDescription = description.length > 160 
+        ? description.substring(0, 157) + '...'
+        : description
+      
+      return {
+        title: metaTitle,
+        description: metaDescription,
+        keywords: `${name}, ${description.split(' ').slice(0, 10).join(', ')}`
+      }
+    }
+
+    // Generate metadata
+    const metadata = generateMetadata(filteredData.name.trim(), filteredData.shortDescription.trim())
 
     // Prepare location data with server-enforced defaults
     const locationData = {
       // Whitelisted fields
       name: filteredData.name.trim(),
-      slug: generateSlug(filteredData.name),
+      slug: generateSlug(filteredData.name, filteredData.shortDescription),
       shortDescription: filteredData.shortDescription.trim(),
       coordinates: {
         latitude: filteredData.coordinates.latitude,
@@ -184,6 +233,14 @@ export async function POST(request: NextRequest) {
       featuredImage: filteredData.featuredImage || undefined,
       gallery: filteredData.gallery || undefined,
       insiderTips: filteredData.insiderTips || undefined,
+      categories: filteredData.categories || undefined,
+
+      // Generated metadata
+      meta: {
+        title: metadata.title,
+        description: metadata.description,
+        keywords: metadata.keywords
+      },
 
       // Server-enforced defaults
       status: 'published',

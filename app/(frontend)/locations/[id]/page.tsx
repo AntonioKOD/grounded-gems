@@ -34,6 +34,7 @@ import { ContactActions } from './contact-actions'
 import { UserPhotosWrapper } from '@/components/location/user-photos-wrapper'
 import ClientInsiderTips from '@/components/location/client-insider-tips'
 import { LocationStructuredData, BreadcrumbStructuredData } from '@/components/seo/enhanced-structured-data'
+import { SimpleLocationView } from '@/components/location/simple-location-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -447,12 +448,63 @@ export default async function LocationPage({ params }: PageProps) {
 
     const locationUrl = `https://sacavia.com/locations/${location.slug || location.id}`
 
+    // Check if this is an unclaimed business (simple view)
+    const isUnclaimed = location.ownership?.claimStatus === 'unclaimed'
+    const isSimpleBusiness = isUnclaimed && !location.isVerified && !location.isFeatured
+
     // Prepare breadcrumb data for structured data
     const breadcrumbItems = [
       { name: 'Home', url: 'https://www.sacavia.com' },
       { name: 'Locations', url: 'https://www.sacavia.com/locations' },
       { name: location.name, url: `https://www.sacavia.com/locations/${location.slug || location.id}` }
     ]
+
+    // Use simple view for unclaimed businesses
+    if (isSimpleBusiness) {
+      return (
+        <>
+          {/* Add structured data for SEO */}
+          <LocationStructuredData location={{
+            id: location.id,
+            name: location.name,
+            description: location.description,
+            address: location.address,
+            categories: categories,
+            featuredImage: location.featuredImage,
+            gallery: location.gallery,
+            latitude: location.coordinates?.latitude,
+            longitude: location.coordinates?.longitude,
+            rating: location.averageRating,
+            reviewCount: location.reviewCount,
+            priceRange: location.priceRange,
+            businessHours: location.businessHours,
+            contactInfo: location.contactInfo,
+            amenities: location.amenities,
+            slug: location.slug
+          }} />
+          <BreadcrumbStructuredData items={breadcrumbItems} />
+          
+          {/* Website Navigation Breadcrumbs */}
+          <div className="bg-white border-b">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+              <nav className="flex items-center space-x-2 text-sm">
+                <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
+                  Home
+                </Link>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                <Link href="/locations" className="text-muted-foreground hover:text-primary transition-colors">
+                  Locations
+                </Link>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                <span className="text-foreground font-medium">{location.name}</span>
+              </nav>
+            </div>
+          </div>
+
+          <SimpleLocationView location={location} />
+        </>
+      )
+    }
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">

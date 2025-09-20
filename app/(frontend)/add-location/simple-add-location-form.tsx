@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { MapPin, Plus, Loader2, Building } from "lucide-react"
+import { MapPin, Plus, Loader2, Building, Tag } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import CategorySearch from "@/components/ui/category-search"
 
 export default function SimpleAddLocationForm() {
   const router = useRouter()
@@ -30,6 +31,7 @@ export default function SimpleAddLocationForm() {
     country: "USA"
   })
   const [insiderTip, setInsiderTip] = useState("")
+  const [selectedCategories, setSelectedCategories] = useState<any[]>([])
   const [isGeocoding, setIsGeocoding] = useState(false)
 
   // Geocoding function to convert address to coordinates
@@ -112,6 +114,8 @@ export default function SimpleAddLocationForm() {
         name: name.trim(),
         shortDescription: shortDescription.trim(),
         coordinates: coordinates,
+        // Categories
+        categories: selectedCategories.map(cat => cat.id),
         // Optional insider tip
         insiderTips: insiderTip.trim() ? [{
           category: 'general',
@@ -231,6 +235,20 @@ export default function SimpleAddLocationForm() {
               <p className="text-sm text-gray-500">
                 {shortDescription.length}/300 characters
               </p>
+            </div>
+
+            {/* Categories */}
+            <div className="space-y-2">
+              <Label className="text-base font-medium flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                Categories (Optional)
+              </Label>
+              <CategorySearch
+                selectedCategories={selectedCategories}
+                onCategoriesChange={setSelectedCategories}
+                placeholder="Search for categories like 'Restaurant', 'Coffee Shop', 'Park'..."
+                maxSelections={3}
+              />
             </div>
 
             {/* Address */}
