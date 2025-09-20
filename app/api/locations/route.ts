@@ -322,39 +322,55 @@ export async function DELETE(request: NextRequest) {
 
     // Parse query parameters to get location IDs
     const { searchParams } = new URL(request.url)
-    const whereParam = searchParams.get('where')
     
-    if (!whereParam) {
-      return NextResponse.json(
-        { error: 'Location IDs are required' },
-        { status: 400 }
-      )
-    }
-
-    // Parse the where parameter to extract location IDs
+    console.log('DELETE /api/locations - URL:', request.url)
+    console.log('DELETE /api/locations - searchParams:', Object.fromEntries(searchParams.entries()))
+    
+    // Extract location IDs from the URL parameters
     let locationIds: string[] = []
-    try {
-      const whereData = JSON.parse(decodeURIComponent(whereParam))
-      
-      // Handle the complex where structure from the URL
-      if (whereData.and && Array.isArray(whereData.and)) {
-        for (const condition of whereData.and) {
-          if (condition.id && condition.id.in && Array.isArray(condition.id.in)) {
-            locationIds = [...locationIds, ...condition.id.in]
-          }
+    
+    // Method 1: Extract from individual query parameters
+    // The URL format is: where%5Band%5D%5B1%5D%5Bid%5D%5Bin%5D%5B0%5D=ID&where%5Band%5D%5B1%5D%5Bid%5D%5Bin%5D%5B1%5D=ID...
+    for (const [key, value] of searchParams.entries()) {
+      // Check if this is a location ID parameter
+      if (key.includes('where') && key.includes('id') && key.includes('in') && value) {
+        // Validate that the value looks like a MongoDB ObjectId (24 hex characters)
+        if (/^[a-f0-9]{24}$/.test(value)) {
+          locationIds.push(value)
         }
       }
-    } catch (parseError) {
-      // If JSON parsing fails, try to extract IDs from the URL directly
-      const idMatches = whereParam.match(/id.*?in.*?\[(\d+)\]/g)
-      if (idMatches) {
-        locationIds = idMatches.map(match => {
-          const idMatch = match.match(/\[(\d+)\]/)
-          return idMatch ? idMatch[1] : null
-        }).filter(Boolean) as string[]
+    }
+    
+    // Method 2: Extract all MongoDB ObjectIds from the URL
+    if (locationIds.length === 0) {
+      const urlString = request.url
+      const objectIdMatches = urlString.match(/[a-f0-9]{24}/g)
+      if (objectIdMatches) {
+        locationIds = [...new Set(objectIdMatches)] // Remove duplicates
+      }
+    }
+    
+    // Method 3: Try to get from 'where' parameter if it exists
+    const whereParam = searchParams.get('where')
+    if (whereParam && locationIds.length === 0) {
+      try {
+        const whereData = JSON.parse(decodeURIComponent(whereParam))
+        
+        // Handle the complex where structure from the URL
+        if (whereData.and && Array.isArray(whereData.and)) {
+          for (const condition of whereData.and) {
+            if (condition.id && condition.id.in && Array.isArray(condition.id.in)) {
+              locationIds = [...locationIds, ...condition.id.in]
+            }
+          }
+        }
+      } catch (parseError) {
+        console.log('JSON parsing failed:', parseError)
       }
     }
 
+    console.log('DELETE /api/locations - extracted locationIds:', locationIds)
+    
     if (locationIds.length === 0) {
       return NextResponse.json(
         { error: 'No valid location IDs found' },
@@ -373,24 +389,68 @@ export async function DELETE(request: NextRequest) {
       limit: 1000
     })
 
+    console.log('DELETE /api/locations - found locations:', locations.docs.length)
+    console.log('DELETE /api/locations - user:', { id: user.id, role: user.role })
+
     // Filter locations that the user can delete
     const deletableLocations = locations.docs.filter(location => {
+      console.log('DELETE /api/locations - checking location:', {
+        id: location.id,
+        createdBy: location.createdBy,
+        ownership: location.ownership,
+        userCanDelete: false
+      })
+      
       // Admins can delete any location
-      if (user.role === 'admin') return true
+      if (user.role === 'admin') {
+        console.log('DELETE /api/locations - admin can delete:', location.id)
+        return true
+      }
       
       // Users can delete their own locations
-      if (location.createdBy === user.id) return true
+      if (location.createdBy === user.id) {
+        console.log('DELETE /api/locations - creator can delete:', location.id)
+        return true
+      }
       
       // Claimed owners can delete their locations (if approved)
       if (location.ownership?.ownerId === user.id && 
-          location.ownership?.claimStatus === 'approved') return true
+          location.ownership?.claimStatus === 'approved') {
+        console.log('DELETE /api/locations - claimed owner can delete:', location.id)
+        return true
+      }
       
+      console.log('DELETE /api/locations - user cannot delete:', location.id)
       return false
     })
 
+    console.log('DELETE /api/locations - deletable locations:', deletableLocations.length)
+
+    if (locations.docs.length === 0) {
+      return NextResponse.json(
+        { 
+          error: 'No locations found with the provided IDs',
+          details: {
+            requestedIds: locationIds,
+            foundLocations: 0,
+            message: 'The location(s) may have already been deleted or the IDs may be incorrect'
+          }
+        },
+        { status: 404 }
+      )
+    }
+
     if (deletableLocations.length === 0) {
       return NextResponse.json(
-        { error: 'No locations found that you have permission to delete' },
+        { 
+          error: 'No locations found that you have permission to delete',
+          details: {
+            requestedIds: locationIds,
+            foundLocations: locations.docs.length,
+            userRole: user.role,
+            userId: user.id
+          }
+        },
         { status: 403 }
       )
     }
