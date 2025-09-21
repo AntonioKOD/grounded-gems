@@ -5,6 +5,7 @@ import config from '@/payload.config'
 import { parseLocationParam } from '@/lib/slug-utils'
 import { getPrimaryImageUrl } from '@/lib/image-utils'
 import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
+import { getLocationViewType, getDataCompletenessScore } from '@/lib/location-data-utils'
 import { redirect, permanentRedirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -473,9 +474,10 @@ export default async function LocationPage({ params }: PageProps) {
 
     const locationUrl = `https://sacavia.com/locations/${location.slug || location.id}`
 
-    // Check if this is an unclaimed business (simple view)
-    const isUnclaimed = location.ownership?.claimStatus === 'unclaimed'
-    const isSimpleBusiness = isUnclaimed && !location.isVerified && !location.isFeatured
+    // Determine the appropriate view type based on data completeness
+    const viewType = getLocationViewType(location)
+    const dataCompletenessScore = getDataCompletenessScore(location)
+    const isSimpleBusiness = viewType === 'simple'
 
     // Prepare breadcrumb data for structured data
     const breadcrumbItems = [
@@ -484,7 +486,7 @@ export default async function LocationPage({ params }: PageProps) {
       { name: location.name, url: `https://www.sacavia.com/locations/${location.slug || location.id}` }
     ]
 
-    // Use simple view for unclaimed businesses
+    // Use simple view for locations with basic data only
     if (isSimpleBusiness) {
       return (
         <>

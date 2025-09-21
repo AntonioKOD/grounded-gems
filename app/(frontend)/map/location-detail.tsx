@@ -57,6 +57,7 @@ import LocationDetailMobile from "./location-detail-mobile"
 import StructuredInsiderTips from "@/components/location/structured-insider-tips"
 import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
 import { SimpleLocationModal } from "@/components/location/simple-location-modal"
+import { getLocationViewType } from "@/lib/location-data-utils"
 import type { 
   User, 
   ReviewItem as Review, 
@@ -1336,10 +1337,9 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
   // Determine if we should show mobile version
   const shouldShowMobile = isMobile || isResponsiveMobile
 
-  // Check if this is an unclaimed business (simple view)
-  const isUnclaimed = location?.ownership?.claimStatus === 'unclaimed'
-  // Show simple view for any unclaimed location, or if ownership field is missing (default to unclaimed)
-  const isSimpleBusiness = isUnclaimed || !location?.ownership
+  // Determine the appropriate view type based on data completeness
+  const viewType = location ? getLocationViewType(location) : 'simple'
+  const isSimpleBusiness = viewType === 'simple'
 
   console.log('🔴 MAIN: LocationDetail props:', {
     locationName: location?.name,
@@ -1347,16 +1347,16 @@ export default function LocationDetail({ location, isOpen, onClose, isMobile = f
     isMobileProp: isMobile,
     isResponsiveMobile,
     shouldShowMobile,
-    isUnclaimed,
+    viewType,
     isSimpleBusiness,
     ownership: location?.ownership,
     isVerified: location?.isVerified,
     isFeatured: location?.isFeatured
   })
 
-  // Use simple modal for unclaimed businesses
+  // Use simple modal for locations with basic data only
   if (isSimpleBusiness && location) {
-    console.log('🔴 MAIN: Rendering simple modal for unclaimed business')
+    console.log('🔴 MAIN: Rendering simple modal for basic location')
     return (
       <SimpleLocationModal 
         location={location} 

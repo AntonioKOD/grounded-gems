@@ -43,7 +43,7 @@ interface SimpleLocationViewProps {
     priceRange?: string
     insiderTips?: any[]
     ownership?: {
-      claimStatus?: 'unclaimed' | 'pending' | 'approved'
+      claimStatus?: 'unclaimed' | 'pending' | 'approved' | 'rejected'
     }
   }
 }
@@ -51,7 +51,7 @@ interface SimpleLocationViewProps {
 export function SimpleLocationView({ location }: SimpleLocationViewProps) {
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false)
 
-  const isUnclaimed = location.ownership?.claimStatus === 'unclaimed'
+  const isUnclaimed = location.ownership?.claimStatus === 'unclaimed' || !location.ownership
   const rating = location.averageRating || 0
   const reviewCount = location.reviewCount || 0
   const categories = location.categories || []
