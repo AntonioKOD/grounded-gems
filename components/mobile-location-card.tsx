@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { useState, useCallback } from "react"
 import { toast } from "sonner"
 import { getPrimaryImageUrl, getOptimizedImageUrl, generateImageAltText } from "@/lib/image-utils"
+import { getLocationStatusBadgeProps } from "@/lib/status-badge-utils"
 
 interface MobileLocationCardProps {
   location: {
@@ -27,6 +28,12 @@ interface MobileLocationCardProps {
     contactInfo?: {
       phone?: string
       website?: string
+    }
+    ownership?: {
+      claimStatus?: 'unclaimed' | 'pending' | 'approved' | 'rejected'
+      ownerId?: string
+      claimedAt?: string
+      claimEmail?: string
     }
   }
   onLocationClick?: (location: any) => void
@@ -291,9 +298,14 @@ export default function MobileLocationCard({
         {/* Header */}
         <div className="space-y-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="font-semibold text-gray-900 text-base leading-tight line-clamp-1">
-              {location.name}
-            </h3>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-gray-900 text-base leading-tight line-clamp-1">
+                  {location.name}
+                </h3>
+                <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+              </div>
+            </div>
             {priceDisplay && (
               <Badge variant="outline" className="text-xs flex-shrink-0">
                 {priceDisplay}

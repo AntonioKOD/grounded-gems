@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Image from "next/image"
+import { getLocationStatusBadgeProps } from "@/lib/status-badge-utils"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
@@ -455,9 +456,14 @@ export default function LocationList({
             {/* Content section */}
             <div className="p-4 bg-white">
               <div className="flex items-start justify-between gap-3 mb-3">
-                <h3 className="font-bold text-lg text-[#333333] leading-tight flex-1">
-                  {location.name}
-                </h3>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-bold text-lg text-[#333333] leading-tight">
+                      {location.name}
+                    </h3>
+                    <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+                  </div>
+                </div>
                 {categoryInfo.name && categoryInfo.name !== 'Uncategorized' && (
                   <Badge 
                     className="text-xs font-medium border-0 shadow-sm flex-shrink-0"

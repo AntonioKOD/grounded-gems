@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { parseLocationParam } from '@/lib/slug-utils'
 import { getPrimaryImageUrl } from '@/lib/image-utils'
+import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 import { redirect, permanentRedirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -609,9 +610,12 @@ export default async function LocationPage({ params }: PageProps) {
                   </div>
 
                   {/* Location Name & Rating */}
-                  <h1 className="text-4xl lg:text-6xl font-bold text-white mb-4 leading-tight">
-                    {location.name}
-                  </h1>
+                  <div className="flex items-center gap-3 mb-4">
+                    <h1 className="text-4xl lg:text-6xl font-bold text-white leading-tight">
+                      {location.name}
+                    </h1>
+                    <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+                  </div>
                   
                   <div className="flex items-center gap-4 mb-6 text-white/90">
                     {rating > 0 && (

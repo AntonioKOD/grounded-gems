@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
+import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 import Image from 'next/image'
 
 interface SimpleLocationViewProps {
@@ -144,9 +145,12 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
                 )}
 
                 {/* Location Name & Rating */}
-                <h1 className="text-4xl lg:text-6xl font-bold text-white mb-4 leading-tight">
-                  {location.name}
-                </h1>
+                <div className="flex items-center gap-3 mb-4">
+                  <h1 className="text-4xl lg:text-6xl font-bold text-white leading-tight">
+                    {location.name}
+                  </h1>
+                  <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+                </div>
                 
                 <div className="flex items-center gap-4 mb-6 text-white/90">
                   {rating > 0 && (

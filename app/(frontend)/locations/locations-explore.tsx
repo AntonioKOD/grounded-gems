@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { getLocations, getCategories } from '@/app/actions'
+import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 
 interface Location {
   id: string
@@ -38,6 +39,12 @@ interface Location {
   isVerified?: boolean
   isFeatured?: boolean
   status: string
+  ownership?: {
+    claimStatus?: 'unclaimed' | 'pending' | 'approved' | 'rejected'
+    ownerId?: string
+    claimedAt?: string
+    claimEmail?: string
+  }
 }
 
 interface Category {
@@ -417,9 +424,12 @@ function LocationsExplore() {
                 <CardContent className="p-4">
                   <div className="space-y-2">
                     <div className="flex items-start justify-between">
-                      <h3 className="font-semibold text-lg leading-tight group-hover:text-[#FF6B6B] transition-colors">
-                        {location.name}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg leading-tight group-hover:text-[#FF6B6B] transition-colors">
+                          {location.name}
+                        </h3>
+                        <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+                      </div>
                     </div>
 
                     {location.averageRating && (

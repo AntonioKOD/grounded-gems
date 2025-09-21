@@ -32,6 +32,12 @@ export interface PersonalizedLocation {
   featuredImage?: string;
   businessHours?: any[];
   isOpen?: boolean;
+  ownership?: {
+    claimStatus?: 'unclaimed' | 'pending' | 'approved' | 'rejected';
+    ownerId?: string;
+    claimedAt?: string;
+    claimEmail?: string;
+  };
 }
 
 export class LocationPersonalizationService {
@@ -208,6 +214,7 @@ export class LocationPersonalizationService {
         featuredImage: location.featuredImage?.url,
         businessHours: location.businessHours,
         isOpen: this.isLocationOpen(location.businessHours),
+        ownership: location.ownership,
       };
     });
 
@@ -472,6 +479,7 @@ export class LocationPersonalizationService {
       featuredImage: location.featuredImage?.url,
       businessHours: location.businessHours,
       isOpen: this.isLocationOpen(location.businessHours),
+      ownership: location.ownership,
     }));
   }
 
@@ -540,6 +548,7 @@ export class LocationPersonalizationService {
           featuredImage: location.featuredImage?.url,
           businessHours: location.businessHours,
           isOpen: this.isLocationOpen(location.businessHours),
+          ownership: location.ownership,
         }));
       }
 

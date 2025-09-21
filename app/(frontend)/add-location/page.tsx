@@ -1,10 +1,10 @@
 import { Suspense } from 'react'
-import ClaimLocationForm from './add-location-form'
+import UltraSimpleForm from './ultra-simple-form'
 
 export default function AddLocationPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <ClaimLocationForm />
+      <UltraSimpleForm />
     </Suspense>
   )
 }

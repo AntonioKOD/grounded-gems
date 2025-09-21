@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 
 import { getPersonalizedLocations, getFilteredLocationsAction, getUserPersonalizationData } from '@/app/actions'
 import { useAuth } from '@/hooks/use-auth'
+import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -539,9 +540,12 @@ function LocationCard({
 
         <CardContent className="p-4">
           <div className="mb-2">
-            <h3 className="font-semibold text-lg text-gray-900 group-hover:text-[#FF6B6B] transition-colors">
-              {location.name}
-            </h3>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-lg text-gray-900 group-hover:text-[#FF6B6B] transition-colors">
+                {location.name}
+              </h3>
+              <Badge {...getLocationStatusBadgeProps(location.ownership)} />
+            </div>
             {location.description && (
               <p className="text-gray-600 text-sm mt-1 line-clamp-2">
                 {location.description}
