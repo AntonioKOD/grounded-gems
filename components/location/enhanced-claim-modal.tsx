@@ -210,11 +210,11 @@ export function EnhancedClaimModal({
 
       const result = await response.json()
       
-      toast.success('Claim submitted successfully! You will be notified once it\'s reviewed.')
+      toast.success('Claim submitted successfully! Redirecting to business editing form...')
       onClose()
       
-      // Optionally redirect to claim status page
-      // router.push(`/locations/${locationId}/claim-status`)
+      // Redirect to the comprehensive editing form
+      router.push(`/add-location?mode=claim&locationId=${locationId}`)
       
     } catch (error) {
       console.error('Error submitting claim:', error)

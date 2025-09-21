@@ -397,11 +397,31 @@ export default function ClaimLocationForm() {
         // Check if location is already claimed and show appropriate message
         if (location.ownership && location.ownership.claimStatus === 'approved') {
           setIsAlreadyClaimed(true)
-          toast({
-            title: "Location Already Claimed",
-            description: "This location is already claimed, but you can still enhance it with additional business information.",
-            variant: "default",
-          })
+          
+          // Check if current user is the owner
+          const isOwner = user && location.ownership.ownerId === user.id
+          
+          if (!isOwner) {
+            // Not the owner - redirect to location page
+            toast({
+              title: "Location Already Claimed",
+              description: "This location has already been claimed by another business owner.",
+              variant: "destructive",
+            })
+            
+            setTimeout(() => {
+              router.push(`/locations/${location.slug || location.id}`)
+            }, 3000)
+            
+            return
+          } else {
+            // Is the owner - allow editing
+            toast({
+              title: "Welcome Back!",
+              description: "You can now edit your business information.",
+              variant: "default",
+            })
+          }
         } else {
           setIsAlreadyClaimed(false)
         }
@@ -1172,7 +1192,12 @@ export default function ClaimLocationForm() {
         let successMessage
         
         if (currentLocation.ownership && currentLocation.ownership.claimStatus === 'approved') {
-          // Location is already claimed - just enhance it with business information
+          // Location is already claimed - verify user is the owner
+          if (currentLocation.ownership.ownerId !== user.id) {
+            throw new Error('You are not authorized to edit this location. Only the business owner can make changes.')
+          }
+          
+          // Owner is editing - just update business information
           claimData = {
             ...formData,
             // Don't change ownership, just update business details
@@ -1316,7 +1341,7 @@ export default function ClaimLocationForm() {
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
               {isAlreadyClaimed 
-                ? "This location is already claimed by another business owner. You can still enhance it with additional business information, photos, and details to help the community."
+                ? "You are the owner of this business. Use this form to update your business information, photos, and details."
                 : "Complete your business listing by adding comprehensive information, photos, and details to help customers find and learn about your business."
               }
             </p>
@@ -1332,7 +1357,12 @@ export default function ClaimLocationForm() {
             <Building className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
               <div className="flex items-center gap-2">
-                <span className="font-medium">You're updating your claimed listing.</span>
+                <span className="font-medium">
+                  {isAlreadyClaimed 
+                    ? "You're editing your business listing." 
+                    : "You're claiming this business listing."
+                  }
+                </span>
                 {isLoadingLocation && (
                   <div className="flex items-center gap-2 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin" />

@@ -77,21 +77,8 @@ export async function POST(
       );
     }
 
-    // Check if user is a business owner
-    if (!user.isBusinessOwner) {
-      return NextResponse.json(
-        { success: false, message: 'Business owner status required' },
-        { status: 403 }
-      );
-    }
-
-    // Check if business owner is verified
-    if (user.businessOwnerProfile?.verificationStatus !== 'verified') {
-      return NextResponse.json(
-        { success: false, message: 'Business owner verification required' },
-        { status: 403 }
-      );
-    }
+    // Allow any authenticated user to claim a business
+    // Business owner verification is optional for claiming
 
     const body: ClaimRequest = await request.json();
 
@@ -140,7 +127,7 @@ export async function POST(
         verificationMethod: body.claimMethod,
         businessLicense: body.businessLicense,
         taxId: body.taxId,
-        claimStatus: 'pending',
+        claimStatus: 'approved',
         // Enhanced business information
         businessName: body.businessName,
         businessAddress: body.businessAddress,
