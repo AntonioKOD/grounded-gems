@@ -28,6 +28,8 @@ import StructuredInsiderTips from '@/components/location/structured-insider-tips
 import SubmitInsiderTipModal from '@/components/location/submit-insider-tip-modal'
 import { toast } from 'sonner'
 import Image from 'next/image'
+import { formatAddressForDetails } from '@/lib/address-utils'
+import { formatLocationName } from '@/lib/location-name-utils'
 import OptimizedImage from "@/components/ui/optimized-image"
 
 interface SimpleLocationModalProps {
@@ -188,36 +190,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
 
   // Helper functions
   const formatAddress = (address: any): string => {
-    if (!address) return 'Address not available'
-    if (typeof address === 'string') return address
-    
-    // Handle different address structures
-    const parts = []
-    
-    // Check for street address
-    if (address.street) parts.push(address.street)
-    if (address.address) parts.push(address.address) // Alternative field name
-    if (address.streetAddress) parts.push(address.streetAddress) // Another alternative
-    
-    // Check for city
-    if (address.city) parts.push(address.city)
-    
-    // Check for state/province
-    if (address.state) parts.push(address.state)
-    if (address.province) parts.push(address.province) // Alternative field name
-    
-    // Check for postal code
-    if (address.zipCode) parts.push(address.zipCode)
-    if (address.postalCode) parts.push(address.postalCode) // Alternative field name
-    if (address.zip) parts.push(address.zip) // Another alternative
-    
-    // Check for country (only add if not US/United States to avoid redundancy)
-    if (address.country && address.country.toLowerCase() !== 'us' && address.country.toLowerCase() !== 'united states') {
-      parts.push(address.country)
-    }
-    
-    const formattedAddress = parts.filter(Boolean).join(', ')
-    return formattedAddress || 'Address not available'
+    return formatAddressForDetails(address)
   }
 
   const formatTime = (timeStr: string): string => {
@@ -320,7 +293,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
           <div className="p-6">
             {/* Title and rating */}
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">{location.name}</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">{formatLocationName(location.name)}</h2>
               <div className="flex items-center gap-6 text-sm">
                 {rating > 0 && (
                   <div className="flex items-center gap-2 bg-yellow-50 px-3 py-1 rounded-full">

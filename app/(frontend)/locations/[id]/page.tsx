@@ -6,6 +6,8 @@ import { parseLocationParam } from '@/lib/slug-utils'
 import { getPrimaryImageUrl } from '@/lib/image-utils'
 import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 import { getLocationViewType, getDataCompletenessScore } from '@/lib/location-data-utils'
+import { formatAddressForDetails } from '@/lib/address-utils'
+import { formatLocationName } from '@/lib/location-name-utils'
 import { redirect, permanentRedirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -146,7 +148,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       }
     }
 
-    const locationName = location.name || 'Unnamed Location'
+    const locationName = formatLocationName(location.name)
     const description = location.shortDescription || location.description || `Visit ${locationName} - find reviews, photos, hours, and contact info for this local business and attraction.`
     
     // Get image URL using the robust utility function
@@ -288,9 +290,7 @@ export default async function LocationPage({ params }: PageProps) {
     }
 
     const formatAddress = (address: Address | string): string => {
-      if (typeof address === 'string') return address
-      const parts = [address.street, address.city, address.state, address.zipCode]
-      return parts.filter(Boolean).join(', ')
+      return formatAddressForDetails(address)
     }
 
     const formatTime = (timeStr: string): string => {
@@ -614,7 +614,7 @@ export default async function LocationPage({ params }: PageProps) {
                   {/* Location Name & Rating */}
                   <div className="flex items-center gap-3 mb-4">
                     <h1 className="text-4xl lg:text-6xl font-bold text-white leading-tight">
-                      {location.name}
+                      {formatLocationName(location.name)}
                     </h1>
                     <Badge {...getLocationStatusBadgeProps(location.ownership)} />
                   </div>
@@ -697,7 +697,7 @@ export default async function LocationPage({ params }: PageProps) {
               {/* About Section */}
               <Card>
                 <CardContent className="p-8">
-                  <h2 className="text-2xl font-bold mb-6 text-primary">About {location.name}</h2>
+                  <h2 className="text-2xl font-bold mb-6 text-primary">About {formatLocationName(location.name)}</h2>
                   {location.description && (
                     <div className="prose prose-gray max-w-none mb-6">
                       <p className="text-lg leading-relaxed text-muted-foreground">

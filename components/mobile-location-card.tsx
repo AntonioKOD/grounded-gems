@@ -9,6 +9,8 @@ import { useState, useCallback } from "react"
 import { toast } from "sonner"
 import { getPrimaryImageUrl, getOptimizedImageUrl, generateImageAltText } from "@/lib/image-utils"
 import { getLocationStatusBadgeProps } from "@/lib/status-badge-utils"
+import { formatAddressForCard } from "@/lib/address-utils"
+import { formatLocationName } from "@/lib/location-name-utils"
 
 interface MobileLocationCardProps {
   location: {
@@ -301,7 +303,7 @@ export default function MobileLocationCard({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold text-gray-900 text-base leading-tight line-clamp-1">
-                  {location.name}
+                  {formatLocationName(location.name)}
                 </h3>
                 <Badge {...getLocationStatusBadgeProps(location.ownership)} />
               </div>
@@ -356,9 +358,7 @@ export default function MobileLocationCard({
           <div className="flex items-start gap-2 text-sm text-gray-500">
             <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <span className="line-clamp-1">
-              {typeof location.address === "string"
-                ? location.address
-                : Object.values(location.address).filter(Boolean).join(", ")}
+              {formatAddressForCard(location.address)}
             </span>
           </div>
         )}

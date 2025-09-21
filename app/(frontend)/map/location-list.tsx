@@ -18,6 +18,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Image from "next/image"
 import { getLocationStatusBadgeProps } from "@/lib/status-badge-utils"
+import { formatAddressForCard } from "@/lib/address-utils"
+import { formatLocationName } from "@/lib/location-name-utils"
 import type { Location } from "./map-data"
 import { getCategoryColor } from "./category-utils"
 import { Card, CardContent } from "@/components/ui/card"
@@ -459,7 +461,7 @@ export default function LocationList({
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-bold text-lg text-[#333333] leading-tight">
-                      {location.name}
+                      {formatLocationName(location.name)}
                     </h3>
                     <Badge {...getLocationStatusBadgeProps(location.ownership)} />
                   </div>
@@ -494,9 +496,7 @@ export default function LocationList({
                   <div className="flex items-center gap-2">
                     <MapPin className="h-4 w-4 flex-shrink-0 text-[#4ECDC4]" />
                     <span className="text-sm text-[#666666] truncate">
-                      {typeof location.address === 'string' 
-                        ? location.address 
-                        : location.address?.city || 'Address not available'}
+                      {formatAddressForCard(location.address)}
                     </span>
                   </div>
                 )}
@@ -577,11 +577,11 @@ export default function LocationList({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <h4 className="font-medium text-gray-900 truncate">
-                                  {location.name}
+                                  {formatLocationName(location.name)}
                                 </h4>
-                                {(typeof location.address === 'string' && location.address) && (
+                                {location.address && (
                                   <p className="text-sm text-gray-500 line-clamp-1">
-                                    {location.address}
+                                    {formatAddressForCard(location.address)}
                                   </p>
                                 )}
                                 <p className="text-xs text-gray-400 mt-1">

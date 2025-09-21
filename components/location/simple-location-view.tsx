@@ -22,6 +22,8 @@ import {
 import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
 import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
+import { formatAddressForDetails } from '@/lib/address-utils'
+import { formatLocationName } from '@/lib/location-name-utils'
 import Image from 'next/image'
 
 interface SimpleLocationViewProps {
@@ -146,9 +148,9 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
 
                 {/* Location Name & Rating */}
                 <div className="flex items-center gap-3 mb-4">
-                  <h1 className="text-4xl lg:text-6xl font-bold text-white leading-tight">
-                    {location.name}
-                  </h1>
+              <h1 className="text-4xl lg:text-6xl font-bold text-white leading-tight">
+                {formatLocationName(location.name)}
+              </h1>
                   <Badge {...getLocationStatusBadgeProps(location.ownership)} />
                 </div>
                 
