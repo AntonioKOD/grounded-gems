@@ -88,6 +88,7 @@ export default function ClaimLocationForm() {
   const [isClaimMode, setIsClaimMode] = useState(false)
   const [claimLocationId, setClaimLocationId] = useState<string | null>(null)
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
+  const [isAlreadyClaimed, setIsAlreadyClaimed] = useState(false)
 
 
   // State for categories and user data
@@ -393,20 +394,16 @@ export default function ClaimLocationForm() {
         setIsFeatured(location.isFeatured || false)
         setIsVerified(location.isVerified || false)
         
-        // Check if location is already claimed
+        // Check if location is already claimed and show appropriate message
         if (location.ownership && location.ownership.claimStatus === 'approved') {
+          setIsAlreadyClaimed(true)
           toast({
             title: "Location Already Claimed",
-            description: "This location has already been claimed by another business owner.",
-            variant: "destructive",
+            description: "This location is already claimed, but you can still enhance it with additional business information.",
+            variant: "default",
           })
-          
-          // Redirect to the location page after a short delay
-          setTimeout(() => {
-            router.push(`/locations/${location.slug || location.id}`)
-          }, 3000)
-          
-          return
+        } else {
+          setIsAlreadyClaimed(false)
         }
         
         toast({
@@ -1159,18 +1156,39 @@ export default function ClaimLocationForm() {
       let result
 
       if (isClaimMode && claimLocationId) {
-        // Update existing location in claim mode and assign ownership
+        // Update existing location in claim mode
         if (!user) {
           throw new Error('User authentication required for claiming')
         }
 
-        const claimData = {
-          ...formData,
-          ownership: {
-            ownerId: user.id,
-            claimStatus: 'approved',
-            claimedAt: new Date().toISOString()
+        // First, fetch the current location to check if it's already claimed
+        const currentLocationResponse = await fetch(`/api/locations/${claimLocationId}`)
+        if (!currentLocationResponse.ok) {
+          throw new Error('Failed to fetch current location data')
+        }
+        const currentLocation = await currentLocationResponse.json()
+        
+        let claimData
+        let successMessage
+        
+        if (currentLocation.ownership && currentLocation.ownership.claimStatus === 'approved') {
+          // Location is already claimed - just enhance it with business information
+          claimData = {
+            ...formData,
+            // Don't change ownership, just update business details
           }
+          successMessage = "🎉 Business Information Updated Successfully!"
+        } else {
+          // Location is not claimed - claim it and assign ownership
+          claimData = {
+            ...formData,
+            ownership: {
+              ownerId: user.id,
+              claimStatus: 'approved',
+              claimedAt: new Date().toISOString()
+            }
+          }
+          successMessage = "🎉 Location Claimed Successfully!"
         }
 
         response = await fetch(`/api/locations/${claimLocationId}`, {
@@ -1183,16 +1201,16 @@ export default function ClaimLocationForm() {
 
         if (!response.ok) {
           const errorData = await response.json()
-          throw new Error(errorData.message || 'Failed to claim location')
+          throw new Error(errorData.message || 'Failed to update location')
         }
 
         result = await response.json()
-        console.log("Location claimed successfully:", result)
+        console.log("Location updated successfully:", result)
 
-        // Show success toast for claim
+        // Show success toast
         toast({
-          title: "🎉 Location Claimed Successfully!",
-          description: `You now own ${locationName}! You can manage it from your dashboard.`,
+          title: successMessage,
+          description: `Business information for ${locationName} has been updated successfully!`,
         })
       } else {
         // Create new location (existing behavior)
@@ -1280,13 +1298,30 @@ export default function ClaimLocationForm() {
       <div className="mb-4 md:mb-6 px-4 md:px-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3">
           <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 sm:mb-0">
-            {isClaimMode ? 'Claim & Complete Your Location' : 'Add New Location'}
+            {isClaimMode 
+              ? (isAlreadyClaimed 
+                ? 'Enhance Business Information' 
+                : 'Claim & Complete Your Location')
+              : 'Add New Location'
+            }
           </h1>
           <Badge variant={formProgress >= 75 ? "default" : formProgress >= 50 ? "secondary" : "outline"} className="text-sm font-medium">
             {formProgress}% Complete
           </Badge>
         </div>
         <Progress value={formProgress} className="h-3 md:h-2 rounded-full" />
+        
+        {/* Description based on claim mode */}
+        {isClaimMode && (
+          <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              {isAlreadyClaimed 
+                ? "This location is already claimed by another business owner. You can still enhance it with additional business information, photos, and details to help the community."
+                : "Complete your business listing by adding comprehensive information, photos, and details to help customers find and learn about your business."
+              }
+            </p>
+          </div>
+        )}
         <p className="text-sm text-gray-600 mt-2 md:hidden">Fill out the required fields to complete your location</p>
       </div>
 
@@ -2514,7 +2549,12 @@ export default function ClaimLocationForm() {
               ) : (
                 <span className="flex items-center">
                   <CheckCircle2 className="mr-2 h-5 w-5" />
-                  {isClaimMode ? 'Claim & Complete Location' : 'Add Location'}
+                  {isClaimMode 
+                    ? (isAlreadyClaimed 
+                      ? 'Update Business Information' 
+                      : 'Claim & Complete Location')
+                    : 'Add Location'
+                  }
                 </span>
               )}
             </Button>
