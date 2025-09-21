@@ -393,6 +393,22 @@ export default function ClaimLocationForm() {
         setIsFeatured(location.isFeatured || false)
         setIsVerified(location.isVerified || false)
         
+        // Check if location is already claimed
+        if (location.ownership && location.ownership.claimStatus === 'approved') {
+          toast({
+            title: "Location Already Claimed",
+            description: "This location has already been claimed by another business owner.",
+            variant: "destructive",
+          })
+          
+          // Redirect to the location page after a short delay
+          setTimeout(() => {
+            router.push(`/locations/${location.slug || location.id}`)
+          }, 3000)
+          
+          return
+        }
+        
         toast({
           title: "Success",
           description: "Location data loaded successfully",
