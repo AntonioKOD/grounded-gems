@@ -86,6 +86,8 @@ interface EditLocationFormProps {
 }
 
 export default function EditLocationForm({ location, currentUser, onSuccess, onCancel }: EditLocationFormProps) {
+  console.log('📝 EditLocationForm rendered with location:', location?.name, 'ID:', location?.id);
+  
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const galleryFileInputRef = useRef<HTMLInputElement>(null)
@@ -116,6 +118,13 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [locationDescription, setLocationDescription] = useState(location.description || "")
   const [shortDescription, setShortDescription] = useState(location.shortDescription || "")
+  
+  console.log('📝 Form initialized with data:', {
+    name: locationName,
+    slug: locationSlug,
+    description: locationDescription,
+    shortDescription: shortDescription
+  });
 
   // Media
   const [locationImage, setLocationImage] = useState<string | null>(null)
@@ -406,9 +415,14 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
   }
 
   const updateBusinessHour = (index: number, field: "open" | "close" | "closed", value: string | boolean) => {
-    setBusinessHours(prev => prev.map((hour, i) => 
-      i === index ? { ...hour, [field]: value } : hour
-    ))
+    console.log(`🕐 Updating business hour ${index}, field: ${field}, value:`, value);
+    setBusinessHours(prev => {
+      const updated = prev.map((hour, i) => 
+        i === index ? { ...hour, [field]: value } : hour
+      );
+      console.log('🕐 Updated business hours:', updated);
+      return updated;
+    });
   }
 
   const validateForm = (): boolean => {
@@ -424,8 +438,14 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
   }
 
   const handleSubmit = async (saveAsDraft = false) => {
-    if (!validateForm()) return
+    console.log('🚀 Form submission started, saveAsDraft:', saveAsDraft);
+    
+    if (!validateForm()) {
+      console.log('❌ Form validation failed');
+      return
+    }
 
+    console.log('✅ Form validation passed');
     setIsLoading(true)
     try {
       const formData: Partial<LocationFormData> = {
@@ -457,7 +477,13 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
         status: saveAsDraft ? 'draft' : 'published',
       }
 
-      const response = await fetch(`/api/locations/${location.id}/edit`, {
+      // Debug: Log the data being sent
+      console.log('📤 Sending update data:', JSON.stringify(finalData, null, 2));
+      
+      const apiUrl = `/api/locations/${location.id}/edit`;
+      console.log('🌐 API URL being called:', apiUrl);
+
+      const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -465,8 +491,12 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
         body: JSON.stringify(finalData),
       })
 
+      console.log('📡 Response status:', response.status, response.statusText);
+      console.log('📡 Response URL:', response.url);
+
       if (response.ok) {
         const result = await response.json()
+        console.log('✅ Update successful:', result);
         toast.success(`Location ${saveAsDraft ? 'saved as draft' : 'updated'} successfully!`)
         
         // Call success callback if provided, otherwise redirect
@@ -477,6 +507,7 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
         }
       } else {
         const errorData = await response.json()
+        console.log('❌ Update failed:', errorData);
         throw new Error(errorData.error || 'Failed to update location')
       }
     } catch (error) {
@@ -1075,7 +1106,10 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
         <div className="flex gap-2">
           <Button
             variant="outline"
-            onClick={() => handleSubmit(true)}
+            onClick={() => {
+              console.log('🔘 Save as Draft button clicked');
+              handleSubmit(true);
+            }}
             disabled={isLoading}
           >
             {isLoading ? (
@@ -1091,7 +1125,10 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
             )}
           </Button>
           <Button
-            onClick={() => handleSubmit(false)}
+            onClick={() => {
+              console.log('🔘 Update Location button clicked');
+              handleSubmit(false);
+            }}
             disabled={isLoading}
             className="bg-[#FF6B6B] hover:bg-[#FF6B6B]/90"
           >

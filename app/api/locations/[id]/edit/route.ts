@@ -9,6 +9,8 @@ export async function PUT(
 ) {
   try {
     const { id: locationId } = await params;
+    console.log('🚀 API PUT /api/locations/[id]/edit called for locationId:', locationId);
+    console.log('🎯 Edit route is now handling the PUT request correctly!');
     
     let body;
     const contentType = req.headers.get('content-type') || '';
@@ -90,6 +92,7 @@ export async function PUT(
     const updateData: any = {
       name: body.name.trim(),
       description: body.description?.trim() || '',
+      shortDescription: body.shortDescription?.trim() || '',
     };
 
     // Handle address - support both string and object formats
@@ -108,6 +111,9 @@ export async function PUT(
     }
 
     // Handle other fields
+    if (body.slug) updateData.slug = body.slug.trim();
+    if (body.featuredImage) updateData.featuredImage = body.featuredImage;
+    if (body.gallery) updateData.gallery = body.gallery;
     if (body.neighborhood) updateData.neighborhood = body.neighborhood.trim();
     if (body.categories) updateData.categories = body.categories;
     if (body.tags) updateData.tags = body.tags;
@@ -129,7 +135,10 @@ export async function PUT(
     }
 
     // Handle business hours
-    if (body.businessHours) updateData.businessHours = body.businessHours;
+    if (body.businessHours) {
+      console.log('📅 Business hours received:', JSON.stringify(body.businessHours, null, 2));
+      updateData.businessHours = body.businessHours;
+    }
 
     // Handle accessibility
     if (body.accessibility) updateData.accessibility = body.accessibility;
@@ -177,6 +186,9 @@ export async function PUT(
         // Continue without geocoding
       }
     }
+
+    // Debug: Log the update data
+    console.log('🔄 Updating location with data:', JSON.stringify(updateData, null, 2));
 
     // Update the location
     const updatedLocation = await payload.update({
@@ -281,6 +293,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  console.log('🔍 GET /api/locations/[id]/edit called - testing if route is recognized');
   try {
     const { id: locationId } = await params;
 

@@ -392,7 +392,7 @@ function ClaimStatusContent() {
           
           {claimStatus.claimStatus === 'approved' && (
             <Button asChild variant="outline" className="flex-1">
-              <Link href={`/locations/${claimStatus.locationSlug || claimStatus.locationId}/edit`}>
+              <Link href={`/locations/${claimStatus.locationId}/edit-comprehensive`}>
                 Manage Listing
               </Link>
             </Button>
@@ -400,7 +400,7 @@ function ClaimStatusContent() {
           
           {claimStatus.claimStatus === 'rejected' && (
             <Button asChild variant="outline" className="flex-1">
-              <Link href={`/locations/${claimStatus.locationSlug || claimStatus.locationId}/claim`}>
+              <Link href={`/locations/${claimStatus.locationId}/edit-comprehensive`}>
                 Resubmit Claim
               </Link>
             </Button>

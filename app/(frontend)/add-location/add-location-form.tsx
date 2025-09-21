@@ -76,7 +76,17 @@ interface UserData {
   email: string
 }
 
-export default function ClaimLocationForm() {
+interface ClaimLocationFormProps {
+  initialLocation?: any
+  isComprehensiveEditMode?: boolean
+  editLocationId?: string
+}
+
+export default function ClaimLocationForm({ 
+  initialLocation, 
+  isComprehensiveEditMode = false, 
+  editLocationId 
+}: ClaimLocationFormProps = {}) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -89,6 +99,10 @@ export default function ClaimLocationForm() {
   const [claimLocationId, setClaimLocationId] = useState<string | null>(null)
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [isAlreadyClaimed, setIsAlreadyClaimed] = useState(false)
+  
+  // Comprehensive edit mode state
+  const [isInComprehensiveEditMode, setIsInComprehensiveEditMode] = useState(false)
+  const [currentEditLocationId, setCurrentEditLocationId] = useState<string | null>(null)
 
 
   // State for categories and user data
@@ -250,16 +264,32 @@ export default function ClaimLocationForm() {
   // Add these state variables for better image handling
   const [locationImagePreview, setLocationImagePreview] = useState<string | null>(null)
 
-  // Handle URL params for claim mode
+  // Handle URL params for claim mode and comprehensive edit mode
   useEffect(() => {
     const mode = searchParams.get('mode')
     const locationId = searchParams.get('locationId')
     
     if (mode === 'claim' && locationId) {
-      setIsClaimMode(true)
-      setClaimLocationId(locationId)
+      // Redirect old claim mode to comprehensive edit route
+      router.replace(`/locations/${locationId}/edit-comprehensive`)
+      return
+    } else if (mode === 'edit-comprehensive' && locationId) {
+      setIsInComprehensiveEditMode(true)
+      setCurrentEditLocationId(locationId)
+      // Clear any existing duplicate check results since we're editing, not creating
+      setDuplicateCheckResult(null)
     }
-  }, [searchParams])
+  }, [searchParams, router])
+
+  // Handle props for comprehensive edit mode
+  useEffect(() => {
+    if (isComprehensiveEditMode && editLocationId) {
+      setIsInComprehensiveEditMode(true)
+      setCurrentEditLocationId(editLocationId)
+      // Clear any existing duplicate check results since we're editing, not creating
+      setDuplicateCheckResult(null)
+    }
+  }, [isComprehensiveEditMode, editLocationId])
 
   // Fetch location data in claim mode
   useEffect(() => {
@@ -444,6 +474,297 @@ export default function ClaimLocationForm() {
     
     fetchLocationData()
   }, [isClaimMode, claimLocationId, toast])
+
+  // Fetch location data in comprehensive edit mode
+  useEffect(() => {
+    const fetchLocationDataForEdit = async () => {
+      if (!isInComprehensiveEditMode || !currentEditLocationId) return
+      
+      // If we have initialLocation prop, use it instead of fetching
+      if (initialLocation) {
+        const location = initialLocation
+        
+        // Prefill all form fields with location data
+        setLocationName(location.name || '')
+        setLocationSlug(location.slug || '')
+        setLocationDescription(location.description || '')
+        setShortDescription(location.shortDescription || '')
+        
+        // Set categories
+        if (location.categories && Array.isArray(location.categories)) {
+          const categoryIds = location.categories.map((cat: any) => 
+            typeof cat === 'string' ? cat : cat.id
+          )
+          setSelectedCategories(categoryIds)
+        }
+        
+        // Set featured image
+        if (location.featuredImage) {
+          setLocationImage(typeof location.featuredImage === 'string' ? location.featuredImage : location.featuredImage.id)
+        }
+        
+        // Set gallery images
+        if (location.gallery && Array.isArray(location.gallery)) {
+          const galleryItems = location.gallery.map((item: any) => ({
+            image: typeof item.image === 'string' ? item.image : item.image?.id || item.image,
+            caption: item.caption || '',
+            tempId: `temp-${Date.now()}-${Math.random()}`
+          }))
+          setGallery(galleryItems)
+        }
+        
+        // Set tags
+        if (location.tags && Array.isArray(location.tags)) {
+          setTags(location.tags)
+        }
+        
+        // Set address
+        if (location.address) {
+          if (typeof location.address === 'string') {
+            // Parse string address if needed
+            const addressParts = location.address.split(', ')
+            setAddress({
+              street: addressParts[0] || '',
+              city: addressParts[1] || '',
+              state: addressParts[2] || '',
+              zip: addressParts[3] || '',
+              country: 'USA',
+              neighborhood: ''
+            })
+          } else {
+            setAddress({
+              street: location.address.street || '',
+              city: location.address.city || '',
+              state: location.address.state || '',
+              zip: location.address.zip || '',
+              country: location.address.country || 'USA',
+              neighborhood: location.address.neighborhood || ''
+            })
+          }
+        }
+        
+        // Set contact info
+        if (location.contactInfo) {
+          setContactInfo({
+            phone: location.contactInfo.phone || '',
+            email: location.contactInfo.email || '',
+            website: location.contactInfo.website || '',
+            socialMedia: {
+              facebook: location.contactInfo.socialMedia?.facebook || '',
+              twitter: location.contactInfo.socialMedia?.twitter || '',
+              instagram: location.contactInfo.socialMedia?.instagram || '',
+              linkedin: location.contactInfo.socialMedia?.linkedin || ''
+            }
+          })
+        }
+        
+        // Set business hours
+        if (location.businessHours && Array.isArray(location.businessHours)) {
+          setBusinessHours(location.businessHours)
+        }
+        
+        // Set price range
+        if (location.priceRange) {
+          setPriceRange(location.priceRange)
+        }
+        
+        // Set best time to visit
+        if (location.bestTimeToVisit && Array.isArray(location.bestTimeToVisit)) {
+          setBestTimeToVisit(location.bestTimeToVisit)
+        }
+        
+        // Set insider tips
+        if (location.insiderTips) {
+          setInsiderTips(location.insiderTips)
+        }
+        
+        // Set accessibility
+        if (location.accessibility) {
+          setAccessibility({
+            wheelchairAccess: location.accessibility.wheelchairAccess || false,
+            parking: location.accessibility.parking || false,
+            other: location.accessibility.other || ''
+          })
+        }
+        
+        // Set meta data
+        if (location.meta) {
+          setMeta({
+            title: location.meta.title || '',
+            description: location.meta.description || '',
+            keywords: location.meta.keywords || ''
+          })
+        }
+        
+        toast({
+          title: "Location Loaded",
+          description: "You can now edit all aspects of this location.",
+          variant: "default",
+        })
+        
+        return // Exit early if we used initialLocation
+      }
+      
+      // If no initialLocation, fetch from API
+      setIsLoadingLocation(true)
+      try {
+        const response = await fetch(`/api/locations/${currentEditLocationId}/edit-comprehensive`)
+        if (!response.ok) {
+          if (response.status === 403) {
+            toast({
+              title: "Access Denied",
+              description: "You can only edit locations you own or have permission to edit.",
+              variant: "destructive",
+            })
+            router.push('/map')
+            return
+          } else if (response.status === 404) {
+            toast({
+              title: "Location Not Found",
+              description: "The location you're trying to edit doesn't exist.",
+              variant: "destructive",
+            })
+            router.push('/map')
+            return
+          }
+          throw new Error('Failed to fetch location data')
+        }
+        
+        const data = await response.json()
+        const location = data.location
+        
+        // Prefill all form fields with location data (same logic as above)
+        setLocationName(location.name || '')
+        setLocationSlug(location.slug || '')
+        setLocationDescription(location.description || '')
+        setShortDescription(location.shortDescription || '')
+        
+        // Set categories
+        if (location.categories && Array.isArray(location.categories)) {
+          const categoryIds = location.categories.map((cat: any) => 
+            typeof cat === 'string' ? cat : cat.id
+          )
+          setSelectedCategories(categoryIds)
+        }
+        
+        // Set featured image
+        if (location.featuredImage) {
+          setLocationImage(typeof location.featuredImage === 'string' ? location.featuredImage : location.featuredImage.id)
+        }
+        
+        // Set gallery images
+        if (location.gallery && Array.isArray(location.gallery)) {
+          const galleryItems = location.gallery.map((item: any) => ({
+            image: typeof item.image === 'string' ? item.image : item.image?.id || item.image,
+            caption: item.caption || '',
+            tempId: `temp-${Date.now()}-${Math.random()}`
+          }))
+          setGallery(galleryItems)
+        }
+        
+        // Set tags
+        if (location.tags && Array.isArray(location.tags)) {
+          setTags(location.tags)
+        }
+        
+        // Set address
+        if (location.address) {
+          if (typeof location.address === 'string') {
+            // Parse string address if needed
+            const addressParts = location.address.split(', ')
+            setAddress({
+              street: addressParts[0] || '',
+              city: addressParts[1] || '',
+              state: addressParts[2] || '',
+              zip: addressParts[3] || '',
+              country: 'USA',
+              neighborhood: ''
+            })
+          } else {
+            setAddress({
+              street: location.address.street || '',
+              city: location.address.city || '',
+              state: location.address.state || '',
+              zip: location.address.zip || '',
+              country: location.address.country || 'USA',
+              neighborhood: location.address.neighborhood || ''
+            })
+          }
+        }
+        
+        // Set contact info
+        if (location.contactInfo) {
+          setContactInfo({
+            phone: location.contactInfo.phone || '',
+            email: location.contactInfo.email || '',
+            website: location.contactInfo.website || '',
+            socialMedia: {
+              facebook: location.contactInfo.socialMedia?.facebook || '',
+              twitter: location.contactInfo.socialMedia?.twitter || '',
+              instagram: location.contactInfo.socialMedia?.instagram || '',
+              linkedin: location.contactInfo.socialMedia?.linkedin || ''
+            }
+          })
+        }
+        
+        // Set business hours
+        if (location.businessHours && Array.isArray(location.businessHours)) {
+          setBusinessHours(location.businessHours)
+        }
+        
+        // Set price range
+        if (location.priceRange) {
+          setPriceRange(location.priceRange)
+        }
+        
+        // Set best time to visit
+        if (location.bestTimeToVisit && Array.isArray(location.bestTimeToVisit)) {
+          setBestTimeToVisit(location.bestTimeToVisit)
+        }
+        
+        // Set insider tips
+        if (location.insiderTips) {
+          setInsiderTips(location.insiderTips)
+        }
+        
+        // Set accessibility
+        if (location.accessibility) {
+          setAccessibility({
+            wheelchairAccess: location.accessibility.wheelchairAccess || false,
+            parking: location.accessibility.parking || false,
+            other: location.accessibility.other || ''
+          })
+        }
+        
+        // Set meta data
+        if (location.meta) {
+          setMeta({
+            title: location.meta.title || '',
+            description: location.meta.description || '',
+            keywords: location.meta.keywords || ''
+          })
+        }
+        
+        toast({
+          title: "Location Loaded",
+          description: "You can now edit all aspects of this location.",
+          variant: "default",
+        })
+        
+      } catch (error) {
+        console.error('Error fetching location data for edit:', error)
+        toast({
+          title: "Error",
+          description: "Failed to load location data. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoadingLocation(false)
+      }
+    }
+    
+    fetchLocationDataForEdit()
+  }, [isInComprehensiveEditMode, currentEditLocationId, initialLocation, toast, router])
 
   // Fetch categories and user data on component mount
   useEffect(() => {
@@ -1050,8 +1371,8 @@ export default function ClaimLocationForm() {
     }
 
     // Check for duplicates unless saving as draft
-    // Skip duplicate check in claim mode
-    if (!saveAsDraft && !isClaimMode) {
+    // Skip duplicate check in claim mode and comprehensive edit mode
+    if (!saveAsDraft && !isClaimMode && !isInComprehensiveEditMode) {
       const fullAddress = [address.street, address.city, address.state, address.zip, address.country]
         .filter(Boolean)
         .join(', ')
@@ -1172,8 +1493,8 @@ export default function ClaimLocationForm() {
         createdBy: user?.id,
       }
 
-      let response
-      let result
+      let response: Response
+      let result: any
 
       if (isClaimMode && claimLocationId) {
         // Update existing location in claim mode
@@ -1204,16 +1525,30 @@ export default function ClaimLocationForm() {
           }
           successMessage = "🎉 Business Information Updated Successfully!"
         } else {
-          // Location is not claimed - claim it and assign ownership
+          // Location is not claimed - submit claim for admin approval
           claimData = {
             ...formData,
             ownership: {
               ownerId: user.id,
-              claimStatus: 'approved',
-              claimedAt: new Date().toISOString()
+              claimStatus: 'pending',
+              claimedAt: new Date().toISOString(),
+              claimEmail: user.email,
+              claimData: {
+                businessName: formData.name,
+                businessDescription: formData.description,
+                contactEmail: user.email,
+                ownerName: user.name || user.email,
+                businessAddress: formData.address,
+                businessWebsite: formData.contactInfo?.website,
+                businessHours: formData.businessHours,
+                priceRange: formData.priceRange,
+                categories: formData.categories,
+                featuredImage: formData.featuredImage,
+                gallery: formData.gallery
+              }
             }
           }
-          successMessage = "🎉 Location Claimed Successfully!"
+          successMessage = "🎉 Claim Submitted Successfully! We'll review your claim and notify you via email."
         }
 
         response = await fetch(`/api/locations/${claimLocationId}`, {
@@ -1237,6 +1572,39 @@ export default function ClaimLocationForm() {
           title: successMessage,
           description: `Business information for ${locationName} has been updated successfully!`,
         })
+      } else if (isInComprehensiveEditMode && currentEditLocationId) {
+        // Update existing location in comprehensive edit mode
+        if (!user) {
+          throw new Error('User authentication required for editing')
+        }
+
+        response = await fetch(`/api/locations/${currentEditLocationId}/edit-comprehensive`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            locationData: formData
+          })
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || 'Failed to update location')
+        }
+
+        result = await response.json()
+
+        // Show success toast
+        toast({
+          title: "🎉 Location Updated Successfully!",
+          description: `All information for ${locationName} has been updated successfully!`,
+        })
+
+        // Redirect to the location page
+        setTimeout(() => {
+          router.push(`/locations/${result.location?.slug || currentEditLocationId}`)
+        }, 2000)
       } else {
         // Create new location (existing behavior)
         response = await fetch('/api/contest/add-location', {
@@ -1323,11 +1691,13 @@ export default function ClaimLocationForm() {
       <div className="mb-4 md:mb-6 px-4 md:px-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3">
           <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-2 sm:mb-0">
-            {isClaimMode 
-              ? (isAlreadyClaimed 
-                ? 'Enhance Business Information' 
-                : 'Claim & Complete Your Location')
-              : 'Add New Location'
+            {isInComprehensiveEditMode 
+              ? 'Edit Location - Comprehensive'
+              : isClaimMode 
+                ? (isAlreadyClaimed 
+                  ? 'Enhance Business Information' 
+                  : 'Claim & Complete Your Location')
+                : 'Add New Location'
             }
           </h1>
           <Badge variant={formProgress >= 75 ? "default" : formProgress >= 50 ? "secondary" : "outline"} className="text-sm font-medium">
@@ -1471,16 +1841,16 @@ export default function ClaimLocationForm() {
                     />
                     {formErrors.name && <p className="text-red-500 text-sm">{formErrors.name}</p>}
                     
-                    {/* Duplicate check indicator */}
-                    {isCheckingDuplicate && (
+                    {/* Duplicate check indicator - only show in add mode, not in edit mode */}
+                    {isCheckingDuplicate && !isInComprehensiveEditMode && (
                       <div className="flex items-center gap-2 text-blue-600 text-sm mt-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Checking for existing locations...
                       </div>
                     )}
                     
-                    {/* Duplicate warning */}
-                    {duplicateCheckResult?.isDuplicate && (
+                    {/* Duplicate warning - only show in add mode, not in edit mode */}
+                    {duplicateCheckResult?.isDuplicate && !isInComprehensiveEditMode && (
                       <Alert className="mt-3 border-orange-200 bg-orange-50">
                         <AlertTriangle className="h-4 w-4 text-orange-600" />
                         <AlertDescription className="text-orange-800">
@@ -2579,11 +2949,13 @@ export default function ClaimLocationForm() {
               ) : (
                 <span className="flex items-center">
                   <CheckCircle2 className="mr-2 h-5 w-5" />
-                  {isClaimMode 
-                    ? (isAlreadyClaimed 
-                      ? 'Update Business Information' 
-                      : 'Claim & Complete Location')
-                    : 'Add Location'
+                  {isInComprehensiveEditMode 
+                    ? 'Update Location'
+                    : isClaimMode 
+                      ? (isAlreadyClaimed 
+                        ? 'Update Business Information' 
+                        : 'Claim & Complete Location')
+                      : 'Add Location'
                   }
                 </span>
               )}

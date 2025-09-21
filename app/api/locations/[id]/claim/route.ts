@@ -127,7 +127,7 @@ export async function POST(
         verificationMethod: body.claimMethod,
         businessLicense: body.businessLicense,
         taxId: body.taxId,
-        claimStatus: 'approved',
+        claimStatus: 'pending',
         // Enhanced business information
         businessName: body.businessName,
         businessAddress: body.businessAddress,
@@ -165,6 +165,42 @@ export async function POST(
       id: locationId,
       data: claimData
     });
+
+    // Send email notification to admin
+    try {
+      const adminEmail = 'antonio_kodheli@icloud.com'
+      
+      // Send email notification
+      await fetch(`${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/api/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: adminEmail,
+          subject: `New Business Claim: ${location.name}`,
+          template: 'business-claim-notification',
+          data: {
+            locationName: location.name,
+            locationId: locationId,
+            claimantName: user.name || user.email,
+            claimantEmail: user.email,
+            claimMethod: body.claimMethod,
+            businessName: body.businessName,
+            businessDescription: body.businessDescription,
+            businessAddress: body.businessAddress,
+            businessWebsite: body.businessWebsite,
+            ownerName: body.ownerName,
+            ownerPhone: body.ownerPhone,
+            claimUrl: `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/admin/claims/${locationId}`,
+            locationUrl: `${process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'}/locations/${location.slug || locationId}`
+          }
+        })
+      })
+    } catch (emailError) {
+      console.error('Failed to send email notification:', emailError)
+      // Don't fail the claim if email fails
+    }
 
     // Create notification for admins
     try {

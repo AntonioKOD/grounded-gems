@@ -20,7 +20,7 @@ import {
   Plus,
   Loader2
 } from 'lucide-react'
-import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
+import { useRouter } from 'next/navigation'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
 import { PhotoSubmissionModal } from '@/components/location/photo-submission-modal'
 import { UserPhotosSection } from '@/components/location/user-photos-section'
@@ -130,7 +130,7 @@ const getAllGalleryImages = (location: any): string[] => {
 }
 
 export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocationModalProps) {
-  const [isClaimModalOpen, setIsClaimModalOpen] = useState(false)
+  const router = useRouter()
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false)
   const [isTipModalOpen, setIsTipModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('info')
@@ -518,7 +518,9 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
                 <Button
                   size="sm"
                   className="w-full bg-[#ffe66d] hover:bg-[#f5d547] text-gray-800 font-medium py-2"
-                  onClick={() => setIsClaimModalOpen(true)}
+                  onClick={() => {
+                    router.push(`/locations/${location.id}/edit-comprehensive`)
+                  }}
                 >
                   <Building2 className="h-4 w-4 mr-2" />
                   Claim This Business
@@ -537,13 +539,6 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
         </div>
       </div>
 
-      <EnhancedClaimModal
-        isOpen={isClaimModalOpen}
-        onClose={() => setIsClaimModalOpen(false)}
-        locationId={location.id}
-        locationName={location.name}
-        locationData={location}
-      />
 
       <PhotoSubmissionModal
         isOpen={isPhotoModalOpen}

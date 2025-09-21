@@ -70,3 +70,4 @@ export function sanitizeLocationName(name: string): string {
     .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
     .trim()
 }
+

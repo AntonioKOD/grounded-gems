@@ -104,13 +104,8 @@ export async function GET(
   }
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  // PUT method delegates to PATCH for location updates
-  return PATCH(req, { params })
-}
+// PUT handler removed to avoid conflict with /edit route
+// All PUT requests should go to /api/locations/[id]/edit instead
 
 export async function PATCH(
   req: NextRequest,

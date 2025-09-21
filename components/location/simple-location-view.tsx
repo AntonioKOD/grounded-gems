@@ -19,7 +19,7 @@ import {
   Users,
   Camera
 } from 'lucide-react'
-import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
+import { useRouter } from 'next/navigation'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
 import { getLocationStatusBadgeProps } from '@/lib/status-badge-utils'
 import { formatAddressForDetails } from '@/lib/address-utils'
@@ -51,7 +51,7 @@ interface SimpleLocationViewProps {
 }
 
 export function SimpleLocationView({ location }: SimpleLocationViewProps) {
-  const [isClaimModalOpen, setIsClaimModalOpen] = useState(false)
+  const router = useRouter()
 
   const isUnclaimed = location.ownership?.claimStatus === 'unclaimed' || !location.ownership
   const rating = location.averageRating || 0
@@ -202,11 +202,13 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
                   )}
                   
                   {isUnclaimed && (
-                    <Button
-                      size="lg"
-                      className="bg-orange-600 hover:bg-orange-700 text-white font-semibold shadow-lg"
-                      onClick={() => setIsClaimModalOpen(true)}
-                    >
+        <Button
+          size="lg"
+          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold shadow-lg"
+          onClick={() => {
+            router.push(`/locations/${location.id}/edit-comprehensive`)
+          }}
+        >
                       <Building2 className="h-5 w-5 mr-2" />
                       Claim This Business
                     </Button>
@@ -400,7 +402,9 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
                     Claim your business listing to manage information, respond to reviews, and connect with customers.
                   </p>
                   <Button
-                    onClick={() => setIsClaimModalOpen(true)}
+                    onClick={() => {
+                      router.push(`/locations/${location.id}/edit-comprehensive`)
+                    }}
                     className="bg-orange-600 hover:bg-orange-700 text-white"
                   >
                     <Building2 className="h-4 w-4 mr-2" />
@@ -413,13 +417,6 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
         </div>
       </div>
 
-      <EnhancedClaimModal
-        isOpen={isClaimModalOpen}
-        onClose={() => setIsClaimModalOpen(false)}
-        locationId={location.id}
-        locationName={location.name}
-        locationData={location}
-      />
     </div>
   )
 }

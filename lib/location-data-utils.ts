@@ -171,3 +171,4 @@ export function getDataCompletenessScore(location: LocationData): number {
 
   return Math.min(score, maxScore)
 }
+
