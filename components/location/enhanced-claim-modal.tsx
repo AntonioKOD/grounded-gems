@@ -131,21 +131,26 @@ export function EnhancedClaimModal({
       if (keys.length === 1) {
         return { ...prev, [field]: value }
       } else if (keys.length === 2) {
+        const firstKey = keys[0] as keyof ClaimFormData
+        const secondKey = keys[1] as string
         return {
           ...prev,
-          [keys[0]]: {
-            ...prev[keys[0] as keyof ClaimFormData],
-            [keys[1]]: value
+          [firstKey]: {
+            ...(prev[firstKey] as any),
+            [secondKey]: value
           }
         }
       } else if (keys.length === 3) {
+        const firstKey = keys[0] as keyof ClaimFormData
+        const secondKey = keys[1] as string
+        const thirdKey = keys[2] as string
         return {
           ...prev,
-          [keys[0]]: {
-            ...prev[keys[0] as keyof ClaimFormData],
-            [keys[1]]: {
-              ...(prev[keys[0] as keyof ClaimFormData] as any)[keys[1]],
-              [keys[2]]: value
+          [firstKey]: {
+            ...(prev[firstKey] as any),
+            [secondKey]: {
+              ...((prev[firstKey] as any)[secondKey] as any),
+              [thirdKey]: value
             }
           }
         }

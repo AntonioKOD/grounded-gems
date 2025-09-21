@@ -51,10 +51,10 @@ interface MobileClaimResponse {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ locationId: string }> }
 ): Promise<NextResponse<MobileClaimResponse>> {
   try {
-    const { id: locationId } = await params;
+    const { locationId } = await params;
     const payload = await getPayload({ config });
     
     // Get the current user (for authenticated claims)
@@ -217,10 +217,10 @@ export async function POST(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ locationId: string }> }
 ): Promise<NextResponse> {
   try {
-    const { id: locationId } = await params;
+    const { locationId } = await params;
     const payload = await getPayload({ config });
     
     // Get the current user
