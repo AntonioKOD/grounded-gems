@@ -1,104 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPayload } from 'payload';
-import config from '../../../../../payload.config';
+import config from '../../../../../../payload.config';
 
-interface ClaimRequest {
-  claimMethod: 'manual' | 'document' | 'phone' | 'email';
-  businessLicense?: string;
-  taxId?: string;
-  verificationDocuments?: string[];
-  contactEmail: string;
-  phoneNumber?: string;
-  // Enhanced business information
-  businessName?: string;
-  businessAddress?: {
-    street?: string;
-    city?: string;
-    state?: string;
-    zip?: string;
-    country?: string;
-  };
-  businessWebsite?: string;
-  businessDescription?: string;
-  businessHours?: any[];
-  businessServices?: string[];
-  businessPhotos?: string[];
-  // Additional verification documents
-  additionalDocuments?: {
-    utilityBill?: string;
-    leaseAgreement?: string;
-    insuranceCertificate?: string;
-    other?: string[];
-  };
-  // Business owner information
-  ownerName?: string;
-  ownerTitle?: string;
-  ownerPhone?: string;
-  // Location enhancement data
+interface MobileClaimRequest {
+  // Basic claim information
+  contactEmail: string
+  businessName: string
+  ownerName: string
+  ownerPhone?: string
+  
+  // Business details
+  businessDescription?: string
+  businessWebsite?: string
+  
+  // Verification
+  claimMethod: 'email' | 'phone' | 'business_license' | 'tax_id'
+  businessLicense?: string
+  taxId?: string
+  
+  // Location enhancement (optional)
   locationData?: {
-    name?: string;
-    description?: string;
-    shortDescription?: string;
-    categories?: string[];
-    featuredImage?: string;
-    gallery?: any[];
-    businessHours?: any[];
-    contactInfo?: any;
-    amenities?: string[];
-    priceRange?: string;
-  };
+    name?: string
+    description?: string
+    shortDescription?: string
+    categories?: string[]
+    businessHours?: any[]
+    amenities?: string[]
+    priceRange?: string
+  }
+  
+  // iOS specific fields
+  deviceInfo?: {
+    platform: 'ios'
+    appVersion: string
+    deviceId?: string
+  }
 }
 
-interface ClaimResponse {
-  success: boolean;
-  message: string;
+interface MobileClaimResponse {
+  success: boolean
+  message: string
   data?: {
-    claimId: string;
-    status: string;
-    estimatedReviewTime: string;
-  };
-  error?: string;
+    claimId: string
+    status: string
+    estimatedReviewTime: string
+    nextSteps: string[]
+  }
+  error?: string
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-): Promise<NextResponse<ClaimResponse>> {
+): Promise<NextResponse<MobileClaimResponse>> {
   try {
     const { id: locationId } = await params;
     const payload = await getPayload({ config });
     
-    // Get the current user
+    // Get the current user (for authenticated claims)
     const { user } = await payload.auth({ headers: request.headers });
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user is a business owner
-    if (!user.isBusinessOwner) {
-      return NextResponse.json(
-        { success: false, message: 'Business owner status required' },
-        { status: 403 }
-      );
-    }
-
-    // Check if business owner is verified
-    if (user.businessOwnerProfile?.verificationStatus !== 'verified') {
-      return NextResponse.json(
-        { success: false, message: 'Business owner verification required' },
-        { status: 403 }
-      );
-    }
-
-    const body: ClaimRequest = await request.json();
+    
+    const body: MobileClaimRequest = await request.json();
 
     // Validate required fields
-    if (!body.claimMethod || !body.contactEmail) {
+    if (!body.contactEmail || !body.businessName || !body.ownerName || !body.claimMethod) {
       return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
+        { success: false, message: 'Missing required fields', error: 'MISSING_FIELDS' },
         { status: 400 }
       );
     }
@@ -111,7 +78,7 @@ export async function POST(
 
     if (!location) {
       return NextResponse.json(
-        { success: false, message: 'Location not found' },
+        { success: false, message: 'Location not found', error: 'LOCATION_NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -119,15 +86,15 @@ export async function POST(
     // Check if location is already claimed
     if (location.ownership?.claimStatus === 'approved') {
       return NextResponse.json(
-        { success: false, message: 'Location is already claimed' },
+        { success: false, message: 'Location is already claimed', error: 'ALREADY_CLAIMED' },
         { status: 409 }
       );
     }
 
     // Check if user already has a pending claim for this location
-    if (location.ownership?.claimStatus === 'pending' && location.ownership?.ownerId === user.id) {
+    if (user && location.ownership?.ownerId === user.id && location.ownership?.claimStatus === 'pending') {
       return NextResponse.json(
-        { success: false, message: 'You already have a pending claim for this location' },
+        { success: false, message: 'You already have a pending claim for this location', error: 'PENDING_CLAIM_EXISTS' },
         { status: 409 }
       );
     }
@@ -135,7 +102,7 @@ export async function POST(
     // Prepare comprehensive claim data
     const claimData: any = {
       ownership: {
-        ownerId: user.id,
+        ownerId: user?.id || null, // Allow anonymous claims from mobile
         claimedAt: new Date().toISOString(),
         verificationMethod: body.claimMethod,
         businessLicense: body.businessLicense,
@@ -143,18 +110,14 @@ export async function POST(
         claimStatus: 'pending',
         // Enhanced business information
         businessName: body.businessName,
-        businessAddress: body.businessAddress,
-        businessWebsite: body.businessWebsite,
         businessDescription: body.businessDescription,
-        businessHours: body.businessHours,
-        businessServices: body.businessServices,
-        businessPhotos: body.businessPhotos,
-        additionalDocuments: body.additionalDocuments,
+        businessWebsite: body.businessWebsite,
         ownerName: body.ownerName,
-        ownerTitle: body.ownerTitle,
         ownerPhone: body.ownerPhone,
         contactEmail: body.contactEmail,
-        phoneNumber: body.phoneNumber
+        // Mobile specific data
+        claimSource: 'mobile_app',
+        deviceInfo: body.deviceInfo
       }
     };
 
@@ -164,10 +127,7 @@ export async function POST(
       claimData.description = body.locationData.description || location.description;
       claimData.shortDescription = body.locationData.shortDescription || location.shortDescription;
       claimData.categories = body.locationData.categories || location.categories;
-      claimData.featuredImage = body.locationData.featuredImage || location.featuredImage;
-      claimData.gallery = body.locationData.gallery || location.gallery;
       claimData.businessHours = body.locationData.businessHours || location.businessHours;
-      claimData.contactInfo = body.locationData.contactInfo || location.contactInfo;
       claimData.amenities = body.locationData.amenities || location.amenities;
       claimData.priceRange = body.locationData.priceRange || location.priceRange;
     }
@@ -193,14 +153,18 @@ export async function POST(
           data: {
             recipient: admin.id,
             type: 'location_claim',
-            title: 'New Location Claim Request',
-            message: `${user.name} is requesting to claim ownership of "${location.name}"`,
+            title: 'New Mobile Location Claim Request',
+            message: `${body.ownerName} (${body.businessName}) is requesting to claim ownership of "${location.name}" via mobile app`,
             priority: 'normal',
             relatedTo: {
               relationTo: 'locations',
               value: locationId
             },
             read: false,
+            metadata: {
+              claimSource: 'mobile_app',
+              deviceInfo: body.deviceInfo
+            }
           },
         });
       }
@@ -208,20 +172,44 @@ export async function POST(
       console.error('Error creating admin notifications:', error);
     }
 
+    // Determine next steps based on claim method
+    const nextSteps = [];
+    switch (body.claimMethod) {
+      case 'email':
+        nextSteps.push('Check your email for verification instructions');
+        nextSteps.push('Click the verification link to confirm ownership');
+        break;
+      case 'phone':
+        nextSteps.push('Expect a call from our verification team');
+        nextSteps.push('Have your business documents ready');
+        break;
+      case 'business_license':
+        nextSteps.push('Our team will verify your business license');
+        nextSteps.push('You may be contacted for additional information');
+        break;
+      case 'tax_id':
+        nextSteps.push('Our team will verify your tax ID');
+        nextSteps.push('You may be contacted for additional information');
+        break;
+    }
+    nextSteps.push('Review typically takes 2-3 business days');
+    nextSteps.push('You will be notified once the review is complete');
+
     return NextResponse.json({
       success: true,
       message: 'Location claim submitted successfully',
       data: {
         claimId: locationId,
         status: 'pending',
-        estimatedReviewTime: '2-3 business days'
+        estimatedReviewTime: '2-3 business days',
+        nextSteps
       }
     });
 
   } catch (error) {
-    console.error('Error claiming location:', error);
+    console.error('Error claiming location from mobile:', error);
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { success: false, message: 'Internal server error', error: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }
@@ -239,7 +227,7 @@ export async function GET(
     const { user } = await payload.auth({ headers: request.headers });
     if (!user) {
       return NextResponse.json(
-        { success: false, message: 'Authentication required' },
+        { success: false, message: 'Authentication required', error: 'AUTH_REQUIRED' },
         { status: 401 }
       );
     }
@@ -252,7 +240,7 @@ export async function GET(
 
     if (!location) {
       return NextResponse.json(
-        { success: false, message: 'Location not found' },
+        { success: false, message: 'Location not found', error: 'LOCATION_NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -263,7 +251,7 @@ export async function GET(
 
     if (!canViewClaim) {
       return NextResponse.json(
-        { success: false, message: 'Access denied' },
+        { success: false, message: 'Access denied', error: 'ACCESS_DENIED' },
         { status: 403 }
       );
     }
@@ -272,20 +260,25 @@ export async function GET(
       success: true,
       data: {
         locationId,
+        locationName: location.name,
         claimStatus: location.ownership?.claimStatus || 'unclaimed',
         ownerId: location.ownership?.ownerId,
         claimedAt: location.ownership?.claimedAt,
         verifiedAt: location.ownership?.verifiedAt,
         verificationMethod: location.ownership?.verificationMethod,
-        rejectionReason: location.ownership?.rejectionReason
+        businessName: location.ownership?.businessName,
+        ownerName: location.ownership?.ownerName,
+        contactEmail: location.ownership?.contactEmail,
+        rejectionReason: location.ownership?.rejectionReason,
+        claimSource: location.ownership?.claimSource || 'web'
       }
     });
 
   } catch (error) {
-    console.error('Error getting location claim status:', error);
+    console.error('Error getting mobile location claim status:', error);
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { success: false, message: 'Internal server error', error: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }
-} 
+}

@@ -19,7 +19,7 @@ import {
   Users,
   Camera
 } from 'lucide-react'
-import { ClaimBusinessModal } from '@/components/location/claim-business-modal'
+import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
 import Image from 'next/image'
 
@@ -406,11 +406,12 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
         </div>
       </div>
 
-      <ClaimBusinessModal
+      <EnhancedClaimModal
         isOpen={isClaimModalOpen}
         onClose={() => setIsClaimModalOpen(false)}
         locationId={location.id}
         locationName={location.name}
+        locationData={location}
       />
     </div>
   )

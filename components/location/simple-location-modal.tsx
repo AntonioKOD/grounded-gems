@@ -20,7 +20,7 @@ import {
   Plus,
   Loader2
 } from 'lucide-react'
-import { ClaimBusinessModal } from '@/components/location/claim-business-modal'
+import { EnhancedClaimModal } from '@/components/location/enhanced-claim-modal'
 import { EnhancedShareButton } from '@/components/ui/enhanced-share-button'
 import { PhotoSubmissionModal } from '@/components/location/photo-submission-modal'
 import { UserPhotosSection } from '@/components/location/user-photos-section'
@@ -468,11 +468,12 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
         </div>
       </div>
 
-      <ClaimBusinessModal
+      <EnhancedClaimModal
         isOpen={isClaimModalOpen}
         onClose={() => setIsClaimModalOpen(false)}
         locationId={location.id}
         locationName={location.name}
+        locationData={location}
       />
 
       <PhotoSubmissionModal
