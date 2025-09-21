@@ -26,6 +26,7 @@ import Image from 'next/image'
 interface SimpleLocationViewProps {
   location: {
     id: string
+    slug?: string
     name: string
     description?: string
     shortDescription?: string
@@ -110,7 +111,7 @@ export function SimpleLocationView({ location }: SimpleLocationViewProps) {
   }
 
   const businessStatus = getBusinessStatus(location.businessHours)
-  const locationUrl = `https://sacavia.com/locations/${location.id}`
+  const locationUrl = `https://sacavia.com/locations/${location.slug || location.id}`
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">

@@ -33,6 +33,7 @@ import OptimizedImage from "@/components/ui/optimized-image"
 interface SimpleLocationModalProps {
   location: {
     id: string
+    slug?: string
     name: string
     description?: string
     shortDescription?: string
@@ -58,6 +59,74 @@ interface SimpleLocationModalProps {
   onClose: () => void
 }
 
+// Helper function to get the main image URL
+const getMainImageUrl = (location: any): string => {
+  try {
+    // First try featured image
+    if (location.featuredImage) {
+      if (typeof location.featuredImage === 'string') {
+        return location.featuredImage
+      } else if (location.featuredImage.url) {
+        return location.featuredImage.url
+      }
+    }
+    
+    // Then try first gallery image
+    if (location.gallery && location.gallery.length > 0) {
+      const firstGalleryItem = location.gallery[0]
+      if (firstGalleryItem.image) {
+        if (typeof firstGalleryItem.image === 'string') {
+          return firstGalleryItem.image
+        } else if (firstGalleryItem.image.url) {
+          return firstGalleryItem.image.url
+        }
+      }
+    }
+    
+    // Fallback to placeholder
+    return '/placeholder.svg'
+  } catch (error) {
+    console.warn('Error getting main image URL:', error)
+    return '/placeholder.svg'
+  }
+}
+
+// Helper function to get all gallery images
+const getAllGalleryImages = (location: any): string[] => {
+  try {
+    const images: string[] = []
+    
+    // Add featured image if it exists
+    if (location.featuredImage) {
+      const featuredUrl = typeof location.featuredImage === 'string' 
+        ? location.featuredImage 
+        : location.featuredImage.url
+      if (featuredUrl) {
+        images.push(featuredUrl)
+      }
+    }
+    
+    // Add gallery images
+    if (location.gallery && location.gallery.length > 0) {
+      location.gallery.forEach((item: any) => {
+        if (item.image) {
+          const imageUrl = typeof item.image === 'string' 
+            ? item.image 
+            : item.image.url
+          if (imageUrl && !images.includes(imageUrl)) {
+            images.push(imageUrl)
+          }
+        }
+      })
+    }
+    
+    return images.length > 0 ? images : ['/placeholder.svg']
+  } catch (error) {
+    console.warn('Error getting gallery images:', error)
+    return ['/placeholder.svg']
+  }
+}
+
 export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocationModalProps) {
   const [isClaimModalOpen, setIsClaimModalOpen] = useState(false)
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false)
@@ -66,6 +135,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
   const [user, setUser] = useState<any>(null)
 
   const isUnclaimed = location.ownership?.claimStatus === 'unclaimed' || !location.ownership
+  const allImages = getAllGalleryImages(location)
   
   console.log('🔴 SimpleLocationModal:', {
     locationName: location.name,
@@ -199,7 +269,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
   }
 
   const businessStatus = getBusinessStatus(location.businessHours)
-  const locationUrl = `https://sacavia.com/locations/${location.id}`
+  const locationUrl = `https://sacavia.com/locations/${location.slug || location.id}`
 
   if (!isOpen) return null
 
@@ -215,10 +285,10 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
           className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden border border-gray-200"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header with image */}
+          {/* Header with main image */}
           <div className="relative h-48">
             <OptimizedImage
-              src={location.featuredImage?.url || '/placeholder.svg'}
+              src={getMainImageUrl(location)}
               alt={location.name}
               fill
               className="object-cover"
@@ -341,11 +411,37 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
                       )}
                     </div>
 
-                    {/* Gallery count */}
-                    {location.gallery && location.gallery.length > 0 && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        <Camera className="w-5 h-5 text-gray-600" />
-                        <span className="font-medium">{location.gallery.length} photos available</span>
+                    {/* Photos Gallery */}
+                    {allImages.length > 0 && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                          <Camera className="w-5 h-5 text-gray-600" />
+                          <span className="font-medium">{allImages.length} photo{allImages.length !== 1 ? 's' : ''} available</span>
+                        </div>
+                        
+                        {/* Image Grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                          {allImages.slice(0, 4).map((imageUrl, index) => (
+                            <div key={index} className="relative h-24 rounded-lg overflow-hidden">
+                              <OptimizedImage
+                                src={imageUrl}
+                                alt={`${location.name} photo ${index + 1}`}
+                                fill
+                                className="object-cover"
+                                sizes="(max-width: 768px) 50vw, 25vw"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Show more indicator if there are more than 4 images */}
+                        {allImages.length > 4 && (
+                          <div className="text-center">
+                            <span className="text-sm text-gray-500">
+                              +{allImages.length - 4} more photo{allImages.length - 4 !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -439,7 +535,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
                   size="sm"
                   variant="outline"
                   className="flex-1 border-gray-300 text-gray-600 hover:bg-gray-100 font-medium py-2"
-                  onClick={() => window.open(`/locations/${location.id}`, '_blank')}
+                  onClick={() => window.open(`/locations/${location.slug || location.id}`, '_blank')}
                 >
                   View Details
                 </Button>

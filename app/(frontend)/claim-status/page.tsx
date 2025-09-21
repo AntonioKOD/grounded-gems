@@ -27,6 +27,7 @@ interface ClaimStatus {
   id: string
   locationId: string
   locationName: string
+  locationSlug?: string
   claimStatus: 'pending' | 'approved' | 'rejected'
   submittedAt: string
   reviewedAt?: string
@@ -87,7 +88,20 @@ function ClaimStatusContent() {
       }
 
       const data = await response.json()
-      setClaimStatus(data.data)
+      const claimData = data.data
+      
+      // Fetch location data to get the slug
+      try {
+        const locationResponse = await fetch(`/api/locations/${id}`)
+        if (locationResponse.ok) {
+          const locationData = await locationResponse.json()
+          claimData.locationSlug = locationData.location?.slug
+        }
+      } catch (locationError) {
+        console.warn('Failed to fetch location slug:', locationError)
+      }
+      
+      setClaimStatus(claimData)
     } catch (error) {
       console.error('Error fetching claim status:', error)
       setError('Failed to load claim status')
@@ -371,14 +385,14 @@ function ClaimStatusContent() {
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-4">
           <Button asChild className="flex-1">
-            <Link href={`/locations/${claimStatus.locationId}`}>
+            <Link href={`/locations/${claimStatus.locationSlug || claimStatus.locationId}`}>
               View Location
             </Link>
           </Button>
           
           {claimStatus.claimStatus === 'approved' && (
             <Button asChild variant="outline" className="flex-1">
-              <Link href={`/locations/${claimStatus.locationId}/edit`}>
+              <Link href={`/locations/${claimStatus.locationSlug || claimStatus.locationId}/edit`}>
                 Manage Listing
               </Link>
             </Button>
@@ -386,7 +400,7 @@ function ClaimStatusContent() {
           
           {claimStatus.claimStatus === 'rejected' && (
             <Button asChild variant="outline" className="flex-1">
-              <Link href={`/locations/${claimStatus.locationId}/claim`}>
+              <Link href={`/locations/${claimStatus.locationSlug || claimStatus.locationId}/claim`}>
                 Resubmit Claim
               </Link>
             </Button>

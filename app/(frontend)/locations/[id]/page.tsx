@@ -4,7 +4,7 @@ import { getPayload } from 'payload'
 import config from '@/payload.config'
 import { parseLocationParam } from '@/lib/slug-utils'
 import { getPrimaryImageUrl } from '@/lib/image-utils'
-import { handleLocationRedirect } from '@/lib/redirect-utils'
+import { redirect, permanentRedirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { 
@@ -264,12 +264,20 @@ export default async function LocationPage({ params }: PageProps) {
 
     // Handle canonical URL redirects (ID to slug)
     // Only redirect if accessing by legacy ID and a slug exists
+    console.log('🔍 Redirect check:', {
+      isLegacyId: parsedParams.isLegacyId,
+      hasSlug: !!location.slug,
+      currentSlug: location.slug,
+      currentId: resolvedParams.id,
+      shouldRedirect: parsedParams.isLegacyId && location.slug && location.slug !== resolvedParams.id
+    })
+    
     if (parsedParams.isLegacyId && location.slug && location.slug !== resolvedParams.id) {
-      handleLocationRedirect(
-        `/locations/${resolvedParams.id}`,
-        `/locations/${location.slug}`,
-        'canonical'
-      )
+      console.log('🔄 Redirecting from ID to slug:', resolvedParams.id, '→', location.slug)
+      console.log('🔄 Redirect URL:', `/locations/${location.slug}`)
+      
+      // Use Next.js permanent redirect
+      permanentRedirect(`/locations/${location.slug}`)
     }
 
     // Helper functions

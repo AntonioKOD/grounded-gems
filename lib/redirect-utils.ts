@@ -5,9 +5,7 @@ import { redirect } from 'next/navigation'
  */
 export function handleLocationRedirect(from: string, to: string, reason: string = 'canonical') {
   // Log the redirect for debugging
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`🔄 Location redirect (${reason}): ${from} → ${to}`)
-  }
+  console.log(`🔄 Location redirect (${reason}): ${from} → ${to}`)
   
   // Add redirect metadata for monitoring
   if (typeof window === 'undefined') {

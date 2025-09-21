@@ -77,8 +77,11 @@ export function parseLocationParam(param: string): {
   id: string | null
   isLegacyId: boolean
 } {
+  console.log('🔍 parseLocationParam input:', param)
+  
   // Check if it's a direct ID (legacy format)
   if (isPayloadId(param)) {
+    console.log('🔍 Detected as Payload ID:', param)
     return {
       slug: param,
       id: param,
@@ -88,6 +91,7 @@ export function parseLocationParam(param: string): {
 
   // Try to extract ID from slug
   const extractedId = extractIdFromSlug(param)
+  console.log('🔍 Extracted ID from slug:', extractedId)
   
   return {
     slug: param,
