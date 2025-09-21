@@ -554,10 +554,11 @@ export function EnhancedClaimModal({
                         <SelectValue placeholder="Select price range" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="$">$ - Budget Friendly</SelectItem>
-                        <SelectItem value="$$">$$ - Moderate</SelectItem>
-                        <SelectItem value="$$$">$$$ - Upscale</SelectItem>
-                        <SelectItem value="$$$$">$$$$ - Luxury</SelectItem>
+                        <SelectItem value="free">Free</SelectItem>
+                        <SelectItem value="budget">$ - Budget Friendly</SelectItem>
+                        <SelectItem value="moderate">$$ - Moderate</SelectItem>
+                        <SelectItem value="expensive">$$$ - Upscale</SelectItem>
+                        <SelectItem value="luxury">$$$$ - Luxury</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
