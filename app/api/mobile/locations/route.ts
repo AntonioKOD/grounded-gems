@@ -682,11 +682,19 @@ export async function POST(request: NextRequest) {
     // Validate and filter categories to ensure they are valid ObjectIds
     let validCategories: string[] = []
     if (categories && Array.isArray(categories) && categories.length > 0) {
+      console.log('🔍 Validating categories:', categories)
+      
       // Filter out invalid ObjectIds and validate they exist
       const validCategoryIds = categories.filter(catId => {
         // Check if it's a valid 24-character hex string (MongoDB ObjectId format)
-        return typeof catId === 'string' && /^[0-9a-fA-F]{24}$/.test(catId)
+        const isValid = typeof catId === 'string' && /^[0-9a-fA-F]{24}$/.test(catId)
+        if (!isValid) {
+          console.log('❌ Invalid category ID format:', catId, 'Expected 24-character hex string')
+        }
+        return isValid
       })
+      
+      console.log('✅ Valid category IDs after format check:', validCategoryIds)
       
       if (validCategoryIds.length > 0) {
         // Verify these categories actually exist in the database
@@ -702,12 +710,17 @@ export async function POST(request: NextRequest) {
           })
           
           validCategories = existingCategories.docs.map(cat => String(cat.id))
-          console.log('Valid categories found:', validCategories.length, 'out of', categories.length)
+          console.log('✅ Valid categories found in database:', validCategories.length, 'out of', categories.length)
+          console.log('✅ Valid category IDs:', validCategories)
         } catch (categoryError) {
-          console.error('Error validating categories:', categoryError)
+          console.error('❌ Error validating categories:', categoryError)
           validCategories = []
         }
+      } else {
+        console.log('❌ No valid category IDs found after format validation')
       }
+    } else {
+      console.log('ℹ️ No categories provided or categories is not an array')
     }
 
     // Validate featuredImage
@@ -751,7 +764,23 @@ export async function POST(request: NextRequest) {
       console.log('Valid gallery images found:', validGallery.length, 'out of', gallery.length)
     }
 
+    // Validate createdBy field to ensure it's a valid ObjectId
+    const createdById = String(user.id)
+    if (!/^[0-9a-fA-F]{24}$/.test(createdById)) {
+      console.error('❌ Invalid createdBy ID format:', createdById)
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid user ID format',
+        details: 'User ID must be a valid 24-character hex string'
+      }, { status: 400 })
+    }
+
     // Create the location with all fields
+    console.log('🏗️ Creating location with validated data...')
+    console.log('📝 Categories:', validCategories)
+    console.log('📝 CreatedBy:', createdById)
+    console.log('📝 FeaturedImage:', validFeaturedImage)
+    
     const location = await payload.create({
       collection: 'locations',
       data: {
@@ -784,7 +813,7 @@ export async function POST(request: NextRequest) {
         } : undefined,
         meta,
         status: 'review', // Always set status to review for mobile
-        createdBy: String(user.id), // Add the authenticated user as creator
+        createdBy: createdById, // Use validated createdBy ID
       }
     })
 

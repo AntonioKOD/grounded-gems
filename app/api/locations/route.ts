@@ -188,6 +188,44 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
+        
+        // Validate MongoDB ObjectId format (24 character hex string)
+        if (!/^[0-9a-fA-F]{24}$/.test(categoryId.trim())) {
+          return NextResponse.json(
+            { error: `Invalid category ID format: ${categoryId}. Must be a 24-character hex string.` },
+            { status: 400 }
+          )
+        }
+      }
+      
+      // Verify that all category IDs exist in the database
+      if (filteredData.categories.length > 0) {
+        try {
+          const existingCategories = await payload.find({
+            collection: 'categories',
+            where: {
+              id: {
+                in: filteredData.categories
+              }
+            },
+            limit: 100
+          })
+          
+          if (existingCategories.docs.length !== filteredData.categories.length) {
+            const foundIds = existingCategories.docs.map(cat => String(cat.id))
+            const missingIds = filteredData.categories.filter((id: string) => !foundIds.includes(id))
+            return NextResponse.json(
+              { error: `Some categories do not exist: ${missingIds.join(', ')}` },
+              { status: 400 }
+            )
+          }
+        } catch (categoryError) {
+          console.error('Error validating categories:', categoryError)
+          return NextResponse.json(
+            { error: 'Failed to validate categories' },
+            { status: 500 }
+          )
+        }
       }
     }
 
