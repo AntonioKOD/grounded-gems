@@ -11,13 +11,14 @@ const ALLOWED_FIELDS = new Set([
   'gallery',
   'insiderTips',
   'categories',
-  'address'
+  'address',
+  'privacy',
+  'privateAccess'
 ])
 
 // Governance fields that should be rejected
 const GOVERNANCE_FIELDS = new Set([
   'status',
-  'privacy',
   'isVerified',
   'isFeatured',
   'source',
@@ -190,6 +191,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate privacy if provided
+    if (filteredData.privacy) {
+      const validPrivacyValues = ['public', 'private', 'followers']
+      if (!validPrivacyValues.includes(filteredData.privacy)) {
+        return NextResponse.json(
+          { error: 'Privacy must be one of: public, private, followers' },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Validate privateAccess if provided
+    if (filteredData.privateAccess) {
+      if (!Array.isArray(filteredData.privateAccess)) {
+        return NextResponse.json(
+          { error: 'Private access must be an array of user IDs' },
+          { status: 400 }
+        )
+      }
+
+      // Validate each user ID in privateAccess
+      for (const userId of filteredData.privateAccess) {
+        if (typeof userId !== 'string' || userId.trim().length === 0) {
+          return NextResponse.json(
+            { error: 'Each private access entry must be a valid user ID string' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     // Generate slug from name and description
     const generateSlug = (name: string, description?: string): string => {
       // Combine name and description for better slug generation
@@ -245,7 +277,8 @@ export async function POST(request: NextRequest) {
 
       // Server-enforced defaults
       status: 'published',
-      privacy: 'public',
+      privacy: filteredData.privacy || 'public', // Use provided privacy or default to public
+      privateAccess: filteredData.privateAccess || [], // Use provided private access or empty array
       isVerified: false,
       source: 'community',
       createdBy: user.id,
