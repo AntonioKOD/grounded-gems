@@ -71,6 +71,15 @@ export async function GET(
       }
     }
 
+    // Debug: Log the raw location data from database
+    console.log('🔍 [Mobile API] Raw location from database:', JSON.stringify({
+      id: location.id,
+      name: location.name,
+      ownership: location.ownership,
+      status: location.status,
+      source: location.source
+    }, null, 2))
+
     // Format location for mobile
     const locationData = {
       id: location.id,
@@ -123,7 +132,9 @@ export async function GET(
       // Creator info
       createdBy: location.createdBy?.name || 'Unknown',
       createdAt: location.createdAt,
-      updatedAt: location.updatedAt
+      updatedAt: location.updatedAt,
+      // Ownership information
+      ownership: location.ownership || { claimStatus: 'unclaimed' }
     }
 
     const responseData: any = { location: locationData }
@@ -169,6 +180,20 @@ export async function GET(
         terms: special.terms
       }))
     }
+
+    // Debug: Log the final response data
+    console.log('🔍 [Mobile API] Final response data:', JSON.stringify({
+      success: true,
+      data: {
+        location: {
+          id: locationData.id,
+          name: locationData.name,
+          ownership: locationData.ownership,
+          featuredImage: locationData.featuredImage,
+          gallery: locationData.gallery
+        }
+      }
+    }, null, 2))
 
     return NextResponse.json({
       success: true,

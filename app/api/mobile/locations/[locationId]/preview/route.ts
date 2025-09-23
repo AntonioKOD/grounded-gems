@@ -28,7 +28,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       categories: location.categories?.map((cat: any) => typeof cat === 'string' ? cat : cat.name || cat.id),
       isFeatured: location.isFeatured,
       priceRange: location.priceRange,
-      coordinates: location.coordinates || undefined
+      coordinates: location.coordinates || undefined,
+      ownership: location.ownership || { claimStatus: 'unclaimed' }
     }
   })
 } 

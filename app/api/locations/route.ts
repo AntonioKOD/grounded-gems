@@ -260,10 +260,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate slug from name and description
-    const generateSlug = (name: string, description?: string): string => {
+    // Generate unique slug from name and description
+    const generateSlug = async (name: string, description?: string): Promise<string> => {
       // Combine name and description for better slug generation
-      const combinedText = `${name} ${description || ''}`
+      let baseSlug = `${name} ${description || ''}`
         .toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-')
@@ -271,7 +271,44 @@ export async function POST(request: NextRequest) {
         .trim()
       
       // Ensure slug is not too long (max 100 chars)
-      return combinedText.length > 100 ? combinedText.substring(0, 100).replace(/-+$/, '') : combinedText
+      baseSlug = baseSlug.length > 100 ? baseSlug.substring(0, 100).replace(/-+$/, '') : baseSlug
+      
+      // Check if slug already exists and make it unique
+      let slug = baseSlug
+      let counter = 1
+      
+      while (true) {
+        try {
+          const existingLocation = await payload.find({
+            collection: 'locations',
+            where: { slug: { equals: slug } },
+            limit: 1
+          })
+          
+          if (existingLocation.docs.length === 0) {
+            // Slug is unique, we can use it
+            break
+          }
+          
+          // Slug exists, try with a counter
+          slug = `${baseSlug}-${counter}`
+          counter++
+          
+          // Prevent infinite loop
+          if (counter > 1000) {
+            // Fallback to timestamp-based slug
+            slug = `${baseSlug}-${Date.now()}`
+            break
+          }
+        } catch (error) {
+          console.error('Error checking slug uniqueness:', error)
+          // Fallback to timestamp-based slug
+          slug = `${baseSlug}-${Date.now()}`
+          break
+        }
+      }
+      
+      return slug
     }
 
     // Generate metadata from name and description
@@ -291,11 +328,14 @@ export async function POST(request: NextRequest) {
     // Generate metadata
     const metadata = generateMetadata(filteredData.name.trim(), filteredData.shortDescription.trim())
 
+    // Generate unique slug
+    const uniqueSlug = await generateSlug(filteredData.name, filteredData.shortDescription)
+
     // Prepare location data with server-enforced defaults
     const locationData = {
       // Whitelisted fields
       name: filteredData.name.trim(),
-      slug: generateSlug(filteredData.name, filteredData.shortDescription),
+      slug: uniqueSlug,
       shortDescription: filteredData.shortDescription.trim(),
       coordinates: {
         latitude: filteredData.coordinates.latitude,
@@ -327,11 +367,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Debug: Log the location data being created
+    console.log('🏗️ Creating location with data:', JSON.stringify(locationData, null, 2))
+    
     // Create the location
     const location = await payload.create({
       collection: 'locations',
       data: locationData,
     })
+    
+    // Debug: Log the created location
+    console.log('✅ Location created:', JSON.stringify({
+      id: location.id,
+      name: location.name,
+      ownership: location.ownership,
+      status: location.status,
+      source: location.source
+    }, null, 2))
+    
+    // Debug: Fetch the location again to see what's actually in the database
+    const verifyLocation = await payload.findByID({
+      collection: 'locations',
+      id: location.id,
+      depth: 0
+    })
+    console.log('🔍 Database verification - Full location record:', JSON.stringify({
+      id: verifyLocation.id,
+      name: verifyLocation.name,
+      ownership: verifyLocation.ownership,
+      status: verifyLocation.status,
+      source: verifyLocation.source,
+      createdBy: verifyLocation.createdBy
+    }, null, 2))
 
     return NextResponse.json({
       success: true,

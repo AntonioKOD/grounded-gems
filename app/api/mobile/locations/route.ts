@@ -509,6 +509,8 @@ export async function GET(request: NextRequest) {
       contactInfo: location.contactInfo || {},
       isVerified: location.isVerified || false,
       isFeatured: location.isFeatured || false,
+      // Ownership information
+      ownership: location.ownership || { claimStatus: 'unclaimed' },
       // User interaction state
       isSaved: savedLocations.includes(location.id),
       isSubscribed: subscribedLocations.includes(location.id),
@@ -599,7 +601,6 @@ export async function POST(request: NextRequest) {
     // Accept all fields from the mobile/web form
     const {
       name,
-      slug,
       description,
       shortDescription,
       categories,
@@ -634,7 +635,35 @@ export async function POST(request: NextRequest) {
 
     // Handle coordinates - if not provided, try to geocode from address
     let finalCoordinates = coordinates
-    if (!coordinates || !coordinates.latitude || !coordinates.longitude) {
+    
+    // Ensure coordinates are numbers if provided
+    if (coordinates && coordinates.latitude && coordinates.longitude) {
+      finalCoordinates = {
+        latitude: typeof coordinates.latitude === 'string' ? parseFloat(coordinates.latitude) : coordinates.latitude,
+        longitude: typeof coordinates.longitude === 'string' ? parseFloat(coordinates.longitude) : coordinates.longitude
+      }
+      console.log('📍 Processed coordinates:', finalCoordinates)
+      
+      // Validate coordinates are within valid ranges
+      if (finalCoordinates.latitude < -90 || finalCoordinates.latitude > 90 || 
+          finalCoordinates.longitude < -180 || finalCoordinates.longitude > 180) {
+        console.error('📍 Invalid coordinate ranges:', finalCoordinates)
+        return NextResponse.json({
+          success: false,
+          message: 'Invalid coordinates provided. Latitude must be between -90 and 90, longitude between -180 and 180.',
+          error: 'INVALID_COORDINATE_RANGE'
+        }, { status: 400 })
+      }
+      
+      // Check for (0,0) coordinates which are likely invalid
+      if (finalCoordinates.latitude === 0 && finalCoordinates.longitude === 0) {
+        console.warn('📍 Coordinates are (0,0) - this might be invalid')
+        // Don't reject (0,0) automatically as it might be valid (e.g., Gulf of Guinea)
+        // But log it for debugging
+      }
+    }
+    
+    if (!finalCoordinates || !finalCoordinates.latitude || !finalCoordinates.longitude) {
       try {
         // Build full address string
         const addressParts = [
@@ -663,19 +692,22 @@ export async function POST(request: NextRequest) {
           console.log('Geocoded coordinates:', finalCoordinates)
         } else {
           console.warn('Could not geocode address:', fullAddress)
-          // Set default coordinates (you might want to handle this differently)
-          finalCoordinates = {
-            latitude: 0,
-            longitude: 0
-          }
+          // Don't set default coordinates - this causes issues with directions
+          // Instead, return an error or use a fallback
+          return NextResponse.json({
+            success: false,
+            message: 'Could not determine location coordinates. Please provide coordinates or a valid address.',
+            error: 'INVALID_COORDINATES'
+          }, { status: 400 })
         }
       } catch (geocodeError) {
         console.error('Geocoding error:', geocodeError)
-        // Set default coordinates
-        finalCoordinates = {
-          latitude: 0,
-          longitude: 0
-        }
+        // Don't set default coordinates - this causes issues with directions
+        return NextResponse.json({
+          success: false,
+          message: 'Error determining location coordinates. Please try again.',
+          error: 'GEOCODING_ERROR'
+        }, { status: 500 })
       }
     }
 
@@ -775,17 +807,72 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Generate unique slug from name and description
+    const generateSlug = async (name: string, description?: string): Promise<string> => {
+      // Combine name and description for better slug generation
+      let baseSlug = `${name} ${description || ''}`
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .trim()
+      
+      // Ensure slug is not too long (max 100 chars)
+      baseSlug = baseSlug.length > 100 ? baseSlug.substring(0, 100).replace(/-+$/, '') : baseSlug
+      
+      // Check if slug already exists and make it unique
+      let slug = baseSlug
+      let counter = 1
+      
+      while (true) {
+        try {
+          const existingLocation = await payload.find({
+            collection: 'locations',
+            where: { slug: { equals: slug } },
+            limit: 1
+          })
+          
+          if (existingLocation.docs.length === 0) {
+            // Slug is unique, we can use it
+            break
+          }
+          
+          // Slug exists, try with a counter
+          slug = `${baseSlug}-${counter}`
+          counter++
+          
+          // Prevent infinite loop
+          if (counter > 1000) {
+            // Fallback to timestamp-based slug
+            slug = `${baseSlug}-${Date.now()}`
+            break
+          }
+        } catch (error) {
+          console.error('Error checking slug uniqueness:', error)
+          // Fallback to timestamp-based slug
+          slug = `${baseSlug}-${Date.now()}`
+          break
+        }
+      }
+      
+      return slug
+    }
+
+    // Generate unique slug
+    const uniqueSlug = await generateSlug(name, shortDescription)
+
     // Create the location with all fields
     console.log('🏗️ Creating location with validated data...')
     console.log('📝 Categories:', validCategories)
     console.log('📝 CreatedBy:', createdById)
     console.log('📝 FeaturedImage:', validFeaturedImage)
+    console.log('📝 Generated Slug:', uniqueSlug)
     
     const location = await payload.create({
       collection: 'locations',
       data: {
         name,
-        slug,
+        slug: uniqueSlug,
         description: description || '',
         shortDescription,
         categories: validCategories, // Use validated categories
@@ -812,8 +899,14 @@ export async function POST(request: NextRequest) {
           details: partnershipDetails.details || undefined,
         } : undefined,
         meta,
-        status: 'review', // Always set status to review for mobile
+        status: 'published', // Set status to published for community submissions
+        source: 'community', // Mark as community submission
         createdBy: createdById, // Use validated createdBy ID
+        
+        // Set ownership defaults - locations created via mobile are unclaimed
+        ownership: {
+          claimStatus: 'unclaimed'
+        }
       }
     })
 
