@@ -68,3 +68,87 @@ Mobile API: Getting location details for 68555d7289ea70a992deb7a2
   }
 }
  GET /api/mobile/locations/68555d7289ea70a992deb7a2 200 in 7648ms
+ ○ Compiling /api/mobile/locations ...
+ ✓ Compiled /api/mobile/locations in 680ms (1963 modules)
+Mobile API: Getting recommended locations for user null
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+📸 Keeping API URL for local serving: /abstract-location.png
+📸 getImageUrl: String URL processed: {
+  original: '/abstract-location.png',
+  processed: 'http://localhost:3000/abstract-location.png'
+}
+ GET /api/mobile/locations 200 in 1110ms
