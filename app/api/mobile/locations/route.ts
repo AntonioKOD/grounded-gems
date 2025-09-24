@@ -407,7 +407,18 @@ export async function GET(request: NextRequest) {
             depth: 2
           })
           
-          locations = result.docs
+          // Properly serialize ownership data for created locations
+          locations = result.docs.map((location: any) => ({
+            ...location,
+            ownership: {
+              claimStatus: location.ownership?.claimStatus || 'unclaimed',
+              ownerId: typeof location.ownership?.ownerId === 'string' 
+                ? location.ownership.ownerId 
+                : location.ownership?.ownerId?.id || null,
+              claimedAt: location.ownership?.claimedAt || null,
+              claimEmail: location.ownership?.claimEmail || null
+            }
+          }))
           hasMore = result.hasNextPage || false
         }
         break
@@ -510,7 +521,14 @@ export async function GET(request: NextRequest) {
       isVerified: location.isVerified || false,
       isFeatured: location.isFeatured || false,
       // Ownership information
-      ownership: location.ownership || { claimStatus: 'unclaimed' },
+      ownership: {
+        claimStatus: location.ownership?.claimStatus || 'unclaimed',
+        ownerId: typeof location.ownership?.ownerId === 'string' 
+          ? location.ownership.ownerId 
+          : location.ownership?.ownerId?.id || null,
+        claimedAt: location.ownership?.claimedAt || null,
+        claimEmail: location.ownership?.claimEmail || null
+      },
       // User interaction state
       isSaved: savedLocations.includes(location.id),
       isSubscribed: subscribedLocations.includes(location.id),

@@ -31,6 +31,7 @@ import Image from 'next/image'
 import { formatAddressForDetails } from '@/lib/address-utils'
 import { formatLocationName } from '@/lib/location-name-utils'
 import OptimizedImage from "@/components/ui/optimized-image"
+import { ComprehensiveClaimModal } from '@/components/location/comprehensive-claim-modal'
 
 interface SimpleLocationModalProps {
   location: {
@@ -133,6 +134,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
   const router = useRouter()
   const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false)
   const [isTipModalOpen, setIsTipModalOpen] = useState(false)
+  const [isComprehensiveClaimModalOpen, setIsComprehensiveClaimModalOpen] = useState(false)
   const [activeTab, setActiveTab] = useState('info')
   const [user, setUser] = useState<any>(null)
 
@@ -519,7 +521,7 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
                   size="sm"
                   className="w-full bg-[#ffe66d] hover:bg-[#f5d547] text-gray-800 font-medium py-2"
                   onClick={() => {
-                    router.push(`/locations/${location.id}/edit-comprehensive`)
+                    setIsComprehensiveClaimModalOpen(true)
                   }}
                 >
                   <Building2 className="h-4 w-4 mr-2" />
@@ -559,6 +561,14 @@ export function SimpleLocationModal({ location, isOpen, onClose }: SimpleLocatio
           setIsTipModalOpen(false)
           toast.success('Insider tip submitted successfully!')
         }}
+      />
+
+      <ComprehensiveClaimModal
+        isOpen={isComprehensiveClaimModalOpen}
+        onClose={() => setIsComprehensiveClaimModalOpen(false)}
+        locationId={location.id}
+        locationName={location.name}
+        locationData={location}
       />
     </>
   )

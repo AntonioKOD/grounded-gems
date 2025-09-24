@@ -116,6 +116,15 @@ export async function getLocations(userId?: string) {
         longitude,
         address: formattedAddress || location.address,
         imageUrl,
+        // Properly serialize ownership data
+        ownership: {
+          claimStatus: location.ownership?.claimStatus || 'unclaimed',
+          ownerId: typeof location.ownership?.ownerId === 'string' 
+            ? location.ownership.ownerId 
+            : location.ownership?.ownerId?.id || null,
+          claimedAt: location.ownership?.claimedAt || null,
+          claimEmail: location.ownership?.claimEmail || null
+        }
       }
     })
 
@@ -3220,7 +3229,18 @@ export async function getSavedLocationsWithData(userId: string): Promise<any[]> 
     
     return savedLocations.docs.map((doc: any) => ({
       id: doc.id,
-      location: doc.location,
+      location: {
+        ...doc.location,
+        // Properly serialize ownership data
+        ownership: {
+          claimStatus: doc.location?.ownership?.claimStatus || 'unclaimed',
+          ownerId: typeof doc.location?.ownership?.ownerId === 'string' 
+            ? doc.location.ownership.ownerId 
+            : doc.location?.ownership?.ownerId?.id || null,
+          claimedAt: doc.location?.ownership?.claimedAt || null,
+          claimEmail: doc.location?.ownership?.claimEmail || null
+        }
+      },
       createdAt: doc.createdAt
     })).filter((item: any) => item.location); // Filter out any null locations
   } catch (error) {

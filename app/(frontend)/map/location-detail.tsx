@@ -34,6 +34,7 @@ import {
   ExternalLink,
   Edit3,
   Camera,
+  Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -57,6 +58,7 @@ import LocationDetailMobile from "./location-detail-mobile"
 import StructuredInsiderTips from "@/components/location/structured-insider-tips"
 import SubmitInsiderTipModal from "@/components/location/submit-insider-tip-modal"
 import { SimpleLocationModal } from "@/components/location/simple-location-modal"
+import { ComprehensiveClaimModal } from "@/components/location/comprehensive-claim-modal"
 import { getLocationViewType } from "@/lib/location-data-utils"
 import type { 
   User, 
@@ -493,6 +495,7 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
   })
   const [isPhotoSubmissionModalOpen, setIsPhotoSubmissionModalOpen] = useState(false)
   const [isSubmitTipModalOpen, setIsSubmitTipModalOpen] = useState(false)
+  const [isComprehensiveClaimModalOpen, setIsComprehensiveClaimModalOpen] = useState(false)
 
   console.log('🔴 DESKTOP: LocationDetailDesktop rendered:', {
     locationName: location?.name,
@@ -963,6 +966,19 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
                         Write Review
                       </Button>
 
+                      {/* Claim button for unclaimed locations */}
+                      {(location.ownership?.claimStatus === 'unclaimed' || !location.ownership) && (
+                        <Button
+                          onClick={() => {
+                            setIsComprehensiveClaimModalOpen(true)
+                          }}
+                          className="bg-gradient-to-r from-[#ffe66d] to-[#f5d547] hover:from-[#f5d547] hover:to-[#e6c947] text-gray-800 border-0 font-semibold"
+                        >
+                          <Building2 className="h-4 w-4 mr-2" />
+                          Claim This Business
+                        </Button>
+                      )}
+
                     </div>
                   </div>
 
@@ -1266,6 +1282,15 @@ function LocationDetailDesktop({ location, isOpen, onClose }: LocationDetailProp
             locationId={location.id}
             locationName={location.name}
             onSuccess={handleTipSubmissionSuccess}
+          />
+
+          {/* Comprehensive Claim Modal */}
+          <ComprehensiveClaimModal
+            isOpen={isComprehensiveClaimModalOpen}
+            onClose={() => setIsComprehensiveClaimModalOpen(false)}
+            locationId={location.id}
+            locationName={location.name}
+            locationData={location}
           />
         </>
       )}

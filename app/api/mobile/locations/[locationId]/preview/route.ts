@@ -29,7 +29,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       isFeatured: location.isFeatured,
       priceRange: location.priceRange,
       coordinates: location.coordinates || undefined,
-      ownership: location.ownership || { claimStatus: 'unclaimed' }
+      ownership: {
+        claimStatus: location.ownership?.claimStatus || 'unclaimed',
+        ownerId: typeof location.ownership?.ownerId === 'string' 
+          ? location.ownership.ownerId 
+          : location.ownership?.ownerId?.id || null,
+        claimedAt: location.ownership?.claimedAt || null,
+        claimEmail: location.ownership?.claimEmail || null
+      }
     }
   })
 } 

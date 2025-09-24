@@ -223,14 +223,8 @@ export async function GET(
     const { locationId } = await params;
     const payload = await getPayload({ config });
     
-    // Get the current user
+    // Get the current user (optional for viewing claim status)
     const { user } = await payload.auth({ headers: request.headers });
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'Authentication required', error: 'AUTH_REQUIRED' },
-        { status: 401 }
-      );
-    }
 
     // Get location with ownership information
     const location = await payload.findByID({
@@ -245,33 +239,35 @@ export async function GET(
       );
     }
 
-    // Check if user is admin or the business owner
-    const canViewClaim = user.role === 'admin' || 
-                        (user.isBusinessOwner && location.ownership?.ownerId === user.id);
+    // Allow anyone to view basic claim status, but restrict detailed info to admins and owners
+    const isAdmin = user?.role === 'admin';
+    const isOwner = user && location.ownership?.ownerId === user.id;
+    const canViewDetailedClaim = isAdmin || isOwner;
 
-    if (!canViewClaim) {
-      return NextResponse.json(
-        { success: false, message: 'Access denied', error: 'ACCESS_DENIED' },
-        { status: 403 }
-      );
+    const responseData: any = {
+      locationId,
+      locationName: location.name,
+      claimStatus: location.ownership?.claimStatus || 'unclaimed',
+    };
+
+    // Only include detailed claim information for admins and owners
+    if (canViewDetailedClaim) {
+      responseData.ownerId = typeof location.ownership?.ownerId === 'string' 
+        ? location.ownership.ownerId 
+        : location.ownership?.ownerId?.id || null;
+      responseData.claimedAt = location.ownership?.claimedAt;
+      responseData.verifiedAt = location.ownership?.verifiedAt;
+      responseData.verificationMethod = location.ownership?.verificationMethod;
+      responseData.businessName = location.ownership?.businessName;
+      responseData.ownerName = location.ownership?.ownerName;
+      responseData.contactEmail = location.ownership?.contactEmail;
+      responseData.rejectionReason = location.ownership?.rejectionReason;
+      responseData.claimSource = location.ownership?.claimSource || 'web';
     }
 
     return NextResponse.json({
       success: true,
-      data: {
-        locationId,
-        locationName: location.name,
-        claimStatus: location.ownership?.claimStatus || 'unclaimed',
-        ownerId: location.ownership?.ownerId,
-        claimedAt: location.ownership?.claimedAt,
-        verifiedAt: location.ownership?.verifiedAt,
-        verificationMethod: location.ownership?.verificationMethod,
-        businessName: location.ownership?.businessName,
-        ownerName: location.ownership?.ownerName,
-        contactEmail: location.ownership?.contactEmail,
-        rejectionReason: location.ownership?.rejectionReason,
-        claimSource: location.ownership?.claimSource || 'web'
-      }
+      data: responseData
     });
 
   } catch (error) {

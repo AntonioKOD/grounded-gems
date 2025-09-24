@@ -1,29 +1,70 @@
 
-> grounded-gems@0.1.0 dev
+> sacavia@0.1.0 dev
 > next dev
 
+ ⚠ Attempted to load /Users/antoniokodheli/sacavia/node_modules/next/next-swc-fallback/@next/swc-darwin-arm64/next-swc.darwin-arm64.node, but it was not installed
+ ⚠ Attempted to load @next/swc-darwin-arm64, but it was not installed
+ ⚠ Attempted to load /Users/antoniokodheli/sacavia/node_modules/next/next-swc-fallback/@next/swc-darwin-arm64/next-swc.darwin-arm64.node, but it was not installed
+ ⚠ Attempted to load @next/swc-darwin-arm64, but it was not installed
    ▲ Next.js 15.3.0
    - Local:        http://localhost:3000
    - Network:      http://192.168.1.208:3000
-   - Environments: .env
+   - Environments: .env.local
    - Experiments (use with caution):
      · staleTimes
-     ⨯ optimisticClientCache
 
  ✓ Starting...
- ✓ Ready in 960ms
- ✓ Compiled /api/posts/debug in 286ms (363 modules)
- GET /api/posts/debug 200 in 357ms
- ✓ Compiled /middleware in 86ms (109 modules)
- ○ Compiling /api/posts/[postId]/save ...
- ✓ Compiled /api/posts/[postId]/save in 1906ms (1661 modules)
- POST /api/posts/testpost/save 401 in 4742ms
- ✓ Compiled in 182ms (1382 modules)
- ✓ Compiled in 105ms (1382 modules)
- ✓ Compiled in 39ms
- ✓ Compiled /api/posts/debug in 78ms (84 modules)
- GET /api/posts/debug 200 in 106ms
- ✓ Compiled in 46ms (109 modules)
- ✓ Compiled in 25ms (109 modules)
- ✓ Compiled in 8ms
- ✓ Compiled in 95ms (388 modules)
+ ✓ Ready in 1555ms
+ ○ Compiling /api/mobile/locations/[locationId] ...
+ ✓ Compiled /api/mobile/locations/[locationId] in 2.6s (1958 modules)
+🔍 [Location GET] getMobileUser result: false
+🔍 [Location GET] User ID: undefined
+Mobile API: Getting location details for 68555d7289ea70a992deb7a2
+🔍 [Mobile API] Raw location from database: {
+  "id": "68555d7289ea70a992deb7a2",
+  "name": "Boston Tea Party Ships and Museum",
+  "ownership": {
+    "claimStatus": "unclaimed"
+  },
+  "status": "published",
+  "source": "community"
+}
+🔍 [Mobile API] Raw ownership data: {
+  "claimStatus": "unclaimed"
+}
+🔍 [Mobile API] ownerId type: undefined
+🔍 [Mobile API] ownerId value: undefined
+🔍 [Mobile API] Final serialized ownership: {
+  "claimStatus": "unclaimed",
+  "ownerId": null,
+  "claimedAt": null,
+  "claimEmail": null
+}
+🔍 [Mobile API] Final response data: {
+  "success": true,
+  "data": {
+    "location": {
+      "id": "68555d7289ea70a992deb7a2",
+      "name": "Boston Tea Party Ships and Museum",
+      "ownership": {
+        "claimStatus": "unclaimed",
+        "ownerId": null,
+        "claimedAt": null,
+        "claimEmail": null
+      },
+      "featuredImage": "http://localhost:3000/api/media/file/boston_tea1.jpeg",
+      "gallery": [
+        {
+          "image": "http://localhost:3000/api/media/file/boston_tea3.jpeg"
+        },
+        {
+          "image": "http://localhost:3000/api/media/file/boston_tea1.jpeg"
+        },
+        {
+          "image": "http://localhost:3000/api/media/file/boston_tea.jpeg"
+        }
+      ]
+    }
+  }
+}
+ GET /api/mobile/locations/68555d7289ea70a992deb7a2 200 in 7648ms

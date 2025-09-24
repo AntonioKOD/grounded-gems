@@ -79,6 +79,11 @@ export async function GET(
       status: location.status,
       source: location.source
     }, null, 2))
+    
+    // Debug: Log the ownership data specifically
+    console.log('🔍 [Mobile API] Raw ownership data:', JSON.stringify(location.ownership, null, 2))
+    console.log('🔍 [Mobile API] ownerId type:', typeof location.ownership?.ownerId)
+    console.log('🔍 [Mobile API] ownerId value:', location.ownership?.ownerId)
 
     // Format location for mobile
     const locationData = {
@@ -134,8 +139,25 @@ export async function GET(
       createdAt: location.createdAt,
       updatedAt: location.updatedAt,
       // Ownership information
-      ownership: location.ownership || { claimStatus: 'unclaimed' }
+      ownership: {
+        claimStatus: location.ownership?.claimStatus || 'unclaimed',
+        ownerId: (() => {
+          const ownerId = location.ownership?.ownerId;
+          if (typeof ownerId === 'string') {
+            return ownerId;
+          } else if (ownerId && typeof ownerId === 'object' && ownerId.id) {
+            return ownerId.id;
+          } else {
+            return null;
+          }
+        })(),
+        claimedAt: location.ownership?.claimedAt || null,
+        claimEmail: location.ownership?.claimEmail || null
+      }
     }
+
+    // Debug: Log the final serialized ownership data
+    console.log('🔍 [Mobile API] Final serialized ownership:', JSON.stringify(locationData.ownership, null, 2))
 
     const responseData: any = { location: locationData }
 
