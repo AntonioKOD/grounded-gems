@@ -504,13 +504,12 @@ export const Locations: CollectionConfig = {
   fields: [
     { name: 'name', type: 'text', required: true },
     { name: 'slug', type: 'text', unique: true, admin: { description: 'URL-friendly identifier' } },
-    { name: 'description', type: 'text' },
     { 
-      name: 'shortDescription', 
+      name: 'description', 
       type: 'text', 
       required: true,
       admin: {
-        description: '<= 300 chars'
+        description: 'Location description (required)'
       }
     },
     {

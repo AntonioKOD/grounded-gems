@@ -48,6 +48,10 @@ export function HierarchicalCategorySelector({
 }: HierarchicalCategorySelectorProps) {
   const [searchTerm, setSearchTerm] = useState('')
   
+  // Debug logging
+  console.log('🔍 HierarchicalCategorySelector received:', categories.length, 'categories')
+  console.log('🔍 First few categories:', categories.slice(0, 3))
+  
   // Flatten all categories and subcategories into a single list
   const flatCategories = useMemo(() => {
     const flattened: CategoryOption[] = []

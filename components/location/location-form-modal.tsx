@@ -151,7 +151,9 @@ export function LocationFormModal({
             }
           })
 
-          setCategories(rootCategories)
+          // For now, show all categories (both root and nested) to ensure they're visible
+          // TODO: Implement proper hierarchical display later
+          setCategories(transformedCategories)
         } else {
           toast.error('Failed to load categories')
         }

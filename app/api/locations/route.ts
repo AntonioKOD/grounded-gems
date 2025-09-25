@@ -5,7 +5,7 @@ import config from '@/payload.config'
 // Whitelisted fields for community submissions
 const ALLOWED_FIELDS = new Set([
   'name',
-  'shortDescription', 
+  'description',
   'coordinates',
   'featuredImage',
   'gallery',
@@ -13,7 +13,9 @@ const ALLOWED_FIELDS = new Set([
   'categories',
   'address',
   'privacy',
-  'privateAccess'
+  'privateAccess',
+  'meta',
+  'slug'
 ])
 
 // Governance fields that should be rejected
@@ -60,9 +62,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!body.shortDescription || typeof body.shortDescription !== 'string' || body.shortDescription.trim().length === 0) {
+    if (!body.description || typeof body.description !== 'string' || body.description.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Short description is required and must be a non-empty string' },
+        { error: 'Description is required and must be a non-empty string' },
         { status: 400 }
       )
     }
@@ -326,17 +328,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate metadata
-    const metadata = generateMetadata(filteredData.name.trim(), filteredData.shortDescription.trim())
+    const metadata = generateMetadata(filteredData.name.trim(), filteredData.description?.trim())
 
     // Generate unique slug
-    const uniqueSlug = await generateSlug(filteredData.name, filteredData.shortDescription)
+    const uniqueSlug = await generateSlug(filteredData.name, filteredData.description)
 
     // Prepare location data with server-enforced defaults
     const locationData = {
       // Whitelisted fields
       name: filteredData.name.trim(),
-      slug: uniqueSlug,
-      shortDescription: filteredData.shortDescription.trim(),
+      slug: filteredData.slug || uniqueSlug,
+      description: filteredData.description?.trim(),
       coordinates: {
         latitude: filteredData.coordinates.latitude,
         longitude: filteredData.coordinates.longitude
@@ -346,8 +348,8 @@ export async function POST(request: NextRequest) {
       insiderTips: filteredData.insiderTips || undefined,
       categories: filteredData.categories || undefined,
 
-      // Generated metadata
-      meta: {
+      // Use provided metadata or generate defaults
+      meta: filteredData.meta || {
         title: metadata.title,
         description: metadata.description,
         keywords: metadata.keywords

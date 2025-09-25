@@ -292,7 +292,11 @@ export default function EditLocationForm({ location, currentUser, onSuccess, onC
           }
         })
 
-        setCategories(rootCategories)
+        // For now, show all categories (both root and nested) to ensure they're visible
+        // TODO: Implement proper hierarchical display later
+        console.log('📊 Categories loaded:', transformedCategories.length, 'categories')
+        console.log('📊 First few categories:', transformedCategories.slice(0, 3))
+        setCategories(transformedCategories)
 
         // Set the initial category selection - now supports multiple categories
         if (location.categories && location.categories.length > 0) {

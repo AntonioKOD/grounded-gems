@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/hooks/use-auth"
-import { MapPin, Plus, Loader2, Building, Upload, X, Image as ImageIcon } from "lucide-react"
+import { MapPin, Plus, Loader2, Building, Upload, X, Image as ImageIcon, Globe } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import CategorySearch from "@/components/ui/category-search"
 import Image from "next/image"
@@ -34,13 +34,108 @@ export default function UltraSimpleForm() {
   const [description, setDescription] = useState("")
   const [address, setAddress] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<any[]>([])
+  
+  // SEO fields
+  const [slug, setSlug] = useState("")
+  const [metaTitle, setMetaTitle] = useState("")
+  const [metaDescription, setMetaDescription] = useState("")
+  const [keywords, setKeywords] = useState("")
+
+  // Auto-generate slug from name
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .trim()
+  }
+
+  // Split keywords into array
+  const splitKeywords = (keywordsString: string) => {
+    return keywordsString
+      .split(',')
+      .map(keyword => keyword.trim())
+      .filter(keyword => keyword.length > 0)
+  }
+
+  // Generate AI metadata
+  const generateAIMetadata = async (locationName: string, locationDescription: string, categories: any[]) => {
+    if (!locationName.trim() || !locationDescription.trim()) return
+
+    try {
+      console.log('🤖 Generating AI metadata for:', locationName)
+      
+      const response = await fetch('/api/ai/generate-metadata', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: locationName,
+          description: locationDescription,
+          categories: categories.map(cat => cat.name)
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.metadata) {
+          console.log('🤖 AI metadata generated:', data.metadata)
+          
+          // Only update if fields are empty or user hasn't manually edited them
+          if (!metaTitle || metaTitle === locationName) {
+            setMetaTitle(data.metadata.title)
+          }
+          if (!metaDescription || metaDescription === locationDescription.substring(0, 160)) {
+            setMetaDescription(data.metadata.description)
+          }
+          if (!keywords || keywords === categories.map(cat => cat.name).join(', ')) {
+            setKeywords(data.metadata.keywords)
+          }
+        }
+      } else {
+        console.warn('🤖 AI metadata generation failed, using fallback')
+        // Fallback to basic metadata
+        setMetaTitle(locationName)
+        setMetaDescription(locationDescription.substring(0, 160))
+        setKeywords(categories.map(cat => cat.name).join(', '))
+      }
+    } catch (error) {
+      console.error('🤖 AI metadata generation error:', error)
+      // Fallback to basic metadata
+      setMetaTitle(locationName)
+      setMetaDescription(locationDescription.substring(0, 160))
+      setKeywords(categories.map(cat => cat.name).join(', '))
+    }
+  }
+
+  // Auto-populate SEO fields when name or description changes
+  useEffect(() => {
+    if (name && !slug) {
+      setSlug(generateSlug(name))
+    }
+  }, [name, slug])
+
+  // Generate AI metadata when name, description, or categories change
+  useEffect(() => {
+    if (name && description) {
+      generateAIMetadata(name, description, selectedCategories)
+    }
+  }, [name, description, selectedCategories])
 
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    const validFiles = files.filter(file => file.type.startsWith('image/'))
+    console.log('📸 [Simple Form] Image upload triggered, files:', files.length)
+    
+    const validFiles = files.filter(file => {
+      console.log('📸 [Simple Form] Validating file:', file.name, file.type, file.size)
+      return file.type.startsWith('image/')
+    })
     
     if (validFiles.length === 0) {
+      console.log('📸 [Simple Form] No valid files after filtering')
       toast({
         title: "Invalid files",
         description: "Please select only image files",
@@ -52,10 +147,12 @@ export default function UltraSimpleForm() {
     // Limit to 3 images max
     const newFiles = [...uploadedImages, ...validFiles].slice(0, 3)
     setUploadedImages(newFiles)
+    console.log('📸 [Simple Form] Updated uploadedImages:', newFiles.length)
 
     // Create previews
     const newPreviews = newFiles.map(file => URL.createObjectURL(file))
     setImagePreviews(newPreviews)
+    console.log('📸 [Simple Form] Updated imagePreviews:', newPreviews.length)
   }
 
   const removeImage = (index: number) => {
@@ -114,25 +211,38 @@ export default function UltraSimpleForm() {
 
   // Upload images to server
   const uploadImages = async (files: File[]) => {
-    const uploadPromises = files.map(async (file) => {
+    console.log('📸 [Simple Form] Starting upload of', files.length, 'images')
+    
+    const uploadPromises = files.map(async (file, index) => {
+      console.log(`📸 [Simple Form] Uploading image ${index + 1}:`, file.name, `(${(file.size / 1024 / 1024).toFixed(2)}MB)`)
+      
       const formData = new FormData()
       formData.append('file', file)
       formData.append('alt', file.name)
       
-      const response = await fetch('/api/upload/blob', {
-        method: 'POST',
-        body: formData,
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to upload image')
-      }
-      
-      const result = await response.json()
-      return {
-        id: result.id,
-        url: result.url,
-        filename: result.filename
+      try {
+        const response = await fetch('/api/upload/blob', {
+          method: 'POST',
+          body: formData,
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('📸 [Simple Form] Upload failed for', file.name, ':', response.status, errorText)
+          throw new Error(`Failed to upload image: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        console.log('📸 [Simple Form] Upload successful for', file.name, ':', result)
+        
+        return {
+          id: result.id,
+          url: result.url,
+          filename: result.filename
+        }
+      } catch (error) {
+        console.error('📸 [Simple Form] Upload error for', file.name, ':', error)
+        throw error
       }
     })
     
@@ -237,15 +347,23 @@ export default function UltraSimpleForm() {
       
       // Upload images if any
       let mediaIds: string[] = []
+      console.log('📸 [Simple Form] DEBUG: uploadedImages.length =', uploadedImages.length)
+      console.log('📸 [Simple Form] DEBUG: uploadedImages =', uploadedImages)
+      
       if (uploadedImages.length > 0) {
+        console.log('📸 [Simple Form] Uploading', uploadedImages.length, 'images before location creation')
         try {
           const uploadResults = await uploadImages(uploadedImages)
+          console.log('📸 [Simple Form] Upload results:', uploadResults)
           mediaIds = uploadResults.filter(result => result.id).map(result => result.id)
-          console.log('Images uploaded successfully, media IDs:', mediaIds)
+          console.log('📸 [Simple Form] Images uploaded successfully, media IDs:', mediaIds)
         } catch (imageError) {
-          console.warn('Image upload failed, but continuing with location creation:', imageError)
+          console.error('📸 [Simple Form] Image upload failed:', imageError)
+          console.warn('📸 [Simple Form] Continuing with location creation without images')
           // Continue with location creation even if image upload fails
         }
+      } else {
+        console.log('📸 [Simple Form] No images to upload')
       }
       
       // Parse address string into address object
@@ -278,7 +396,8 @@ export default function UltraSimpleForm() {
 
       const locationData = {
         name: name.trim(),
-        shortDescription: description.trim(),
+        slug: slug || generateSlug(name),
+        description: description.trim(),
         coordinates: coordinates,
         address: parseAddressString(address),
         categories: selectedCategories.map(cat => cat.id),
@@ -286,10 +405,26 @@ export default function UltraSimpleForm() {
         featuredImage: mediaIds[0] || undefined,
         gallery: mediaIds.map((mediaId, index) => ({
           image: mediaId,
-          isPrimary: index === 0,
+          caption: `Gallery image ${index + 1}`,
           order: index
-        }))
+        })),
+        // SEO & Metadata
+        meta: {
+          title: metaTitle || name,
+          description: metaDescription || description.substring(0, 160),
+          keywords: keywords ? splitKeywords(keywords).join(', ') : selectedCategories.map(cat => cat.name).join(', ')
+        },
+        // Status
+        status: 'review',
+        createdBy: user.id
       }
+
+      console.log('📸 [Simple Form] Location data being sent:', {
+        name: locationData.name,
+        featuredImage: locationData.featuredImage,
+        gallery: locationData.gallery,
+        mediaIds: mediaIds
+      })
 
       const response = await fetch('/api/locations', {
         method: 'POST',
@@ -408,6 +543,7 @@ export default function UltraSimpleForm() {
               </p>
             </div>
 
+
             {/* Address */}
             <div className="space-y-2">
               <Label htmlFor="address" className="text-base font-medium flex items-center gap-2">
@@ -519,6 +655,82 @@ export default function UltraSimpleForm() {
                 placeholder="Search categories..."
                 maxSelections={1}
               />
+            </div>
+
+            {/* SEO Fields */}
+            <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4" />
+                <Label className="text-base font-medium">SEO Settings (Auto-generated)</Label>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="slug" className="text-sm font-medium">
+                    URL Slug
+                  </Label>
+                  <Input
+                    id="slug"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="auto-generated-from-name"
+                    className="h-10 text-sm"
+                  />
+                  <p className="text-xs text-gray-500">
+                    This will be the URL for your location page
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="metaTitle" className="text-sm font-medium">
+                    SEO Title
+                  </Label>
+                  <Input
+                    id="metaTitle"
+                    value={metaTitle}
+                    onChange={(e) => setMetaTitle(e.target.value)}
+                    placeholder="Auto-generated from location name"
+                    className="h-10 text-sm"
+                    maxLength={60}
+                  />
+                  <p className="text-xs text-gray-500">
+                    {metaTitle.length}/60 characters - Appears in search results
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="metaDescription" className="text-sm font-medium">
+                    SEO Description
+                  </Label>
+                  <Textarea
+                    id="metaDescription"
+                    value={metaDescription}
+                    onChange={(e) => setMetaDescription(e.target.value)}
+                    placeholder="Auto-generated from description"
+                    className="min-h-[60px] text-sm"
+                    maxLength={160}
+                  />
+                  <p className="text-xs text-gray-500">
+                    {metaDescription.length}/160 characters - Appears in search results
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="keywords" className="text-sm font-medium">
+                    Keywords (Optional)
+                  </Label>
+                  <Input
+                    id="keywords"
+                    value={keywords}
+                    onChange={(e) => setKeywords(e.target.value)}
+                    placeholder="e.g., coffee, breakfast, wifi, outdoor seating"
+                    className="h-10 text-sm"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Separate keywords with commas - helps with search visibility
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Image Upload */}

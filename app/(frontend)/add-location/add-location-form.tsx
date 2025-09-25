@@ -800,7 +800,11 @@ export default function ClaimLocationForm({
           }
         })
 
-        setCategories(rootCategories)
+        // For now, show all categories (both root and nested) to ensure they're visible
+        // TODO: Implement proper hierarchical display later
+        console.log('📊 Add Location - Categories loaded:', transformedCategories.length, 'categories')
+        console.log('📊 Add Location - First few categories:', transformedCategories.slice(0, 3))
+        setCategories(transformedCategories)
       } catch (error) {
         console.error("Error fetching categories:", error)
         toast({
