@@ -434,7 +434,11 @@ const MobileFeedPost = memo(function MobileFeedPost({
         toast.success("Post deleted successfully")
         // Notify parent component to remove post from feed
         if (onPostUpdated) {
-          onPostUpdated({ ...post, deleted: true })
+          // Create a custom event to notify about deletion
+          const customEvent = new CustomEvent('postDeleted', { 
+            detail: { postId: post.id } 
+          })
+          window.dispatchEvent(customEvent)
         }
         // Dispatch action to remove from Redux store
         // This will be handled by the parent component

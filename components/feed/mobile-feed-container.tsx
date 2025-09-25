@@ -405,16 +405,24 @@ export default function MobileFeedContainer({
 
   // Post update handler
   const handlePostUpdate = useCallback((updatedPost: Post) => {
-    // Handle post deletion
-    if ((updatedPost as any).deleted) {
-      console.log('Post deleted:', updatedPost.id)
-      // Refresh the feed to remove the deleted post
-      refreshPosts()
-      return
-    }
-    
     // Post updates are handled by Redux automatically
     console.log('Post updated:', updatedPost.id)
+  }, [])
+
+  // Handle post deletion events
+  useEffect(() => {
+    const handlePostDeleted = (event: CustomEvent) => {
+      const { postId } = event.detail
+      console.log('Post deleted:', postId)
+      // Refresh the feed to remove the deleted post
+      refreshPosts()
+    }
+
+    window.addEventListener('postDeleted', handlePostDeleted as EventListener)
+    
+    return () => {
+      window.removeEventListener('postDeleted', handlePostDeleted as EventListener)
+    }
   }, [refreshPosts])
 
   // Don't render anything before hydration completes
