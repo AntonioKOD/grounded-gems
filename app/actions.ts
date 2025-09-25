@@ -6078,3 +6078,57 @@ export async function getUserProfile(userId: string, currentUserId?: string) {
     return null
   }
 }
+
+// Delete a post
+export async function deletePost(postId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const payload = await getPayload({ config })
+    
+    // Get current user for authentication
+    const user = await getAuthenticatedUserForServerActions()
+    if (!user) {
+      return { success: false, error: 'Authentication required' }
+    }
+
+    console.log(`Deleting post ${postId} by user ${user.id}`)
+
+    // Get the post to verify ownership
+    const post = await payload.findByID({
+      collection: 'posts',
+      id: postId,
+      depth: 1
+    })
+
+    if (!post) {
+      return { success: false, error: 'Post not found' }
+    }
+
+    // Check if the current user is the author of the post
+    const postAuthorId = typeof post.author === 'string' ? post.author : post.author?.id
+    if (postAuthorId !== user.id) {
+      return { success: false, error: 'You can only delete your own posts' }
+    }
+
+    // Delete the post
+    await payload.delete({
+      collection: 'posts',
+      id: postId
+    })
+
+    console.log(`Successfully deleted post ${postId}`)
+
+    // Revalidate relevant paths
+    revalidatePath('/')
+    revalidatePath('/profile')
+    revalidatePath(`/profile/${user.id}`)
+
+    return { success: true }
+
+  } catch (error) {
+    console.error('Error deleting post:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to delete post' 
+    }
+  }
+}

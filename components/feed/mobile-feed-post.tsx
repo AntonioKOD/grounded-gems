@@ -21,6 +21,7 @@ import {
   ArrowUp,
   X,
   Maximize,
+  Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
@@ -36,7 +37,7 @@ import {
 import type { Post } from "@/types/feed"
 import { getInitials } from "@/lib/utils"
 import { mediumHaptics } from "@/lib/haptics"
-import { likePost, sharePost } from "@/app/actions"
+import { likePost, sharePost, deletePost } from "@/app/actions"
 import { useAppSelector, useAppDispatch } from "@/lib/hooks"
 import { savePostAsync, toggleSaveOptimistic } from "@/lib/features/posts/postsSlice"
 import { formatDistanceToNow } from "date-fns"
@@ -77,6 +78,10 @@ const MobileFeedPost = memo(function MobileFeedPost({
   const [imageError, setImageError] = useState(false)
   const [videoError, setVideoError] = useState(false)
   const [hasValidMedia, setHasValidMedia] = useState(false)
+
+  // Delete functionality
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   // Process media from API response (preferred) or fallback to individual fields
   const mediaItems = useMemo(() => {
@@ -414,6 +419,36 @@ const MobileFeedPost = memo(function MobileFeedPost({
     mediumHaptics()
     setShowCommentDialog(true)
   }, [])
+
+  // Handle delete post
+  const handleDelete = useCallback(async () => {
+    if (isDeleting) return
+    
+    setIsDeleting(true)
+    mediumHaptics()
+    
+    try {
+      const result = await deletePost(post.id)
+      
+      if (result.success) {
+        toast.success("Post deleted successfully")
+        // Notify parent component to remove post from feed
+        if (onPostUpdated) {
+          onPostUpdated({ ...post, deleted: true })
+        }
+        // Dispatch action to remove from Redux store
+        // This will be handled by the parent component
+      } else {
+        toast.error(result.error || "Failed to delete post")
+      }
+    } catch (error) {
+      console.error('Error deleting post:', error)
+      toast.error("Failed to delete post")
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }, [post.id, isDeleting, onPostUpdated])
 
   // Handle post tap to show/hide actions (Instagram Reels behavior)
   const handlePostTap = useCallback((e: React.MouseEvent) => {
@@ -909,6 +944,25 @@ const MobileFeedPost = memo(function MobileFeedPost({
                         {saveCount}
                       </span>
                     </motion.button>
+
+                    {/* Delete Button - Only show for current user's posts */}
+                    {user && post.author && (typeof post.author === 'string' ? post.author === user.id : post.author.id === user.id) && (
+                      <motion.button
+                        initial={{ scale: 0, opacity: 0, y: 20 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0, opacity: 0, y: 20 }}
+                        whileHover={{ scale: 1.15 }}
+                        whileTap={{ scale: 0.85 }}
+                        transition={{ type: "spring", stiffness: 600, damping: 20, delay: 0.2 }}
+                        className="group relative"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        disabled={isDeleting}
+                      >
+                        <div className="relative p-3 rounded-full backdrop-blur-xl bg-red-500/20 border border-red-400/50 hover:bg-red-500/30 transition-all duration-300 shadow-2xl">
+                          <Trash2 className="h-6 w-6 text-red-400" />
+                        </div>
+                      </motion.button>
+                    )}
                   </>
                 )}
               </AnimatePresence>
@@ -1213,6 +1267,48 @@ const MobileFeedPost = memo(function MobileFeedPost({
               className="bg-transparent"
               autoShow={true}
             />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md w-[90vw] bg-white border-0 shadow-2xl p-6 rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              Delete Post
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to delete this post? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+                className="px-4 py-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Post'
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
