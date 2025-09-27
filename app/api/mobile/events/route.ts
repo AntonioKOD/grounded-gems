@@ -480,6 +480,51 @@ export async function POST(request: NextRequest) {
       console.log('Error checking slug uniqueness, continuing with original slug')
     }
 
+    // Generate AI metadata for public events
+    let eventMeta = body.meta || {
+      title: title,
+      description: body.description?.substring(0, 160) || ''
+    }
+
+    // Only generate AI metadata for public events
+    if (body.privacy !== 'private' && body.status !== 'draft') {
+      try {
+        console.log('🤖 Generating AI metadata for public event:', title)
+        
+        const aiResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://sacavia.com'}/api/ai/generate-event-metadata`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: title,
+            description: body.description,
+            category: category,
+            eventType: eventType,
+            location: body.location || 'TBD',
+            startDate: body.startDate
+          })
+        })
+
+        if (aiResponse.ok) {
+          const aiData = await aiResponse.json()
+          if (aiData.success && aiData.metadata) {
+            eventMeta = {
+              title: aiData.metadata.title,
+              description: aiData.metadata.description,
+              keywords: aiData.metadata.keywords
+            }
+            console.log('🤖 AI metadata generated successfully:', eventMeta)
+          }
+        } else {
+          console.log('🤖 AI metadata generation failed, using fallback')
+        }
+      } catch (aiError) {
+        console.error('🤖 AI metadata generation error:', aiError)
+        // Continue with fallback metadata
+      }
+    }
+
     // Transform mobile app data to match EventFormData interface
     const eventData: EventFormData = {
       name: title,
@@ -505,10 +550,7 @@ export async function POST(request: NextRequest) {
       isMatchmaking: body.isMatchmaking || false,
       matchmakingSettings: body.matchmakingSettings,
       image: body.image, // Add image field
-      meta: body.meta || {
-        title: title,
-        description: body.description?.substring(0, 160) || ''
-      }
+      meta: eventMeta
     }
 
     // Handle invited users if provided

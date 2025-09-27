@@ -13,13 +13,14 @@ export async function GET(request: NextRequest) {
     const longitude = searchParams.get("lng")
 
     if (!query || query.trim().length < 1) {
-      return NextResponse.json({ 
-        users: [],
-        locations: [],
-        categories: [],
-        total: 0,
-        message: "Enter at least 1 character to search"
-      })
+    return NextResponse.json({ 
+      users: [],
+      locations: [],
+      categories: [],
+      events: [],
+      total: 0,
+      message: "Enter at least 1 character to search"
+    })
     }
 
     const payload = await getPayload({ config })
@@ -29,11 +30,13 @@ export async function GET(request: NextRequest) {
       users: any[];
       locations: any[];
       categories: any[];
+      events: any[];
       total: number;
     } = {
       users: [],
       locations: [],
       categories: [],
+      events: [],
       total: 0
     }
 
@@ -416,8 +419,170 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Search events if requested
+    if (type === "events" || type === "all" || !type) {
+      try {
+        const eventsResult = await payload.find({
+          collection: "events",
+          where: {
+            and: [
+              {
+                status: {
+                  equals: "published",
+                },
+              },
+              {
+                privacy: {
+                  equals: "public",
+                },
+              },
+              {
+                or: [
+                  // Event name exact match
+                  {
+                    name: {
+                      like: trimmedQuery,
+                    },
+                  },
+                  // Event name starts with
+                  {
+                    name: {
+                      like: `${trimmedQuery}%`,
+                    },
+                  },
+                  // Event name contains
+                  {
+                    name: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Description contains
+                  {
+                    description: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Category search
+                  {
+                    category: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Event type search
+                  {
+                    eventType: {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Tags search
+                  {
+                    tags: {
+                      contains: trimmedQuery,
+                    },
+                  },
+                  // Meta title search
+                  {
+                    "meta.title": {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Meta description search
+                  {
+                    "meta.description": {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                  // Meta keywords search
+                  {
+                    "meta.keywords": {
+                      like: `%${trimmedQuery}%`,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          limit: type === "events" ? limit : Math.ceil(limit / 4),
+          depth: 2,
+          sort: sortBy === "name" ? "name" : sortBy === "recent" ? "-createdAt" : "-createdAt",
+          overrideAccess: true,
+        })
+
+        // Score and sort events by relevance
+        let scoredEvents = eventsResult.docs.map((event: any) => {
+          let score = 0
+          const lowerQuery = trimmedQuery.toLowerCase()
+          const eventName = event.name?.toLowerCase() || ''
+          const eventDesc = event.description?.toLowerCase() || ''
+          const eventCategory = event.category?.toLowerCase() || ''
+          const eventType = event.eventType?.toLowerCase() || ''
+          const eventTags = event.tags?.join(' ').toLowerCase() || ''
+          const metaTitle = event.meta?.title?.toLowerCase() || ''
+          const metaDesc = event.meta?.description?.toLowerCase() || ''
+          const metaKeywords = event.meta?.keywords?.toLowerCase() || ''
+
+          // Exact name match gets highest score
+          if (eventName === lowerQuery) score += 100
+          
+          // Name starts with query
+          if (eventName.startsWith(lowerQuery)) score += 80
+          
+          // Name contains query
+          if (eventName.includes(lowerQuery)) score += 60
+          
+          // Meta title matches (AI-generated metadata)
+          if (metaTitle.includes(lowerQuery)) score += 70
+          
+          // Meta description matches
+          if (metaDesc.includes(lowerQuery)) score += 50
+          
+          // Meta keywords matches
+          if (metaKeywords.includes(lowerQuery)) score += 40
+          
+          // Description contains query
+          if (eventDesc.includes(lowerQuery)) score += 40
+          
+          // Category matches
+          if (eventCategory.includes(lowerQuery)) score += 30
+          
+          // Event type matches
+          if (eventType.includes(lowerQuery)) score += 25
+          
+          // Tags matches
+          if (eventTags.includes(lowerQuery)) score += 20
+          
+          // Boost for upcoming events
+          const eventDate = new Date(event.startDate)
+          const now = new Date()
+          if (eventDate > now) {
+            const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+            if (daysUntil <= 7) score += 15 // This week
+            else if (daysUntil <= 30) score += 10 // This month
+            else if (daysUntil <= 90) score += 5 // Next 3 months
+          }
+          
+          // Boost for events with high attendance
+          if (event.goingCount >= 50) score += 10
+          else if (event.goingCount >= 20) score += 5
+          
+          // Boost for free events
+          if (event.isFree) score += 5
+
+          return { ...event, relevanceScore: score }
+        })
+
+        if (sortBy === "relevance") {
+          scoredEvents.sort((a, b) => b.relevanceScore - a.relevanceScore)
+        }
+
+        results.events = scoredEvents
+      } catch (error) {
+        console.error("Error searching events:", error)
+      }
+    }
+
     // Calculate total results
-    results.total = results.users.length + results.locations.length + results.categories.length
+    results.total = results.users.length + results.locations.length + results.categories.length + results.events.length
 
     return NextResponse.json({
       ...results,
@@ -439,6 +604,7 @@ export async function GET(request: NextRequest) {
         users: [],
         locations: [],
         categories: [],
+        events: [],
         total: 0 
       },
       { status: 500 }
