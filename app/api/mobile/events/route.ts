@@ -402,12 +402,52 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // If no location provided, create a default "TBD" location
     if (!locationId) {
-      return NextResponse.json({
-        success: false,
-        error: 'Location is required',
-        message: 'Please provide a location for the event'
-      }, { status: 400 })
+      try {
+        const defaultLocation = await payload.create({
+          collection: 'locations',
+          data: {
+            name: 'Location TBD',
+            slug: 'location-tbd',
+            description: 'Location to be determined',
+            status: 'draft',
+            privacy: 'public',
+            createdBy: currentUser.id,
+            address: {},
+            coordinates: {},
+            contactInfo: { socialMedia: {} },
+            accessibility: {},
+            partnershipDetails: {},
+            meta: {},
+            ownership: { claimStatus: 'unclaimed' },
+            businessSettings: {
+              allowSpecials: false,
+              allowNotifications: false,
+              notificationPreferences: {
+                pushNotifications: true,
+                emailNotifications: false,
+                targetAudience: 'all'
+              }
+            },
+            gallery: [],
+            tags: [],
+            businessHours: [],
+            bestTimeToVisit: [],
+            insiderTips: [],
+            communityPhotos: []
+          }
+        })
+        locationId = String(defaultLocation.id)
+        console.log('Mobile API: Created default TBD location:', locationId)
+      } catch (locationError) {
+        console.error('Mobile API: Failed to create default location:', locationError)
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to create default location',
+          message: 'Location creation failed'
+        }, { status: 400 })
+      }
     }
 
     // Validate category and event type
