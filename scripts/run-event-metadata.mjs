@@ -37,3 +37,4 @@ child.on('error', (error) => {
   console.error('❌ Failed to start metadata generation:', error)
   process.exit(1)
 })
+

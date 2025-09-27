@@ -183,3 +183,4 @@ function generateFallbackEventKeywords(name: string, description: string, catego
   // Remove duplicates and limit to 10
   return [...new Set(allKeywords)].slice(0, 10).join(', ')
 }
+
