@@ -559,6 +559,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate organizer ID is a valid ObjectId
+    let validOrganizerId: string | undefined = undefined
+    const organizerId = String(currentUser.id)
+    if (/^[0-9a-fA-F]{24}$/.test(organizerId)) {
+      validOrganizerId = organizerId
+      console.log('Mobile API: Validated organizer ID:', organizerId)
+    } else {
+      console.log('Mobile API: Invalid organizer ID format:', organizerId)
+      return NextResponse.json({
+        success: false,
+        error: 'Invalid user ID format',
+        message: 'User authentication error'
+      }, { status: 400 })
+    }
+
     // Transform mobile app data to match EventFormData interface
     const eventData: EventFormData = {
       name: title,
@@ -571,7 +586,7 @@ export async function POST(request: NextRequest) {
       durationMinutes: body.durationMinutes,
       location: validLocationId || '', // Only set if valid ObjectId
       capacity: body.maxParticipants || body.capacity,
-      organizer: String(currentUser.id),
+      organizer: validOrganizerId, // Use validated organizer ID
       status: body.status || 'published',
       tags: body.tags || [],
       privacy: body.privacy || 'public',
@@ -591,16 +606,30 @@ export async function POST(request: NextRequest) {
     if (body.invitedUsers && Array.isArray(body.invitedUsers) && body.invitedUsers.length > 0) {
       console.log(`Mobile API: Processing ${body.invitedUsers.length} invited users`)
       
-      // Create RSVP entries for invited users
-      const rsvpEntries = body.invitedUsers.map((userId: string) => ({
-        user: userId,
-        status: 'invited',
-        invitedAt: new Date().toISOString(),
-        invitedBy: String(currentUser.id)
-      }))
+      // Validate all invited user IDs are valid ObjectIds
+      const validInvitedUsers = body.invitedUsers.filter((userId: string) => {
+        if (/^[0-9a-fA-F]{24}$/.test(userId)) {
+          return true
+        } else {
+          console.log('Mobile API: Invalid invited user ID format, skipping:', userId)
+          return false
+        }
+      })
       
-      // Note: RSVP entries will be created separately after event creation
-      console.log(`Mobile API: Will create ${body.invitedUsers.length} RSVP entries after event creation`)
+      if (validInvitedUsers.length > 0) {
+        // Create RSVP entries for valid invited users
+        const rsvpEntries = validInvitedUsers.map((userId: string) => ({
+          user: userId,
+          status: 'invited',
+          invitedAt: new Date().toISOString(),
+          invitedBy: validOrganizerId // Use validated organizer ID
+        }))
+        
+        // Note: RSVP entries will be created separately after event creation
+        console.log(`Mobile API: Will create ${validInvitedUsers.length} RSVP entries after event creation`)
+      } else {
+        console.log('Mobile API: No valid invited user IDs found, skipping RSVP creation')
+      }
     }
 
     console.log(`Mobile API: Creating event for user ${currentUser.id}`)
