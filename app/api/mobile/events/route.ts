@@ -336,51 +336,52 @@ export async function POST(request: NextRequest) {
           locationId = String(locations.docs[0]?.id)
           console.log('Mobile API: Found existing location:', locationId)
         } else {
-        // Create a placeholder location for mobile events
-        try {
-          const locationSlug = body.location.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-          const newLocation = await payload.create({
-            collection: 'locations',
-            data: {
-              name: body.location,
-              slug: locationSlug,
-              description: `Location for event: ${body.title || 'Untitled Event'}`,
-              status: 'draft',
-              privacy: 'public',
-              createdBy: currentUser.id,
-              address: {},
-              coordinates: {},
-              contactInfo: { socialMedia: {} },
-              accessibility: {},
-              partnershipDetails: {},
-              meta: {},
-              ownership: { claimStatus: 'unclaimed' },
-              businessSettings: {
-                allowSpecials: false,
-                allowNotifications: false,
-                notificationPreferences: {
-                  pushNotifications: true,
-                  emailNotifications: false,
-                  targetAudience: 'all'
-                }
-              },
-              gallery: [],
-              tags: [],
-              businessHours: [],
-              bestTimeToVisit: [],
-              insiderTips: [],
-              communityPhotos: []
-            }
-          })
-          locationId = String(newLocation.id)
-          console.log('Mobile API: Created placeholder location:', locationId)
-        } catch (locationError) {
-          console.error('Mobile API: Failed to create location:', locationError)
-          return NextResponse.json({
-            success: false,
-            error: 'Failed to create location for event',
-            message: 'Location creation failed'
-          }, { status: 400 })
+          // Create a placeholder location for mobile events
+          try {
+            const locationSlug = body.location.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+            const newLocation = await payload.create({
+              collection: 'locations',
+              data: {
+                name: body.location,
+                slug: locationSlug,
+                description: `Location for event: ${body.title || 'Untitled Event'}`,
+                status: 'draft',
+                privacy: 'public',
+                createdBy: currentUser.id,
+                address: {},
+                coordinates: {},
+                contactInfo: { socialMedia: {} },
+                accessibility: {},
+                partnershipDetails: {},
+                meta: {},
+                ownership: { claimStatus: 'unclaimed' },
+                businessSettings: {
+                  allowSpecials: false,
+                  allowNotifications: false,
+                  notificationPreferences: {
+                    pushNotifications: true,
+                    emailNotifications: false,
+                    targetAudience: 'all'
+                  }
+                },
+                gallery: [],
+                tags: [],
+                businessHours: [],
+                bestTimeToVisit: [],
+                insiderTips: [],
+                communityPhotos: []
+              }
+            })
+            locationId = String(newLocation.id)
+            console.log('Mobile API: Created placeholder location:', locationId)
+          } catch (locationError) {
+            console.error('Mobile API: Failed to create location:', locationError)
+            return NextResponse.json({
+              success: false,
+              error: 'Failed to create location for event',
+              message: 'Location creation failed'
+            }, { status: 400 })
+          }
         }
       }
     }
@@ -581,27 +582,18 @@ export async function POST(request: NextRequest) {
     console.log('Mobile API: Transformed event data:', eventData)
 
     // Create event directly with payload to ensure proper authentication context
-    try {
-      const event = await payload.create({
-        collection: "events",
-        data: eventData,
-      })
+    const event = await payload.create({
+      collection: "events",
+      data: eventData,
+    })
 
-      console.log(`Mobile API: Event created successfully: ${event.id}`)
+    console.log(`Mobile API: Event created successfully: ${event.id}`)
 
-      return NextResponse.json({
-        success: true,
-        message: 'Event created successfully',
-        data: { event: event }
-      })
-    } catch (createError) {
-      console.error('Mobile API: Error creating event with payload:', createError)
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to create event',
-        message: createError instanceof Error ? createError.message : 'Unknown error'
-      }, { status: 400 })
-    }
+    return NextResponse.json({
+      success: true,
+      message: 'Event created successfully',
+      data: { event: event }
+    })
   } catch (error) {
     console.error('Mobile API: Error creating event:', error)
     return NextResponse.json(
