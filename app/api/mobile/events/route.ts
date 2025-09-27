@@ -588,7 +588,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Transform mobile app data to match EventFormData interface
-    const eventData: EventFormData = {
+    const eventData: any = {
       name: title,
       slug: slug,
       description: body.description,
@@ -611,7 +611,7 @@ export async function POST(request: NextRequest) {
       ageRestriction: body.ageRestriction || 'all',
       isMatchmaking: body.isMatchmaking || false,
       matchmakingSettings: body.matchmakingSettings,
-      // image: validImageId, // Skip image field for mobile API - not compatible with File type
+      image: validImageId, // Use validated image ID if available
       meta: eventMeta
     }
 

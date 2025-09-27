@@ -700,20 +700,41 @@ export const Media: CollectionConfig = {
                 filename: doc.filename
               })
               
+              // Validate BLOB_READ_WRITE_TOKEN format
+              if (!process.env.BLOB_READ_WRITE_TOKEN.startsWith('vercel_blob_rw_')) {
+                console.warn('⚠️ Invalid BLOB_READ_WRITE_TOKEN format, skipping blob URL conversion')
+                return
+              }
+              
               // Construct blob storage URL
               const blobHostname = process.env.BLOB_READ_WRITE_TOKEN.replace('vercel_blob_rw_', '')
               const blobUrl = `https://${blobHostname}.public.blob.vercel-storage.com/${doc.filename}`
               
-              // Update the document with blob URL
-              await req.payload.update({
-                collection: 'media',
-                id: doc.id,
-                data: {
-                  url: blobUrl
+              // Check if document still exists before updating
+              try {
+                const existingDoc = await req.payload.findByID({
+                  collection: 'media',
+                  id: doc.id
+                })
+                
+                if (existingDoc) {
+                  // Update the document with blob URL
+                  await req.payload.update({
+                    collection: 'media',
+                    id: doc.id,
+                    data: {
+                      url: blobUrl
+                    }
+                  })
+                  
+                  console.log('✅ Updated media URL to blob storage:', blobUrl)
+                } else {
+                  console.log('⚠️ Media document not found, skipping blob URL update:', doc.id)
                 }
-              })
-              
-              console.log('✅ Updated media URL to blob storage:', blobUrl)
+              } catch (updateError) {
+                console.error('❌ Error checking/updating media document:', updateError)
+                // Don't throw the error, just log it and continue
+              }
             }
           } catch (error) {
             console.error('❌ Failed to update media URL to blob storage:', error)
