@@ -534,6 +534,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Validate locationId is a valid ObjectId before creating event
+    let validLocationId: string | undefined = undefined
+    if (locationId) {
+      if (/^[0-9a-fA-F]{24}$/.test(locationId)) {
+        // Verify the location exists in the database
+        try {
+          const location = await payload.findByID({
+            collection: 'locations',
+            id: locationId,
+            depth: 0
+          })
+          if (location) {
+            validLocationId = locationId
+            console.log('Mobile API: Validated location ID:', locationId)
+          } else {
+            console.log('Mobile API: Location not found in database, skipping location')
+          }
+        } catch (error) {
+          console.log('Mobile API: Error validating location, skipping:', error)
+        }
+      } else {
+        console.log('Mobile API: Invalid location ID format, skipping location')
+      }
+    }
+
     // Transform mobile app data to match EventFormData interface
     const eventData: EventFormData = {
       name: title,
@@ -544,7 +569,7 @@ export async function POST(request: NextRequest) {
       startDate: body.startDate,
       endDate: body.endDate,
       durationMinutes: body.durationMinutes,
-      location: locationId,
+      location: validLocationId || '', // Only set if valid ObjectId
       capacity: body.maxParticipants || body.capacity,
       organizer: String(currentUser.id),
       status: body.status || 'published',
