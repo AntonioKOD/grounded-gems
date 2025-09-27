@@ -574,6 +574,19 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // Validate image ID if provided
+    let validImageId: string | undefined = undefined
+    if (body.image && body.image !== 'placeholder_image_id') {
+      if (/^[0-9a-fA-F]{24}$/.test(body.image)) {
+        validImageId = body.image
+        console.log('Mobile API: Validated image ID:', body.image)
+      } else {
+        console.log('Mobile API: Invalid image ID format, skipping:', body.image)
+      }
+    } else if (body.image === 'placeholder_image_id') {
+      console.log('Mobile API: Skipping placeholder image ID')
+    }
+
     // Transform mobile app data to match EventFormData interface
     const eventData: EventFormData = {
       name: title,
@@ -598,7 +611,7 @@ export async function POST(request: NextRequest) {
       ageRestriction: body.ageRestriction || 'all',
       isMatchmaking: body.isMatchmaking || false,
       matchmakingSettings: body.matchmakingSettings,
-      image: body.image, // Add image field
+      // image: validImageId, // Skip image field for mobile API - not compatible with File type
       meta: eventMeta
     }
 
@@ -633,7 +646,17 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`Mobile API: Creating event for user ${currentUser.id}`)
-    console.log('Mobile API: Transformed event data:', eventData)
+    console.log('Mobile API: Transformed event data:', JSON.stringify(eventData, null, 2))
+    
+    // Log each field to identify potential BSON issues
+    console.log('Mobile API: Field validation:')
+    console.log('- organizer:', eventData.organizer, 'type:', typeof eventData.organizer, 'valid:', /^[0-9a-fA-F]{24}$/.test(eventData.organizer))
+    console.log('- location:', eventData.location, 'type:', typeof eventData.location, 'valid:', eventData.location ? /^[0-9a-fA-F]{24}$/.test(eventData.location) : 'empty')
+    console.log('- image:', eventData.image ? 'File object' : 'null', 'type:', typeof eventData.image)
+    console.log('- startDate:', eventData.startDate, 'type:', typeof eventData.startDate)
+    console.log('- endDate:', eventData.endDate, 'type:', typeof eventData.endDate)
+    console.log('- tags:', eventData.tags, 'type:', typeof eventData.tags, 'isArray:', Array.isArray(eventData.tags))
+    console.log('- privateAccess:', eventData.privateAccess, 'type:', typeof eventData.privateAccess, 'isArray:', Array.isArray(eventData.privateAccess))
 
     // Create event directly with payload to ensure proper authentication context
     const event = await payload.create({

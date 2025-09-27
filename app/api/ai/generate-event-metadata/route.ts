@@ -3,11 +3,11 @@ import OpenAI from 'openai'
 
 // Initialize OpenAI client only if API key is available
 const getOpenAIClient = () => {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.OPEN_AI_KEY) {
     return null
   }
   return new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPEN_AI_KEY,
   })
 }
 
