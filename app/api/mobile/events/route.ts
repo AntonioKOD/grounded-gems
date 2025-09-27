@@ -314,20 +314,28 @@ export async function POST(request: NextRequest) {
     // Handle location - find existing location or create a placeholder
     let locationId: string | undefined = body.locationId ? String(body.locationId) : undefined // If mobile app sends locationId
     
+    // Check if body.location is a valid ObjectId (24 character hex string)
+    const isValidObjectId = (id: string) => /^[0-9a-fA-F]{24}$/.test(id)
+    
     if (!locationId && body.location) {
-      // Try to find existing location by name
-      const locations = await payload.find({
-        collection: 'locations',
-        where: {
-          name: { equals: body.location }
-        },
-        limit: 1
-      })
-      
-      if (locations.docs.length > 0) {
-        locationId = String(locations.docs[0]?.id)
-        console.log('Mobile API: Found existing location:', locationId)
+      if (isValidObjectId(body.location)) {
+        // body.location is a valid ObjectId, use it directly
+        locationId = body.location
+        console.log('Mobile API: Using provided location ID:', locationId)
       } else {
+        // Try to find existing location by name
+        const locations = await payload.find({
+          collection: 'locations',
+          where: {
+            name: { equals: body.location }
+          },
+          limit: 1
+        })
+        
+        if (locations.docs.length > 0) {
+          locationId = String(locations.docs[0]?.id)
+          console.log('Mobile API: Found existing location:', locationId)
+        } else {
         // Create a placeholder location for mobile events
         try {
           const locationSlug = body.location.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
